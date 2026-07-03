@@ -1,0 +1,2 @@
+-- evaluation_settings are seeded when a school admin is approved (see lib/evaluation-settings-seed.ts).
+-- Do not bulk-insert settings for every row in schools.

@@ -1,0 +1,2216 @@
+[
+  {
+    "label": "สพป.กระบี่",
+    "province": "กระบี่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108101",
+    "seqMin": 2,
+    "seqMax": 233,
+    "count": 202
+  },
+  {
+    "label": "สพป.กรุงเทพมหานคร",
+    "province": "กรุงเทพมหานคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101072",
+    "seqMin": 1,
+    "seqMax": 2916,
+    "count": 38
+  },
+  {
+    "label": "สพป.กาญจนบุรี เขต 1",
+    "province": "กาญจนบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107102",
+    "seqMin": 1,
+    "seqMax": 445,
+    "count": 126
+  },
+  {
+    "label": "สพป.กาญจนบุรี เขต 2",
+    "province": "กาญจนบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107102",
+    "seqMin": 136,
+    "seqMax": 444,
+    "count": 100
+  },
+  {
+    "label": "สพป.กาญจนบุรี เขต 3",
+    "province": "กาญจนบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107102",
+    "seqMin": 62,
+    "seqMax": 446,
+    "count": 80
+  },
+  {
+    "label": "สพป.กาญจนบุรี เขต 4",
+    "province": "กาญจนบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107102",
+    "seqMin": 27,
+    "seqMax": 418,
+    "count": 96
+  },
+  {
+    "label": "สพป.กาฬสินธุ์ เขต 1",
+    "province": "กาฬสินธุ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104603",
+    "seqMin": 1,
+    "seqMax": 563,
+    "count": 160
+  },
+  {
+    "label": "สพป.กาฬสินธุ์ เขต 2",
+    "province": "กาฬสินธุ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104603",
+    "seqMin": 74,
+    "seqMax": 580,
+    "count": 162
+  },
+  {
+    "label": "สพป.กาฬสินธุ์ เขต 3",
+    "province": "กาฬสินธุ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104603",
+    "seqMin": 18,
+    "seqMax": 526,
+    "count": 201
+  },
+  {
+    "label": "สพป.กำแพงเพชร เขต 1",
+    "province": "กำแพงเพชร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106204",
+    "seqMin": 1,
+    "seqMax": 429,
+    "count": 199
+  },
+  {
+    "label": "สพป.กำแพงเพชร เขต 2",
+    "province": "กำแพงเพชร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106204",
+    "seqMin": 89,
+    "seqMax": 421,
+    "count": 181
+  },
+  {
+    "label": "สพป.ขอนแก่น เขต 1",
+    "province": "ขอนแก่น",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104005",
+    "seqMin": 1,
+    "seqMax": 504,
+    "count": 142
+  },
+  {
+    "label": "สพป.ขอนแก่น เขต 2",
+    "province": "ขอนแก่น",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104005",
+    "seqMin": 192,
+    "seqMax": 1067,
+    "count": 204
+  },
+  {
+    "label": "สพป.ขอนแก่น เขต 3",
+    "province": "ขอนแก่น",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104005",
+    "seqMin": 222,
+    "seqMax": 1085,
+    "count": 166
+  },
+  {
+    "label": "สพป.ขอนแก่น เขต 4",
+    "province": "ขอนแก่น",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104005",
+    "seqMin": 63,
+    "seqMax": 1190,
+    "count": 175
+  },
+  {
+    "label": "สพป.ขอนแก่น เขต 5",
+    "province": "ขอนแก่น",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104005",
+    "seqMin": 46,
+    "seqMax": 1193,
+    "count": 263
+  },
+  {
+    "label": "สพป.จันทบุรี เขต 1",
+    "province": "จันทบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102206",
+    "seqMin": 1,
+    "seqMax": 228,
+    "count": 78
+  },
+  {
+    "label": "สพป.จันทบุรี เขต 2",
+    "province": "จันทบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102206",
+    "seqMin": 67,
+    "seqMax": 227,
+    "count": 106
+  },
+  {
+    "label": "สพป.ฉะเชิงเทรา เขต 1",
+    "province": "ฉะเชิงเทรา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102407",
+    "seqMin": 1,
+    "seqMax": 176,
+    "count": 136
+  },
+  {
+    "label": "สพป.ฉะเชิงเทรา เขต 2",
+    "province": "ฉะเชิงเทรา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102407",
+    "seqMin": 14,
+    "seqMax": 319,
+    "count": 144
+  },
+  {
+    "label": "สพป.ชลบุรี เขต 1",
+    "province": "ชลบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102008",
+    "seqMin": 1,
+    "seqMax": 261,
+    "count": 80
+  },
+  {
+    "label": "สพป.ชลบุรี เขต 2",
+    "province": "ชลบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102008",
+    "seqMin": 113,
+    "seqMax": 307,
+    "count": 112
+  },
+  {
+    "label": "สพป.ชลบุรี เขต 3",
+    "province": "ชลบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102008",
+    "seqMin": 43,
+    "seqMax": 248,
+    "count": 83
+  },
+  {
+    "label": "สพป.ชัยนาท",
+    "province": "ชัยนาท",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101809",
+    "seqMin": 1,
+    "seqMax": 207,
+    "count": 158
+  },
+  {
+    "label": "สพป.ชัยภูมิ เขต 1",
+    "province": "ชัยภูมิ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103610",
+    "seqMin": 1,
+    "seqMax": 722,
+    "count": 208
+  },
+  {
+    "label": "สพป.ชัยภูมิ เขต 2",
+    "province": "ชัยภูมิ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103610",
+    "seqMin": 19,
+    "seqMax": 701,
+    "count": 257
+  },
+  {
+    "label": "สพป.ชัยภูมิ เขต 3",
+    "province": "ชัยภูมิ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103610",
+    "seqMin": 104,
+    "seqMax": 755,
+    "count": 198
+  },
+  {
+    "label": "สพป.ชุมพร เขต 1",
+    "province": "ชุมพร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108611",
+    "seqMin": 1,
+    "seqMax": 283,
+    "count": 106
+  },
+  {
+    "label": "สพป.ชุมพร เขต 2",
+    "province": "ชุมพร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108611",
+    "seqMin": 4,
+    "seqMax": 281,
+    "count": 118
+  },
+  {
+    "label": "สพป.เชียงราย เขต 1",
+    "province": "เชียงราย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105712",
+    "seqMin": 1,
+    "seqMax": 693,
+    "count": 99
+  },
+  {
+    "label": "สพป.เชียงราย เขต 2",
+    "province": "เชียงราย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105712",
+    "seqMin": 222,
+    "seqMax": 652,
+    "count": 149
+  },
+  {
+    "label": "สพป.เชียงราย เขต 3",
+    "province": "เชียงราย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105712",
+    "seqMin": 60,
+    "seqMax": 740,
+    "count": 143
+  },
+  {
+    "label": "สพป.เชียงราย เขต 4",
+    "province": "เชียงราย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105712",
+    "seqMin": 90,
+    "seqMax": 742,
+    "count": 131
+  },
+  {
+    "label": "สพป.เชียงใหม่ เขต 1",
+    "province": "เชียงใหม่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105013",
+    "seqMin": 1,
+    "seqMax": 955,
+    "count": 77
+  },
+  {
+    "label": "สพป.เชียงใหม่ เขต 2",
+    "province": "เชียงใหม่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105013",
+    "seqMin": 165,
+    "seqMax": 1064,
+    "count": 125
+  },
+  {
+    "label": "สพป.เชียงใหม่ เขต 3",
+    "province": "เชียงใหม่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105013",
+    "seqMin": 84,
+    "seqMax": 1066,
+    "count": 153
+  },
+  {
+    "label": "สพป.เชียงใหม่ เขต 4",
+    "province": "เชียงใหม่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105013",
+    "seqMin": 153,
+    "seqMax": 1060,
+    "count": 89
+  },
+  {
+    "label": "สพป.เชียงใหม่ เขต 5",
+    "province": "เชียงใหม่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105013",
+    "seqMin": 272,
+    "seqMax": 983,
+    "count": 102
+  },
+  {
+    "label": "สพป.เชียงใหม่ เขต 6",
+    "province": "เชียงใหม่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105013",
+    "seqMin": 34,
+    "seqMax": 1062,
+    "count": 99
+  },
+  {
+    "label": "สพป.ตรัง เขต 1",
+    "province": "ตรัง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109214",
+    "seqMin": 1,
+    "seqMax": 329,
+    "count": 126
+  },
+  {
+    "label": "สพป.ตรัง เขต 2",
+    "province": "ตรัง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109214",
+    "seqMin": 30,
+    "seqMax": 319,
+    "count": 139
+  },
+  {
+    "label": "สพป.ตราด",
+    "province": "ตราด",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102315",
+    "seqMin": 1,
+    "seqMax": 121,
+    "count": 100
+  },
+  {
+    "label": "สพป.ตาก เขต 1",
+    "province": "ตาก",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106316",
+    "seqMin": 1,
+    "seqMax": 264,
+    "count": 106
+  },
+  {
+    "label": "สพป.ตาก เขต 2",
+    "province": "ตาก",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106302",
+    "seqMin": 54,
+    "seqMax": 268,
+    "count": 123
+  },
+  {
+    "label": "สพป.นครนายก",
+    "province": "นครนายก",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102617",
+    "seqMin": 1,
+    "seqMax": 150,
+    "count": 131
+  },
+  {
+    "label": "สพป.นครปฐม เขต 1",
+    "province": "นครปฐม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107318",
+    "seqMin": 1,
+    "seqMax": 130,
+    "count": 120
+  },
+  {
+    "label": "สพป.นครปฐม เขต 2",
+    "province": "นครปฐม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107318",
+    "seqMin": 60,
+    "seqMax": 257,
+    "count": 118
+  },
+  {
+    "label": "สพป.นครพนม เขต 1",
+    "province": "นครพนม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104819",
+    "seqMin": 1,
+    "seqMax": 455,
+    "count": 237
+  },
+  {
+    "label": "สพป.นครพนม เขต 2",
+    "province": "นครพนม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104819",
+    "seqMin": 7,
+    "seqMax": 441,
+    "count": 189
+  },
+  {
+    "label": "สพป.นครราชสีมา เขต 1",
+    "province": "นครราชสีมา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103020",
+    "seqMin": 469,
+    "seqMax": 957,
+    "count": 130
+  },
+  {
+    "label": "สพป.นครราชสีมา เขต 2",
+    "province": "นครราชสีมา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103020",
+    "seqMin": 179,
+    "seqMax": 1320,
+    "count": 151
+  },
+  {
+    "label": "สพป.นครราชสีมา เขต 3",
+    "province": "นครราชสีมา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103020",
+    "seqMin": 129,
+    "seqMax": 1214,
+    "count": 173
+  },
+  {
+    "label": "สพป.นครราชสีมา เขต 4",
+    "province": "นครราชสีมา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103020",
+    "seqMin": 209,
+    "seqMax": 1174,
+    "count": 171
+  },
+  {
+    "label": "สพป.นครราชสีมา เขต 5",
+    "province": "นครราชสีมา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103005",
+    "seqMin": 25,
+    "seqMax": 1278,
+    "count": 217
+  },
+  {
+    "label": "สพป.นครราชสีมา เขต 6",
+    "province": "นครราชสีมา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103020",
+    "seqMin": 1,
+    "seqMax": 1354,
+    "count": 185
+  },
+  {
+    "label": "สพป.นครราชสีมา เขต 7",
+    "province": "นครราชสีมา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103020",
+    "seqMin": 3,
+    "seqMax": 1342,
+    "count": 260
+  },
+  {
+    "label": "สพป.นครศรีธรรมราช เขต 1",
+    "province": "นครศรีธรรมราช",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108021",
+    "seqMin": 1,
+    "seqMax": 770,
+    "count": 100
+  },
+  {
+    "label": "สพป.นครศรีธรรมราช เขต 2",
+    "province": "นครศรีธรรมราช",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108021",
+    "seqMin": 95,
+    "seqMax": 852,
+    "count": 185
+  },
+  {
+    "label": "สพป.นครศรีธรรมราช เขต 3",
+    "province": "นครศรีธรรมราช",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108021",
+    "seqMin": 41,
+    "seqMax": 853,
+    "count": 217
+  },
+  {
+    "label": "สพป.นครศรีธรรมราช เขต 4",
+    "province": "นครศรีธรรมราช",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108021",
+    "seqMin": 75,
+    "seqMax": 734,
+    "count": 136
+  },
+  {
+    "label": "สพป.นครสวรรค์ เขต 1",
+    "province": "นครสวรรค์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106022",
+    "seqMin": 1,
+    "seqMax": 418,
+    "count": 145
+  },
+  {
+    "label": "สพป.นครสวรรค์ เขต 2",
+    "province": "นครสวรรค์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106022",
+    "seqMin": 25,
+    "seqMax": 659,
+    "count": 141
+  },
+  {
+    "label": "สพป.นครสวรรค์ เขต 3",
+    "province": "นครสวรรค์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106022",
+    "seqMin": 107,
+    "seqMax": 613,
+    "count": 195
+  },
+  {
+    "label": "สพป.นนทบุรี เขต 1",
+    "province": "นนทบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101223",
+    "seqMin": 1,
+    "seqMax": 72,
+    "count": 32
+  },
+  {
+    "label": "สพป.นนทบุรี เขต 2",
+    "province": "นนทบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101223",
+    "seqMin": 30,
+    "seqMax": 145,
+    "count": 63
+  },
+  {
+    "label": "สพป.นราธิวาส เขต 1",
+    "province": "นราธิวาส",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109624",
+    "seqMin": 1,
+    "seqMax": 298,
+    "count": 141
+  },
+  {
+    "label": "สพป.นราธิวาส เขต 2",
+    "province": "นราธิวาส",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109624",
+    "seqMin": 3,
+    "seqMax": 313,
+    "count": 121
+  },
+  {
+    "label": "สพป.นราธิวาส เขต 3",
+    "province": "นราธิวาส",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109624",
+    "seqMin": 122,
+    "seqMax": 347,
+    "count": 78
+  },
+  {
+    "label": "สพป.น่าน เขต 1",
+    "province": "น่าน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105525",
+    "seqMin": 2,
+    "seqMax": 425,
+    "count": 155
+  },
+  {
+    "label": "สพป.น่าน เขต 2",
+    "province": "น่าน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105525",
+    "seqMin": 30,
+    "seqMax": 461,
+    "count": 143
+  },
+  {
+    "label": "สพป.บึงกาฬ",
+    "province": "บึงกาฬ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103866",
+    "seqMin": 59,
+    "seqMax": 419,
+    "count": 211
+  },
+  {
+    "label": "สพป.บุรีรัมย์ เขต 1",
+    "province": "บุรีรัมย์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103126",
+    "seqMin": 1,
+    "seqMax": 805,
+    "count": 171
+  },
+  {
+    "label": "สพป.บุรีรัมย์ เขต 2",
+    "province": "บุรีรัมย์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103126",
+    "seqMin": 44,
+    "seqMax": 845,
+    "count": 215
+  },
+  {
+    "label": "สพป.บุรีรัมย์ เขต 3",
+    "province": "บุรีรัมย์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103126",
+    "seqMin": 25,
+    "seqMax": 824,
+    "count": 215
+  },
+  {
+    "label": "สพป.บุรีรัมย์ เขต 4",
+    "province": "บุรีรัมย์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103126",
+    "seqMin": 27,
+    "seqMax": 844,
+    "count": 219
+  },
+  {
+    "label": "สพป.ปทุมธานี เขต 1",
+    "province": "ปทุมธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101327",
+    "seqMin": 1,
+    "seqMax": 150,
+    "count": 102
+  },
+  {
+    "label": "สพป.ปทุมธานี เขต 2",
+    "province": "ปทุมธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101327",
+    "seqMin": 61,
+    "seqMax": 176,
+    "count": 66
+  },
+  {
+    "label": "สพป.ประจวบคีรีขันธ์ เขต 1",
+    "province": "ประจวบคีรีขันธ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107728",
+    "seqMin": 1,
+    "seqMax": 208,
+    "count": 114
+  },
+  {
+    "label": "สพป.ประจวบคีรีขันธ์ เขต 2",
+    "province": "ประจวบคีรีขันธ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107728",
+    "seqMin": 41,
+    "seqMax": 259,
+    "count": 91
+  },
+  {
+    "label": "สพป.ปราจีนบุรี เขต 1",
+    "province": "ปราจีนบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102529",
+    "seqMin": 2,
+    "seqMax": 264,
+    "count": 110
+  },
+  {
+    "label": "สพป.ปราจีนบุรี เขต 2",
+    "province": "ปราจีนบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102529",
+    "seqMin": 31,
+    "seqMax": 261,
+    "count": 112
+  },
+  {
+    "label": "สพป.ปัตตานี เขต 1",
+    "province": "ปัตตานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109430",
+    "seqMin": 1,
+    "seqMax": 281,
+    "count": 129
+  },
+  {
+    "label": "สพป.ปัตตานี เขต 2",
+    "province": "ปัตตานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109430",
+    "seqMin": 9,
+    "seqMax": 328,
+    "count": 120
+  },
+  {
+    "label": "สพป.ปัตตานี เขต 3",
+    "province": "ปัตตานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109430",
+    "seqMin": 206,
+    "seqMax": 316,
+    "count": 68
+  },
+  {
+    "label": "สพป.พระนครศรีอยุธยา เขต 1",
+    "province": "พระนครศรีอยุธยา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101431",
+    "seqMin": 1,
+    "seqMax": 398,
+    "count": 169
+  },
+  {
+    "label": "สพป.พระนครศรีอยุธยา เขต 2",
+    "province": "พระนครศรีอยุธยา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101431",
+    "seqMin": 12,
+    "seqMax": 368,
+    "count": 158
+  },
+  {
+    "label": "สพป.พะเยา เขต 1",
+    "province": "พะเยา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105632",
+    "seqMin": 1,
+    "seqMax": 290,
+    "count": 77
+  },
+  {
+    "label": "สพป.พะเยา เขต 2",
+    "province": "พะเยา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105632",
+    "seqMin": 43,
+    "seqMax": 274,
+    "count": 130
+  },
+  {
+    "label": "สพป.พังงา",
+    "province": "พังงา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108233",
+    "seqMin": 1,
+    "seqMax": 173,
+    "count": 131
+  },
+  {
+    "label": "สพป.พัทลุง เขต 1",
+    "province": "พัทลุง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109334",
+    "seqMin": 1,
+    "seqMax": 259,
+    "count": 113
+  },
+  {
+    "label": "สพป.พัทลุง เขต 2",
+    "province": "พัทลุง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109334",
+    "seqMin": 49,
+    "seqMax": 247,
+    "count": 114
+  },
+  {
+    "label": "สพป.พิจิตร เขต 1",
+    "province": "พิจิตร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106635",
+    "seqMin": 1,
+    "seqMax": 372,
+    "count": 126
+  },
+  {
+    "label": "สพป.พิจิตร เขต 2",
+    "province": "พิจิตร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106635",
+    "seqMin": 58,
+    "seqMax": 349,
+    "count": 108
+  },
+  {
+    "label": "สพป.พิษณุโลก เขต 1",
+    "province": "พิษณุโลก",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106536",
+    "seqMin": 1,
+    "seqMax": 271,
+    "count": 109
+  },
+  {
+    "label": "สพป.พิษณุโลก เขต 2",
+    "province": "พิษณุโลก",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106536",
+    "seqMin": 162,
+    "seqMax": 458,
+    "count": 121
+  },
+  {
+    "label": "สพป.พิษณุโลก เขต 3",
+    "province": "พิษณุโลก",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106536",
+    "seqMin": 73,
+    "seqMax": 426,
+    "count": 162
+  },
+  {
+    "label": "สพป.เพชรบุรี เขต 1",
+    "province": "เพชรบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107637",
+    "seqMin": 1,
+    "seqMax": 220,
+    "count": 87
+  },
+  {
+    "label": "สพป.เพชรบุรี เขต 2",
+    "province": "เพชรบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107637",
+    "seqMin": 66,
+    "seqMax": 246,
+    "count": 122
+  },
+  {
+    "label": "สพป.เพชรบูรณ์ เขต 1",
+    "province": "เพชรบูรณ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106738",
+    "seqMin": 1,
+    "seqMax": 565,
+    "count": 115
+  },
+  {
+    "label": "สพป.เพชรบูรณ์ เขต 2",
+    "province": "เพชรบูรณ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106738",
+    "seqMin": 54,
+    "seqMax": 577,
+    "count": 119
+  },
+  {
+    "label": "สพป.เพชรบูรณ์ เขต 3",
+    "province": "เพชรบูรณ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106738",
+    "seqMin": 32,
+    "seqMax": 521,
+    "count": 189
+  },
+  {
+    "label": "สพป.แพร่ เขต 1",
+    "province": "แพร่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105439",
+    "seqMin": 1,
+    "seqMax": 300,
+    "count": 98
+  },
+  {
+    "label": "สพป.แพร่ เขต 2",
+    "province": "แพร่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105439",
+    "seqMin": 62,
+    "seqMax": 291,
+    "count": 107
+  },
+  {
+    "label": "สพป.ภูเก็ต",
+    "province": "ภูเก็ต",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108340",
+    "seqMin": 1,
+    "seqMax": 57,
+    "count": 48
+  },
+  {
+    "label": "สพป.มหาสารคาม เขต 1",
+    "province": "มหาสารคาม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104441",
+    "seqMin": 1,
+    "seqMax": 518,
+    "count": 171
+  },
+  {
+    "label": "สพป.มหาสารคาม เขต 2",
+    "province": "มหาสารคาม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104441",
+    "seqMin": 18,
+    "seqMax": 541,
+    "count": 220
+  },
+  {
+    "label": "สพป.มหาสารคาม เขต 3",
+    "province": "มหาสารคาม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104441",
+    "seqMin": 58,
+    "seqMax": 579,
+    "count": 150
+  },
+  {
+    "label": "สพป.มุกดาหาร",
+    "province": "มุกดาหาร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104973",
+    "seqMin": 1,
+    "seqMax": 246,
+    "count": 242
+  },
+  {
+    "label": "สพป.แม่ฮ่องสอน เขต 1",
+    "province": "แม่ฮ่องสอน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105842",
+    "seqMin": 1,
+    "seqMax": 366,
+    "count": 127
+  },
+  {
+    "label": "สพป.แม่ฮ่องสอน เขต 2",
+    "province": "แม่ฮ่องสอน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105842",
+    "seqMin": 21,
+    "seqMax": 360,
+    "count": 180
+  },
+  {
+    "label": "สพป.ยโสธร เขต 1",
+    "province": "ยโสธร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103543",
+    "seqMin": 1,
+    "seqMax": 279,
+    "count": 175
+  },
+  {
+    "label": "สพป.ยโสธร เขต 2",
+    "province": "ยโสธร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103543",
+    "seqMin": 33,
+    "seqMax": 392,
+    "count": 185
+  },
+  {
+    "label": "สพป.ยะลา เขต 1",
+    "province": "ยะลา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109544",
+    "seqMin": 1,
+    "seqMax": 213,
+    "count": 109
+  },
+  {
+    "label": "สพป.ยะลา เขต 2",
+    "province": "ยะลา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109544",
+    "seqMin": 68,
+    "seqMax": 203,
+    "count": 69
+  },
+  {
+    "label": "สพป.ยะลา เขต 3",
+    "province": "ยะลา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109544",
+    "seqMin": 49,
+    "seqMax": 195,
+    "count": 32
+  },
+  {
+    "label": "สพป.ร้อยเอ็ด เขต 1",
+    "province": "ร้อยเอ็ด",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104545",
+    "seqMin": 1,
+    "seqMax": 853,
+    "count": 202
+  },
+  {
+    "label": "สพป.ร้อยเอ็ด เขต 2",
+    "province": "ร้อยเอ็ด",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104545",
+    "seqMin": 11,
+    "seqMax": 784,
+    "count": 331
+  },
+  {
+    "label": "สพป.ร้อยเอ็ด เขต 3",
+    "province": "ร้อยเอ็ด",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104545",
+    "seqMin": 80,
+    "seqMax": 800,
+    "count": 221
+  },
+  {
+    "label": "สพป.ระนอง",
+    "province": "ระนอง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108546",
+    "seqMin": 1,
+    "seqMax": 92,
+    "count": 73
+  },
+  {
+    "label": "สพป.ระยอง เขต 1",
+    "province": "ระยอง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102147",
+    "seqMin": 1,
+    "seqMax": 218,
+    "count": 114
+  },
+  {
+    "label": "สพป.ระยอง เขต 2",
+    "province": "ระยอง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102147",
+    "seqMin": 45,
+    "seqMax": 205,
+    "count": 86
+  },
+  {
+    "label": "สพป.ราชบุรี เขต 1",
+    "province": "ราชบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107048",
+    "seqMin": 1,
+    "seqMax": 357,
+    "count": 165
+  },
+  {
+    "label": "สพป.ราชบุรี เขต 2",
+    "province": "ราชบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107048",
+    "seqMin": 57,
+    "seqMax": 216,
+    "count": 143
+  },
+  {
+    "label": "สพป.ลพบุรี เขต 1",
+    "province": "ลพบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101649",
+    "seqMin": 1,
+    "seqMax": 269,
+    "count": 142
+  },
+  {
+    "label": "สพป.ลพบุรี เขต 2",
+    "province": "ลพบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101649",
+    "seqMin": 134,
+    "seqMax": 392,
+    "count": 127
+  },
+  {
+    "label": "สพป.ลำปาง เขต 1",
+    "province": "ลำปาง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105250",
+    "seqMin": 1,
+    "seqMax": 475,
+    "count": 98
+  },
+  {
+    "label": "สพป.ลำปาง เขต 2",
+    "province": "ลำปาง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105250",
+    "seqMin": 91,
+    "seqMax": 510,
+    "count": 94
+  },
+  {
+    "label": "สพป.ลำปาง เขต 3",
+    "province": "ลำปาง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105250",
+    "seqMin": 14,
+    "seqMax": 420,
+    "count": 93
+  },
+  {
+    "label": "สพป.ลำพูน เขต 1",
+    "province": "ลำพูน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105151",
+    "seqMin": 1,
+    "seqMax": 310,
+    "count": 87
+  },
+  {
+    "label": "สพป.ลำพูน เขต 2",
+    "province": "ลำพูน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105151",
+    "seqMin": 65,
+    "seqMax": 292,
+    "count": 79
+  },
+  {
+    "label": "สพป.เลย เขต 1",
+    "province": "เลย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104201",
+    "seqMin": 2,
+    "seqMax": 387,
+    "count": 122
+  },
+  {
+    "label": "สพป.เลย เขต 2",
+    "province": "เลย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104252",
+    "seqMin": 30,
+    "seqMax": 455,
+    "count": 154
+  },
+  {
+    "label": "สพป.เลย เขต 3",
+    "province": "เลย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104252",
+    "seqMin": 7,
+    "seqMax": 419,
+    "count": 114
+  },
+  {
+    "label": "สพป.ศรีสะเกษ เขต 1",
+    "province": "ศรีสะเกษ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103353",
+    "seqMin": 1,
+    "seqMax": 851,
+    "count": 236
+  },
+  {
+    "label": "สพป.ศรีสะเกษ เขต 2",
+    "province": "ศรีสะเกษ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103353",
+    "seqMin": 12,
+    "seqMax": 883,
+    "count": 177
+  },
+  {
+    "label": "สพป.ศรีสะเกษ เขต 3",
+    "province": "ศรีสะเกษ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103353",
+    "seqMin": 103,
+    "seqMax": 884,
+    "count": 199
+  },
+  {
+    "label": "สพป.ศรีสะเกษ เขต 4",
+    "province": "ศรีสะเกษ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103353",
+    "seqMin": 81,
+    "seqMax": 860,
+    "count": 228
+  },
+  {
+    "label": "สพป.สกลนคร เขต 1",
+    "province": "สกลนคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104754",
+    "seqMin": 1,
+    "seqMax": 625,
+    "count": 162
+  },
+  {
+    "label": "สพป.สกลนคร เขต 2",
+    "province": "สกลนคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104754",
+    "seqMin": 34,
+    "seqMax": 586,
+    "count": 251
+  },
+  {
+    "label": "สพป.สกลนคร เขต 3",
+    "province": "สกลนคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104754",
+    "seqMin": 106,
+    "seqMax": 537,
+    "count": 190
+  },
+  {
+    "label": "สพป.สงขลา เขต 1",
+    "province": "สงขลา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109055",
+    "seqMin": 1,
+    "seqMax": 472,
+    "count": 133
+  },
+  {
+    "label": "สพป.สงขลา เขต 2",
+    "province": "สงขลา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109055",
+    "seqMin": 21,
+    "seqMax": 484,
+    "count": 121
+  },
+  {
+    "label": "สพป.สงขลา เขต 3",
+    "province": "สงขลา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109055",
+    "seqMin": 22,
+    "seqMax": 482,
+    "count": 198
+  },
+  {
+    "label": "สพป.สตูล",
+    "province": "สตูล",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109156",
+    "seqMin": 1,
+    "seqMax": 166,
+    "count": 157
+  },
+  {
+    "label": "สพป.สมุทรปราการ เขต 1",
+    "province": "สมุทรปราการ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101157",
+    "seqMin": 1,
+    "seqMax": 134,
+    "count": 71
+  },
+  {
+    "label": "สพป.สมุทรปราการ เขต 2",
+    "province": "สมุทรปราการ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101157",
+    "seqMin": 59,
+    "seqMax": 148,
+    "count": 71
+  },
+  {
+    "label": "สพป.สมุทรสงคราม",
+    "province": "สมุทรสงคราม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107558",
+    "seqMin": 1,
+    "seqMax": 95,
+    "count": 66
+  },
+  {
+    "label": "สพป.สมุทรสาคร",
+    "province": "สมุทรสาคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107459",
+    "seqMin": 1,
+    "seqMax": 110,
+    "count": 102
+  },
+  {
+    "label": "สพป.สระแก้ว เขต 1",
+    "province": "สระแก้ว",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102774",
+    "seqMin": 1,
+    "seqMax": 316,
+    "count": 138
+  },
+  {
+    "label": "สพป.สระแก้ว เขต 2",
+    "province": "สระแก้ว",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102774",
+    "seqMin": 2,
+    "seqMax": 275,
+    "count": 123
+  },
+  {
+    "label": "สพป.สระบุรี เขต 1",
+    "province": "สระบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101960",
+    "seqMin": 1,
+    "seqMax": 299,
+    "count": 114
+  },
+  {
+    "label": "สพป.สระบุรี เขต 2",
+    "province": "สระบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101960",
+    "seqMin": 24,
+    "seqMax": 280,
+    "count": 137
+  },
+  {
+    "label": "สพป.สิงห์บุรี",
+    "province": "สิงห์บุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101761",
+    "seqMin": 2,
+    "seqMax": 138,
+    "count": 89
+  },
+  {
+    "label": "สพป.สุโขทัย เขต 1",
+    "province": "สุโขทัย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106462",
+    "seqMin": 1,
+    "seqMax": 184,
+    "count": 117
+  },
+  {
+    "label": "สพป.สุโขทัย เขต 2",
+    "province": "สุโขทัย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106462",
+    "seqMin": 57,
+    "seqMax": 357,
+    "count": 160
+  },
+  {
+    "label": "สพป.สุพรรณบุรี เขต 1",
+    "province": "สุพรรณบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107263",
+    "seqMin": 2,
+    "seqMax": 275,
+    "count": 126
+  },
+  {
+    "label": "สพป.สุพรรณบุรี เขต 2",
+    "province": "สุพรรณบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107263",
+    "seqMin": 65,
+    "seqMax": 420,
+    "count": 128
+  },
+  {
+    "label": "สพป.สุพรรณบุรี เขต 3",
+    "province": "สุพรรณบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107263",
+    "seqMin": 9,
+    "seqMax": 480,
+    "count": 132
+  },
+  {
+    "label": "สพป.สุราษฎร์ธานี เขต 1",
+    "province": "สุราษฎร์ธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108464",
+    "seqMin": 1,
+    "seqMax": 237,
+    "count": 114
+  },
+  {
+    "label": "สพป.สุราษฎร์ธานี เขต 2",
+    "province": "สุราษฎร์ธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108464",
+    "seqMin": 98,
+    "seqMax": 586,
+    "count": 175
+  },
+  {
+    "label": "สพป.สุราษฎร์ธานี เขต 3",
+    "province": "สุราษฎร์ธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108464",
+    "seqMin": 7,
+    "seqMax": 528,
+    "count": 156
+  },
+  {
+    "label": "สพป.สุรินทร์ เขต 1",
+    "province": "สุรินทร์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103265",
+    "seqMin": 1,
+    "seqMax": 733,
+    "count": 272
+  },
+  {
+    "label": "สพป.สุรินทร์ เขต 2",
+    "province": "สุรินทร์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103265",
+    "seqMin": 35,
+    "seqMax": 754,
+    "count": 216
+  },
+  {
+    "label": "สพป.สุรินทร์ เขต 3",
+    "province": "สุรินทร์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103265",
+    "seqMin": 18,
+    "seqMax": 756,
+    "count": 249
+  },
+  {
+    "label": "สพป.หนองคาย เขต 1",
+    "province": "หนองคาย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104366",
+    "seqMin": 1,
+    "seqMax": 493,
+    "count": 149
+  },
+  {
+    "label": "สพป.หนองคาย เขต 2",
+    "province": "หนองคาย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104366",
+    "seqMin": 231,
+    "seqMax": 486,
+    "count": 105
+  },
+  {
+    "label": "สพป.หนองบัวลำภู เขต 1",
+    "province": "หนองบัวลำภู",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103976",
+    "seqMin": 1,
+    "seqMax": 301,
+    "count": 193
+  },
+  {
+    "label": "สพป.หนองบัวลำภู เขต 2",
+    "province": "หนองบัวลำภู",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103976",
+    "seqMin": 33,
+    "seqMax": 326,
+    "count": 105
+  },
+  {
+    "label": "สพป.อ่างทอง",
+    "province": "อ่างทอง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101567",
+    "seqMin": 1,
+    "seqMax": 158,
+    "count": 133
+  },
+  {
+    "label": "สพป.อำนาจเจริญ",
+    "province": "อำนาจเจริญ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103775",
+    "seqMin": 1,
+    "seqMax": 285,
+    "count": 251
+  },
+  {
+    "label": "สพป.อุดรธานี เขต 1",
+    "province": "อุดรธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104168",
+    "seqMin": 1,
+    "seqMax": 670,
+    "count": 199
+  },
+  {
+    "label": "สพป.อุดรธานี เขต 2",
+    "province": "อุดรธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104168",
+    "seqMin": 119,
+    "seqMax": 821,
+    "count": 178
+  },
+  {
+    "label": "สพป.อุดรธานี เขต 3",
+    "province": "อุดรธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104168",
+    "seqMin": 15,
+    "seqMax": 804,
+    "count": 204
+  },
+  {
+    "label": "สพป.อุดรธานี เขต 4",
+    "province": "อุดรธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104168",
+    "seqMin": 98,
+    "seqMax": 894,
+    "count": 166
+  },
+  {
+    "label": "สพป.อุตรดิตถ์ เขต 1",
+    "province": "อุตรดิตถ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105369",
+    "seqMin": 1,
+    "seqMax": 310,
+    "count": 132
+  },
+  {
+    "label": "สพป.อุตรดิตถ์ เขต 2",
+    "province": "อุตรดิตถ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105369",
+    "seqMin": 51,
+    "seqMax": 292,
+    "count": 76
+  },
+  {
+    "label": "สพป.อุทัยธานี เขต 1",
+    "province": "อุทัยธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106170",
+    "seqMin": 2,
+    "seqMax": 210,
+    "count": 68
+  },
+  {
+    "label": "สพป.อุทัยธานี เขต 2",
+    "province": "อุทัยธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106170",
+    "seqMin": 51,
+    "seqMax": 259,
+    "count": 121
+  },
+  {
+    "label": "สพป.อุบลราชธานี เขต 1",
+    "province": "อุบลราชธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103471",
+    "seqMin": 1,
+    "seqMax": 1030,
+    "count": 211
+  },
+  {
+    "label": "สพป.อุบลราชธานี เขต 2",
+    "province": "อุบลราชธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103471",
+    "seqMin": 19,
+    "seqMax": 1053,
+    "count": 193
+  },
+  {
+    "label": "สพป.อุบลราชธานี เขต 3",
+    "province": "อุบลราชธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103471",
+    "seqMin": 93,
+    "seqMax": 1039,
+    "count": 213
+  },
+  {
+    "label": "สพป.อุบลราชธานี เขต 4",
+    "province": "อุบลราชธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103471",
+    "seqMin": 71,
+    "seqMax": 1074,
+    "count": 142
+  },
+  {
+    "label": "สพป.อุบลราชธานี เขต 5",
+    "province": "อุบลราชธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103471",
+    "seqMin": 48,
+    "seqMax": 1094,
+    "count": 290
+  },
+  {
+    "label": "สพม.กรุงเทพมหานคร เขต 1",
+    "province": "กรุงเทพมหานคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101072",
+    "seqMin": 39,
+    "seqMax": 161,
+    "count": 66
+  },
+  {
+    "label": "สพม.กรุงเทพมหานคร เขต 2",
+    "province": "กรุงเทพมหานคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101072",
+    "seqMin": 52,
+    "seqMax": 4005,
+    "count": 53
+  },
+  {
+    "label": "สพม.กาญจนบุรี",
+    "province": "กาญจนบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107102",
+    "seqMin": 447,
+    "seqMax": 479,
+    "count": 29
+  },
+  {
+    "label": "สพม.กาฬสินธุ์",
+    "province": "กาฬสินธุ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104603",
+    "seqMin": 581,
+    "seqMax": 2026,
+    "count": 55
+  },
+  {
+    "label": "สพม.กำแพงเพชร",
+    "province": "กำแพงเพชร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106202",
+    "seqMin": 430,
+    "seqMax": 2014,
+    "count": 33
+  },
+  {
+    "label": "สพม.ขอนแก่น",
+    "province": "ขอนแก่น",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104005",
+    "seqMin": 1089,
+    "seqMax": 1192,
+    "count": 83
+  },
+  {
+    "label": "สพม.จันทบุรี ตราด",
+    "province": "จันทบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102206",
+    "seqMin": 18,
+    "seqMax": 252,
+    "count": 37
+  },
+  {
+    "label": "สพม.ฉะเชิงเทรา",
+    "province": "ฉะเชิงเทรา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102407",
+    "seqMin": 320,
+    "seqMax": 352,
+    "count": 27
+  },
+  {
+    "label": "สพม.ชลบุรี ระยอง",
+    "province": "ชลบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102008",
+    "seqMin": 144,
+    "seqMax": 341,
+    "count": 46
+  },
+  {
+    "label": "สพม.ชัยภูมิ",
+    "province": "ชัยภูมิ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103610",
+    "seqMin": 757,
+    "seqMax": 818,
+    "count": 37
+  },
+  {
+    "label": "สพม.เชียงราย",
+    "province": "เชียงราย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105712",
+    "seqMin": 694,
+    "seqMax": 736,
+    "count": 41
+  },
+  {
+    "label": "สพม.เชียงใหม่",
+    "province": "เชียงใหม่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105013",
+    "seqMin": 984,
+    "seqMax": 1065,
+    "count": 34
+  },
+  {
+    "label": "สพม.ตรัง กระบี่",
+    "province": "กระบี่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108101",
+    "seqMin": 234,
+    "seqMax": 357,
+    "count": 44
+  },
+  {
+    "label": "สพม.ตาก",
+    "province": "ตาก",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106302",
+    "seqMin": 237,
+    "seqMax": 2010,
+    "count": 21
+  },
+  {
+    "label": "สพม.นครปฐม",
+    "province": "นครปฐม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107318",
+    "seqMin": 258,
+    "seqMax": 288,
+    "count": 28
+  },
+  {
+    "label": "สพม.นครพนม",
+    "province": "นครพนม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104819",
+    "seqMin": 456,
+    "seqMax": 507,
+    "count": 51
+  },
+  {
+    "label": "สพม.นครราชสีมา",
+    "province": "นครราชสีมา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103020",
+    "seqMin": 1355,
+    "seqMax": 1462,
+    "count": 50
+  },
+  {
+    "label": "สพม.นครศรีธรรมราช",
+    "province": "นครศรีธรรมราช",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108021",
+    "seqMin": 774,
+    "seqMax": 849,
+    "count": 71
+  },
+  {
+    "label": "สพม.นครสวรรค์",
+    "province": "นครสวรรค์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106022",
+    "seqMin": 620,
+    "seqMax": 658,
+    "count": 37
+  },
+  {
+    "label": "สพม.นนทบุรี",
+    "province": "นนทบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101223",
+    "seqMin": 146,
+    "seqMax": 166,
+    "count": 18
+  },
+  {
+    "label": "สพม.นราธิวาส",
+    "province": "นราธิวาส",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109624",
+    "seqMin": 348,
+    "seqMax": 366,
+    "count": 17
+  },
+  {
+    "label": "สพม.น่าน",
+    "province": "น่าน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105525",
+    "seqMin": 426,
+    "seqMax": 462,
+    "count": 29
+  },
+  {
+    "label": "สพม.บึงกาฬ",
+    "province": "บึงกาฬ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103866",
+    "seqMin": 507,
+    "seqMax": 543,
+    "count": 25
+  },
+  {
+    "label": "สพม.บุรีรัมย์",
+    "province": "บุรีรัมย์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103126",
+    "seqMin": 846,
+    "seqMax": 913,
+    "count": 66
+  },
+  {
+    "label": "สพม.ปทุมธานี",
+    "province": "ปทุมธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101327",
+    "seqMin": 177,
+    "seqMax": 200,
+    "count": 20
+  },
+  {
+    "label": "สพม.ประจวบคีรีขันธ์",
+    "province": "ประจวบคีรีขันธ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107728",
+    "seqMin": 239,
+    "seqMax": 258,
+    "count": 18
+  },
+  {
+    "label": "สพม.ปราจีนบุรี นครนายก",
+    "province": "ปราจีนบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102529",
+    "seqMin": 151,
+    "seqMax": 290,
+    "count": 29
+  },
+  {
+    "label": "สพม.ปัตตานี",
+    "province": "ปัตตานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109430",
+    "seqMin": 329,
+    "seqMax": 345,
+    "count": 17
+  },
+  {
+    "label": "สพม.พระนครศรีอยุธยา",
+    "province": "พระนครศรีอยุธยา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101431",
+    "seqMin": 399,
+    "seqMax": 427,
+    "count": 24
+  },
+  {
+    "label": "สพม.พะเยา",
+    "province": "พะเยา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105632",
+    "seqMin": 291,
+    "seqMax": 309,
+    "count": 18
+  },
+  {
+    "label": "สพม.พังงา ภูเก็ต ระนอง",
+    "province": "พังงา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108233",
+    "seqMin": 58,
+    "seqMax": 186,
+    "count": 27
+  },
+  {
+    "label": "สพม.พัทลุง",
+    "province": "พัทลุง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109334",
+    "seqMin": 260,
+    "seqMax": 288,
+    "count": 27
+  },
+  {
+    "label": "สพม.พิจิตร",
+    "province": "พิจิตร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106635",
+    "seqMin": 373,
+    "seqMax": 404,
+    "count": 30
+  },
+  {
+    "label": "สพม.พิษณุโลก อุตรดิตถ์",
+    "province": "อุตรดิตถ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105369",
+    "seqMin": 315,
+    "seqMax": 501,
+    "count": 57
+  },
+  {
+    "label": "สพม.เพชรบุรี",
+    "province": "เพชรบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107637",
+    "seqMin": 247,
+    "seqMax": 270,
+    "count": 22
+  },
+  {
+    "label": "สพม.เพชรบูรณ์",
+    "province": "เพชรบูรณ์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106738",
+    "seqMin": 579,
+    "seqMax": 620,
+    "count": 39
+  },
+  {
+    "label": "สพม.แพร่",
+    "province": "แพร่",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105439",
+    "seqMin": 301,
+    "seqMax": 318,
+    "count": 16
+  },
+  {
+    "label": "สพม.มหาสารคาม",
+    "province": "มหาสารคาม",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104441",
+    "seqMin": 580,
+    "seqMax": 634,
+    "count": 35
+  },
+  {
+    "label": "สพม.มุกดาหาร",
+    "province": "มุกดาหาร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104973",
+    "seqMin": 247,
+    "seqMax": 277,
+    "count": 30
+  },
+  {
+    "label": "สพม.แม่ฮ่องสอน",
+    "province": "แม่ฮ่องสอน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105842",
+    "seqMin": 347,
+    "seqMax": 358,
+    "count": 8
+  },
+  {
+    "label": "สพม.ยะลา",
+    "province": "ยะลา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109544",
+    "seqMin": 214,
+    "seqMax": 226,
+    "count": 12
+  },
+  {
+    "label": "สพม.ร้อยเอ็ด",
+    "province": "ร้อยเอ็ด",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104545",
+    "seqMin": 804,
+    "seqMax": 868,
+    "count": 59
+  },
+  {
+    "label": "สพม.ราชบุรี",
+    "province": "ราชบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107048",
+    "seqMin": 358,
+    "seqMax": 383,
+    "count": 26
+  },
+  {
+    "label": "สพม.ลพบุรี",
+    "province": "ลพบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101649",
+    "seqMin": 393,
+    "seqMax": 419,
+    "count": 25
+  },
+  {
+    "label": "สพม.ลำปาง ลำพูน",
+    "province": "ลำพูน",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "105151",
+    "seqMin": 293,
+    "seqMax": 2007,
+    "count": 46
+  },
+  {
+    "label": "สพม.เลย หนองบัวลำภู",
+    "province": "หนองบัวลำภู",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103976",
+    "seqMin": 327,
+    "seqMax": 489,
+    "count": 51
+  },
+  {
+    "label": "สพม.ศรีสะเกษ ยโสธร",
+    "province": "ศรีสะเกษ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103353",
+    "seqMin": 394,
+    "seqMax": 975,
+    "count": 83
+  },
+  {
+    "label": "สพม.สกลนคร",
+    "province": "สกลนคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104754",
+    "seqMin": 626,
+    "seqMax": 677,
+    "count": 45
+  },
+  {
+    "label": "สพม.สงขลา สตูล",
+    "province": "สงขลา",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "109055",
+    "seqMin": 167,
+    "seqMax": 528,
+    "count": 52
+  },
+  {
+    "label": "สพม.สมุทรปราการ",
+    "province": "สมุทรปราการ",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101157",
+    "seqMin": 73,
+    "seqMax": 172,
+    "count": 25
+  },
+  {
+    "label": "สพม.สมุทรสาคร สมุทรสงคราม",
+    "province": "สมุทรสาคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107459",
+    "seqMin": 96,
+    "seqMax": 121,
+    "count": 19
+  },
+  {
+    "label": "สพม.สระแก้ว",
+    "province": "สระแก้ว",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "102702",
+    "seqMin": 294,
+    "seqMax": 2010,
+    "count": 15
+  },
+  {
+    "label": "สพม.สระบุรี",
+    "province": "สระบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101960",
+    "seqMin": 300,
+    "seqMax": 321,
+    "count": 17
+  },
+  {
+    "label": "สพม.สิงห์บุรี อ่างทอง",
+    "province": "อ่างทอง",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101567",
+    "seqMin": 140,
+    "seqMax": 173,
+    "count": 25
+  },
+  {
+    "label": "สพม.สุโขทัย",
+    "province": "สุโขทัย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "106462",
+    "seqMin": 359,
+    "seqMax": 385,
+    "count": 27
+  },
+  {
+    "label": "สพม.สุพรรณบุรี",
+    "province": "สุพรรณบุรี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "107203",
+    "seqMin": 447,
+    "seqMax": 2011,
+    "count": 31
+  },
+  {
+    "label": "สพม.สุราษฎร์ธานี ชุมพร",
+    "province": "สุราษฎร์ธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "108464",
+    "seqMin": 284,
+    "seqMax": 585,
+    "count": 66
+  },
+  {
+    "label": "สพม.สุรินทร์",
+    "province": "สุรินทร์",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103265",
+    "seqMin": 757,
+    "seqMax": 842,
+    "count": 85
+  },
+  {
+    "label": "สพม.หนองคาย",
+    "province": "หนองคาย",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104366",
+    "seqMin": 494,
+    "seqMax": 550,
+    "count": 31
+  },
+  {
+    "label": "สพม.อุดรธานี",
+    "province": "อุดรธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "104168",
+    "seqMin": 822,
+    "seqMax": 893,
+    "count": 63
+  },
+  {
+    "label": "สพม.อุทัยธานี ชัยนาท",
+    "province": "ชัยนาท",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101809",
+    "seqMin": 208,
+    "seqMax": 280,
+    "count": 34
+  },
+  {
+    "label": "สพม.อุบลราชธานี อำนาจเจริญ",
+    "province": "อุบลราชธานี",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "103401",
+    "seqMin": 262,
+    "seqMax": 2025,
+    "count": 82
+  },
+  {
+    "label": "สำนักบริหารงานการศึกษาพิเศษ",
+    "province": "กรุงเทพมหานคร",
+    "department": "สพฐ.",
+    "schoolIdPrefix": "101072",
+    "seqMin": 1,
+    "seqMax": 3002,
+    "count": 189
+  }
+]
