@@ -10,8 +10,11 @@ export default async function SchoolLoginPage({ params }: { params: Promise<{ co
 
   if (!school) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0F2F8', fontFamily: 'Sarabun, sans-serif', color: '#6B7280' }}>
-        ไม่พบโรงเรียนนี้ — ตรวจสอบลิงก์อีกครั้ง
+      <div className="auth-scout-page" style={{ placeItems: 'center', justifyContent: 'center' }}>
+        <div className="auth-scout-card" style={{ textAlign: 'center', maxWidth: 400 }}>
+          <p style={{ color: '#6B5D45', margin: 0 }}>ไม่พบโรงเรียนนี้ — ตรวจสอบลิงก์อีกครั้ง</p>
+          <a href="/" className="auth-scout-footer" style={{ display: 'inline-block', marginTop: 16 }}>‹ กลับหน้าแรก</a>
+        </div>
       </div>
     )
   }

@@ -186,40 +186,34 @@ async function generateAndStoreApprovedDocument(params: {
       landscape: printReq.landscape,
     })
 
-    const storagePath = `${params.schoolId}/${params.previewTarget.kind}/${params.exportId}.pdf`
-    const { error: uploadError } = await db.storage
-      .from('approved-documents')
-      .upload(storagePath, pdfBuffer, { contentType: 'application/pdf', upsert: true })
-    if (uploadError) throw new Error(uploadError.message)
-
+    // เก็บ PDF ไว้ที่ Google Drive ของโรงเรียนอย่างเดียว (ไม่เก็บใน Supabase Storage)
     const { data: school } = await db.from('schools')
       .select('google_drive_folder_id')
       .eq('id', params.schoolId)
       .maybeSingle()
 
-    let driveFileId: string | null = null
-    let driveWebViewLink: string | null = null
-    let driveFolderPath: string | null = null
+    if (!school?.google_drive_folder_id) {
+      throw new Error('ยังไม่ได้เชื่อมต่อ Google Drive ของโรงเรียน — กรุณาเชื่อมต่อก่อน แล้วเอกสารจะถูกจัดเก็บใน Drive')
+    }
 
-    if (school?.google_drive_folder_id) {
-      const folderLabel = APPROVED_DOC_FOLDER_LABELS[params.previewTarget.kind]
-      const drive = await uploadPdfToDrive({
-        schoolId: params.schoolId,
-        rootFolderId: school.google_drive_folder_id,
-        folderSegments: [String(params.yearBe), folderLabel],
-        fileName: params.fileName,
-        buffer: pdfBuffer,
-      })
-      driveFileId = drive.fileId
-      driveWebViewLink = drive.webViewLink
-      driveFolderPath = drive.folderPath
+    const folderLabel = APPROVED_DOC_FOLDER_LABELS[params.previewTarget.kind]
+    const drive = await uploadPdfToDrive({
+      schoolId: params.schoolId,
+      rootFolderId: school.google_drive_folder_id,
+      folderSegments: [String(params.yearBe), folderLabel],
+      fileName: params.fileName,
+      buffer: pdfBuffer,
+    })
+
+    if (!drive.fileId) {
+      throw new Error('อัปโหลดไฟล์ขึ้น Google Drive ไม่สำเร็จ')
     }
 
     await db.from('approved_document_exports').update({
-      storage_path: storagePath,
-      drive_file_id: driveFileId,
-      drive_web_view_link: driveWebViewLink,
-      drive_folder_path: driveFolderPath,
+      storage_path: null,
+      drive_file_id: drive.fileId,
+      drive_web_view_link: drive.webViewLink,
+      drive_folder_path: drive.folderPath,
       generated_at: new Date().toISOString(),
       status: 'ready',
       error_message: null,

@@ -309,7 +309,7 @@ export async function fetchApprovedDocuments(docKind: ApprovedDocKind) {
       drive_web_view_link: row.drive_web_view_link,
       drive_folder_path: row.drive_folder_path,
       can_delete: canDeleteApprovedDocs(session.role),
-      has_file: row.status === 'ready' && Boolean(row.storage_path),
+      has_file: row.status === 'ready' && Boolean(row.drive_web_view_link || row.storage_path),
     })
   }
 
@@ -349,7 +349,7 @@ export async function getApprovedDocumentDownloadPath(id: string) {
     .eq('id', id)
     .eq('school_id', session.schoolId)
     .maybeSingle()
-  if (!row || row.status !== 'ready' || !row.storage_path) return { error: 'ไฟล์ยังไม่พร้อม' }
+  if (!row || row.status !== 'ready') return { error: 'ไฟล์ยังไม่พร้อม' }
 
   const allowed = await canViewDocument(session, row as typeof row & {
     doc_kind: ApprovedDocKind
@@ -360,11 +360,21 @@ export async function getApprovedDocumentDownloadPath(id: string) {
   })
   if (!allowed) return { error: 'ไม่มีสิทธิ์เข้าถึงไฟล์นี้' }
 
-  const { data, error } = await db.storage
-    .from('approved-documents')
-    .createSignedUrl(row.storage_path, 60 * 10)
-  if (error || !data?.signedUrl) return { error: 'ดาวน์โหลดไม่สำเร็จ' }
-  return { url: data.signedUrl, fileName: row.file_name }
+  // เอกสารเก็บใน Google Drive — เปิด/ดาวน์โหลดผ่านลิงก์ Drive
+  if (row.drive_web_view_link) {
+    return { url: row.drive_web_view_link, fileName: row.file_name }
+  }
+
+  // เผื่อเอกสารเก่าที่ยังเก็บใน Supabase Storage
+  if (row.storage_path) {
+    const { data, error } = await db.storage
+      .from('approved-documents')
+      .createSignedUrl(row.storage_path, 60 * 10)
+    if (error || !data?.signedUrl) return { error: 'ดาวน์โหลดไม่สำเร็จ' }
+    return { url: data.signedUrl, fileName: row.file_name }
+  }
+
+  return { error: 'ไฟล์ยังไม่พร้อม' }
 }
 
 /** @deprecated ใช้ OAuth เชื่อมต่อแทน — คงไว้สำหรับ advanced/manual override */
