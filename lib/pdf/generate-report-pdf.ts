@@ -5,6 +5,23 @@ export { appOrigin }
 
 const isProd = process.env.NODE_ENV === 'production'
 
+/** A4 @ 96dpi — ให้ layout ตรงกับ 210×297mm */
+const A4_VIEWPORT = { width: 794, height: 1123, deviceScaleFactor: 1 as const }
+const A4_LANDSCAPE_VIEWPORT = { width: 1123, height: 794, deviceScaleFactor: 1 as const }
+
+async function waitForReportFonts(page: import('puppeteer-core').Page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready
+    for (let i = 0; i < 80; i++) {
+      const ok = document.fonts.check('16px Sarabun')
+        || document.fonts.check('400 16px Sarabun')
+        || getComputedStyle(document.body).fontFamily.toLowerCase().includes('sarabun')
+      if (ok) return
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  })
+}
+
 async function launchBrowser(): Promise<Browser> {
   if (isProd) {
     const [{ default: chromium }, { default: puppeteerCore }] = await Promise.all([
@@ -50,6 +67,7 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
   try {
     browser = await launchBrowser()
     const page = await browser.newPage()
+    await page.setViewport(input.landscape ? A4_LANDSCAPE_VIEWPORT : A4_VIEWPORT)
     if (input.localStorageSeed) {
       for (const [key, value] of Object.entries(input.localStorageSeed)) {
         await page.evaluateOnNewDocument((storageKey, storageValue) => {
@@ -65,12 +83,12 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
       httpOnly: true,
       secure,
     })
-    await page.goto(targetUrl, { waitUntil: 'load', timeout: 90000 })
+    await page.goto(targetUrl, { waitUntil: 'networkidle0', timeout: 120000 }).catch(async () => {
+      await page.goto(targetUrl, { waitUntil: 'load', timeout: 90000 })
+    })
     await page.waitForFunction('window.__REPORT_READY__ === true', { timeout: 120000 })
-
-    if (!input.landscape) {
-      await page.emulateMediaType('screen')
-    }
+    await waitForReportFonts(page)
+    await page.emulateMediaType('screen')
 
     const pdf = input.landscape
       ? await page.pdf({
@@ -82,8 +100,9 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
       })
       : await page.pdf({
         printBackground: true,
-        format: 'A4',
-        preferCSSPageSize: true,
+        width: '210mm',
+        height: '297mm',
+        preferCSSPageSize: false,
         margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
       })
 

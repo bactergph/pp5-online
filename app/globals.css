@@ -5364,6 +5364,11 @@ div:has(> .thai-table) {
   max-width: none;
 }
 
+.app-shell--chromeless:has(.report-workspace--print),
+.main-content--chromeless:has(.report-workspace--print) {
+  background: #ffffff !important;
+}
+
 .document-sign-modal__panel--actions {
   width: min(520px, calc(100vw - 32px));
   max-height: none;
