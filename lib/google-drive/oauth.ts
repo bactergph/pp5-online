@@ -1,4 +1,5 @@
 import 'server-only'
+import { appOrigin } from '@/lib/app-origin'
 import { SignJWT, jwtVerify } from 'jose'
 import { google } from 'googleapis'
 
@@ -26,10 +27,7 @@ export function googleOAuthRedirectUri() {
   if (process.env.GOOGLE_OAUTH_REDIRECT_URI) {
     return process.env.GOOGLE_OAUTH_REDIRECT_URI
   }
-  const base = process.env.APP_URL
-    || process.env.NEXT_PUBLIC_APP_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-  return `${base.replace(/\/$/, '')}/api/integrations/google-drive/callback`
+  return `${appOrigin()}/api/integrations/google-drive/callback`
 }
 
 export function createGoogleOAuthClient() {
