@@ -37,6 +37,8 @@ export type GenerateReportPdfInput = {
   query: string
   sessionToken: string
   landscape?: boolean
+  /** ใส่ค่า layout จาก localStorage ของ browser ก่อนโหลดหน้า print=1 */
+  localStorageSeed?: Record<string, string>
 }
 
 export async function generateReportPdf(input: GenerateReportPdfInput): Promise<Buffer> {
@@ -48,6 +50,13 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
   try {
     browser = await launchBrowser()
     const page = await browser.newPage()
+    if (input.localStorageSeed) {
+      for (const [key, value] of Object.entries(input.localStorageSeed)) {
+        await page.evaluateOnNewDocument((storageKey, storageValue) => {
+          localStorage.setItem(storageKey, storageValue)
+        }, key, value)
+      }
+    }
     await page.setCookie({
       name: 'session',
       value: input.sessionToken,
@@ -59,6 +68,10 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
     await page.goto(targetUrl, { waitUntil: 'load', timeout: 90000 })
     await page.waitForFunction('window.__REPORT_READY__ === true', { timeout: 120000 })
 
+    if (!input.landscape) {
+      await page.emulateMediaType('screen')
+    }
+
     const pdf = input.landscape
       ? await page.pdf({
         printBackground: true,
@@ -69,7 +82,9 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
       })
       : await page.pdf({
         printBackground: true,
+        format: 'A4',
         preferCSSPageSize: true,
+        margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
       })
 
     return Buffer.from(pdf)

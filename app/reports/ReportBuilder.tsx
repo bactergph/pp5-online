@@ -69,11 +69,12 @@ import {
   pp5SectionLayoutStyle,
   pp5StudentTableRows,
   savePp5PrintLayouts,
+  PP5_PRINT_LAYOUTS_STORAGE_KEY,
   type Pp5PrintSection,
   PP5_PRINT_SECTIONS,
 } from '@/lib/pp5-print-layout'
 import { usePp5Layout, usePp5SectionLayout, Pp5PrintLayoutsProvider } from '@/lib/pp5-print-layout-context'
-import { pp6SectionLayoutStyle, savePp6PrintLayouts } from '@/lib/pp6-print-layout'
+import { pp6SectionLayoutStyle, savePp6PrintLayouts, PP6_PRINT_LAYOUTS_STORAGE_KEY } from '@/lib/pp6-print-layout'
 import { usePp6SectionLayout, Pp6PrintLayoutsProvider } from '@/lib/pp6-print-layout-context'
 import Pp5PrintLayoutTuner, { usePp5PrintLayoutsState, usePp6PrintLayoutsState } from '@/components/reports/Pp5PrintLayoutTuner'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
@@ -4008,6 +4009,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
       }))
       await new Promise(requestAnimationFrame)
       await new Promise(requestAnimationFrame)
+      if (printMode) await new Promise(resolve => window.setTimeout(resolve, 300))
       if (!cancelled) (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = true
     }
     void markReady()
@@ -4085,10 +4087,22 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
       if (mode === 'pp6') params.set('ranked', pp6Ranked ? '1' : '0')
       if (mode === 'pp6') params.set('showGrade', pp6ShowGrade ? '1' : '0')
 
+      const localStorageSeed: Record<string, string> = {}
+      if (mode === 'pp5-subject' || mode === 'pp5-class') {
+        localStorageSeed[PP5_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp5PrintLayouts)
+      }
+      if (mode === 'pp6') {
+        localStorageSeed[PP6_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp6PrintLayouts)
+      }
+
       const res = await fetch('/api/reports/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: window.location.pathname, query: params.toString() }),
+        body: JSON.stringify({
+          path: window.location.pathname,
+          query: params.toString(),
+          localStorageSeed: Object.keys(localStorageSeed).length > 0 ? localStorageSeed : undefined,
+        }),
       })
       if (!res.ok) {
         let message = 'สร้าง PDF ไม่สำเร็จ'
@@ -4115,9 +4129,9 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   }
 
   return (
-    <div className={`page-stack report-workspace${embedMode ? ' report-workspace--embed' : ''}`}>
+    <div className={`page-stack report-workspace${embedMode ? ' report-workspace--embed' : ''}${printMode ? ' report-workspace--print' : ''}`}>
       <div className="report-layout">
-        {!embedMode && (
+        {!embedMode && !printMode && (
         <aside className="report-side-panel">
           <div className="report-side-title">
             <div className="section-title">พิมพ์รายงาน {MODE_CONFIG[mode].title}</div>
@@ -4312,7 +4326,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         )}
 
         <main className="report-preview-panel">
-          {!embedMode && (
+          {!embedMode && !printMode && (
           <div className="report-preview-toolbar">
             <label>
               <span>ขนาด</span>
@@ -4338,7 +4352,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
             </div>
           </div>
           )}
-          {!embedMode && (mode === 'pp6' ? (
+          {!embedMode && !printMode && (mode === 'pp6' ? (
             <Pp5PrintLayoutTuner
               variant="pp6"
               open={pp5TunerOpen}
@@ -4385,8 +4399,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
             ) : (
               <Pp5PrintLayoutsProvider layouts={pp5PrintLayouts}>
               <div
-                className="report-print-zone"
-                style={{ transform: `scale(${(embedMode ? 72 : scale) / 100})`, transformOrigin: 'top center' }}
+                className={printMode ? 'report-print-zone is-pdf-export' : 'report-print-zone'}
+                style={printMode ? undefined : { transform: `scale(${(embedMode ? 72 : scale) / 100})`, transformOrigin: 'top center' }}
               >
                 {mode === 'pp5-subject' && sections.includes('cover') && <CoverPage data={data} mode={mode} subject={selectedSubject} term={reportTerm} pageNumber={pageNumbers.cover} />}
                 {mode === 'pp5-class' && sections.includes('cover') && <CoverPage data={data} mode={mode} subject={null} term={term} pageNumber={pageNumbers.cover} />}
@@ -6908,6 +6922,22 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           max-width: none;
         }
         .report-workspace--embed .report-preview-shell {
+          padding: 0;
+        }
+        .report-workspace--print {
+          padding: 0;
+          margin: 0;
+          min-height: 0;
+          background: white;
+        }
+        .report-workspace--print .report-layout {
+          display: block;
+        }
+        .report-workspace--print .report-preview-panel,
+        .report-workspace--print .report-preview-shell {
+          width: 210mm;
+          max-width: none;
+          margin: 0;
           padding: 0;
         }
         .report-layout {

@@ -59,6 +59,7 @@ export const DEFAULT_PP6_PRINT_LAYOUTS: Pp6PrintLayouts = {
 }
 
 const STORAGE_KEY = 'pp6-print-layouts-v1'
+export const PP6_PRINT_LAYOUTS_STORAGE_KEY = STORAGE_KEY
 
 export function mmToPx96(mm: number): number {
   return Math.round((mm * 96) / 25.4)

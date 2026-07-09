@@ -8,11 +8,19 @@ export async function POST(req: NextRequest) {
   let path = '/'
   let query = ''
   let landscape = false
+  let localStorageSeed: Record<string, string> | undefined
   try {
     const body = await req.json()
     path = typeof body?.path === 'string' ? body.path : '/'
     query = typeof body?.query === 'string' ? body.query : ''
     landscape = body?.landscape === true
+    if (body?.localStorageSeed && typeof body.localStorageSeed === 'object' && !Array.isArray(body.localStorageSeed)) {
+      localStorageSeed = Object.fromEntries(
+        Object.entries(body.localStorageSeed).filter((entry): entry is [string, string] => (
+          typeof entry[0] === 'string' && typeof entry[1] === 'string'
+        )),
+      )
+    }
   } catch {
     return NextResponse.json({ error: 'คำขอไม่ถูกต้อง' }, { status: 400 })
   }
@@ -33,6 +41,7 @@ export async function POST(req: NextRequest) {
       query,
       sessionToken: session,
       landscape,
+      localStorageSeed,
     })
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,

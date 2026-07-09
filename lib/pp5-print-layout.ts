@@ -175,6 +175,7 @@ export const DEFAULT_PP5_PRINT_LAYOUTS: Pp5PrintLayouts = {
 }
 
 const STORAGE_KEY = 'pp5-print-layouts-v3'
+export const PP5_PRINT_LAYOUTS_STORAGE_KEY = STORAGE_KEY
 const STORAGE_KEY_V2 = 'pp5-print-layouts-v2'
 const STORAGE_KEY_V1 = 'pp5-print-layout-v1'
 
