@@ -1,10 +1,14 @@
-import chromium from '@sparticuz/chromium'
-import puppeteerCore, { type Browser } from 'puppeteer-core'
+import type { Browser } from 'puppeteer-core'
 
 const isProd = process.env.NODE_ENV === 'production'
 
 async function launchBrowser(): Promise<Browser> {
   if (isProd) {
+    const [{ default: chromium }, { default: puppeteerCore }] = await Promise.all([
+      import('@sparticuz/chromium'),
+      import('puppeteer-core'),
+    ])
+    chromium.setGraphicsMode = false
     return puppeteerCore.launch({
       args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
       defaultViewport: { width: 1240, height: 1754 },
@@ -13,6 +17,7 @@ async function launchBrowser(): Promise<Browser> {
     })
   }
 
+  const { default: puppeteerCore } = await import('puppeteer-core')
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
   return puppeteerCore.launch({
     channel: executablePath ? undefined : 'chrome',
