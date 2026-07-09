@@ -4649,7 +4649,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
           page-break-after: always;
           box-sizing: border-box;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           font-size: 14px;
         }
         .report-page-number-wrap {
@@ -5040,7 +5040,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           padding: var(--pp5-cover-pad-top, 9mm) var(--pp5-cover-pad-x, 10mm) var(--pp5-cover-pad-bottom, 10mm);
           font-size: var(--pp5-cover-font-base, 18px);
           line-height: 1.15;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           box-sizing: border-box;
         }
         .pp5-subject-cover-doc-mark {
@@ -5424,7 +5424,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         .pp5-subject-report-head {
           text-align: center;
           margin-bottom: 10px;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
         }
         .pp5-subject-report-head h1 {
           margin: 0 0 4px;
@@ -5518,7 +5518,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           text-align: center;
           position: relative;
           margin-bottom: 24px;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
         }
         .pp5-attendance-page-number {
           position: absolute;
@@ -5555,7 +5555,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           table-layout: fixed;
           font-size: 16px;
           line-height: 1;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           border: 2px solid #111827;
         }
         .pp5-attendance-table th,
@@ -5917,7 +5917,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           position: relative;
           text-align: center;
           margin-bottom: 24px;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
         }
         .pp5-score-entry-head h1 {
           margin: 0;
@@ -5941,7 +5941,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           border-collapse: collapse;
           table-layout: fixed;
           border: 2px solid #111827;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           font-size: 16px;
           line-height: 1;
         }
@@ -6040,7 +6040,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         }
         .pp5-achievement-page {
           padding: var(--pp5-pad-top, 25mm) var(--pp5-pad-x, 13mm) var(--pp5-pad-bottom, 10mm) !important;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
         }
         .pp5-achievement-head {
           position: relative;
@@ -6184,7 +6184,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           border-collapse: collapse;
           table-layout: fixed;
           border: 2px solid #111827;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           font-size: 15px;
           line-height: 1.15;
         }
@@ -6259,7 +6259,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           position: relative;
           text-align: center;
           margin-bottom: 10px;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
         }
         .pp5-character-head h1 {
           margin: 0 0 8px;
@@ -6283,7 +6283,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           border-collapse: collapse;
           table-layout: fixed;
           border: 2px solid #111827;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           font-size: 16px;
           line-height: 1;
         }
@@ -6364,7 +6364,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           position: relative;
           text-align: center;
           margin-bottom: 10px;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
         }
         .pp5-reading-head h1 {
           margin: 0 0 8px;
@@ -6388,7 +6388,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           border-collapse: collapse;
           table-layout: fixed;
           border: 2px solid #111827;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           font-size: 16px;
           line-height: 1;
         }
@@ -6469,7 +6469,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           position: relative;
           text-align: center;
           margin-bottom: 10px;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
         }
         .pp5-competency-head h1 {
           margin: 0 0 8px;
@@ -6493,7 +6493,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           border-collapse: collapse;
           table-layout: fixed;
           border: 2px solid #111827;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           font-size: 16px;
           line-height: 1;
         }
@@ -6547,7 +6547,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           position: relative;
           text-align: center;
           margin-bottom: 10px;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
         }
         .pp5-activity-head h1 {
           margin: 0 0 8px;
@@ -6571,7 +6571,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           border-collapse: collapse;
           table-layout: fixed;
           border: 2px solid #111827;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           font-size: 16px;
           line-height: 1;
         }
@@ -6618,7 +6618,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           height: 297mm;
           padding: var(--pp6-pad-top, 8mm) var(--pp6-pad-x, 12mm) var(--pp6-pad-bottom, 9mm) !important;
           overflow: hidden;
-          font-family: var(--font-sarabun), Sarabun, "Noto Sans Thai", sans-serif;
+          font-family: "TH Sarabun New", Sarabun, "Noto Sans Thai", sans-serif;
           font-size: var(--pp6-font-base, 17px);
           line-height: 1.05;
         }

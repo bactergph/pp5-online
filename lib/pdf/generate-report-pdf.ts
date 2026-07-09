@@ -12,10 +12,11 @@ const A4_LANDSCAPE_VIEWPORT = { width: 1123, height: 794, deviceScaleFactor: 1 a
 async function waitForReportFonts(page: import('puppeteer-core').Page) {
   await page.evaluate(async () => {
     await document.fonts.ready
-    for (let i = 0; i < 80; i++) {
-      const ok = document.fonts.check('16px Sarabun')
-        || document.fonts.check('400 16px Sarabun')
-        || getComputedStyle(document.body).fontFamily.toLowerCase().includes('sarabun')
+    for (let i = 0; i < 100; i++) {
+      const ok = document.fonts.check('16px "TH Sarabun New"')
+        || document.fonts.check('700 16px "TH Sarabun New"')
+        || document.fonts.check('italic 16px "TH Sarabun New"')
+        || document.fonts.check('italic 700 16px "TH Sarabun New"')
       if (ok) return
       await new Promise(resolve => setTimeout(resolve, 100))
     }
