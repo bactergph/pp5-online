@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { downloadBlob, revokeBlobUrl } from '@/lib/download-blob'
 import { fetchClassroomAdminExportContext, fetchClassroomAdminExportData } from './actions'
 import { toDailyDisplay } from '@/lib/daily-attendance'
 
@@ -124,12 +125,15 @@ export default function ClassroomAdminExportPage() {
   const [dataByMonth, setDataByMonth] = useState<Record<number, ExportData>>({})
   const [error, setError] = useState('')
   const [pdfExporting, setPdfExporting] = useState(false)
+  const [pdfDownload, setPdfDownload] = useState<{ url: string; name: string } | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewScale, setPreviewScale] = useState(88)
   const [printMode] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1')
   const [embedMode] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('embed') === '1')
   const deepLinkMode = printMode || embedMode
   const printLoadStarted = useRef(false)
+
+  useEffect(() => () => revokeBlobUrl(pdfDownload?.url), [pdfDownload?.url])
 
   useEffect(() => {
     fetchClassroomAdminExportContext().then(result => {
@@ -280,8 +284,9 @@ export default function ClassroomAdminExportPage() {
       if (!loaded) return
       sourceData = loaded
     }
-    setPreviewOpen(true)
 
+    revokeBlobUrl(pdfDownload?.url)
+    setPdfDownload(null)
     setPdfExporting(true)
     setError('')
     try {
@@ -311,14 +316,8 @@ export default function ClassroomAdminExportPage() {
         throw new Error(message)
       }
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
+      const { manualUrl } = downloadBlob(blob, fileName)
+      setPdfDownload({ url: manualUrl, name: fileName })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
     } finally {
@@ -339,7 +338,8 @@ export default function ClassroomAdminExportPage() {
   }, [deepLinkMode, yearId, classroomId, monthKey, selectedMonths, selectedReports])
 
   useEffect(() => {
-    if (!deepLinkMode || !previewOpen || !hasData) return
+    if (!deepLinkMode || !hasData) return
+    if (!printMode && !previewOpen) return
     let cancelled = false
     const markReady = async () => {
       try {
@@ -352,11 +352,12 @@ export default function ClassroomAdminExportPage() {
       })))
       await new Promise(requestAnimationFrame)
       await new Promise(requestAnimationFrame)
+      if (printMode) await new Promise(resolve => setTimeout(resolve, 300))
       if (!cancelled) (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = true
     }
     void markReady()
     return () => { cancelled = true }
-  }, [deepLinkMode, previewOpen, hasData])
+  }, [deepLinkMode, printMode, previewOpen, hasData])
   const reportLabel = (type: ReportType) => type === 'attendance'
     ? 'แบบบันทึกเวลาเรียนรายวัน'
     : type === 'health'
@@ -687,9 +688,26 @@ export default function ClassroomAdminExportPage() {
       )}
 
       {error && <div className="alert alert-error no-print">{error}</div>}
+      {pdfDownload && (
+        <div className="classroom-export-pdf-ready no-print">
+          <strong>PDF พร้อมแล้ว</strong>
+          <span>ถ้าไฟล์ไม่ลงอัตโนมัติ ให้กดปุ่มด้านล่าง</span>
+          <a href={pdfDownload.url} download={pdfDownload.name} className="classroom-export-pdf-btn">
+            ดาวน์โหลด {pdfDownload.name}
+          </a>
+        </div>
+      )}
+      {pdfExporting && (
+        <div className="classroom-export-pdf-busy no-print" role="status" aria-live="polite">
+          <div className="classroom-export-pdf-busy-card">
+            <strong>กำลังสร้าง PDF...</strong>
+            <p>อาจใช้เวลา 30–60 วินาที กรุณารอสักครู่</p>
+          </div>
+        </div>
+      )}
 
       <div className="classroom-export-preview-pane">
-      {previewOpen && hasData ? (
+      {(previewOpen || printMode) && hasData ? (
         <div className="classroom-export-preview">
           {!embedMode && (
           <div className="classroom-export-preview-head no-print">
@@ -1089,6 +1107,56 @@ function ExportPageStyles() {
       }
       .classroom-export-report-grid button.is-selected strong {
         color: #3730A3;
+      }
+      .classroom-export-pdf-busy {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: grid;
+        place-items: center;
+        background: rgba(15, 23, 42, 0.45);
+        backdrop-filter: blur(4px);
+      }
+      .classroom-export-pdf-busy-card {
+        min-width: min(92vw, 360px);
+        padding: 22px 24px;
+        border-radius: 18px;
+        background: #FFFFFF;
+        box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+        text-align: center;
+      }
+      .classroom-export-pdf-busy-card strong {
+        display: block;
+        color: #0F172A;
+        font-size: 18px;
+        font-weight: 900;
+      }
+      .classroom-export-pdf-busy-card p {
+        margin: 8px 0 0;
+        color: #64748B;
+        font-size: 14px;
+      }
+      .classroom-export-pdf-ready {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 14px 16px;
+        border: 1px solid #86EFAC;
+        border-radius: 14px;
+        background: #F0FDF4;
+        color: #166534;
+      }
+      .classroom-export-pdf-ready strong {
+        font-weight: 900;
+      }
+      .classroom-export-pdf-ready span {
+        color: #15803D;
+        font-size: 13px;
+      }
+      .classroom-export-pdf-ready a {
+        margin-left: auto;
+        text-decoration: none;
       }
       .classroom-export-preview {
         display: grid;

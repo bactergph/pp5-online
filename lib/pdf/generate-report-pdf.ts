@@ -56,8 +56,8 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
       httpOnly: true,
       secure,
     })
-    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 90000 })
-    await page.waitForFunction('window.__REPORT_READY__ === true', { timeout: 90000 })
+    await page.goto(targetUrl, { waitUntil: 'load', timeout: 90000 })
+    await page.waitForFunction('window.__REPORT_READY__ === true', { timeout: 120000 })
 
     const pdf = input.landscape
       ? await page.pdf({
