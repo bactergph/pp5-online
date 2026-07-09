@@ -679,8 +679,8 @@ export default function ClassroomAdminExportPage() {
 
         <div className="classroom-export-actions classroom-export-actions-main">
           <button type="button" onClick={openPrintPreview} className="classroom-export-primary-btn" disabled={!canGenerate || isPending}>พิมพ์</button>
-          <button type="button" onClick={exportPdf} className="classroom-export-pdf-btn" disabled={!canGenerate || pdfExporting || isPending}>
-            {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
+          <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={!canGenerate || pdfExporting || isPending}>
+            {pdfExporting ? 'กำลังสร้าง' : 'บันทึก PDF'}
           </button>
           <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn" disabled={!canGenerate || isPending}>Excel</button>
         </div>
@@ -695,14 +695,6 @@ export default function ClassroomAdminExportPage() {
           <a href={pdfDownload.url} download={pdfDownload.name} className="classroom-export-pdf-btn">
             ดาวน์โหลด {pdfDownload.name}
           </a>
-        </div>
-      )}
-      {pdfExporting && (
-        <div className="classroom-export-pdf-busy no-print" role="status" aria-live="polite">
-          <div className="classroom-export-pdf-busy-card">
-            <strong>กำลังสร้าง PDF...</strong>
-            <p>อาจใช้เวลา 30–60 วินาที กรุณารอสักครู่</p>
-          </div>
         </div>
       )}
 
@@ -723,8 +715,8 @@ export default function ClassroomAdminExportPage() {
                 </select>
               </label>
               <button type="button" onClick={() => window.print()} className="classroom-export-primary-btn">พิมพ์จริง</button>
-              <button type="button" onClick={exportPdf} className="classroom-export-pdf-btn" disabled={pdfExporting}>
-                {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
+              <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={pdfExporting}>
+                {pdfExporting ? 'กำลังสร้าง' : 'บันทึก PDF'}
               </button>
               <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn">Excel</button>
               <button type="button" onClick={() => { setPreviewOpen(false); setDataByMonth({}) }} className="classroom-export-close-btn">ล้างตัวอย่าง</button>
@@ -1108,33 +1100,9 @@ function ExportPageStyles() {
       .classroom-export-report-grid button.is-selected strong {
         color: #3730A3;
       }
-      .classroom-export-pdf-busy {
-        position: fixed;
-        inset: 0;
-        z-index: 10000;
-        display: grid;
-        place-items: center;
-        background: rgba(15, 23, 42, 0.45);
-        backdrop-filter: blur(4px);
-      }
-      .classroom-export-pdf-busy-card {
-        min-width: min(92vw, 360px);
-        padding: 22px 24px;
-        border-radius: 18px;
-        background: #FFFFFF;
-        box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
-        text-align: center;
-      }
-      .classroom-export-pdf-busy-card strong {
-        display: block;
-        color: #0F172A;
-        font-size: 18px;
-        font-weight: 900;
-      }
-      .classroom-export-pdf-busy-card p {
-        margin: 8px 0 0;
-        color: #64748B;
-        font-size: 14px;
+      .classroom-export-pdf-btn.is-loading {
+        opacity: 0.75;
+        cursor: wait;
       }
       .classroom-export-pdf-ready {
         display: flex;
