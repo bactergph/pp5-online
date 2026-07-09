@@ -1,0 +1,29 @@
+/* TH Sarabun New — ใช้เฉพาะรายงาน ปพ.5/ปพ.6 (preview + PDF) */
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/regular.woff') format('woff');
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/bold.woff') format('woff');
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/italic.woff') format('woff');
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/bold-italic.woff') format('woff');
+}

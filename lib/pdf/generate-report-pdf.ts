@@ -1,4 +1,5 @@
 import { appOrigin } from '@/lib/app-origin'
+import { reportFontFaceCss } from '@/lib/report-font-faces'
 import type { Browser } from 'puppeteer-core'
 
 export { appOrigin }
@@ -9,18 +10,33 @@ const isProd = process.env.NODE_ENV === 'production'
 const A4_VIEWPORT = { width: 794, height: 1123, deviceScaleFactor: 1 as const }
 const A4_LANDSCAPE_VIEWPORT = { width: 1123, height: 794, deviceScaleFactor: 1 as const }
 
-async function waitForReportFonts(page: import('puppeteer-core').Page) {
-  await page.evaluate(async () => {
+async function waitForReportFonts(page: import('puppeteer-core').Page, origin: string) {
+  await page.evaluate(async (baseOrigin) => {
+    const specs = [
+      { file: 'regular.woff', weight: '400', style: 'normal' },
+      { file: 'bold.woff', weight: '700', style: 'normal' },
+      { file: 'italic.woff', weight: '400', style: 'italic' },
+      { file: 'bold-italic.woff', weight: '700', style: 'italic' },
+    ] as const
+    const loads = specs.map(async ({ file, weight, style }) => {
+      const url = `${baseOrigin}/fonts/th-sarabun-new/${file}`
+      try {
+        const face = new FontFace('TH Sarabun New', `url(${url}) format('woff')`, { weight, style })
+        const loaded = await face.load()
+        document.fonts.add(loaded)
+      } catch {
+        // @font-face จาก CSS อาจโหลดให้แล้ว
+      }
+    })
+    await Promise.all(loads)
     await document.fonts.ready
     for (let i = 0; i < 100; i++) {
       const ok = document.fonts.check('16px "TH Sarabun New"')
         || document.fonts.check('700 16px "TH Sarabun New"')
-        || document.fonts.check('italic 16px "TH Sarabun New"')
-        || document.fonts.check('italic 700 16px "TH Sarabun New"')
       if (ok) return
       await new Promise(resolve => setTimeout(resolve, 100))
     }
-  })
+  }, origin)
 }
 
 async function launchBrowser(): Promise<Browser> {
@@ -69,6 +85,13 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
     browser = await launchBrowser()
     const page = await browser.newPage()
     await page.setViewport(input.landscape ? A4_LANDSCAPE_VIEWPORT : A4_VIEWPORT)
+    const fontCss = reportFontFaceCss(input.origin)
+    await page.evaluateOnNewDocument((css) => {
+      const style = document.createElement('style')
+      style.setAttribute('data-report-fonts', '1')
+      style.textContent = css
+      document.documentElement.appendChild(style)
+    }, fontCss)
     if (input.localStorageSeed) {
       for (const [key, value] of Object.entries(input.localStorageSeed)) {
         await page.evaluateOnNewDocument((storageKey, storageValue) => {
@@ -88,7 +111,7 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
       await page.goto(targetUrl, { waitUntil: 'load', timeout: 90000 })
     })
     await page.waitForFunction('window.__REPORT_READY__ === true', { timeout: 120000 })
-    await waitForReportFonts(page)
+    await waitForReportFonts(page, input.origin)
     await page.emulateMediaType('screen')
 
     const pdf = input.landscape

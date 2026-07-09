@@ -1,35 +1,5 @@
 @import "tailwindcss";
 
-/* TH Sarabun New — ฟอนต์ราชการ SIPA (ฝังในโปรเจกต์ ให้ preview กับ PDF เหมือนกัน) */
-@font-face {
-  font-family: 'TH Sarabun New';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/th-sarabun-new/regular.ttf') format('truetype');
-}
-@font-face {
-  font-family: 'TH Sarabun New';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/th-sarabun-new/bold.ttf') format('truetype');
-}
-@font-face {
-  font-family: 'TH Sarabun New';
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/th-sarabun-new/italic.ttf') format('truetype');
-}
-@font-face {
-  font-family: 'TH Sarabun New';
-  font-style: italic;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/fonts/th-sarabun-new/bold-italic.ttf') format('truetype');
-}
-
 /* ============================================================
    Design Tokens
    ============================================================ */
@@ -603,7 +573,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
-  font-family: 'TH Sarabun New', Sarabun, 'Noto Sans Thai', system-ui, sans-serif;
+  font-family: var(--font-sarabun), 'Sarabun', 'Noto Sans Thai', system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.65;
   color: var(--text);
