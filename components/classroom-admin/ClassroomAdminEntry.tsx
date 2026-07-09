@@ -1222,6 +1222,14 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
     const clone = source.cloneNode(true) as HTMLElement
     clone.classList.add('is-pdf-export')
+    clone.querySelectorAll('.attendance-print-holiday-name').forEach(node => {
+      const el = node as HTMLElement
+      el.style.writingMode = 'horizontal-tb'
+      el.style.textOrientation = 'mixed'
+      el.style.transform = 'none'
+      el.style.textAlign = 'center'
+      el.style.whiteSpace = 'normal'
+    })
     clone.style.width = '1122px'
     clone.style.height = '790px'
     clone.style.minHeight = '0'
@@ -1517,7 +1525,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             >
               บันทึก
             </LoadingButton>
-            <button type="button" className="btn classroom-admin-print-green classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={() => setPrintPreviewOpen(true)} disabled={!classroomId || students.length === 0}>
+            <button type="button" className="btn btn-secondary classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={exportAttendancePdf} disabled={!classroomId || students.length === 0 || pdfExporting}>
+              {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
+            </button>
+            <button type="button" className="btn classroom-admin-print-green classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={printCurrentPage} disabled={!classroomId || students.length === 0}>
               พิมพ์หน้านี้
             </button>
           </div>
@@ -2020,7 +2031,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               บันทึก
             </LoadingButton>
           )}
-          <button type="button" className="btn btn-secondary" onClick={() => setPrintPreviewOpen(true)}>
+          <button type="button" className="btn btn-secondary" onClick={printCurrentPage}>
             พิมพ์หน้านี้
           </button>
         </div>

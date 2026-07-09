@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { downloadBlob, revokeBlobUrl } from '@/lib/download-blob'
 import { fetchClassroomAdminExportContext, fetchClassroomAdminExportData } from './actions'
 import { toDailyDisplay } from '@/lib/daily-attendance'
@@ -111,7 +111,6 @@ function attendanceExportDisplay(studentId: string, day: number, data: ExportDat
 }
 
 export default function ClassroomAdminExportPage() {
-  const [isPending] = useTransition()
   const [years, setYears] = useState<Year[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [schoolName, setSchoolName] = useState('')
@@ -124,16 +123,13 @@ export default function ClassroomAdminExportPage() {
   const [selectedReports, setSelectedReports] = useState<ReportType[]>([])
   const [dataByMonth, setDataByMonth] = useState<Record<number, ExportData>>({})
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
   const [pdfExporting, setPdfExporting] = useState(false)
-  const [pdfDownload, setPdfDownload] = useState<{ url: string; name: string } | null>(null)
-  const [previewOpen, setPreviewOpen] = useState(false)
   const [previewScale, setPreviewScale] = useState(88)
   const [printMode] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1')
   const [embedMode] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('embed') === '1')
   const deepLinkMode = printMode || embedMode
-  const printLoadStarted = useRef(false)
-
-  useEffect(() => () => revokeBlobUrl(pdfDownload?.url), [pdfDownload?.url])
+  const loadRequestRef = useRef(0)
 
   useEffect(() => {
     fetchClassroomAdminExportContext().then(result => {
@@ -165,8 +161,11 @@ export default function ClassroomAdminExportPage() {
       const nowMonthKey = currentMonthKey()
       const nowMonth = Number(nowMonthKey.slice(5, 7))
       const nowTerm = nowMonth >= 5 && nowMonth <= 10 ? 1 : 2
+      const termMonths = TERM_MONTHS[nowTerm]
       setMonthKey(nowMonthKey)
       setTerm(nowTerm)
+      setSelectedMonths([termMonths.includes(nowMonth) ? nowMonth : termMonths[0]])
+      setSelectedReports(['attendance', 'brushing', 'milk', 'lunch', 'cleaning', 'saving'])
       const active = (result.years as Year[]).find(y => y.is_active) || (result.years as Year[])[0]
       const firstClass = (result.classrooms as Classroom[]).find(c => c.academic_year_id === active?.id) || (result.classrooms as Classroom[])[0]
       setYearId(active?.id || '')
@@ -183,13 +182,9 @@ export default function ClassroomAdminExportPage() {
     setYearId(nextYearId)
     const firstClassroom = classrooms.find(c => c.academic_year_id === nextYearId)
     setClassroomId(firstClassroom?.id || '')
-    setDataByMonth({})
-    setPreviewOpen(false)
   }
 
   function toggleReport(type: ReportType) {
-    setDataByMonth({})
-    setPreviewOpen(false)
     setSelectedReports(prev => (
       prev.includes(type)
         ? prev.length === 1 ? prev : prev.filter(item => item !== type)
@@ -198,8 +193,6 @@ export default function ClassroomAdminExportPage() {
   }
 
   function selectReportPreset(preset: 'daily' | 'health' | 'all') {
-    setDataByMonth({})
-    setPreviewOpen(false)
     if (preset === 'daily') setSelectedReports(['attendance', 'brushing', 'milk', 'lunch', 'cleaning', 'saving'])
     else if (preset === 'health') setSelectedReports(['health', 'inspection'])
     else setSelectedReports(REPORT_TYPES.map(r => r.key))
@@ -207,25 +200,98 @@ export default function ClassroomAdminExportPage() {
 
   async function loadSelectedMonths(): Promise<Record<number, ExportData> | null> {
     if (!yearId || !classroomId || !monthKey || selectedMonths.length === 0 || selectedReports.length === 0) return null
+    const requestId = ++loadRequestRef.current
+    setIsLoading(true)
     setError('')
-    const results = await Promise.all(selectedMonths.map(async month => {
-      const result = await fetchClassroomAdminExportData(classroomId, yearId, setMonthInKey(monthKey, month), term)
-      return [month, result] as const
-    }))
-    const firstError = results.find(([, result]) => result.error)?.[1].error
-    if (firstError) {
-      setError(firstError)
-      return null
+    try {
+      const results = await Promise.all(selectedMonths.map(async month => {
+        const result = await fetchClassroomAdminExportData(classroomId, yearId, setMonthInKey(monthKey, month), term)
+        return [month, result] as const
+      }))
+      if (requestId !== loadRequestRef.current) return null
+      const firstError = results.find(([, result]) => result.error)?.[1].error
+      if (firstError) {
+        setError(firstError)
+        setDataByMonth({})
+        return null
+      }
+      const nextData = Object.fromEntries(results.map(([month, result]) => [month, result as ExportData]))
+      setDataByMonth(nextData)
+      return nextData
+    } finally {
+      if (requestId === loadRequestRef.current) setIsLoading(false)
     }
-    const nextData = Object.fromEntries(results.map(([month, result]) => [month, result as ExportData]))
-    setError('')
-    setDataByMonth(nextData)
-    return nextData
   }
 
-  async function openPrintPreview() {
-    const loaded = await loadSelectedMonths()
-    if (loaded) setPreviewOpen(true)
+  async function waitForPreviewRender() {
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  }
+
+  async function printExportDocument() {
+    let sourceData = dataByMonth
+    if (Object.keys(sourceData).length === 0) {
+      const loaded = await loadSelectedMonths()
+      if (!loaded) return
+      sourceData = loaded
+    }
+    await waitForPreviewRender()
+
+    const book = document.querySelector('.classroom-export-book') as HTMLElement | null
+    if (!book) {
+      setError('ไม่พบเอกสารสำหรับพิมพ์')
+      return
+    }
+
+    const images = Array.from(book.querySelectorAll<HTMLImageElement>('img'))
+    await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise<void>(resolve => {
+      img.addEventListener('load', () => resolve(), { once: true })
+      img.addEventListener('error', () => resolve(), { once: true })
+    })))
+
+    const printStyles = document.querySelector('.classroom-export-page > style')?.textContent || ''
+    const firstData = sourceData[selectedMonths.find(month => sourceData[month]) || selectedMonths[0]]
+    const printTitle = `เล่มรายงานธุรการ_${firstData?.classroom?.level || ''}-${firstData?.classroom?.room || ''}_${selectedMonths.join('-')}`.trim()
+    const escapeHtml = (value: string) => value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+    const printWindow = window.open('', '_blank', 'width=1200,height=800')
+
+    if (!printWindow) {
+      window.print()
+      return
+    }
+
+    printWindow.document.open()
+    printWindow.document.write(`<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(printTitle)}</title>
+  <style>${printStyles}</style>
+  <style>
+    body { margin: 0; background: #ffffff; }
+    .classroom-export-print-window { display: grid; place-items: start center; padding: 0; }
+    .classroom-export-book { transform: none !important; }
+    .attendance-print-sheet { box-shadow: none !important; }
+  </style>
+</head>
+<body>
+  <main class="classroom-export-print-window">${book.outerHTML}</main>
+  <script>
+    window.addEventListener('load', function () {
+      window.setTimeout(function () {
+        window.focus();
+        window.print();
+      }, 180);
+    });
+  </script>
+</body>
+</html>`)
+    printWindow.document.close()
   }
 
   async function exportExcel() {
@@ -285,8 +351,6 @@ export default function ClassroomAdminExportPage() {
       sourceData = loaded
     }
 
-    revokeBlobUrl(pdfDownload?.url)
-    setPdfDownload(null)
     setPdfExporting(true)
     setError('')
     try {
@@ -317,7 +381,7 @@ export default function ClassroomAdminExportPage() {
       }
       const blob = await res.blob()
       const { manualUrl } = downloadBlob(blob, fileName)
-      setPdfDownload({ url: manualUrl, name: fileName })
+      window.setTimeout(() => revokeBlobUrl(manualUrl), 60_000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
     } finally {
@@ -329,17 +393,19 @@ export default function ClassroomAdminExportPage() {
   const hasData = activeMonths.length > 0
   const canGenerate = Boolean(yearId && classroomId && selectedMonths.length > 0 && selectedReports.length > 0)
 
-  useEffect(() => {
-    if (!deepLinkMode || printLoadStarted.current) return
-    if (!yearId || !classroomId || !monthKey || selectedMonths.length === 0 || selectedReports.length === 0) return
-    printLoadStarted.current = true
-    loadSelectedMonths().then(loaded => { if (loaded) setPreviewOpen(true) })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepLinkMode, yearId, classroomId, monthKey, selectedMonths, selectedReports])
+  const selectedMonthsKey = selectedMonths.join(',')
 
   useEffect(() => {
-    if (!deepLinkMode || !hasData) return
-    if (!printMode && !previewOpen) return
+    if (!canGenerate) {
+      setDataByMonth({})
+      return
+    }
+    void loadSelectedMonths()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearId, classroomId, monthKey, term, selectedMonthsKey])
+
+  useEffect(() => {
+    if (!deepLinkMode || !hasData || !printMode) return
     let cancelled = false
     const markReady = async () => {
       try {
@@ -357,7 +423,7 @@ export default function ClassroomAdminExportPage() {
     }
     void markReady()
     return () => { cancelled = true }
-  }, [deepLinkMode, printMode, previewOpen, hasData])
+  }, [deepLinkMode, printMode, hasData])
   const reportLabel = (type: ReportType) => type === 'attendance'
     ? 'แบบบันทึกเวลาเรียนรายวัน'
     : type === 'health'
@@ -619,7 +685,7 @@ export default function ClassroomAdminExportPage() {
           </label>
           <label>
             <span>ห้อง</span>
-            <select value={classroomId} onChange={e => { setClassroomId(e.target.value); setDataByMonth({}); setPreviewOpen(false) }}>
+            <select value={classroomId} onChange={e => setClassroomId(e.target.value)}>
               <option value="">เลือกห้อง</option>
               {filteredClassrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room}</option>)}
             </select>
@@ -631,8 +697,6 @@ export default function ClassroomAdminExportPage() {
               setTerm(nextTerm)
               setSelectedMonths(TERM_MONTHS[nextTerm])
               setMonthKey(setMonthInKey(monthKey, TERM_MONTHS[nextTerm][0]))
-              setDataByMonth({})
-              setPreviewOpen(false)
             }}>
               <option value={1}>ภาคเรียนที่ 1</option>
               <option value={2}>ภาคเรียนที่ 2</option>
@@ -657,8 +721,6 @@ export default function ClassroomAdminExportPage() {
                     return [...prev, month].sort((a, b) => TERM_MONTHS[term].indexOf(a) - TERM_MONTHS[term].indexOf(b))
                   })
                   setMonthKey(setMonthInKey(monthKey, month))
-                  setDataByMonth({})
-                  setPreviewOpen(false)
                 }}
               >
                 {MONTH_SHORT_LABELS[month]}
@@ -667,39 +729,30 @@ export default function ClassroomAdminExportPage() {
             <button
               type="button"
               className={selectedMonths.length === TERM_MONTHS[term].length ? 'is-summary is-active' : 'is-summary'}
-              onClick={() => { setSelectedMonths(TERM_MONTHS[term]); setDataByMonth({}); setPreviewOpen(false) }}
+              onClick={() => setSelectedMonths(TERM_MONTHS[term])}
             >
               สรุป
             </button>
           </div>
           <div className="classroom-export-status">
-            {isPending ? 'กำลังโหลดข้อมูล...' : canGenerate ? `พร้อมสร้าง ${selectedMonths.length} เดือน · ${selectedReports.length} หมวด` : 'เลือกเดือนและหมวดรายงานก่อน'}
+            {isLoading ? 'กำลังโหลดข้อมูล...' : canGenerate ? `พร้อมสร้าง ${selectedMonths.length} เดือน · ${selectedReports.length} หมวด` : 'เลือกเดือนและหมวดรายงานก่อน'}
           </div>
         </div>
 
         <div className="classroom-export-actions classroom-export-actions-main">
-          <button type="button" onClick={openPrintPreview} className="classroom-export-primary-btn" disabled={!canGenerate || isPending}>พิมพ์</button>
-          <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={!canGenerate || pdfExporting || isPending}>
+          <button type="button" onClick={printExportDocument} className="classroom-export-primary-btn" disabled={!canGenerate || isLoading || pdfExporting}>พิมพ์</button>
+          <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={!canGenerate || pdfExporting || isLoading}>
             {pdfExporting ? 'กำลังสร้าง' : 'บันทึก PDF'}
           </button>
-          <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn" disabled={!canGenerate || isPending}>Excel</button>
+          <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn" disabled={!canGenerate || isLoading}>Excel</button>
         </div>
       </div>
       )}
 
       {error && <div className="alert alert-error no-print">{error}</div>}
-      {pdfDownload && (
-        <div className="classroom-export-pdf-ready no-print">
-          <strong>PDF พร้อมแล้ว</strong>
-          <span>ถ้าไฟล์ไม่ลงอัตโนมัติ ให้กดปุ่มด้านล่าง</span>
-          <a href={pdfDownload.url} download={pdfDownload.name} className="classroom-export-pdf-btn">
-            ดาวน์โหลด {pdfDownload.name}
-          </a>
-        </div>
-      )}
 
       <div className="classroom-export-preview-pane">
-      {(previewOpen || printMode) && hasData ? (
+      {hasData ? (
         <div className="classroom-export-preview">
           {!embedMode && (
           <div className="classroom-export-preview-head no-print">
@@ -714,12 +767,6 @@ export default function ClassroomAdminExportPage() {
                   {[50, 60, 75, 88, 90, 100, 110, 125].map(value => <option key={value} value={value}>{value}%</option>)}
                 </select>
               </label>
-              <button type="button" onClick={() => window.print()} className="classroom-export-primary-btn">พิมพ์จริง</button>
-              <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={pdfExporting}>
-                {pdfExporting ? 'กำลังสร้าง' : 'บันทึก PDF'}
-              </button>
-              <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn">Excel</button>
-              <button type="button" onClick={() => { setPreviewOpen(false); setDataByMonth({}) }} className="classroom-export-close-btn">ล้างตัวอย่าง</button>
             </div>
           </div>
           )}
@@ -736,8 +783,8 @@ export default function ClassroomAdminExportPage() {
       ) : (
         <div className="classroom-export-preview-empty no-print">
           <div>
-            <strong>ยังไม่แสดงตัวอย่าง</strong>
-            <p>เลือกเดือนและหมวดรายงานทางซ้าย แล้วกดปุ่มพิมพ์เพื่อสร้าง preview</p>
+            <strong>{isLoading ? 'กำลังโหลดตัวอย่าง...' : 'ยังไม่แสดงตัวอย่าง'}</strong>
+            <p>{isLoading ? 'รอสักครู่ ระบบกำลังดึงข้อมูลรายเดือน' : 'เลือกเดือนและหมวดรายงานทางซ้าย ตัวอย่างจะแสดงอัตโนมัติ'}</p>
           </div>
         </div>
       )}

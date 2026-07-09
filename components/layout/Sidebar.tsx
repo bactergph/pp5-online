@@ -1,10 +1,11 @@
 'use client'
 import Link from 'next/link'
 import { ROLE_LABELS } from '@/lib/roles'
+import { defaultSidebarIcon, normalizeSidebarTone, type SidebarTone } from '@/lib/sidebar-tones'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
-type Child = { href?: string; label: string; icon?: React.ReactNode; children?: Child[] }
+type Child = { href?: string; label: string; icon?: React.ReactNode; children?: Child[]; tone?: SidebarTone }
 type NavItem = { href: string; label: string; icon: React.ReactNode; children?: Child[] }
 type NavSection = { label?: string; items: NavItem[] }
 
@@ -44,6 +45,31 @@ const I = {
 }
 const ic = (d: string) => <SvgIcon d={d} />
 
+const ICON_BY_PREFIX: Record<string, string> = {
+  '/district/results': I.chart,
+  '/district': I.building,
+  '/reports': I.chart,
+  '/export': I.export,
+  '/evaluation/summary': I.star,
+  '/evaluation': I.star,
+  '/settings': SETTINGS_ICON,
+  '/classrooms': I.class,
+  '/students': I.users,
+  '/scores': I.pen,
+  '/score-config': I.sliders,
+  '/attendance': I.clock,
+  '/schedules': I.calendar,
+  '/documents': I.sign,
+  '/classroom-admin': I.grid,
+  '/activity': I.clock,
+}
+
+function leafIcon(child: Child) {
+  if (child.icon) return child.icon
+  if (!child.href) return undefined
+  return defaultSidebarIcon(child.href, ic, ICON_BY_PREFIX)
+}
+
 // ── building blocks ──
 const DASHBOARD: NavItem = { href: '/dashboard', label: 'หน้าหลัก', icon: ic(I.home) }
 const CLASSROOMS: NavItem = { href: '/classrooms', label: 'ชั้นเรียน', icon: ic(I.class) }
@@ -61,8 +87,8 @@ const DISTRICT_RESULTS: NavItem = {
   label: 'ผลลัพธ์รวม',
   icon: ic(I.chart),
   children: [
-    { href: '/district/results/scores', label: 'สรุปผลการเรียน' },
-    { href: '/district/results/attendance', label: 'สรุปเวลาเรียน' },
+    { href: '/district/results/scores', label: 'สรุปผลการเรียน', icon: ic(I.chart) },
+    { href: '/district/results/attendance', label: 'สรุปเวลาเรียน', icon: ic(I.clock) },
   ],
 }
 const DISTRICT_REPORT_EXPORT: NavItem = { href: '/district/reports/export', label: 'Export รายงานเขต', icon: ic(I.export) }
@@ -75,8 +101,8 @@ const TEACHER_REPORTS: NavItem = {
   label: 'รายงาน / เอกสาร',
   icon: ic(I.chart),
   children: [
-    { href: '/reports/summary', label: 'สรุปคะแนน' },
-    { href: '/reports/pp5', label: 'ปพ.5 รายวิชา' },
+    { href: '/reports/summary', label: 'สรุปคะแนน', icon: ic(I.chart) },
+    { href: '/reports/pp5', label: 'ปพ.5 รายวิชา', icon: ic(I.doc) },
   ],
 }
 const CLASSROOM_ATTENDANCE: NavItem = { href: '/classroom-admin/daily-attendance', label: 'บันทึกเวลาเรียน', icon: ic(I.calendar) }
@@ -89,76 +115,110 @@ const CLASSROOM_HEALTH: NavItem = { href: '/classroom-admin/health', label: 'บ
 const CLASSROOM_SAVING: NavItem = { href: '/classroom-admin/saving', label: 'บันทึกเงินออม', icon: ic(I.coin) }
 const CLASSROOM_PRINT: NavItem = { href: '/export/classroom-admin', label: 'พิมพ์เล่มเอกสาร', icon: ic(I.export) }
 const CLASSROOM_ADMIN_APPROVED: NavItem = { href: '/classroom-admin/approved', label: 'เอกสารที่อนุมัติแล้ว', icon: ic(I.doc) }
-const CLASSROOM_ADMIN_ITEMS = [
-  CLASSROOM_ATTENDANCE,
-  CLASSROOM_BRUSHING,
-  CLASSROOM_MILK,
-  CLASSROOM_LUNCH,
-  CLASSROOM_CLEANING,
-  CLASSROOM_WEIGHT,
-  CLASSROOM_HEALTH,
-  CLASSROOM_SAVING,
-  CLASSROOM_PRINT,
-  CLASSROOM_ADMIN_APPROVED,
-]
 const CLASSROOM_ADMIN_MAIN: NavItem = {
   href: '/classroom-admin',
   label: 'ธุรการชั้นเรียน',
   icon: ic(I.grid),
-  children: CLASSROOM_ADMIN_ITEMS.map(item => ({ href: item.href, label: item.label })),
+  children: [
+    {
+      label: 'บันทึกประจำวัน',
+      icon: ic(I.calendar),
+      tone: 'daily',
+      children: [
+        { href: CLASSROOM_ATTENDANCE.href, label: 'เวลาเรียน', icon: CLASSROOM_ATTENDANCE.icon },
+        { href: CLASSROOM_BRUSHING.href, label: 'แปรงฟัน', icon: CLASSROOM_BRUSHING.icon },
+        { href: CLASSROOM_MILK.href, label: 'ดื่มนม', icon: CLASSROOM_MILK.icon },
+        { href: CLASSROOM_LUNCH.href, label: 'อาหารกลางวัน', icon: CLASSROOM_LUNCH.icon },
+        { href: CLASSROOM_CLEANING.href, label: 'ทำความสะอาด', icon: CLASSROOM_CLEANING.icon },
+      ],
+    },
+    {
+      label: 'สุขภาพ / พัฒนาการ',
+      icon: ic(I.heart),
+      tone: 'health',
+      children: [
+        { href: CLASSROOM_WEIGHT.href, label: 'น้ำหนัก - ส่วนสูง', icon: CLASSROOM_WEIGHT.icon },
+        { href: CLASSROOM_HEALTH.href, label: 'ตรวจสุขภาพ', icon: CLASSROOM_HEALTH.icon },
+        { href: CLASSROOM_SAVING.href, label: 'เงินออม', icon: CLASSROOM_SAVING.icon },
+      ],
+    },
+    {
+      label: 'เอกสาร',
+      icon: ic(I.doc),
+      tone: 'docs',
+      children: [
+        { href: CLASSROOM_PRINT.href, label: 'พิมพ์เล่มเอกสาร', icon: CLASSROOM_PRINT.icon },
+        { href: CLASSROOM_ADMIN_APPROVED.href, label: 'อนุมัติแล้ว', icon: CLASSROOM_ADMIN_APPROVED.icon },
+      ],
+    },
+  ],
 }
 const SCHEDULE_CHECK_VIEW_CHILDREN: Child[] = [
-  { href: '/schedules/conflicts', label: 'ตรวจความขัดแย้ง' },
-  { href: '/schedules/workload', label: 'ภาระงานสอน' },
+  { href: '/schedules/conflicts', label: 'ตรวจความขัดแย้ง', icon: ic(I.shield) },
+  { href: '/schedules/workload', label: 'ภาระงานสอน', icon: ic(I.chart) },
 ]
 const SCHEDULE_CHECK_MANAGE_CHILDREN: Child[] = [
-  { href: '/settings/class-subjects', label: 'จัดการเข้าสอน' },
-  { href: '/schedules/conflicts', label: 'ตรวจความขัดแย้ง' },
-  { href: '/schedules/workload', label: 'ภาระงานสอน' },
+  { href: '/settings/class-subjects', label: 'จัดการเข้าสอน', icon: ic(I.users) },
+  { href: '/schedules/conflicts', label: 'ตรวจความขัดแย้ง', icon: ic(I.shield) },
+  { href: '/schedules/workload', label: 'ภาระงานสอน', icon: ic(I.chart) },
 ]
 const SCHEDULE_VIEW_CHILDREN: Child[] = [
   {
     label: 'ดูตาราง',
+    icon: ic(I.calendar),
+    tone: 'sky',
     children: [
-      { href: '/schedules/class', label: 'ตารางเรียน' },
-      { href: '/schedules/teaching', label: 'ตารางสอน' },
+      { href: '/schedules/class', label: 'ตารางเรียน', icon: ic(I.class) },
+      { href: '/schedules/teaching', label: 'ตารางสอน', icon: ic(I.pen) },
     ],
   },
   {
     label: 'ตรวจสอบ',
+    icon: ic(I.shield),
+    tone: 'violet',
     children: SCHEDULE_CHECK_VIEW_CHILDREN,
   },
   {
     label: 'พิมพ์เอกสาร',
+    icon: ic(I.export),
+    tone: 'docs',
     children: [
-      { href: '/export/schedules', label: 'พิมพ์ตาราง' },
+      { href: '/export/schedules', label: 'พิมพ์ตาราง', icon: ic(I.export) },
     ],
   },
 ]
 const SCHEDULE_MANAGE_CHILDREN: Child[] = [
   {
     label: 'ดูตาราง',
+    icon: ic(I.calendar),
+    tone: 'sky',
     children: [
-      { href: '/schedules/class', label: 'ตารางเรียน' },
-      { href: '/schedules/teaching', label: 'ตารางสอน' },
+      { href: '/schedules/class', label: 'ตารางเรียน', icon: ic(I.class) },
+      { href: '/schedules/teaching', label: 'ตารางสอน', icon: ic(I.pen) },
     ],
   },
   {
     label: 'จัดการตาราง',
+    icon: ic(I.sliders),
+    tone: 'indigo',
     children: [
-      { href: '/schedules/class/manage', label: 'จัดการตารางเรียน' },
-      { href: '/schedules/period-times', label: 'เวลาคาบเรียน' },
-      { href: '/schedules/substitute', label: 'ตารางสอนแทน' },
+      { href: '/schedules/class/manage', label: 'จัดการตารางเรียน', icon: ic(I.grid) },
+      { href: '/schedules/period-times', label: 'เวลาคาบเรียน', icon: ic(I.clock) },
+      { href: '/schedules/substitute', label: 'ตารางสอนแทน', icon: ic(I.users) },
     ],
   },
   {
     label: 'ตรวจสอบ',
+    icon: ic(I.shield),
+    tone: 'violet',
     children: SCHEDULE_CHECK_MANAGE_CHILDREN,
   },
   {
     label: 'พิมพ์เอกสาร',
+    icon: ic(I.export),
+    tone: 'docs',
     children: [
-      { href: '/export/schedules', label: 'พิมพ์ตาราง' },
+      { href: '/export/schedules', label: 'พิมพ์ตาราง', icon: ic(I.export) },
     ],
   },
 ]
@@ -180,6 +240,7 @@ const PP5_MAIN: NavItem = {
     {
       label: 'บันทึกผล',
       icon: ic(I.pen),
+      tone: 'emerald',
       children: [
         { href: '/scores',                label: 'คะแนนรายวิชา', icon: ic(I.doc) },
         { href: '/evaluation/activities', label: 'พัฒนาผู้เรียน', icon: ic(I.star) },
@@ -191,6 +252,7 @@ const PP5_MAIN: NavItem = {
     {
       label: 'พิมพ์รายงาน',
       icon: ic(I.export),
+      tone: 'docs',
       children: [
         { href: '/reports/pp5',       label: 'ปพ.5 รายวิชา', icon: ic(I.doc) },
         { href: '/reports/pp5-class', label: 'ปพ.5 รวมชั้นเรียน', icon: ic(I.grid) },
@@ -207,6 +269,7 @@ const PP5_PRINT_ONLY: NavItem = {
     {
       label: 'พิมพ์รายงาน',
       icon: ic(I.export),
+      tone: 'docs',
       children: [
         { href: '/reports/pp5',       label: 'ปพ.5 รายวิชา', icon: ic(I.doc) },
         { href: '/reports/pp5-class', label: 'ปพ.5 รวมชั้นเรียน', icon: ic(I.grid) },
@@ -218,29 +281,29 @@ const PP5_PRINT_ONLY: NavItem = {
 const EVAL_SUMMARY: NavItem = {
   href: '/evaluation/summary', label: 'สรุปการประเมิน', icon: ic(I.star),
   children: [
-    { href: '/evaluation/summary/reading',    label: 'สรุปอ่าน คิด วิเคราะห์' },
-    { href: '/evaluation/summary/activities', label: 'สรุปกิจกรรมพัฒนาผู้เรียน' },
+    { href: '/evaluation/summary/reading',    label: 'สรุปอ่าน คิด วิเคราะห์', icon: ic(I.pen) },
+    { href: '/evaluation/summary/activities', label: 'สรุปกิจกรรมพัฒนาผู้เรียน', icon: ic(I.star) },
   ],
 }
 const REPORT_STATUS: NavItem = {
   href: '/reports', label: 'รายงาน', icon: ic(I.chart),
-  children: [{ href: '/reports/status', label: 'สถานะการบันทึก' }],
+  children: [{ href: '/reports/status', label: 'สถานะการบันทึก', icon: ic(I.clock) }],
 }
 const REPORT_OVERSIGHT: NavItem = {
   href: '/reports', label: 'รายงาน', icon: ic(I.chart),
   children: [
-    { href: '/reports/status',     label: 'สถานะการบันทึก' },
-    { href: '/reports/individual', label: 'รายงานรายบุคคล (ทุกชั้น)' },
+    { href: '/reports/status',     label: 'สถานะการบันทึก', icon: ic(I.clock) },
+    { href: '/reports/individual', label: 'รายงานรายบุคคล', icon: ic(I.users) },
   ],
 }
 const EXPORT_FULL: NavItem = {
   href: '/export', label: 'Export เอกสาร', icon: ic(I.export),
   children: [
-    { href: '/export/schoolmis',       label: 'SchoolMIS' },
-    { href: '/export/grade-matrix',    label: 'Grade Matrix' },
-    { href: '/export/name-list',       label: 'รายชื่อนักเรียน' },
-    { href: '/export/classroom-admin', label: 'ธุรการชั้นเรียน' },
-    { href: '/export/schedules',       label: 'ตารางเรียน/สอน' },
+    { href: '/export/schoolmis',       label: 'SchoolMIS', icon: ic(I.export) },
+    { href: '/export/grade-matrix',    label: 'Grade Matrix', icon: ic(I.grid) },
+    { href: '/export/name-list',       label: 'รายชื่อนักเรียน', icon: ic(I.users) },
+    { href: '/export/classroom-admin', label: 'ธุรการชั้นเรียน', icon: ic(I.grid) },
+    { href: '/export/schedules',       label: 'ตารางเรียน/สอน', icon: ic(I.calendar) },
   ],
 }
 const DOCUMENTS_SIGN_NAV: NavItem = {
@@ -251,11 +314,11 @@ const DOCUMENTS_SIGN_NAV: NavItem = {
 const ASSIGN: NavItem = {
   href: '/settings', label: 'มอบหมายและตั้งค่าวิชาการ', icon: ic(I.users),
   children: [
-    { href: '/settings/subjects', label: 'รายวิชา/ชุมนุม/พัฒนาผู้เรียน' },
-    { href: '/settings/evaluation-criteria', label: 'คุณลักษณะ/ อ่านคิด/สมรรถนะ' },
-    { href: '/settings/class-subjects', label: 'กำหนดครูผู้สอน' },
-    { href: '/classrooms', label: 'กำหนดครูประจำชั้น' },
-    { href: '/score-config',   label: 'สัดส่วนคะแนน' },
+    { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
+    { href: '/settings/evaluation-criteria', label: 'เกณฑ์ประเมิน', icon: ic(I.doc) },
+    { href: '/settings/class-subjects', label: 'กำหนดครูผู้สอน', icon: ic(I.users) },
+    { href: '/classrooms', label: 'ครูประจำชั้น', icon: ic(I.class) },
+    { href: '/score-config',   label: 'สัดส่วนคะแนน', icon: ic(I.sliders) },
   ],
 }
 const ADMIN_SETTINGS: NavItem = {
@@ -266,6 +329,7 @@ const ADMIN_SETTINGS: NavItem = {
     {
       label: 'บัญชีของฉัน',
       icon: ic(I.users),
+      tone: 'slate',
       children: [
         { href: '/settings/profile', label: 'ข้อมูลตัวเอง', icon: ic(I.users) },
       ],
@@ -273,6 +337,7 @@ const ADMIN_SETTINGS: NavItem = {
     {
       label: 'ข้อมูลพื้นฐาน',
       icon: ic(I.building),
+      tone: 'sky',
       children: [
         { href: '/settings/school', label: 'ข้อมูลโรงเรียน', icon: ic(I.building) },
         { href: '/settings/academic-year', label: 'ปีการศึกษา', icon: ic(I.calendar) },
@@ -282,15 +347,16 @@ const ADMIN_SETTINGS: NavItem = {
     {
       label: 'ข้อมูลวิชาการ',
       icon: ic(I.book),
+      tone: 'indigo',
       children: [
         { href: '/students', label: 'ข้อมูลนักเรียน', icon: ic(I.class) },
-        { href: '/settings/subjects', label: 'รายวิชา/ชุมนุม/พัฒนาผู้เรียน', icon: ic(I.book) },
-        { href: '/settings/evaluation-criteria', label: 'คุณลักษณะ/ อ่านคิด/สมรรถนะ', icon: ic(I.doc) },
+        { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
+        { href: '/settings/evaluation-criteria', label: 'เกณฑ์ประเมิน', icon: ic(I.doc) },
         { href: '/settings/users', label: 'ข้อมูลบุคลากร', icon: ic(I.users) },
-        { href: '/settings/class-subjects', label: 'จัดครูเข้าสอน', icon: ic(I.doc) },
+        { href: '/settings/class-subjects', label: 'จัดครูเข้าสอน', icon: ic(I.pen) },
         { href: '/score-config', label: 'สัดส่วนคะแนน', icon: ic(I.sliders) },
         { href: '/classrooms', label: 'ครูประจำชั้น', icon: ic(I.users) },
-        { href: '/settings/import-dmc', label: 'นำเข้านักเรียน DMC', icon: ic(I.export) },
+        { href: '/settings/import-dmc', label: 'นำเข้า DMC', icon: ic(I.export) },
       ],
     },
   ],
@@ -368,6 +434,86 @@ function buildNav(role: string, isHomeroom: boolean): NavSection[] {
       { label: 'ตั้งค่า', items: [USER_SETTINGS] },
     ]
   }
+}
+
+function renderSubmenuLink(
+  child: Child,
+  tone: string,
+  opts: {
+    mounted: boolean
+    pathname: string
+    scopedHref: (href: string) => string
+    isCurrent: (href: string) => boolean
+    onClose: () => void
+  },
+) {
+  if (!child.href) return null
+  const childHref = opts.scopedHref(child.href)
+  const active = opts.mounted && (opts.pathname === childHref || opts.pathname === child.href)
+  const icon = leafIcon(child)
+  return (
+    <Link
+      key={child.href}
+      href={childHref}
+      onClick={opts.onClose}
+      data-sidebar-current={opts.isCurrent(child.href) ? 'true' : undefined}
+      className={`sidebar-child-link sidebar-submenu-link sidebar-submenu-link--${tone} ${active ? 'is-active' : ''}`}
+    >
+      {icon && <span className="sidebar-child-icon">{icon}</span>}
+      <span>{child.label}</span>
+    </Link>
+  )
+}
+
+function renderSubmenuChildren(
+  children: Child[],
+  opts: {
+    mounted: boolean
+    pathname: string
+    scopedHref: (href: string) => string
+    isCurrent: (href: string) => boolean
+    onClose: () => void
+  },
+) {
+  const nodes: React.ReactNode[] = []
+  let flatBatch: Child[] = []
+  let toneIndex = 0
+
+  const flushFlat = () => {
+    if (!flatBatch.length) return
+    const tone = normalizeSidebarTone(undefined, toneIndex++)
+    nodes.push(
+      <div key={`flat-${toneIndex}`} className={`sidebar-child-group sidebar-child-group--list sidebar-child-group--${tone}`}>
+        <div className="sidebar-grandchildren">
+          {flatBatch.map(child => renderSubmenuLink(child, tone, opts))}
+        </div>
+      </div>,
+    )
+    flatBatch = []
+  }
+
+  for (const child of children) {
+    if (child.children?.length) {
+      flushFlat()
+      const tone = normalizeSidebarTone(child.tone, toneIndex++)
+      nodes.push(
+        <div key={child.label} className={`sidebar-child-group sidebar-child-group--${tone}`}>
+          <div className="sidebar-child-group-label">
+            {child.icon && <span className="sidebar-child-group-badge">{child.icon}</span>}
+            <span className="sidebar-child-group-text">{child.label}</span>
+          </div>
+          <div className="sidebar-grandchildren">
+            {child.children.map(grandchild => renderSubmenuLink(grandchild, tone, opts))}
+          </div>
+        </div>,
+      )
+    } else if (child.href) {
+      flatBatch.push(child)
+    }
+  }
+
+  flushFlat()
+  return nodes
 }
 
 type Props = {
@@ -471,44 +617,13 @@ export default function Sidebar({
           </svg>
         </button>
         {isExpanded(item) && (
-          <div className="sidebar-children">
-            {item.children.map(c => {
-              if (c.children) {
-                return (
-                  <div key={c.label} className="sidebar-child-group">
-                    <div className="sidebar-child-group-label">
-                      {c.icon && <span className="sidebar-child-icon">{c.icon}</span>}
-                      <span className="sidebar-child-group-text">{c.label}</span>
-                    </div>
-                    <div className="sidebar-grandchildren">
-                      {c.children.map(gc => {
-                        if (!gc.href) return null
-                        const grandHref = scopedHref(gc.href)
-                        const ga = mounted && (pathname === grandHref || pathname === gc.href)
-                        return (
-                          <Link key={gc.href} href={grandHref} onClick={onClose}
-                            data-sidebar-current={isCurrent(gc.href) ? 'true' : undefined}
-                            className={`sidebar-child-link sidebar-grandchild-link ${ga ? 'is-active' : ''}`}>
-                            {gc.icon && <span className="sidebar-child-icon">{gc.icon}</span>}
-                            <span>{gc.label}</span>
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              }
-              if (!c.href) return null
-              const childHref = scopedHref(c.href)
-              const ca = mounted && (pathname === childHref || pathname === c.href)
-              return (
-                <Link key={c.href} href={childHref} onClick={onClose}
-                  data-sidebar-current={isCurrent(c.href) ? 'true' : undefined}
-                  className={`sidebar-child-link ${ca ? 'is-active' : ''}`}>
-                  {c.icon && <span className="sidebar-child-icon">{c.icon}</span>}
-                  <span>{c.label}</span>
-                </Link>
-              )
+          <div className="sidebar-children sidebar-submenu--cards">
+            {renderSubmenuChildren(item.children ?? [], {
+              mounted,
+              pathname,
+              scopedHref,
+              isCurrent,
+              onClose,
             })}
           </div>
         )}

@@ -92,25 +92,34 @@ export const CLASSROOM_ADMIN_PRINT_STYLES = `
     position: relative;
   }
   .attendance-print-holiday-stack {
-    display: inline-flex;
+    display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    padding: 4px 1px;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    padding: 4px 2px;
     box-sizing: border-box;
   }
   .attendance-print-holiday-name {
     display: block;
-    writing-mode: vertical-rl;
+    writing-mode: horizontal-tb;
     text-orientation: mixed;
     color: #111827 !important;
     font-size: 7px;
     font-weight: 900;
-    line-height: 1.1;
-    max-height: 90px;
-    overflow: hidden;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
     word-break: break-word;
+    overflow: hidden;
+    max-width: 100%;
+  }
+  .attendance-print-sheet.is-pdf-export .attendance-print-holiday-name {
+    writing-mode: horizontal-tb !important;
+    text-orientation: mixed !important;
+    transform: none !important;
   }
   .attendance-print-summary-good { background: #DCFCE7 !important; font-weight: 900; }
   .attendance-print-summary-sick { background: #FEF3C7 !important; font-weight: 900; }

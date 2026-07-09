@@ -73,6 +73,7 @@ import {
   type Pp5PrintSection,
   PP5_PRINT_SECTIONS,
 } from '@/lib/pp5-print-layout'
+import ReportCheckMark from '@/components/reports/ReportCheckMark'
 import { usePp5Layout, usePp5SectionLayout, Pp5PrintLayoutsProvider } from '@/lib/pp5-print-layout-context'
 import { pp6SectionLayoutStyle, savePp6PrintLayouts, PP6_PRINT_LAYOUTS_STORAGE_KEY } from '@/lib/pp6-print-layout'
 import { usePp6SectionLayout, Pp6PrintLayoutsProvider } from '@/lib/pp6-print-layout-context'
@@ -863,7 +864,9 @@ function subjectIsElective(subject: ReportSubject | null | undefined) {
 function CoverFormCheckbox({ checked, label }: { checked: boolean; label: string }) {
   return (
     <span className="pp5-subject-cover-check-item">
-      <span className="pp5-subject-cover-checkbox">{checked ? '✓' : ''}</span>
+      <span className={`pp5-subject-cover-checkbox${checked ? ' is-checked' : ''}`}>
+        {checked ? <ReportCheckMark size={10} /> : null}
+      </span>
       {label}
     </span>
   )
@@ -5234,6 +5237,12 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           font-weight: 700;
           line-height: 1;
           flex: 0 0 auto;
+        }
+        .pp5-subject-cover-checkbox.is-checked {
+          color: #111827;
+        }
+        .pp5-subject-cover-checkbox .report-checkmark {
+          display: block;
         }
         .pp5-subject-cover-grade-table,
         .pp5-subject-cover-eval-table {

@@ -2051,6 +2051,202 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
   color: #93C5FD;
 }
 
+/* Sidebar submenu — การ์ดแยกหมวด (ทุกเมนูย่อย) */
+.sidebar-submenu--cards {
+  margin: 6px 0 12px 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-submenu--cards .sidebar-child-group {
+  margin: 0;
+  padding: 8px 8px 6px;
+  border: 1px solid var(--sb-tone-border, rgba(51, 65, 85, 0.72));
+  border-radius: 12px;
+  background: var(--sb-tone-bg, rgba(15, 23, 42, 0.42));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.sidebar-submenu--cards .sidebar-child-group--list {
+  padding-top: 6px;
+}
+
+.sidebar-child-group--indigo,
+.sidebar-child-group--daily {
+  --sb-tone-border: rgba(99, 102, 241, 0.34);
+  --sb-tone-bg: linear-gradient(180deg, rgba(79, 70, 229, 0.16) 0%, rgba(15, 23, 42, 0.34) 100%);
+  --sb-tone-label: #C7D2FE;
+  --sb-tone-badge-bg: rgba(99, 102, 241, 0.28);
+  --sb-tone-badge-fg: #E0E7FF;
+  --sb-tone-active-border: rgba(129, 140, 248, 0.45);
+  --sb-tone-active-fg: #EEF2FF;
+  --sb-tone-active-bg: rgba(79, 70, 229, 0.34);
+}
+
+.sidebar-child-group--emerald,
+.sidebar-child-group--health {
+  --sb-tone-border: rgba(16, 185, 129, 0.34);
+  --sb-tone-bg: linear-gradient(180deg, rgba(5, 150, 105, 0.16) 0%, rgba(15, 23, 42, 0.34) 100%);
+  --sb-tone-label: #A7F3D0;
+  --sb-tone-badge-bg: rgba(16, 185, 129, 0.24);
+  --sb-tone-badge-fg: #D1FAE5;
+  --sb-tone-active-border: rgba(52, 211, 153, 0.45);
+  --sb-tone-active-fg: #ECFDF5;
+  --sb-tone-active-bg: rgba(5, 150, 105, 0.32);
+}
+
+.sidebar-child-group--amber,
+.sidebar-child-group--docs {
+  --sb-tone-border: rgba(245, 158, 11, 0.34);
+  --sb-tone-bg: linear-gradient(180deg, rgba(217, 119, 6, 0.16) 0%, rgba(15, 23, 42, 0.34) 100%);
+  --sb-tone-label: #FDE68A;
+  --sb-tone-badge-bg: rgba(245, 158, 11, 0.24);
+  --sb-tone-badge-fg: #FEF3C7;
+  --sb-tone-active-border: rgba(251, 191, 36, 0.45);
+  --sb-tone-active-fg: #FFFBEB;
+  --sb-tone-active-bg: rgba(217, 119, 6, 0.3);
+}
+
+.sidebar-child-group--sky {
+  --sb-tone-border: rgba(14, 165, 233, 0.34);
+  --sb-tone-bg: linear-gradient(180deg, rgba(2, 132, 199, 0.16) 0%, rgba(15, 23, 42, 0.34) 100%);
+  --sb-tone-label: #BAE6FD;
+  --sb-tone-badge-bg: rgba(14, 165, 233, 0.24);
+  --sb-tone-badge-fg: #E0F2FE;
+  --sb-tone-active-border: rgba(56, 189, 248, 0.45);
+  --sb-tone-active-fg: #F0F9FF;
+  --sb-tone-active-bg: rgba(2, 132, 199, 0.32);
+}
+
+.sidebar-child-group--violet {
+  --sb-tone-border: rgba(139, 92, 246, 0.34);
+  --sb-tone-bg: linear-gradient(180deg, rgba(124, 58, 237, 0.16) 0%, rgba(15, 23, 42, 0.34) 100%);
+  --sb-tone-label: #DDD6FE;
+  --sb-tone-badge-bg: rgba(139, 92, 246, 0.24);
+  --sb-tone-badge-fg: #EDE9FE;
+  --sb-tone-active-border: rgba(167, 139, 250, 0.45);
+  --sb-tone-active-fg: #F5F3FF;
+  --sb-tone-active-bg: rgba(124, 58, 237, 0.32);
+}
+
+.sidebar-child-group--rose {
+  --sb-tone-border: rgba(244, 63, 94, 0.34);
+  --sb-tone-bg: linear-gradient(180deg, rgba(225, 29, 72, 0.14) 0%, rgba(15, 23, 42, 0.34) 100%);
+  --sb-tone-label: #FECDD3;
+  --sb-tone-badge-bg: rgba(244, 63, 94, 0.22);
+  --sb-tone-badge-fg: #FFE4E6;
+  --sb-tone-active-border: rgba(251, 113, 133, 0.45);
+  --sb-tone-active-fg: #FFF1F2;
+  --sb-tone-active-bg: rgba(225, 29, 72, 0.28);
+}
+
+.sidebar-child-group--cyan {
+  --sb-tone-border: rgba(6, 182, 212, 0.34);
+  --sb-tone-bg: linear-gradient(180deg, rgba(8, 145, 178, 0.16) 0%, rgba(15, 23, 42, 0.34) 100%);
+  --sb-tone-label: #A5F3FC;
+  --sb-tone-badge-bg: rgba(6, 182, 212, 0.24);
+  --sb-tone-badge-fg: #CFFAFE;
+  --sb-tone-active-border: rgba(34, 211, 238, 0.45);
+  --sb-tone-active-fg: #ECFEFF;
+  --sb-tone-active-bg: rgba(8, 145, 178, 0.3);
+}
+
+.sidebar-child-group--slate {
+  --sb-tone-border: rgba(100, 116, 139, 0.38);
+  --sb-tone-bg: linear-gradient(180deg, rgba(71, 85, 105, 0.2) 0%, rgba(15, 23, 42, 0.34) 100%);
+  --sb-tone-label: #CBD5E1;
+  --sb-tone-badge-bg: rgba(100, 116, 139, 0.28);
+  --sb-tone-badge-fg: #E2E8F0;
+  --sb-tone-active-border: rgba(148, 163, 184, 0.45);
+  --sb-tone-active-fg: #F8FAFC;
+  --sb-tone-active-bg: rgba(71, 85, 105, 0.36);
+}
+
+.sidebar-submenu--cards .sidebar-child-group-label {
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 0 2px 6px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  color: var(--sb-tone-label, #E2E8F0) !important;
+  font-size: 11.5px !important;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.sidebar-submenu--cards .sidebar-child-group-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  flex-shrink: 0;
+  background: var(--sb-tone-badge-bg, rgba(255, 255, 255, 0.08));
+  color: var(--sb-tone-badge-fg, #E2E8F0);
+}
+
+.sidebar-submenu--cards .sidebar-child-group-badge svg {
+  width: 13px;
+  height: 13px;
+}
+
+.sidebar-submenu--cards .sidebar-grandchildren {
+  margin-left: 0;
+  padding-left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sidebar-submenu--cards .sidebar-submenu-link {
+  gap: 8px;
+  margin-bottom: 0;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #CBD5E1;
+  font-size: 13px !important;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.sidebar-submenu--cards .sidebar-submenu-link:hover {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(30, 41, 59, 0.72);
+  color: #F8FAFC;
+}
+
+.sidebar-submenu--cards .sidebar-submenu-link.is-active {
+  border-color: var(--sb-tone-active-border, rgba(129, 140, 248, 0.45));
+  color: var(--sb-tone-active-fg, #EEF2FF);
+  background: var(--sb-tone-active-bg, rgba(79, 70, 229, 0.34));
+  font-weight: 700;
+}
+
+.sidebar-submenu--cards .sidebar-submenu-link .sidebar-child-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: #94A3B8;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.sidebar-submenu--cards .sidebar-submenu-link.is-active .sidebar-child-icon {
+  color: inherit;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-submenu--cards .sidebar-submenu-link .sidebar-child-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
 /* Sidebar typography tuned to the EasyClass reference scale. */
 .sidebar .sidebar-link {
   padding: 8px 9px !important;
@@ -3936,15 +4132,17 @@ div:has(> .thai-table) {
 
 .classroom-admin-holiday-name {
   display: block;
-  writing-mode: vertical-rl;
+  writing-mode: horizontal-tb;
   text-orientation: mixed;
   color: #111827 !important;
   font-size: 10px;
   font-weight: 800;
   line-height: 1.2;
-  max-height: 140px;
+  text-align: center;
+  white-space: normal;
   overflow: hidden;
   word-break: break-word;
+  max-width: 100%;
 }
 
 .classroom-admin-month-td {
