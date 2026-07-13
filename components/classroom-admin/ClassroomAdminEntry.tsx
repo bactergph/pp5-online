@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { Fragment, useEffect, useMemo, useState, useTransition } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { flushSync } from 'react-dom'
 import {
@@ -48,6 +48,11 @@ import {
 import { resolveClassroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
 import { DAILY_STATUS_LABELS, nextDailyDisplay, toDailyDb, toDailyDisplay } from '@/lib/daily-attendance'
+import {
+  PRINT_STUDENTS_PER_PAGE,
+  chunkStudentsForPrintPages,
+  printPageRowCount,
+} from '@/lib/print-student-pages'
 import { useAppAlert } from '@/lib/use-app-alert'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 
@@ -550,17 +555,21 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     })
   }
 
-  function renderPrintDayCells(bodyRowIndex: number, row: (typeof printRows)[number] | null) {
+  function renderPrintDayCells(
+    bodyRowIndex: number,
+    row: (typeof printRows)[number] | null,
+    pageHolidayRowSpan: number,
+  ) {
     return days.map(day => {
       const dateKey = dayDate(monthKey, day)
       const holiday = holidayMap[dateKey]
       if (holiday) {
-        if (bodyRowIndex < holidayRowSpan) {
+        if (bodyRowIndex < pageHolidayRowSpan) {
           if (bodyRowIndex > 0) return null
           return (
             <td
               key={day}
-              rowSpan={holidayRowSpan}
+              rowSpan={pageHolidayRowSpan}
               className="attendance-print-status-cell attendance-print-holiday-cell is-holiday"
               title={holidayColumnLabel(day, holiday)}
             >
@@ -609,6 +618,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
   const termLabel = `ภาคเรียนที่ ${attendanceTerm}`
   const isSavingMode = mode === 'activity' && activityType === 'saving'
+  const isRoutineActivityMode = mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType))
   const savingStats = isSavingMode
     ? (() => {
         const rows = students.map(student => {
@@ -894,8 +904,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function printAttendanceDocument() {
-    const source = document.querySelector('.attendance-print-only .attendance-print-sheet') as HTMLElement | null
-    if (!source) {
+    const container = document.querySelector('.attendance-print-only') as HTMLElement | null
+    const sheets = container
+      ? Array.from(container.querySelectorAll<HTMLElement>('.attendance-print-sheet'))
+      : []
+    if (!container || sheets.length === 0) {
       window.print()
       return
     }
@@ -914,6 +927,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       return
     }
 
+    const sheetsHtml = sheets.map(sheet => sheet.outerHTML).join('')
     printWindow.document.open()
     printWindow.document.write(`<!doctype html>
 <html lang="th">
@@ -928,7 +942,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   </style>
 </head>
 <body>
-  <main class="attendance-print-window">${source.outerHTML}</main>
+  <main class="attendance-print-window">${sheetsHtml}</main>
   <script>
     window.addEventListener('load', function () {
       window.setTimeout(function () {
@@ -947,254 +961,298 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function renderPrintableAttendanceDocument({ preview = false }: { preview?: boolean } = {}) {
-    const documentMeta = isMonthlyMode
+    const documentMetaBase = isMonthlyMode
       ? `${termLabel} · ห้อง ${currentClassLabel(classrooms, classroomId)} · เดือน${thaiMonthTitle(monthKey, years, yearId)}`
       : `ห้อง ${currentClassLabel(classrooms, classroomId)} · เดือน${MONTHS.find(m => m.value === month)?.label || ''}${years.find(y => y.id === yearId)?.year_be ? ` พ.ศ.${years.find(y => y.id === yearId)?.year_be}` : ''}`
     const standardTableFieldCount = mode === 'weightHeight' ? 3 : INSPECTION_FIELDS.length
+    const studentPages = chunkStudentsForPrintPages(students)
+    const pageCount = studentPages.length
+
+    type PrintRow =
+      | { type: 'student'; student: Student; number: number }
+      | { type: 'blank'; number: number }
 
     return (
-      <section
-        className={`attendance-print-sheet ${preview ? 'is-preview' : ''}`}
-        style={printLayoutStyle}
-      >
-        <header className="attendance-print-head">
-          <div className="attendance-print-logo-slot">
-            {schoolLogoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoSrc || schoolLogoUrl} alt="โลโก้โรงเรียน" />
-            ) : (
-              <span>ตรา</span>
-            )}
-          </div>
-          <div>
-            <h1>{documentTitle}</h1>
-            <div className="attendance-print-school">{schoolName || 'ชื่อโรงเรียน'}</div>
-            <p>{documentMeta}</p>
-          </div>
-        </header>
+      <Fragment>
+        {studentPages.map((pageStudents, pageIndex) => {
+          const pageOffset = pageIndex * PRINT_STUDENTS_PER_PAGE
+          const pageHolidayRowSpan = pageStudents.length
+          const pageLabel = pageCount > 1 ? ` · หน้า ${pageIndex + 1}/${pageCount}` : ''
+          const documentMeta = `${documentMetaBase}${pageLabel}`
+          const targetRows = isMonthlyMode
+            ? printPageRowCount(pageStudents.length, {
+              pageSize: PRINT_STUDENTS_PER_PAGE,
+              minRows: printLayouts.monthly.minBlankRows,
+            })
+            : pageStudents.length
+          const pagePrintRows: PrintRow[] = isMonthlyMode
+            ? [
+                ...pageStudents.map((student, index) => ({
+                  type: 'student' as const,
+                  student,
+                  number: student.student_number || pageOffset + index + 1,
+                })),
+                ...Array.from({ length: Math.max(0, targetRows - pageStudents.length) }, (_, index) => ({
+                  type: 'blank' as const,
+                  number: pageOffset + pageStudents.length + index + 1,
+                })),
+              ]
+            : []
 
-        {isMonthlyMode ? (
-          <table className="attendance-print-table">
-            <colgroup>
-              <col className="attendance-print-number-col" />
-              <col className="attendance-print-name-col" />
-              {days.map(day => <col key={day} />)}
-              {mode === 'attendance' && (
-                <>
-                  <col className="attendance-print-summary-col" />
-                  <col className="attendance-print-summary-col" />
-                  <col className="attendance-print-summary-col" />
-                  <col className="attendance-print-summary-col" />
-                </>
-              )}
-              {isSavingMode && (
-                <>
-                  <col className="attendance-print-summary-col" />
-                  <col className="attendance-print-summary-col" />
-                  <col className="attendance-print-summary-col" />
-                  <col className="attendance-print-summary-col" />
-                </>
-              )}
-            </colgroup>
-            <thead>
-              <tr>
-                <th rowSpan={3}>เลขที่</th>
-                <th rowSpan={3}>ชื่อ-นามสกุล</th>
-                <th colSpan={days.length} className="attendance-print-month-title">เดือน{thaiMonthTitle(monthKey, years, yearId)}</th>
-                {mode === 'attendance' && <th colSpan={4} className="attendance-print-summary-title">สรุปผล</th>}
-                {isSavingMode && <th colSpan={4} className="attendance-print-summary-title">สรุปเงินออม</th>}
-              </tr>
-              <tr>
-                {days.map(day => {
-                  const dateKey = dayDate(monthKey, day)
-                  const holiday = holidayMap[dateKey]
-                  const closedWeekend = isClosedWeekend(day)
-                  const openWeekend = isOpenWeekend(day)
-                  return (
-                    <th
-                      key={day}
-                      className={[
-                        'attendance-print-day',
-                        closedWeekend ? 'is-weekend' : '',
-                        openWeekend ? 'is-open-weekend' : '',
-                        holiday ? 'is-holiday' : '',
-                      ].filter(Boolean).join(' ')}
-                      title={holiday ? holidayColumnLabel(day, holiday) : undefined}
-                    >
-                      {day}
-                    </th>
-                  )
-                })}
-                {mode === 'attendance' && (
-                  <>
-                    <th rowSpan={2} className="attendance-print-summary-good">มา</th>
-                    <th rowSpan={2} className="attendance-print-summary-sick">ป่วย</th>
-                    <th rowSpan={2} className="attendance-print-summary-leave">ลา</th>
-                    <th rowSpan={2} className="attendance-print-summary-absent">ขาด</th>
-                  </>
-                )}
-                {isSavingMode && (
-                  <>
-                    <th rowSpan={2} className="attendance-print-summary-good">รวม</th>
-                    <th rowSpan={2} className="attendance-print-summary-sick">ครูช่วย</th>
-                    <th rowSpan={2} className="attendance-print-summary-good">สุทธิ</th>
-                    <th rowSpan={2} className="attendance-print-summary-title">อันดับ</th>
-                  </>
-                )}
-              </tr>
-              <tr>
-                {days.map(day => {
-                  const dateKey = dayDate(monthKey, day)
-                  const holiday = holidayMap[dateKey]
-                  const closedWeekend = isClosedWeekend(day)
-                  const openWeekend = isOpenWeekend(day)
-                  return (
-                    <th
-                      key={`weekday-${day}`}
-                      className={[
-                        'attendance-print-weekday',
-                        closedWeekend ? 'is-weekend' : '',
-                        openWeekend ? 'is-open-weekend' : '',
-                        holiday ? 'is-holiday' : '',
-                      ].filter(Boolean).join(' ')}
-                      title={holiday ? holidayColumnLabel(day, holiday) : undefined}
-                    >
-                      {weekdayLabel(monthKey, day)}
-                    </th>
-                  )
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {printRows.map((row, bodyRowIndex) => {
-                if (row.type === 'blank') {
-                  return (
-                    <tr key={`print-blank-${row.number}`}>
-                      <td>{row.number}</td>
-                      <td>&nbsp;</td>
-                      {renderPrintDayCells(bodyRowIndex, row)}
+          return (
+            <section
+              key={`print-sheet-p${pageIndex}`}
+              className={`attendance-print-sheet ${preview ? 'is-preview' : ''}`}
+              style={printLayoutStyle}
+            >
+              <header className="attendance-print-head">
+                <div className="attendance-print-logo-slot">
+                  {schoolLogoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoSrc || schoolLogoUrl} alt="โลโก้โรงเรียน" />
+                  ) : (
+                    <span>ตรา</span>
+                  )}
+                </div>
+                <div>
+                  <h1>{documentTitle}</h1>
+                  <div className="attendance-print-school">{schoolName || 'ชื่อโรงเรียน'}</div>
+                  <p>{documentMeta}</p>
+                </div>
+              </header>
+
+              {isMonthlyMode ? (
+                <table className="attendance-print-table">
+                  <colgroup>
+                    <col className="attendance-print-number-col" />
+                    <col className="attendance-print-name-col" />
+                    {days.map(day => <col key={day} />)}
+                    {mode === 'attendance' && (
+                      <>
+                        <col className="attendance-print-summary-col" />
+                        <col className="attendance-print-summary-col" />
+                        <col className="attendance-print-summary-col" />
+                        <col className="attendance-print-summary-col" />
+                      </>
+                    )}
+                    {isRoutineActivityMode && <col className="attendance-print-summary-col" />}
+                    {isSavingMode && (
+                      <>
+                        <col className="attendance-print-summary-col" />
+                        <col className="attendance-print-summary-col" />
+                        <col className="attendance-print-summary-col" />
+                        <col className="attendance-print-summary-col" />
+                      </>
+                    )}
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th rowSpan={3}>เลขที่</th>
+                      <th rowSpan={3}>ชื่อ-นามสกุล</th>
+                      <th colSpan={days.length} className="attendance-print-month-title">เดือน{thaiMonthTitle(monthKey, years, yearId)}</th>
+                      {mode === 'attendance' && <th colSpan={4} className="attendance-print-summary-title">สรุปผล</th>}
+                      {isRoutineActivityMode && <th rowSpan={3} className="attendance-print-summary-title">สรุปผล</th>}
+                      {isSavingMode && <th colSpan={4} className="attendance-print-summary-title">สรุปเงินออม</th>}
+                    </tr>
+                    <tr>
+                      {days.map(day => {
+                        const dateKey = dayDate(monthKey, day)
+                        const holiday = holidayMap[dateKey]
+                        const closedWeekend = isClosedWeekend(day)
+                        const openWeekend = isOpenWeekend(day)
+                        return (
+                          <th
+                            key={day}
+                            className={[
+                              'attendance-print-day',
+                              closedWeekend ? 'is-weekend' : '',
+                              openWeekend ? 'is-open-weekend' : '',
+                              holiday ? 'is-holiday' : '',
+                            ].filter(Boolean).join(' ')}
+                            title={holiday ? holidayColumnLabel(day, holiday) : undefined}
+                          >
+                            {day}
+                          </th>
+                        )
+                      })}
                       {mode === 'attendance' && (
                         <>
-                          <td className="attendance-print-summary-good">&nbsp;</td>
-                          <td className="attendance-print-summary-sick">&nbsp;</td>
-                          <td className="attendance-print-summary-leave">&nbsp;</td>
-                          <td className="attendance-print-summary-absent">&nbsp;</td>
+                          <th rowSpan={2} className="attendance-print-summary-good">มา</th>
+                          <th rowSpan={2} className="attendance-print-summary-sick">ป่วย</th>
+                          <th rowSpan={2} className="attendance-print-summary-leave">ลา</th>
+                          <th rowSpan={2} className="attendance-print-summary-absent">ขาด</th>
                         </>
                       )}
                       {isSavingMode && (
                         <>
-                          <td className="attendance-print-summary-good">&nbsp;</td>
-                          <td className="attendance-print-summary-sick">&nbsp;</td>
-                          <td className="attendance-print-summary-good">&nbsp;</td>
-                          <td className="attendance-print-summary-title">&nbsp;</td>
+                          <th rowSpan={2} className="attendance-print-summary-good">รวม</th>
+                          <th rowSpan={2} className="attendance-print-summary-sick">ครูช่วย</th>
+                          <th rowSpan={2} className="attendance-print-summary-good">สุทธิ</th>
+                          <th rowSpan={2} className="attendance-print-summary-title">อันดับ</th>
                         </>
                       )}
                     </tr>
-                  )
-                }
+                    <tr>
+                      {days.map(day => {
+                        const dateKey = dayDate(monthKey, day)
+                        const holiday = holidayMap[dateKey]
+                        const closedWeekend = isClosedWeekend(day)
+                        const openWeekend = isOpenWeekend(day)
+                        return (
+                          <th
+                            key={`weekday-${day}`}
+                            className={[
+                              'attendance-print-weekday',
+                              closedWeekend ? 'is-weekend' : '',
+                              openWeekend ? 'is-open-weekend' : '',
+                              holiday ? 'is-holiday' : '',
+                            ].filter(Boolean).join(' ')}
+                            title={holiday ? holidayColumnLabel(day, holiday) : undefined}
+                          >
+                            {weekdayLabel(monthKey, day)}
+                          </th>
+                        )
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagePrintRows.map((row, bodyRowIndex) => {
+                      if (row.type === 'blank') {
+                        return (
+                          <tr key={`print-blank-${row.number}-p${pageIndex}`}>
+                            <td>{row.number}</td>
+                            <td>&nbsp;</td>
+                            {renderPrintDayCells(bodyRowIndex, row, pageHolidayRowSpan)}
+                            {mode === 'attendance' && (
+                              <>
+                                <td className="attendance-print-summary-good">&nbsp;</td>
+                                <td className="attendance-print-summary-sick">&nbsp;</td>
+                                <td className="attendance-print-summary-leave">&nbsp;</td>
+                                <td className="attendance-print-summary-absent">&nbsp;</td>
+                              </>
+                            )}
+                            {isRoutineActivityMode && <td className="attendance-print-summary-good">&nbsp;</td>}
+                            {isSavingMode && (
+                              <>
+                                <td className="attendance-print-summary-good">&nbsp;</td>
+                                <td className="attendance-print-summary-sick">&nbsp;</td>
+                                <td className="attendance-print-summary-good">&nbsp;</td>
+                                <td className="attendance-print-summary-title">&nbsp;</td>
+                              </>
+                            )}
+                          </tr>
+                        )
+                      }
 
-                const summary = mode === 'attendance' ? attendanceSummary(row.student) : null
-                const savingRow = savingStats?.rows.get(row.student.id)
-                return (
-                  <tr key={row.student.id}>
-                    <td>{row.number}</td>
-                    <td className="attendance-print-student-name">{studentName(row.student)}</td>
-                    {renderPrintDayCells(bodyRowIndex, row)}
-                    {summary && (
-                      <>
-                        <td className="attendance-print-summary-good">{summary['ม']}</td>
-                        <td className="attendance-print-summary-sick">{summary['ป']}</td>
-                        <td className="attendance-print-summary-leave">{summary['ล']}</td>
-                        <td className="attendance-print-summary-absent">{summary['ข']}</td>
-                      </>
-                    )}
-                    {isSavingMode && (
-                      <>
-                        <td className="attendance-print-summary-good">{savingRow?.total ? savingRow.total.toLocaleString('th-TH') : ''}</td>
-                        <td className="attendance-print-summary-sick">{savingRow?.teacherSupport ? savingRow.teacherSupport.toLocaleString('th-TH') : ''}</td>
-                        <td className="attendance-print-summary-good">{savingRow?.netTotal ? savingRow.netTotal.toLocaleString('th-TH') : ''}</td>
-                        <td className="attendance-print-summary-title">{savingRow?.rank ? savingRow.rank : ''}</td>
-                      </>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <table
-            className={`attendance-print-table attendance-print-standard-table${isStandardFixedColMode ? ' attendance-print-inspection-table' : ''}`}
-            style={isStandardFixedColMode ? classroomAdminStandardTableWidthStyle(standardTableFieldCount) : undefined}
-          >
-            <colgroup>
-              <col className={isStandardFixedColMode ? 'attendance-print-inspection-number-col' : 'attendance-print-number-col'} />
-              <col className={isStandardFixedColMode ? 'attendance-print-inspection-name-col' : 'attendance-print-name-col'} />
-              {mode === 'weightHeight' ? (
-                <>
-                  <col className="attendance-print-inspection-field-col" />
-                  <col className="attendance-print-inspection-field-col" />
-                  <col className="attendance-print-inspection-field-col" />
-                </>
-              ) : INSPECTION_FIELDS.map(field => (
-                <col key={field.key} className="attendance-print-inspection-field-col" />
-              ))}
-            </colgroup>
-            <thead>
-              <tr>
-                <th>เลขที่</th>
-                <th>ชื่อ-นามสกุล</th>
-                {mode === 'weightHeight' ? (
-                  <>
-                    <th>น้ำหนัก (กก.)</th>
-                    <th>ส่วนสูง (ซม.)</th>
-                    <th>BMI</th>
-                  </>
-                ) : INSPECTION_FIELDS.map(field => <th key={field.key}>{field.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student, index) => {
-                const weightRow = weightRows[student.id] || { weight: '', height: '' }
-                const inspectionRow = inspectionRows[student.id] || {}
-                return (
-                  <tr key={student.id}>
-                    <td>{student.student_number || index + 1}</td>
-                    <td className="attendance-print-student-name">{studentName(student)}</td>
-                    {mode === 'weightHeight' ? (
-                      <>
-                        <td>{weightRow.weight || ''}</td>
-                        <td>{weightRow.height || ''}</td>
-                        <td>{weightRow.bmi ? `${weightRow.bmi} · ${weightRow.bmi_result || '-'}` : ''}</td>
-                      </>
-                    ) : INSPECTION_FIELDS.map(field => {
-                      const value = inspectionRow[field.key] || 'ผ่าน'
+                      const summary = mode === 'attendance' ? attendanceSummary(row.student) : null
+                      const routineCount = isRoutineActivityMode ? activityDoneCount(row.student) : null
+                      const savingRow = savingStats?.rows.get(row.student.id)
                       return (
-                        <td key={field.key} className={value === 'ผ่าน' ? 'attendance-print-value-done' : 'attendance-print-value-alert'}>
-                          {value}
-                        </td>
+                        <tr key={`${row.student.id}-p${pageIndex}`}>
+                          <td>{row.number}</td>
+                          <td className="attendance-print-student-name">{studentName(row.student)}</td>
+                          {renderPrintDayCells(bodyRowIndex, row, pageHolidayRowSpan)}
+                          {summary && (
+                            <>
+                              <td className="attendance-print-summary-good">{summary['ม']}</td>
+                              <td className="attendance-print-summary-sick">{summary['ป']}</td>
+                              <td className="attendance-print-summary-leave">{summary['ล']}</td>
+                              <td className="attendance-print-summary-absent">{summary['ข']}</td>
+                            </>
+                          )}
+                          {routineCount !== null && (
+                            <td className="attendance-print-summary-good">{routineCount || ''}</td>
+                          )}
+                          {isSavingMode && (
+                            <>
+                              <td className="attendance-print-summary-good">{savingRow?.total ? savingRow.total.toLocaleString('th-TH') : ''}</td>
+                              <td className="attendance-print-summary-sick">{savingRow?.teacherSupport ? savingRow.teacherSupport.toLocaleString('th-TH') : ''}</td>
+                              <td className="attendance-print-summary-good">{savingRow?.netTotal ? savingRow.netTotal.toLocaleString('th-TH') : ''}</td>
+                              <td className="attendance-print-summary-title">{savingRow?.rank ? savingRow.rank : ''}</td>
+                            </>
+                          )}
+                        </tr>
                       )
                     })}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
+                  </tbody>
+                </table>
+              ) : (
+                <table
+                  className={`attendance-print-table attendance-print-standard-table${isStandardFixedColMode ? ' attendance-print-inspection-table' : ''}`}
+                  style={isStandardFixedColMode ? classroomAdminStandardTableWidthStyle(standardTableFieldCount) : undefined}
+                >
+                  <colgroup>
+                    <col className={isStandardFixedColMode ? 'attendance-print-inspection-number-col' : 'attendance-print-number-col'} />
+                    <col className={isStandardFixedColMode ? 'attendance-print-inspection-name-col' : 'attendance-print-name-col'} />
+                    {mode === 'weightHeight' ? (
+                      <>
+                        <col className="attendance-print-inspection-field-col" />
+                        <col className="attendance-print-inspection-field-col" />
+                        <col className="attendance-print-inspection-field-col" />
+                      </>
+                    ) : INSPECTION_FIELDS.map(field => (
+                      <col key={field.key} className="attendance-print-inspection-field-col" />
+                    ))}
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>เลขที่</th>
+                      <th>ชื่อ-นามสกุล</th>
+                      {mode === 'weightHeight' ? (
+                        <>
+                          <th>น้ำหนัก (กก.)</th>
+                          <th>ส่วนสูง (ซม.)</th>
+                          <th>BMI</th>
+                        </>
+                      ) : INSPECTION_FIELDS.map(field => <th key={field.key}>{field.label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageStudents.map((student, index) => {
+                      const weightRow = weightRows[student.id] || { weight: '', height: '' }
+                      const inspectionRow = inspectionRows[student.id] || {}
+                      return (
+                        <tr key={`${student.id}-p${pageIndex}`}>
+                          <td>{student.student_number || pageOffset + index + 1}</td>
+                          <td className="attendance-print-student-name">{studentName(student)}</td>
+                          {mode === 'weightHeight' ? (
+                            <>
+                              <td>{weightRow.weight || ''}</td>
+                              <td>{weightRow.height || ''}</td>
+                              <td>{weightRow.bmi ? `${weightRow.bmi} · ${weightRow.bmi_result || '-'}` : ''}</td>
+                            </>
+                          ) : INSPECTION_FIELDS.map(field => {
+                            const value = inspectionRow[field.key] || 'ผ่าน'
+                            return (
+                              <td key={field.key} className={value === 'ผ่าน' ? 'attendance-print-value-done' : 'attendance-print-value-alert'}>
+                                {value}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
 
-        <footer className="attendance-print-signatures">
-          <div>
-            <div className="attendance-print-sign-line">ลงชื่อ ...........................................</div>
-            <strong>( {homeroomTeacherName || 'ยังไม่กำหนด'} )</strong>
-            <span>ครูประจำชั้น</span>
-          </div>
-          <div>
-            <div className="attendance-print-sign-line">ลงชื่อ ...........................................</div>
-            <strong>( {directorSignName} )</strong>
-            {directorSignPosition && <span>{directorSignPosition}</span>}
-            <span>{directorSignSchool}</span>
-          </div>
-        </footer>
-      </section>
+              <footer className="attendance-print-signatures">
+                <div>
+                  <div className="attendance-print-sign-line">ลงชื่อ ...........................................</div>
+                  <strong>( {homeroomTeacherName || 'ยังไม่กำหนด'} )</strong>
+                  <span>ครูประจำชั้น</span>
+                </div>
+                <div>
+                  <div className="attendance-print-sign-line">ลงชื่อ ...........................................</div>
+                  <strong>( {directorSignName} )</strong>
+                  {directorSignPosition && <span>{directorSignPosition}</span>}
+                  <span>{directorSignSchool}</span>
+                </div>
+              </footer>
+            </section>
+          )
+        })}
+      </Fragment>
     )
   }
 
@@ -1212,6 +1270,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             'ชื่อ-นามสกุล',
             ...days.map(day => String(day)),
             ...(mode === 'attendance' ? ['มา', 'ป่วย', 'ลา', 'ขาด'] : []),
+            ...(isRoutineActivityMode ? ['สรุปผล'] : []),
             ...(isSavingMode ? ['รวม', 'ครูช่วย', 'สุทธิ', 'อันดับ'] : []),
           ],
           [
@@ -1219,6 +1278,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             '',
             ...days.map(day => weekdayLabel(monthKey, day)),
             ...(mode === 'attendance' ? ['', '', '', ''] : []),
+            ...(isRoutineActivityMode ? [''] : []),
             ...(isSavingMode ? ['', '', '', ''] : []),
           ],
           ...printRows.map(row => {
@@ -1228,10 +1288,12 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 '',
                 ...days.map(() => ''),
                 ...(mode === 'attendance' ? ['', '', '', ''] : []),
+                ...(isRoutineActivityMode ? [''] : []),
                 ...(isSavingMode ? ['', '', '', ''] : []),
               ]
             }
             const summary = mode === 'attendance' ? attendanceSummary(row.student) : null
+            const routineCount = isRoutineActivityMode ? activityDoneCount(row.student) : null
             const savingRow = savingStats?.rows.get(row.student.id)
             return [
               row.number,
@@ -1245,6 +1307,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 return activityType === 'saving' ? (value || '') : classroomAdminDoneMark(value)
               }),
               ...(summary ? [summary['ม'], summary['ป'], summary['ล'], summary['ข']] : []),
+              ...(routineCount !== null ? [routineCount || ''] : []),
               ...(isSavingMode ? [
                 savingRow?.total || '',
                 savingRow?.teacherSupport || '',
@@ -1282,6 +1345,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       { wch: 28 },
       ...(isMonthlyMode ? days.map(() => ({ wch: activityType === 'saving' ? 6 : 4 })) : []),
       ...(mode === 'attendance' ? [{ wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }] : []),
+      ...(isRoutineActivityMode ? [{ wch: 8 }] : []),
       ...(isSavingMode ? [{ wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 }] : []),
       ...(mode === 'weightHeight' ? [
         { wch: 4 },
@@ -1347,6 +1411,13 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       acc[value] += 1
       return acc
     }, { 'ม': 0, 'ป': 0, 'ล': 0, 'ข': 0 } as Record<AttendanceStatus, number>)
+  }
+
+  function activityDoneCount(student: Student) {
+    return activeDays.reduce((sum, day) => {
+      const value = Number(monthlyActivityValues[student.id]?.[day] || 0)
+      return sum + (value > 0 ? 1 : 0)
+    }, 0)
   }
 
   function attendanceDisplayValue(studentId: string, day: number) {
@@ -1841,6 +1912,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               <col style={{ width: 58 }} />
               <col style={{ width: 248 }} />
               {days.map(day => <col key={day} style={{ width: activityType === 'saving' ? 50 : 38 }} />)}
+              {isRoutineActivityMode && <col style={{ width: 64 }} />}
               {isSavingMode && (
                 <>
                   <col style={{ width: 92 }} />
@@ -1868,6 +1940,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 {mode === 'attendance' && (
                   <th colSpan={4} className="classroom-admin-month-title classroom-admin-summary-head">
                     สรุป
+                  </th>
+                )}
+                {isRoutineActivityMode && (
+                  <th rowSpan={monthlyHeaderRowSpan} className="classroom-admin-month-title classroom-admin-summary-head">
+                    สรุปผล
                   </th>
                 )}
                 {isSavingMode && (
@@ -1982,7 +2059,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               {hasMonthlyBulkTools && isPending ? (
                 <tr>
                   <td
-                    colSpan={2 + days.length + (mode === 'attendance' ? 4 : 0) + (isSavingMode ? 4 : 0)}
+                    colSpan={2 + days.length + (mode === 'attendance' ? 4 : 0) + (isRoutineActivityMode ? 1 : 0) + (isSavingMode ? 4 : 0)}
                     style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}
                   >
                     กำลังโหลดตาราง...
@@ -1995,15 +2072,29 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                       <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{row.number}</td>
                       <td className="classroom-admin-student-cell">&nbsp;</td>
                       {renderMonthlyDayCells(bodyRowIndex, null)}
-                      <td className="classroom-admin-summary-cell">&nbsp;</td>
-                      <td className="classroom-admin-summary-cell">&nbsp;</td>
-                      <td className="classroom-admin-summary-cell">&nbsp;</td>
-                      <td className="classroom-admin-summary-cell">&nbsp;</td>
+                      {mode === 'attendance' && (
+                        <>
+                          <td className="classroom-admin-summary-cell">&nbsp;</td>
+                          <td className="classroom-admin-summary-cell">&nbsp;</td>
+                          <td className="classroom-admin-summary-cell">&nbsp;</td>
+                          <td className="classroom-admin-summary-cell">&nbsp;</td>
+                        </>
+                      )}
+                      {isRoutineActivityMode && <td className="classroom-admin-summary-cell">&nbsp;</td>}
+                      {isSavingMode && (
+                        <>
+                          <td className="classroom-admin-summary-cell">&nbsp;</td>
+                          <td className="classroom-admin-summary-cell">&nbsp;</td>
+                          <td className="classroom-admin-summary-cell">&nbsp;</td>
+                          <td className="classroom-admin-summary-cell">&nbsp;</td>
+                        </>
+                      )}
                     </tr>
                   )
                 }
 
                 const summary = mode === 'attendance' ? attendanceSummary(row.student) : null
+                const routineCount = isRoutineActivityMode ? activityDoneCount(row.student) : null
                 const savingRow = savingStats?.rows.get(row.student.id)
                 return (
                   <tr key={row.student.id}>
@@ -2017,6 +2108,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                         <td className="classroom-admin-summary-cell">{summary['ล']}</td>
                         <td className="classroom-admin-summary-cell">{summary['ข']}</td>
                       </>
+                    )}
+                    {routineCount !== null && (
+                      <td className="classroom-admin-summary-cell">{routineCount || ''}</td>
                     )}
                     {isSavingMode && (
                       <>

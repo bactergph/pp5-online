@@ -84,7 +84,33 @@ export type GenerateReportPdfInput = {
   emulateMedia?: 'screen' | 'print'
   /** ใส่ค่า layout จาก localStorage ของ browser ก่อนโหลดหน้า print=1 */
   localStorageSeed?: Record<string, string>
+  /**
+   * ตัดเอฟเฟกต์ตกแต่ง (gradient/เงา/filter/blend) เฉพาะตอนสร้าง PDF
+   * เพื่อไม่ให้ Chromium/Skia แปลงเป็น Tiling Pattern + SoftMask จำนวนมาก
+   * ซึ่งทำให้ไฟล์ PDF เปิดช้า/อืด — ไม่กระทบ CSS ต้นทางหรือ preview บนจอ
+   * สีพื้น solid (หัวตาราง/ช่องสถานะ) ยังคงอยู่ครบ
+   */
+  flattenEffects?: boolean
 }
+
+/**
+ * CSS ชั่วคราวที่ฉีดตอนสร้าง PDF เท่านั้น เพื่อลดความซับซ้อนของ vector ใน PDF
+ * - background-image: none → ตัด gradient ที่ถูกแปลงเป็น shading/tiling pattern
+ * - box-shadow/text-shadow/filter/backdrop-filter/mix-blend → ตัดตัวการสร้าง SoftMask
+ * หมายเหตุ: ไม่แตะ background-color (สีพื้น solid ยังอยู่) และไม่แตะขนาด/layout
+ */
+const FLATTEN_EFFECTS_CSS = `
+*, *::before, *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background-image: none !important;
+  mix-blend-mode: normal !important;
+}
+`
 
 export async function generateReportPdf(input: GenerateReportPdfInput): Promise<Buffer> {
   const targetUrl = `${input.origin}${input.path}${input.query ? `?${input.query}` : ''}`
@@ -123,6 +149,14 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
     })
     await page.waitForFunction('window.__REPORT_READY__ === true', { timeout: 120000 })
     await waitForReportFonts(page, input.origin)
+    // ลบ Next.js dev overlay/indicator ("N" + กล่อง dev) ไม่ให้ติดไปใน PDF
+    await page.evaluate(() => {
+      document.querySelectorAll('nextjs-portal, [data-nextjs-toast], #__next-build-watcher').forEach(el => el.remove())
+    }).catch(() => {})
+    if (input.flattenEffects) {
+      // ฉีดท้าย <head> เพื่อให้ !important ชนะ CSS ตกแต่งของแอป (เฉพาะตอนสร้าง PDF)
+      await page.addStyleTag({ content: FLATTEN_EFFECTS_CSS }).catch(() => {})
+    }
     await page.emulateMediaType(input.emulateMedia ?? (input.landscape ? 'print' : 'screen'))
 
     const pdf = input.landscape

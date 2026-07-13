@@ -64,6 +64,11 @@ import {
 import { expandEducationAreaOffice } from '@/lib/education-area-office'
 import { downloadReportPdf } from '@/lib/pdf/download-report-pdf'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
+import {
+  PRINT_STUDENTS_PER_PAGE,
+  chunkStudentsForPrintPages,
+  printStudentPageCount,
+} from '@/lib/print-student-pages'
 import { subjectGroupHeadPositionLine } from '@/lib/subject-groups'
 import { isPrimaryClassLevel, isSecondaryClassLevel, pp5SubjectReportTerm } from '@/lib/class-level'
 import {
@@ -205,11 +210,24 @@ const SUBJECT_SCORE_PAGES_PER_TERM = 3
 const SUBJECT_UNIT_DISPLAY_COLS = 6
 const SUBJECT_FINAL_DISPLAY_COLS = 4
 const CRITERIA_REPORT_PAGE_COUNT = 2
-const CHARACTER_EVALUATION_PAGE_COUNT = 1
-const READING_EVALUATION_PAGE_COUNT = 1
 
-function subjectScorePageCount(term: 0 | 1 | 2) {
-  return (term === 0 ? 2 : 1) * SUBJECT_SCORE_PAGES_PER_TERM
+function studentTablePageCount(data: ReportPayload | null) {
+  return printStudentPageCount(data?.students?.length || 0)
+}
+
+function withStudentChunks<T>(
+  data: ReportPayload | null,
+  render: (pageData: ReportPayload | null, pageIndex: number, pageStartOffset: number) => T,
+): T[] {
+  const chunks = chunkStudentsForPrintPages(data?.students || [])
+  return chunks.map((students, pageIndex) => {
+    const pageData = data ? { ...data, students } : null
+    return render(pageData, pageIndex, pageIndex * PRINT_STUDENTS_PER_PAGE)
+  })
+}
+
+function subjectScorePageCount(term: 0 | 1 | 2, data: ReportPayload | null = null) {
+  return (term === 0 ? 2 : 1) * SUBJECT_SCORE_PAGES_PER_TERM * studentTablePageCount(data)
 }
 
 function splitScoreUnits(config: ReturnType<typeof scoreConfigFor>) {
@@ -655,29 +673,30 @@ function subjectHourlySummaryPageCount(data: ReportPayload | null, term: 0 | 1 |
 }
 
 function attendancePageCount(data: ReportPayload | null, mode: ReportMode, term: 0 | 1 | 2, subject?: ReportSubject | null) {
+  const studentPages = studentTablePageCount(data)
   if (mode === 'pp5-subject') {
     if (term === 0) {
       const term1 = subjectHourlyTermPageCount(data, subject, 1)
       const term2 = subjectHourlyTermPageCount(data, subject, 2)
       const summaries = subjectHourlySummaryPageCount(data, term)
       if (isSecondaryClassLevel(data?.classroom?.level)) {
-        return term1 + 1 + term2 + 1
+        return (term1 + 1 + term2 + 1) * studentPages
       }
-      return term1 + term2 + summaries
+      return (term1 + term2 + summaries) * studentPages
     }
-    return subjectHourlyTermPageCount(data, subject, term as 1 | 2) + subjectHourlySummaryPageCount(data, term)
+    return (subjectHourlyTermPageCount(data, subject, term as 1 | 2) + subjectHourlySummaryPageCount(data, term)) * studentPages
   }
-  if (mode !== 'pp5-class') return 1
+  if (mode !== 'pp5-class') return studentPages
   const term1Pages = term === 0 || term === 1 ? classAttendanceTermPageCount(data, 1) : 0
   const term2Pages = term === 0 || term === 2 ? classAttendanceTermPageCount(data, 2) : 0
   const total = term1Pages + term2Pages
-  if (total === 0) return 1
-  return total + (term === 0 ? 1 : 0)
+  if (total === 0) return studentPages
+  return (total + (term === 0 ? 1 : 0)) * studentPages
 }
 
 function classScorePageCount(data: ReportPayload | null, term: 0 | 1 | 2) {
   const termCount = term === 0 ? 2 : 1
-  return (data?.subjects.length || 0) * termCount
+  return (data?.subjects.length || 0) * termCount * studentTablePageCount(data)
 }
 
 const PP5_SUBJECT_PAGE_MARK = '(รายวิชา)'
@@ -740,13 +759,13 @@ function reportPageStarts(data: ReportPayload | null, mode: ReportMode, sections
     cover: undefined,
     criteria: takePageStart(sections.includes('criteria'), CRITERIA_REPORT_PAGE_COUNT),
     attendance: takePageStart(sections.includes('attendance'), attendancePageCount(data, mode, term, subject)),
-    subjectScore: takePageStart(mode === 'pp5-subject' && sections.includes('scores'), subjectScorePageCount(term)),
+    subjectScore: takePageStart(mode === 'pp5-subject' && sections.includes('scores'), subjectScorePageCount(term, data)),
     classScore: takePageStart(mode === 'pp5-class' && sections.includes('scores'), classScorePageCount(data, term)),
-    achievement: takePageStart(mode === 'pp5-class' && sections.includes('achievement')),
-    character: takePageStart(sections.includes('character'), CHARACTER_EVALUATION_PAGE_COUNT),
-    reading: takePageStart(sections.includes('reading'), READING_EVALUATION_PAGE_COUNT),
-    competency: takePageStart(sections.includes('competency')),
-    activities: takePageStart(mode === 'pp5-class' && sections.includes('activities')),
+    achievement: takePageStart(mode === 'pp5-class' && sections.includes('achievement'), studentTablePageCount(data)),
+    character: takePageStart(sections.includes('character'), studentTablePageCount(data)),
+    reading: takePageStart(sections.includes('reading'), studentTablePageCount(data)),
+    competency: takePageStart(sections.includes('competency'), studentTablePageCount(data)),
+    activities: takePageStart(mode === 'pp5-class' && sections.includes('activities'), studentTablePageCount(data)),
     pp6: undefined,
   }
 }
@@ -1969,16 +1988,18 @@ function SubjectHourlyAttendancePages({
   const subjectId = subject?.class_subject_id || classSubjectId || ''
   const recordMap = buildHourlyStatusMap(data?.hourlyAttendanceRecords, subjectId, term)
   const students = data?.students || []
+  const studentChunks = chunkStudentsForPrintPages(students)
+  const studentPageCount = studentChunks.length
   const isSecondary = isSecondaryClassLevel(data?.classroom?.level)
 
   if (!subject) {
-    return (
-      <section className="report-page pp5-body-page pp5-subject-hourly-page" style={pageStyle}>
-        <ReportPageNumber value={pageStart} mark={PP5_SUBJECT_PAGE_MARK} />
-        <HeaderLine data={data} title="แบบบันทึกเวลาเรียนรายวิชา" term={term} />
+    return withStudentChunks(data, (pageData, pageIndex) => (
+      <section key={`subject-hourly-empty-${term}-${pageIndex}`} className="report-page pp5-body-page pp5-subject-hourly-page" style={pageStyle}>
+        <ReportPageNumber value={pageStart + pageIndex} mark={PP5_SUBJECT_PAGE_MARK} />
+        <HeaderLine data={pageData} title="แบบบันทึกเวลาเรียนรายวิชา" term={term} />
         <p className="report-empty-inline">ยังไม่มีข้อมูลเวลาเรียนหรือยังไม่ได้กำหนดปฏิทินภาคเรียน</p>
       </section>
-    )
+    ))
   }
 
   if (isSecondary) {
@@ -1986,30 +2007,32 @@ function SubjectHourlyAttendancePages({
     const hpw = subjectHourlyHpw(subject.subject.hours_per_year || 0, teachingWeeks)
     const { weeks, totalHours } = buildSubjectCalendarWeeks(range.start, range.end, calendar, hpw, holidayNameMap(data?.holidays))
     if (weeks.length === 0) {
-      return (
-        <section className="report-page pp5-body-page pp5-subject-hourly-page" style={pageStyle}>
-          <ReportPageNumber value={pageStart} mark={PP5_SUBJECT_PAGE_MARK} />
-          <HeaderLine data={data} title="บันทึกเวลาเรียน" term={term} />
+      return withStudentChunks(data, (pageData, pageIndex) => (
+        <section key={`subject-hourly-sec-empty-${term}-${pageIndex}`} className="report-page pp5-body-page pp5-subject-hourly-page" style={pageStyle}>
+          <ReportPageNumber value={pageStart + pageIndex} mark={PP5_SUBJECT_PAGE_MARK} />
+          <HeaderLine data={pageData} title="บันทึกเวลาเรียน" term={term} />
           <p className="report-empty-inline">ยังไม่มีข้อมูลเวลาเรียนหรือยังไม่ได้กำหนดปฏิทินภาคเรียน</p>
         </section>
-      )
+      ))
     }
     const pages = secondaryHourlyPages(weeks)
-    return pages.map((page, pageIndex) => (
-      <SubjectSecondaryHourlyAttendancePage
-        key={`subject-hourly-sec-${term}-${page.key}`}
-        data={data}
-        subject={subject}
-        term={term}
-        pageWeeks={page.weeks}
-        allWeeks={weeks}
-        showSummary={page.showSummary}
-        pageNumber={pageStart + pageIndex}
-        totalHours={totalHours}
-        recordMap={recordMap}
-        students={students}
-      />
-    ))
+    return pages.flatMap((page, pageIndex) =>
+      studentChunks.map((chunk, studentPageIndex) => (
+        <SubjectSecondaryHourlyAttendancePage
+          key={`subject-hourly-sec-${term}-${page.key}-${studentPageIndex}`}
+          data={data}
+          subject={subject}
+          term={term}
+          pageWeeks={page.weeks}
+          allWeeks={weeks}
+          showSummary={page.showSummary}
+          pageNumber={pageStart + pageIndex * studentPageCount + studentPageIndex}
+          totalHours={totalHours}
+          recordMap={recordMap}
+          students={chunk}
+        />
+      )),
+    )
   }
 
   const weeks = subjectHourlyTermWeeks(range.start, range.end, calendar)
@@ -2017,32 +2040,34 @@ function SubjectHourlyAttendancePages({
   const slotsPerWeek = displaySlotsPerWeek(true, hpw)
 
   if (weeks.length === 0) {
-    return (
-      <section className="report-page pp5-body-page pp5-subject-hourly-page" style={pageStyle}>
-        <ReportPageNumber value={pageStart} mark={PP5_SUBJECT_PAGE_MARK} />
-        <HeaderLine data={data} title="แบบบันทึกเวลาเรียนรายวิชา" term={term} />
+    return withStudentChunks(data, (pageData, pageIndex) => (
+      <section key={`subject-hourly-pri-empty-${term}-${pageIndex}`} className="report-page pp5-body-page pp5-subject-hourly-page" style={pageStyle}>
+        <ReportPageNumber value={pageStart + pageIndex} mark={PP5_SUBJECT_PAGE_MARK} />
+        <HeaderLine data={pageData} title="แบบบันทึกเวลาเรียนรายวิชา" term={term} />
         <p className="report-empty-inline">ยังไม่มีข้อมูลเวลาเรียนหรือยังไม่ได้กำหนดปฏิทินภาคเรียน</p>
       </section>
-    )
+    ))
   }
 
   const pages = primaryHourlyPages(weeks)
-  return pages.map((page, pageIndex) => (
-    <SubjectPrimaryHourlyAttendancePage
-      key={`subject-hourly-${term}-${page.key}`}
-      data={data}
-      subject={subject}
-      term={term}
-      pageWeeks={page.weeks}
-      allWeeks={weeks}
-      showSummary={page.showSummary}
-      pageNumber={pageStart + pageIndex}
-      slotsPerWeek={slotsPerWeek}
-      dataSlotsPerWeek={hpw}
-      recordMap={recordMap}
-      students={students}
-    />
-  ))
+  return pages.flatMap((page, pageIndex) =>
+    studentChunks.map((chunk, studentPageIndex) => (
+      <SubjectPrimaryHourlyAttendancePage
+        key={`subject-hourly-${term}-${page.key}-${studentPageIndex}`}
+        data={data}
+        subject={subject}
+        term={term}
+        pageWeeks={page.weeks}
+        allWeeks={weeks}
+        showSummary={page.showSummary}
+        pageNumber={pageStart + pageIndex * studentPageCount + studentPageIndex}
+        slotsPerWeek={slotsPerWeek}
+        dataSlotsPerWeek={hpw}
+        recordMap={recordMap}
+        students={chunk}
+      />
+    )),
+  )
 }
 
 function AttendancePage({ data, mode, subject, classSubjectId, term, pageStart }: { data: ReportPayload | null; mode: ReportMode; subject: ReportSubject | null; classSubjectId?: string; term: 0 | 1 | 2; pageStart?: number }) {
@@ -2050,20 +2075,39 @@ function AttendancePage({ data, mode, subject, classSubjectId, term, pageStart }
   if (mode === 'pp5-class') return <ClassAttendancePages data={data} term={term} pageStart={pageStart} />
   if (mode === 'pp5-subject') {
     const isSecondary = isSecondaryClassLevel(data?.classroom?.level)
+    const studentPages = studentTablePageCount(data)
     if (term === 0) {
-      const term1Pages = subjectHourlyTermPageCount(data, subject, 1)
-      const term2Pages = subjectHourlyTermPageCount(data, subject, 2)
+      const term1Pages = subjectHourlyTermPageCount(data, subject, 1) * studentPages
+      const term2Pages = subjectHourlyTermPageCount(data, subject, 2) * studentPages
       const start = pageStart || 1
       if (isSecondary) {
         const afterTerm1 = start + term1Pages
-        const afterTerm1Summary = afterTerm1 + 1
+        const afterTerm1Summary = afterTerm1 + studentPages
         const afterTerm2 = afterTerm1Summary + term2Pages
         return (
           <>
             <SubjectHourlyAttendancePages data={data} subject={subject} classSubjectId={classSubjectId} term={1} pageStart={start} />
-            <SubjectHourlySummaryPage data={data} subject={subject} classSubjectId={classSubjectId} term={1} pageNumber={afterTerm1} />
+            {withStudentChunks(data, (pageData, pageIndex) => (
+              <SubjectHourlySummaryPage
+                key={`hourly-summary-1-${pageIndex}`}
+                data={pageData}
+                subject={subject}
+                classSubjectId={classSubjectId}
+                term={1}
+                pageNumber={afterTerm1 + pageIndex}
+              />
+            ))}
             <SubjectHourlyAttendancePages data={data} subject={subject} classSubjectId={classSubjectId} term={2} pageStart={afterTerm1Summary} />
-            <SubjectHourlySummaryPage data={data} subject={subject} classSubjectId={classSubjectId} term={2} pageNumber={afterTerm2} />
+            {withStudentChunks(data, (pageData, pageIndex) => (
+              <SubjectHourlySummaryPage
+                key={`hourly-summary-2-${pageIndex}`}
+                data={pageData}
+                subject={subject}
+                classSubjectId={classSubjectId}
+                term={2}
+                pageNumber={afterTerm2 + pageIndex}
+              />
+            ))}
           </>
         )
       }
@@ -2071,61 +2115,84 @@ function AttendancePage({ data, mode, subject, classSubjectId, term, pageStart }
         <>
           <SubjectHourlyAttendancePages data={data} subject={subject} classSubjectId={classSubjectId} term={1} pageStart={start} />
           <SubjectHourlyAttendancePages data={data} subject={subject} classSubjectId={classSubjectId} term={2} pageStart={start + term1Pages} />
-          <SubjectHourlySummaryPage data={data} subject={subject} classSubjectId={classSubjectId} term={2} pageNumber={start + term1Pages + term2Pages} />
+          {withStudentChunks(data, (pageData, pageIndex) => (
+            <SubjectHourlySummaryPage
+              key={`hourly-summary-year-${pageIndex}`}
+              data={pageData}
+              subject={subject}
+              classSubjectId={classSubjectId}
+              term={2}
+              pageNumber={start + term1Pages + term2Pages + pageIndex}
+            />
+          ))}
         </>
       )
     }
     const activeTerm = term as 1 | 2
-    const termPages = subjectHourlyTermPageCount(data, subject, activeTerm)
+    const termPages = subjectHourlyTermPageCount(data, subject, activeTerm) * studentPages
     const start = pageStart || 1
     return (
       <>
         <SubjectHourlyAttendancePages data={data} subject={subject} classSubjectId={classSubjectId} term={activeTerm} pageStart={start} />
-        {subjectHourlySummaryPageCount(data, term) > 0 ? (
-          <SubjectHourlySummaryPage data={data} subject={subject} classSubjectId={classSubjectId} term={activeTerm} pageNumber={start + termPages} />
-        ) : null}
+        {subjectHourlySummaryPageCount(data, term) > 0
+          ? withStudentChunks(data, (pageData, pageIndex) => (
+              <SubjectHourlySummaryPage
+                key={`hourly-summary-${activeTerm}-${pageIndex}`}
+                data={pageData}
+                subject={subject}
+                classSubjectId={classSubjectId}
+                term={activeTerm}
+                pageNumber={start + termPages + pageIndex}
+              />
+            ))
+          : null}
       </>
     )
   }
 
   const attendance = data?.dailyAttendance
+  const start = pageStart || 1
   return (
-    <section className="report-page pp5-body-page pp5-attendance-summary-page" style={pageStyle}>
-      <ReportPageNumber value={pageStart} />
-      <HeaderLine data={data} title="สรุปเวลาเรียนรวมของชั้นเรียน" term={term} />
-      <table className="report-table compact">
-        <thead>
-          <tr>
-            <th>เลขที่</th>
-            <th>เลขประจำตัว</th>
-            <th>ชื่อ - สกุล</th>
-            <th>มา</th>
-            <th>ป่วย</th>
-            <th>ลา</th>
-            <th>ขาด</th>
-            <th>รวม</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(data?.students || []).map(student => {
-            const summary = attendance?.[student.id] || { present: 0, sick: 0, leave: 0, absent: 0 }
-            const total = summary.present + summary.sick + summary.leave + summary.absent
-            return (
-              <tr key={student.id}>
-                <td>{student.student_number}</td>
-                <td>{student.student_code || '-'}</td>
-                <td className="text-left">{studentName(student)}</td>
-                <td>{summary.present}</td>
-                <td>{summary.sick}</td>
-                <td>{summary.leave}</td>
-                <td>{summary.absent}</td>
-                <td>{total}</td>
+    <>
+      {withStudentChunks(data, (pageData, pageIndex) => (
+        <section key={`attendance-fallback-${pageIndex}`} className="report-page pp5-body-page pp5-attendance-summary-page" style={pageStyle}>
+          <ReportPageNumber value={start + pageIndex} />
+          <HeaderLine data={pageData} title="สรุปเวลาเรียนรวมของชั้นเรียน" term={term} />
+          <table className="report-table compact">
+            <thead>
+              <tr>
+                <th>เลขที่</th>
+                <th>เลขประจำตัว</th>
+                <th>ชื่อ - สกุล</th>
+                <th>มา</th>
+                <th>ป่วย</th>
+                <th>ลา</th>
+                <th>ขาด</th>
+                <th>รวม</th>
               </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </section>
+            </thead>
+            <tbody>
+              {(pageData?.students || []).map(student => {
+                const summary = attendance?.[student.id] || { present: 0, sick: 0, leave: 0, absent: 0 }
+                const total = summary.present + summary.sick + summary.leave + summary.absent
+                return (
+                  <tr key={student.id}>
+                    <td>{student.student_number}</td>
+                    <td>{student.student_code || '-'}</td>
+                    <td className="text-left">{studentName(student)}</td>
+                    <td>{summary.present}</td>
+                    <td>{summary.sick}</td>
+                    <td>{summary.leave}</td>
+                    <td>{summary.absent}</td>
+                    <td>{total}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </section>
+      ))}
+    </>
   )
 }
 
@@ -2135,18 +2202,21 @@ function ClassAttendancePages({ data, term, pageStart = 1 }: { data: ReportPaylo
   const recordMap = attendanceRecordMap(data?.dailyAttendanceRecords || [])
   const holidayMap = calendarDayMap(data?.holidays || [])
   const openWeekendMap = calendarDayMap(data?.weekendSchoolDays || [])
-  const students = data?.students || []
+  const studentChunks = chunkStudentsForPrintPages(data?.students || [])
+  const studentPageCount = studentChunks.length
 
   function renderTermPages(activeTerm: 1 | 2, pageOffset = 0) {
     const { start, end } = attendanceDateRange(data, activeTerm)
     const weekPages = chunkArray(attendanceWeeks(start, end), 4)
-    return weekPages.map((weeks, pageIndex) => {
+    return weekPages.flatMap((weeks, weekIndex) =>
+      studentChunks.map((chunkStudents, studentPageIndex) => {
         const weekSlots = weeks.map(week => ({ week, slots: expandAttendanceWeek(week) }))
         const columns = weekSlots.flatMap(({ week, slots }) => slots.map(slot => ({ weekNumber: week.weekNumber, slot })))
-        const rowCount = pp5AttendanceBodyRows(students.length, layout, 5)
+        const rowCount = pp5AttendanceBodyRows(chunkStudents.length, layout, 5)
+        const pageNumber = pageStart + pageOffset + weekIndex * studentPageCount + studentPageIndex
         return (
-          <section className="report-page pp5-body-page pp5-attendance-month-page" key={`attendance-term-${activeTerm}-page-${pageIndex}`} style={pageStyle}>
-            <ReportPageNumber value={pageStart + pageOffset + pageIndex} />
+          <section className="report-page pp5-body-page pp5-attendance-month-page" key={`attendance-term-${activeTerm}-page-${weekIndex}-${studentPageIndex}`} style={pageStyle}>
+            <ReportPageNumber value={pageNumber} />
             <header className="pp5-attendance-head">
               <h1>บันทึกเวลาเรียน ภาคเรียนที่ {activeTerm}</h1>
               <p className="pp5-attendance-class-line">
@@ -2213,10 +2283,10 @@ function ClassAttendancePages({ data, term, pageStart = 1 }: { data: ReportPaylo
               </thead>
               <tbody>
                 {Array.from({ length: rowCount }, (_, index) => {
-                  const student = students[index]
+                  const student = chunkStudents[index]
                   return (
                     <tr key={student?.id || `empty-${index}`}>
-                      <td>{student ? index + 1 : ''}</td>
+                      <td>{student ? student.student_number || index + 1 : ''}</td>
                       <td>{student?.student_code || ''}</td>
                       <td className="text-left">{student ? studentName(student) : ''}</td>
                       <td className="pp5-attendance-row-label" />
@@ -2244,7 +2314,8 @@ function ClassAttendancePages({ data, term, pageStart = 1 }: { data: ReportPaylo
             </table>
           </section>
         )
-      })
+      }),
+    )
   }
 
   const term1Pages = term === 0 || term === 1 ? renderTermPages(1, 0) : []
@@ -2252,11 +2323,15 @@ function ClassAttendancePages({ data, term, pageStart = 1 }: { data: ReportPaylo
 
   if (term1Pages.length + term2Pages.length === 0) {
     return (
-      <section className="report-page pp5-body-page pp5-attendance-month-page" style={pageStyle}>
-        <ReportPageNumber value={pageStart} />
-        <HeaderLine data={data} title="แบบบันทึกเวลาเรียน" term={term} />
-        <div className="report-empty">ยังไม่ได้ตั้งค่าวันเปิด-ปิดภาคเรียนในปีการศึกษา</div>
-      </section>
+      <>
+        {withStudentChunks(data, (pageData, pageIndex) => (
+          <section key={`attendance-empty-${pageIndex}`} className="report-page pp5-body-page pp5-attendance-month-page" style={pageStyle}>
+            <ReportPageNumber value={pageStart + pageIndex} />
+            <HeaderLine data={pageData} title="แบบบันทึกเวลาเรียน" term={term} />
+            <div className="report-empty">ยังไม่ได้ตั้งค่าวันเปิด-ปิดภาคเรียนในปีการศึกษา</div>
+          </section>
+        ))}
+      </>
     )
   }
 
@@ -2264,7 +2339,18 @@ function ClassAttendancePages({ data, term, pageStart = 1 }: { data: ReportPaylo
     <>
       {term1Pages}
       {term2Pages}
-      {term === 0 && <ClassAttendanceSummaryPage data={data} recordMap={recordMap} holidayMap={holidayMap} openWeekendMap={openWeekendMap} pageNumber={pageStart + term1Pages.length + term2Pages.length} />}
+      {term === 0
+        ? withStudentChunks(data, (pageData, pageIndex) => (
+            <ClassAttendanceSummaryPage
+              key={`class-att-summary-${pageIndex}`}
+              data={pageData}
+              recordMap={recordMap}
+              holidayMap={holidayMap}
+              openWeekendMap={openWeekendMap}
+              pageNumber={pageStart + term1Pages.length + term2Pages.length + pageIndex}
+            />
+          ))
+        : null}
     </>
   )
 }
@@ -2323,7 +2409,7 @@ function ClassAttendanceSummaryPage({
             const percent = allKeys.length ? (total.present / allKeys.length) * 100 : 0
             return (
               <tr key={student.id}>
-                <td>{index + 1}</td>
+                <td>{student.student_number || index + 1}</td>
                 <td>{student.student_code || '-'}</td>
                 <td className="text-left">{studentName(student)}</td>
                 <td>{term1.leave || '-'}</td>
@@ -2678,33 +2764,43 @@ function SubjectScorePages({
 
   return (
     <>
-      {activeTerms.flatMap(activeTerm => {
-        const pages = [
-          <SubjectBetweenScorePage key={`between-${activeTerm}`} data={data} subject={subject} term={activeTerm} pageNumber={pageNumber} />,
-          <SubjectAchievementResultPage key={`achievement-${activeTerm}`} data={data} subject={subject} term={activeTerm} pageNumber={pageNumber + 1} />,
-          <SubjectExamNoticePage key={`exam-${activeTerm}`} data={data} subject={subject} term={activeTerm} pageNumber={pageNumber + 2} />,
-        ]
-        pageNumber += SUBJECT_SCORE_PAGES_PER_TERM
-        return pages
-      })}
+      {activeTerms.flatMap(activeTerm =>
+        withStudentChunks(data, (pageData, pageIndex) => {
+          const base = pageNumber
+          pageNumber += SUBJECT_SCORE_PAGES_PER_TERM
+          return [
+            <SubjectBetweenScorePage key={`between-${activeTerm}-${pageIndex}`} data={pageData} subject={subject} term={activeTerm} pageNumber={base} />,
+            <SubjectAchievementResultPage key={`achievement-${activeTerm}-${pageIndex}`} data={pageData} subject={subject} term={activeTerm} pageNumber={base + 1} />,
+            <SubjectExamNoticePage key={`exam-${activeTerm}-${pageIndex}`} data={pageData} subject={subject} term={activeTerm} pageNumber={base + 2} />,
+          ]
+        }).flat(),
+      )}
     </>
   )
 }
 
 function ClassScorePage({ data, term, pageStart = 1 }: { data: ReportPayload | null; term: 0 | 1 | 2; pageStart?: number }) {
-  const pageStyle = usePp5PageStyle('scores')
   const activeTerms: Array<1 | 2> = term === 0 ? [1, 2] : [term]
-  const pages = activeTerms.flatMap(activeTerm => (data?.subjects || []).map(subject => ({ term: activeTerm, subject })))
+  const pages = (data?.subjects || []).flatMap(subject =>
+    activeTerms.flatMap(activeTerm =>
+      withStudentChunks(data, (pageData, pageIndex) => ({
+        subject,
+        term: activeTerm,
+        pageData,
+        pageIndex,
+      })),
+    ),
+  )
 
   return (
     <>
-      {pages.map(({ term: activeTerm, subject }, pageIndex) => (
+      {pages.map(({ subject, term: activeTerm, pageData, pageIndex }, pageOrdinal) => (
         <ClassSubjectScorePage
-          key={`${subject.class_subject_id}-${activeTerm}`}
-          data={data}
+          key={`${subject.class_subject_id}-${activeTerm}-${pageIndex}`}
+          data={pageData}
           subject={subject}
           term={activeTerm}
-          pageNumber={pageStart + pageIndex}
+          pageNumber={pageStart + pageOrdinal}
         />
       ))}
     </>
@@ -2789,7 +2885,7 @@ function ClassSubjectScorePage({
             const score = student ? scoreForTerm(data, student.id, subject.class_subject_id, term) : null
             return (
               <tr key={student?.id || `empty-score-${index}`}>
-                <td>{student ? index + 1 : ''}</td>
+                <td>{student ? student.student_number || index + 1 : ''}</td>
                 <td>{student?.student_code || ''}</td>
                 <td className="text-left">{student ? studentName(student) : ''}</td>
                 {Array.from({ length: visibleUnits }, (_, unitIndex) => (
@@ -2885,7 +2981,7 @@ function AchievementSummaryPage({ data, pageNumber }: { data: ReportPayload | nu
             const gpa = student ? studentGpa(data, student.id, subjects) : null
             return (
               <tr key={student?.id || `achievement-empty-${index}`}>
-                <td>{student ? index + 1 : ''}</td>
+                <td>{student ? student.student_number || index + 1 : ''}</td>
                 <td>{student?.student_code || ''}</td>
                 <td className="text-left">{student ? studentName(student) : ''}</td>
                 {subjects.map(subject => {
@@ -3117,14 +3213,20 @@ function CharacterReportPages({
   pageMark?: string
   term?: 0 | 1 | 2
 }) {
+  const start = pageStart || 1
   return (
-    <CharacterEvaluationPage
-      data={data}
-      rows={rows}
-      pageNumber={pageStart}
-      pageMark={pageMark}
-      term={term}
-    />
+    <>
+      {withStudentChunks(data, (pageData, pageIndex) => (
+        <CharacterEvaluationPage
+          key={`character-${pageIndex}`}
+          data={pageData}
+          rows={rows}
+          pageNumber={start + pageIndex}
+          pageMark={pageMark}
+          term={term}
+        />
+      ))}
+    </>
   )
 }
 
@@ -3192,7 +3294,7 @@ function CharacterEvaluationPage({
             const result = (row?.result_level as string | null) || (fallbackResult === '-' ? '' : fallbackResult)
             return (
               <tr key={student?.id || `empty-character-${index}`}>
-                <td>{student ? index + 1 : ''}</td>
+                <td>{student ? student.student_number || index + 1 : ''}</td>
                 <td>{student?.student_code || ''}</td>
                 <td className="text-left">{student ? studentName(student) : ''}</td>
                 {Array.from({ length: scoreColumns }, (_, scoreIndex) => (
@@ -3287,7 +3389,7 @@ function ReadingEvaluationPage({
             const result = (row?.result_level as string | null) || (fallbackResult === '-' ? '' : fallbackResult)
             return (
               <tr key={student?.id || `empty-reading-${index}`}>
-                <td>{student ? index + 1 : ''}</td>
+                <td>{student ? student.student_number || index + 1 : ''}</td>
                 <td>{student?.student_code || ''}</td>
                 <td className="text-left">{student ? studentName(student) : ''}</td>
                 {readingColumns.map((column, columnIndex) => <td key={columnKey(column, columnIndex)}>{columnValue(row, column)}</td>)}
@@ -3351,7 +3453,7 @@ function CompetencyEvaluationPage({
             const result = (row?.result_level as string | null) || (fallbackResult === '-' ? '' : fallbackResult)
             return (
               <tr key={student?.id || `empty-competency-${index}`}>
-                <td>{student ? index + 1 : ''}</td>
+                <td>{student ? student.student_number || index + 1 : ''}</td>
                 <td className="text-left">{student ? studentName(student) : ''}</td>
                 {COMPETENCY_KEYS.map(key => <td key={key}>{row?.[key] ?? (student ? '–' : '')}</td>)}
                 <td>{result}</td>
@@ -3409,7 +3511,7 @@ function ActivityEvaluationPage({
             const row = student ? rowFor(rows, student.id) : null
             return (
               <tr key={student?.id || `empty-activity-${index}`}>
-                <td>{student ? index + 1 : ''}</td>
+                <td>{student ? student.student_number || index + 1 : ''}</td>
                 <td className="text-left">{student ? studentName(student) : ''}</td>
                 {ACTIVITY_KEYS.map(key => <td key={key}>{row?.[key] ?? (student ? '–' : '')}</td>)}
                 <td>{row?.overall_result || ''}</td>
@@ -4125,6 +4227,9 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         query: params.toString(),
         fileName,
         localStorageSeed: Object.keys(localStorageSeed).length > 0 ? localStorageSeed : undefined,
+        // ตัดเอฟเฟกต์ตกแต่งเฉพาะตอนสร้าง PDF เพื่อให้ไฟล์เปิดลื่น ไม่อืด
+        // (ไม่กระทบ CSS/preview บนจอ และสีพื้นตารางยังอยู่ครบ)
+        flattenEffects: true,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
@@ -4431,7 +4536,13 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                 {mode !== 'pp6' && sections.includes('attendance') && <AttendancePage data={data} mode={mode} subject={selectedSubject} classSubjectId={classSubjectId} term={reportTerm} pageStart={pageNumbers.attendance} />}
                 {mode === 'pp5-subject' && sections.includes('scores') && <SubjectScorePages data={data} subject={selectedSubject} term={reportTerm} pageStart={pageNumbers.subjectScore} />}
                 {mode === 'pp5-class' && sections.includes('scores') && <ClassScorePage data={data} term={term} pageStart={pageNumbers.classScore} />}
-                {mode === 'pp5-class' && sections.includes('achievement') && <AchievementSummaryPage data={data} pageNumber={pageNumbers.achievement} />}
+                {mode === 'pp5-class' && sections.includes('achievement') && withStudentChunks(data, (pageData, pageIndex) => (
+                  <AchievementSummaryPage
+                    key={`achievement-${pageIndex}`}
+                    data={pageData}
+                    pageNumber={(pageNumbers.achievement || 1) + pageIndex}
+                  />
+                ))}
                 {mode === 'pp5-subject' && sections.includes('character') && (
                   <CharacterReportPages
                     data={data}
@@ -4449,33 +4560,43 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                     term={reportTerm}
                   />
                 )}
-                {mode === 'pp5-subject' && sections.includes('reading') && (
+                {mode === 'pp5-subject' && sections.includes('reading') && withStudentChunks(data, (pageData, pageIndex) => (
                   <ReadingEvaluationPage
-                    data={data}
+                    key={`reading-subj-${pageIndex}`}
+                    data={pageData}
                     rows={data.evaluations.reading}
-                    pageNumber={pageNumbers.reading}
+                    pageNumber={(pageNumbers.reading || 1) + pageIndex}
                     pageMark={PP5_SUBJECT_PAGE_MARK}
                     term={reportTerm}
                   />
-                )}
-                {mode === 'pp5-class' && sections.includes('reading') && (
+                ))}
+                {mode === 'pp5-class' && sections.includes('reading') && withStudentChunks(data, (pageData, pageIndex) => (
                   <ReadingEvaluationPage
-                    data={data}
+                    key={`reading-class-${pageIndex}`}
+                    data={pageData}
                     rows={data.evaluations.reading}
-                    pageNumber={pageNumbers.reading}
+                    pageNumber={(pageNumbers.reading || 1) + pageIndex}
                     term={reportTerm}
                   />
-                )}
-                {mode !== 'pp6' && sections.includes('competency') && (
+                ))}
+                {mode !== 'pp6' && sections.includes('competency') && withStudentChunks(data, (pageData, pageIndex) => (
                   <CompetencyEvaluationPage
-                    data={data}
+                    key={`competency-${pageIndex}`}
+                    data={pageData}
                     rows={data.evaluations.competency}
-                    pageNumber={pageNumbers.competency}
+                    pageNumber={(pageNumbers.competency || 1) + pageIndex}
                     pageMark={mode === 'pp5-subject' ? PP5_SUBJECT_PAGE_MARK : undefined}
                     term={reportTerm}
                   />
-                )}
-                {mode === 'pp5-class' && sections.includes('activities') && <ActivityEvaluationPage data={data} rows={data.evaluations.activities} pageNumber={pageNumbers.activities} />}
+                ))}
+                {mode === 'pp5-class' && sections.includes('activities') && withStudentChunks(data, (pageData, pageIndex) => (
+                  <ActivityEvaluationPage
+                    key={`activities-${pageIndex}`}
+                    data={pageData}
+                    rows={data.evaluations.activities}
+                    pageNumber={(pageNumbers.activities || 1) + pageIndex}
+                  />
+                ))}
               </div>
               </Pp5PrintLayoutsProvider>
             )}

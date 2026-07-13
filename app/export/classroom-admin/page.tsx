@@ -23,6 +23,11 @@ import {
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
 import { REPORT_FONT_FAMILY } from '@/lib/report-font'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
+import {
+  PRINT_STUDENTS_PER_PAGE,
+  chunkStudentsForPrintPages,
+  printPageRowCount,
+} from '@/lib/print-student-pages'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; academic_year_id: string }
@@ -133,6 +138,19 @@ function summaryFor(student: Student, data: ExportData) {
     out[value] = (out[value] || 0) + 1
   })
   return out
+}
+
+/** จำนวนวันที่ทำกิจวัตร (เช็ค) หรือยอดรวมเงินออม */
+function activitySummaryFor(studentId: string, type: ActivityType, data: ExportData) {
+  return (data.schoolDays || []).reduce((sum, day) => {
+    const value = Number(data.activities?.[type]?.[studentId]?.[day] || 0)
+    if (!value) return sum
+    return type === 'saving' ? sum + value : sum + 1
+  }, 0)
+}
+
+function isRoutineActivityReport(type: ReportType): type is Exclude<ActivityType, 'saving'> {
+  return type === 'brushing' || type === 'milk' || type === 'lunch' || type === 'cleaning'
 }
 
 function attendanceExportDisplay(studentId: string, day: number, data: ExportData) {
@@ -376,13 +394,17 @@ export default function ClassroomAdminExportPage() {
       ]), `เวลาเรียน-${MONTH_SHORT_LABELS[month]}`.slice(0, 31))
 
       ;(['brushing', 'milk', 'lunch', 'cleaning', 'saving'] as ActivityType[]).forEach(type => {
-        const rows = data.students?.map(student => [
-          student.student_number,
-          studentName(student),
-          ...days.map(day => data.schoolDays?.includes(day) ? (data.activities?.[type]?.[student.id]?.[day] || '') : ''),
-        ]) || []
+        const rows = data.students?.map(student => {
+          const summary = activitySummaryFor(student.id, type, data)
+          return [
+            student.student_number,
+            studentName(student),
+            ...days.map(day => data.schoolDays?.includes(day) ? (data.activities?.[type]?.[student.id]?.[day] || '') : ''),
+            summary || '',
+          ]
+        }) || []
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-          [...baseHeaders, ...days.map(String)],
+          [...baseHeaders, ...days.map(String), type === 'saving' ? 'รวม' : 'สรุปผล'],
           ...rows,
         ]), `${ACTIVITY_LABELS[type]}-${MONTH_SHORT_LABELS[month]}`.slice(0, 31))
       })
@@ -472,87 +494,109 @@ export default function ClassroomAdminExportPage() {
 
   function renderReportSheet(type: ReportType, data: ExportData, sheetMonthKey: string) {
     const monthly = type === 'attendance' || ['brushing', 'milk', 'lunch', 'cleaning', 'saving'].includes(type)
+    const showActivitySummary = isRoutineActivityReport(type) || type === 'saving'
     const days = Array.from({ length: data.days || 0 }, (_, i) => i + 1)
-    const printRows = monthly
-      ? [
-          ...(data.students || []).map((student, index) => ({ type: 'student' as const, student, number: student.student_number || index + 1 })),
-          ...Array.from({ length: Math.max(0, printLayouts.monthly.minBlankRows - (data.students?.length || 0)) }, (_, index) => ({ type: 'blank' as const, number: (data.students?.length || 0) + index + 1 })),
-        ]
-      : []
+    const allStudents = data.students || []
+    const studentPages = chunkStudentsForPrintPages(allStudents)
     const holidayMap = Object.fromEntries((data.holidays || []).map(item => [item.date, item.name]))
-    const holidayRowSpan = (data.students || []).length
     const isClosedWeekend = (day: number) => !(data.schoolDays || []).includes(day)
     const isOpenWeekend = (day: number) => Boolean(data.weekendSchoolDays?.some(item => item.date === dayDateKey(sheetMonthKey, day)))
     const isHoliday = (day: number) => Boolean(holidayMap[dayDateKey(sheetMonthKey, day)])
     const isSchoolDay = (day: number) => (data.schoolDays || []).includes(day) && !isHoliday(day)
 
-    function renderExportPrintDayCells(
-      bodyRowIndex: number,
-      row: (typeof printRows)[number] | null,
-    ) {
-      return days.map(day => {
-        const dateKey = dayDateKey(sheetMonthKey, day)
-        const holiday = holidayMap[dateKey]
-        if (holiday) {
-          if (bodyRowIndex < holidayRowSpan) {
-            if (bodyRowIndex > 0) return null
-            return (
-              <td
-                key={day}
-                rowSpan={holidayRowSpan}
-                className="attendance-print-status-cell attendance-print-holiday-cell is-holiday"
-                title={holidayColumnLabel(day, holiday)}
-              >
-                <div className="attendance-print-holiday-stack">
-                  <span className="attendance-print-holiday-name">{holiday}</span>
-                </div>
-              </td>
-            )
-          }
-          return <td key={day} className="attendance-print-empty-cell">&nbsp;</td>
-        }
-
-        if (!row || row.type === 'blank') {
-          return <td key={day} className="attendance-print-empty-cell">&nbsp;</td>
-        }
-
-        const closedWeekend = isClosedWeekend(day)
-        const openWeekend = isOpenWeekend(day)
-        const schoolDay = isSchoolDay(day)
-        const attendanceValue = type === 'attendance' && schoolDay ? attendanceExportDisplay(row.student.id, day, data) : ''
-        const activityValue = type !== 'attendance' && schoolDay ? (data.activities?.[type as ActivityType]?.[row.student.id]?.[day] || 0) : 0
-        const displayValue = type === 'attendance'
-          ? attendanceValue
-          : type === 'saving'
-            ? (activityValue ? String(activityValue) : '')
-            : classroomAdminDoneMark(activityValue)
-        const attendanceClass = type === 'attendance' && attendanceValue
-          ? (attendanceValue === '/' ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
-          : type !== 'attendance' && type !== 'saving' && displayValue === CLASSROOM_ADMIN_CHECK_MARK
-            ? 'attendance-print-status-present'
-            : ''
-
-        return (
-          <td
-            key={day}
-            className={[
-              'attendance-print-status-cell',
-              attendanceClass,
-              closedWeekend ? 'is-weekend' : '',
-              openWeekend ? 'is-open-weekend' : '',
-            ].filter(Boolean).join(' ')}
-          >
-            {displayValue}
-          </td>
-        )
-      })
-    }
-
     const sheetLayoutSection = classroomAdminPrintSectionForReport(type)
     const sheetLayoutStyle = classroomAdminSectionLayoutStyle(sheetLayoutSection, printLayouts[sheetLayoutSection])
+    const pageCount = studentPages.length
 
-    return (
-      <section className="attendance-print-sheet" key={`${type}-${sheetMonthKey}`} style={sheetLayoutStyle}>
+    return studentPages.map((pageStudents, pageIndex) => {
+      const pageOffset = pageIndex * PRINT_STUDENTS_PER_PAGE
+      const holidayRowSpan = pageStudents.length
+      const targetRows = monthly
+        ? printPageRowCount(pageStudents.length, {
+          pageSize: PRINT_STUDENTS_PER_PAGE,
+          minRows: printLayouts.monthly.minBlankRows,
+        })
+        : pageStudents.length
+      type PrintRow =
+        | { type: 'student'; student: Student; number: number }
+        | { type: 'blank'; number: number }
+      const printRows: PrintRow[] = monthly
+        ? [
+            ...pageStudents.map((student, index) => ({
+              type: 'student' as const,
+              student,
+              number: student.student_number || pageOffset + index + 1,
+            })),
+            ...Array.from({ length: Math.max(0, targetRows - pageStudents.length) }, (_, index) => ({
+              type: 'blank' as const,
+              number: pageOffset + pageStudents.length + index + 1,
+            })),
+          ]
+        : []
+
+      function renderExportPrintDayCells(bodyRowIndex: number, row: PrintRow | null) {
+        return days.map(day => {
+          const dateKey = dayDateKey(sheetMonthKey, day)
+          const holiday = holidayMap[dateKey]
+          if (holiday) {
+            if (bodyRowIndex < holidayRowSpan) {
+              if (bodyRowIndex > 0) return null
+              return (
+                <td
+                  key={day}
+                  rowSpan={holidayRowSpan}
+                  className="attendance-print-status-cell attendance-print-holiday-cell is-holiday"
+                  title={holidayColumnLabel(day, holiday)}
+                >
+                  <div className="attendance-print-holiday-stack">
+                    <span className="attendance-print-holiday-name">{holiday}</span>
+                  </div>
+                </td>
+              )
+            }
+            return <td key={day} className="attendance-print-empty-cell">&nbsp;</td>
+          }
+
+          if (!row || row.type === 'blank') {
+            return <td key={day} className="attendance-print-empty-cell">&nbsp;</td>
+          }
+
+          const closedWeekend = isClosedWeekend(day)
+          const openWeekend = isOpenWeekend(day)
+          const schoolDay = isSchoolDay(day)
+          const attendanceValue = type === 'attendance' && schoolDay ? attendanceExportDisplay(row.student.id, day, data) : ''
+          const activityValue = type !== 'attendance' && schoolDay ? (data.activities?.[type as ActivityType]?.[row.student.id]?.[day] || 0) : 0
+          const displayValue = type === 'attendance'
+            ? attendanceValue
+            : type === 'saving'
+              ? (activityValue ? String(activityValue) : '')
+              : classroomAdminDoneMark(activityValue)
+          const attendanceClass = type === 'attendance' && attendanceValue
+            ? (attendanceValue === '/' ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
+            : type !== 'attendance' && type !== 'saving' && displayValue === CLASSROOM_ADMIN_CHECK_MARK
+              ? 'attendance-print-status-present'
+              : ''
+
+          return (
+            <td
+              key={day}
+              className={[
+                'attendance-print-status-cell',
+                attendanceClass,
+                closedWeekend ? 'is-weekend' : '',
+                openWeekend ? 'is-open-weekend' : '',
+              ].filter(Boolean).join(' ')}
+            >
+              {displayValue}
+            </td>
+          )
+        })
+      }
+
+      const pageLabel = pageCount > 1 ? ` · หน้า ${pageIndex + 1}/${pageCount}` : ''
+
+      return (
+      <section className="attendance-print-sheet" key={`${type}-${sheetMonthKey}-p${pageIndex}`} style={sheetLayoutStyle}>
         <header className="attendance-print-head">
           <div className="attendance-print-logo-slot">
             {schoolLogoUrl ? (
@@ -565,7 +609,7 @@ export default function ClassroomAdminExportPage() {
           <div>
             <h1>{reportLabel(type)}</h1>
             <div className="attendance-print-school">{schoolName || 'ชื่อโรงเรียน'}</div>
-            <p>ภาคเรียนที่ {term} · ห้อง {data.classroom?.level}/{data.classroom?.room} · เดือน{monthName(sheetMonthKey)} พ.ศ.{data.academicYear?.year_be}</p>
+            <p>ภาคเรียนที่ {term} · ห้อง {data.classroom?.level}/{data.classroom?.room} · เดือน{monthName(sheetMonthKey)} พ.ศ.{data.academicYear?.year_be}{pageLabel}</p>
           </div>
         </header>
 
@@ -583,6 +627,7 @@ export default function ClassroomAdminExportPage() {
                   <col className="attendance-print-summary-col" />
                 </>
               )}
+              {showActivitySummary && <col className="attendance-print-summary-col" />}
             </colgroup>
             <thead>
               <tr>
@@ -590,6 +635,11 @@ export default function ClassroomAdminExportPage() {
                 <th rowSpan={3}>ชื่อ-นามสกุล</th>
                 <th colSpan={days.length} className="attendance-print-month-title">เดือน{monthName(sheetMonthKey)} พ.ศ.{data.academicYear?.year_be}</th>
                 {type === 'attendance' && <th colSpan={4} className="attendance-print-summary-title">สรุปผล</th>}
+                {showActivitySummary && (
+                  <th rowSpan={3} className="attendance-print-summary-title">
+                    {type === 'saving' ? 'รวม' : 'สรุปผล'}
+                  </th>
+                )}
               </tr>
               <tr>
                 {days.map(day => (
@@ -636,7 +686,7 @@ export default function ClassroomAdminExportPage() {
               {printRows.map((row, bodyRowIndex) => {
                 if (row.type === 'blank') {
                   return (
-                    <tr key={`${type}-blank-${row.number}`}>
+                    <tr key={`${type}-blank-${row.number}-p${pageIndex}`}>
                       <td>{row.number}</td>
                       <td>&nbsp;</td>
                       {renderExportPrintDayCells(bodyRowIndex, row)}
@@ -648,13 +698,17 @@ export default function ClassroomAdminExportPage() {
                           <td className="attendance-print-summary-absent">&nbsp;</td>
                         </>
                       )}
+                      {showActivitySummary && <td className="attendance-print-summary-good">&nbsp;</td>}
                     </tr>
                   )
                 }
 
                 const summary = type === 'attendance' ? summaryFor(row.student, data) : null
+                const activitySummary = showActivitySummary
+                  ? activitySummaryFor(row.student.id, type as ActivityType, data)
+                  : null
                 return (
-                  <tr key={`${type}-${row.student.id}`}>
+                  <tr key={`${type}-${row.student.id}-p${pageIndex}`}>
                     <td>{row.number}</td>
                     <td className="attendance-print-student-name">{studentName(row.student)}</td>
                     {renderExportPrintDayCells(bodyRowIndex, row)}
@@ -665,6 +719,11 @@ export default function ClassroomAdminExportPage() {
                         <td className="attendance-print-summary-leave">{summary['ล']}</td>
                         <td className="attendance-print-summary-absent">{summary['ข']}</td>
                       </>
+                    )}
+                    {activitySummary !== null && (
+                      <td className="attendance-print-summary-good">
+                        {activitySummary ? (type === 'saving' ? activitySummary.toLocaleString('th-TH') : activitySummary) : ''}
+                      </td>
                     )}
                   </tr>
                 )
@@ -709,12 +768,12 @@ export default function ClassroomAdminExportPage() {
               </tr>
             </thead>
             <tbody>
-              {(data.students || []).map((student, index) => {
+              {pageStudents.map((student, index) => {
                 const health = data.health?.[student.id]
                 const inspection = data.inspection?.[student.id] || {}
                 return (
-                  <tr key={`${type}-${student.id}`}>
-                    <td>{student.student_number || index + 1}</td>
+                  <tr key={`${type}-${student.id}-p${pageIndex}`}>
+                    <td>{student.student_number || pageOffset + index + 1}</td>
                     <td className="attendance-print-student-name">{studentName(student)}</td>
                     {type === 'health' ? (
                       <>
@@ -747,8 +806,10 @@ export default function ClassroomAdminExportPage() {
           </div>
         </footer>
       </section>
-    )
+      )
+    })
   }
+
 
   return (
     <ClassroomAdminPrintLayoutsProvider layouts={printLayouts}>
@@ -903,7 +964,7 @@ export default function ClassroomAdminExportPage() {
               {activeMonths.flatMap(month => {
                 const sheetData = dataByMonth[month]
                 const sheetMonthKey = setMonthInKey(monthKey, month)
-                return selectedReports.map(report => renderReportSheet(report, sheetData, sheetMonthKey))
+                return selectedReports.flatMap(report => renderReportSheet(report, sheetData, sheetMonthKey))
               })}
             </div>
           </div>

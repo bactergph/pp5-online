@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { PRINT_STUDENTS_PER_PAGE } from '@/lib/print-student-pages'
 
 export type Pp5CoverSection = 'coverClass' | 'coverSubject'
 
@@ -188,7 +189,9 @@ export function pxToMm96(px: number): number {
 }
 
 export function pp5StudentTableRows(studentCount: number, layout: Pp5SectionLayout = BODY_DEFAULT): number {
-  return Math.max(layout.minStudentRows, studentCount)
+  const pageSize = PRINT_STUDENTS_PER_PAGE
+  if (studentCount >= pageSize) return studentCount
+  return Math.max(studentCount, Math.min(layout.minStudentRows, pageSize))
 }
 
 export function pp5AttendanceMaxRows(layout: Pp5SectionLayout, theadRows = 5): number {
@@ -197,7 +200,7 @@ export function pp5AttendanceMaxRows(layout: Pp5SectionLayout, theadRows = 5): n
   const theadRowMm = 4.8
   const bodyRowMm = pxToMm96(layout.rowHeightPx)
   const available = pageHeightMm - layout.padTopMm - layout.padBottomMm - headerBlockMm - (theadRows * theadRowMm)
-  return Math.max(18, Math.min(50, Math.floor(available / bodyRowMm)))
+  return Math.max(18, Math.min(PRINT_STUDENTS_PER_PAGE, Math.floor(available / bodyRowMm)))
 }
 
 export function pp5AttendanceBodyRows(
@@ -205,10 +208,13 @@ export function pp5AttendanceBodyRows(
   layout: Pp5SectionLayout,
   theadRows = 5,
 ): number {
-  const padded = Math.max(studentCount, layout.minStudentRows)
+  const pageSize = PRINT_STUDENTS_PER_PAGE
+  const padded = studentCount >= pageSize
+    ? studentCount
+    : Math.max(studentCount, Math.min(layout.minStudentRows, pageSize))
   const maxFitRows = pp5AttendanceMaxRows(layout, theadRows)
-  if (studentCount > maxFitRows) return maxFitRows
-  return padded
+  if (studentCount > maxFitRows) return Math.min(studentCount, pageSize)
+  return Math.min(padded, pageSize)
 }
 
 export function pp5CoverLayoutToCssVars(layout: Pp5CoverLayout): Record<string, string> {

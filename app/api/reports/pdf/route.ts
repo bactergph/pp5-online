@@ -10,11 +10,13 @@ export async function POST(req: NextRequest) {
   let landscape = false
   let emulateMedia: 'screen' | 'print' | undefined
   let localStorageSeed: Record<string, string> | undefined
+  let flattenEffects = false
   try {
     const body = await req.json()
     path = typeof body?.path === 'string' ? body.path : '/'
     query = typeof body?.query === 'string' ? body.query : ''
     landscape = body?.landscape === true
+    flattenEffects = body?.flattenEffects === true
     if (body?.emulateMedia === 'screen' || body?.emulateMedia === 'print') {
       emulateMedia = body.emulateMedia
     }
@@ -47,6 +49,7 @@ export async function POST(req: NextRequest) {
       landscape,
       emulateMedia,
       localStorageSeed,
+      flattenEffects,
     })
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,

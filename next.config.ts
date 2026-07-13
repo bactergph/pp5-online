@@ -2,6 +2,8 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
+  // ปิดปุ่ม/แถบสถานะ dev ("N" มุมล่างซ้าย) ไม่ให้ถูกจับไปใส่ใน PDF ที่สร้างด้วย Puppeteer
+  devIndicators: false,
   serverExternalPackages: ['puppeteer-core', '@sparticuz/chromium'],
   // Vercel ต้อง trace ไฟล์ chromium.br ใน bin/ มาด้วย ไม่งั้น PDF บน production จะหา path ไม่เจอ
   outputFileTracingIncludes: {

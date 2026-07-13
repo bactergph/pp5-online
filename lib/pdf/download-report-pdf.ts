@@ -5,6 +5,7 @@ export type DownloadReportPdfInput = {
   landscape?: boolean
   emulateMedia?: 'screen' | 'print'
   localStorageSeed?: Record<string, string>
+  flattenEffects?: boolean
 }
 
 /** ดาวน์โหลด PDF ผ่าน Puppeteer (/api/reports/pdf) — ใช้ร่วมกับ ปพ.5, ธุรการชั้นเรียน, ตารางเรียน */
@@ -18,6 +19,7 @@ export async function downloadReportPdf(input: DownloadReportPdfInput) {
       landscape: input.landscape,
       emulateMedia: input.emulateMedia,
       localStorageSeed: input.localStorageSeed,
+      flattenEffects: input.flattenEffects,
     }),
   })
 

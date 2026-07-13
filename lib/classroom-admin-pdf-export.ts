@@ -8,6 +8,9 @@ export async function downloadClassroomAdminPdf(input: ClassroomAdminPdfDownload
     ...input,
     landscape: true,
     emulateMedia: 'screen',
+    // ตัดเอฟเฟกต์ตกแต่งเฉพาะตอนสร้าง PDF เพื่อให้ไฟล์เปิดลื่น ไม่อืด
+    // (ไม่กระทบ CSS/preview บนจอ และสีพื้นตารางยังอยู่ครบ)
+    flattenEffects: true,
   })
 }
 
