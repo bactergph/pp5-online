@@ -47,7 +47,7 @@ const COVER_FIELD_META: Record<keyof Pp5CoverLayout, { unit: 'mm' | 'px'; min: n
   docMarkFontPx: { unit: 'px', min: 14, max: 32, step: 1, group: 'โลโก้ & ปพ.' },
   headerGapPx: { unit: 'px', min: 0, max: 40, step: 1, group: 'ตาราง & ระยะ' },
   tableTopMm: { unit: 'mm', min: 0, max: 15, step: 0.5, group: 'ตาราง & ระยะ' },
-  tableRowHeightPx: { unit: 'px', min: 8, max: 24, step: 1, group: 'ตาราง & ระยะ' },
+  tableRowHeightPx: { unit: 'px', min: 0, max: 24, step: 1, group: 'ตาราง & ระยะ' },
   summaryGapPx: { unit: 'px', min: 0, max: 20, step: 1, group: 'ตาราง & ระยะ' },
   approvalGapPx: { unit: 'px', min: 0, max: 24, step: 1, group: 'ตาราง & ระยะ' },
 }
@@ -68,8 +68,8 @@ const BODY_FIELD_META: Record<keyof Pp5SectionLayout, { unit: 'mm' | 'px' | 'row
   logoGapPx: { unit: 'px', min: 0, max: 32, step: 1, group: 'โลโก้' },
   logoOffsetXPx: { unit: 'px', min: -80, max: 200, step: 1, group: 'โลโก้' },
   logoOffsetYPx: { unit: 'px', min: -40, max: 80, step: 1, group: 'โลโก้' },
-  rowHeightPx: { unit: 'px', min: 16, max: 36, step: 1, group: 'ตาราง' },
-  minStudentRows: { unit: 'rows', min: 20, max: 50, step: 1, group: 'ตาราง' },
+  rowHeightPx: { unit: 'px', min: 0, max: 36, step: 1, group: 'ตาราง' },
+  minStudentRows: { unit: 'rows', min: 0, max: 50, step: 1, group: 'ตาราง' },
 }
 
 const PP6_FIELD_META: Record<keyof Pp6SectionLayout, { unit: 'mm' | 'px' | 'rows' | 'pct'; min: number; max: number; step: number; group: string }> = {
@@ -83,9 +83,9 @@ const PP6_FIELD_META: Record<keyof Pp6SectionLayout, { unit: 'mm' | 'px' | 'rows
   fontTablePx: { unit: 'px', min: 10, max: 20, step: 1, group: 'ฟอนต์' },
   fontNamePx: { unit: 'px', min: 10, max: 20, step: 1, group: 'ฟอนต์' },
   fontNotePx: { unit: 'px', min: 10, max: 18, step: 1, group: 'ฟอนต์' },
-  rowHeightPx: { unit: 'px', min: 14, max: 32, step: 1, group: 'ตาราง' },
-  theadHeightMm: { unit: 'mm', min: 4, max: 14, step: 0.2, group: 'ตาราง' },
-  minSubjectRows: { unit: 'rows', min: 10, max: 20, step: 1, group: 'ตาราง' },
+  rowHeightPx: { unit: 'px', min: 0, max: 32, step: 1, group: 'ตาราง' },
+  theadHeightMm: { unit: 'mm', min: 0, max: 14, step: 0.2, group: 'ตาราง' },
+  minSubjectRows: { unit: 'rows', min: 0, max: 20, step: 1, group: 'ตาราง' },
   tableWidthPct: { unit: 'pct', min: 70, max: 100, step: 1, group: 'ตาราง' },
   logoSizeMm: { unit: 'mm', min: 10, max: 30, step: 1, group: 'โลโก้ & ปพ.' },
   logoLeftMm: { unit: 'mm', min: 8, max: 40, step: 1, group: 'โลโก้ & ปพ.' },
@@ -131,7 +131,7 @@ function clampPanelPos(x: number, y: number, panelW: number, panelH: number): Pa
   }
 }
 
-function useDraggablePanel(open: boolean) {
+export function useDraggablePanel(open: boolean) {
   const panelRef = useRef<HTMLElement | null>(null)
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
   const [pos, setPos] = useState<PanelPos | null>(null)
@@ -236,6 +236,7 @@ type Props = Pp5Props | Pp6Props
 
 const TUNER_CATEGORY_META: Record<string, { icon: string; description: string }> = {
   'ระยะขอบ': { icon: '⊡', description: 'ระยะห่างรอบหน้ากระดาษ' },
+  'หัวกระดาษ': { icon: '≡', description: 'ระยะบรรทัดหัวกระดาษ' },
   'ฟอนต์': { icon: 'Aa', description: 'ขนาดตัวอักษรและหัวข้อ' },
   'โลโก้': { icon: '◇', description: 'ตำแหน่งและขนาดโลโก้' },
   'ตาราง': { icon: '▤', description: 'ความสูงแถวและจำนวนแถว' },
@@ -244,7 +245,7 @@ const TUNER_CATEGORY_META: Record<string, { icon: string; description: string }>
   'ระยะส่วน': { icon: '↕', description: 'ระยะห่างระหว่างส่วน' },
 }
 
-function groupFields<K extends string>(
+export function groupFields<K extends string>(
   keys: readonly K[],
   meta: Record<K, { group: string }>,
 ): Array<{ title: string; keys: K[] }> {
@@ -308,7 +309,7 @@ function LogoPositionPad({
   )
 }
 
-function CategoryPicker({
+export function CategoryPicker({
   categories,
   active,
   onChange,
@@ -342,7 +343,7 @@ function CategoryPicker({
   )
 }
 
-function FieldSlider<K extends string>({
+export function FieldSlider<K extends string>({
   fieldKey,
   label,
   value,
@@ -355,7 +356,10 @@ function FieldSlider<K extends string>({
   meta: { unit: string; min: number; max: number; step: number }
   onChange: (key: K, value: number) => void
 }) {
-  const pct = ((value - meta.min) / (meta.max - meta.min)) * 100
+  // Local draft lets users type freely (empty, partial, decimals, or values
+  // outside the slider range) without the controlled input fighting back.
+  const [draft, setDraft] = useState<string | null>(null)
+  const pct = Math.max(0, Math.min(100, ((value - meta.min) / (meta.max - meta.min)) * 100))
   const pxHint = meta.unit === 'mm' ? `${mmToPx96(value)} px` : null
   const axisHint =
     fieldKey === 'logoOffsetXPx'
@@ -363,6 +367,17 @@ function FieldSlider<K extends string>({
       : fieldKey === 'logoOffsetYPx'
         ? (value < 0 ? `เลื่อนขึ้น ${Math.abs(value)} px` : value > 0 ? `เลื่อนลง ${value} px` : 'ตำแหน่งกลางแนวตั้ง')
         : null
+
+  const commitInput = (raw: string) => {
+    setDraft(raw)
+    if (raw.trim() === '' || raw === '-' || raw === '.' || raw === '-.') return
+    const num = Number(raw)
+    if (Number.isNaN(num)) return
+    onChange(fieldKey, num)
+  }
+
+  const inputValue = draft !== null ? draft : String(value)
+
   return (
     <div className="layout-tuner-field">
       <div className="layout-tuner-field-top">
@@ -370,11 +385,10 @@ function FieldSlider<K extends string>({
         <span className="layout-tuner-field-value">
           <input
             type="number"
-            min={meta.min}
-            max={meta.max}
             step={meta.step}
-            value={value}
-            onChange={event => onChange(fieldKey, Number(event.target.value))}
+            value={inputValue}
+            onChange={event => commitInput(event.target.value)}
+            onBlur={() => setDraft(null)}
             className="layout-tuner-num"
           />
           <span className="layout-tuner-unit">{meta.unit}</span>
@@ -388,8 +402,11 @@ function FieldSlider<K extends string>({
           min={meta.min}
           max={meta.max}
           step={meta.step}
-          value={value}
-          onChange={event => onChange(fieldKey, Number(event.target.value))}
+          value={Math.max(meta.min, Math.min(meta.max, value))}
+          onChange={event => {
+            setDraft(null)
+            onChange(fieldKey, Number(event.target.value))
+          }}
         />
       </div>
       {pxHint && <span className="layout-tuner-hint">≈ {pxHint}</span>}
@@ -398,7 +415,7 @@ function FieldSlider<K extends string>({
   )
 }
 
-function TunerShell({
+export function TunerShell({
   title,
   badge,
   subtitle,

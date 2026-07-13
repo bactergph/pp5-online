@@ -62,6 +62,8 @@ import {
   directorSchoolLine,
 } from '@/lib/school-director'
 import { expandEducationAreaOffice } from '@/lib/education-area-office'
+import { downloadReportPdf } from '@/lib/pdf/download-report-pdf'
+import { downscaleImageUrl } from '@/lib/downscale-image-url'
 import { subjectGroupHeadPositionLine } from '@/lib/subject-groups'
 import { isPrimaryClassLevel, isSecondaryClassLevel, pp5SubjectReportTerm } from '@/lib/class-level'
 import {
@@ -3645,6 +3647,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const [subjectOptions, setSubjectOptions] = useState<ReportSubject[]>([])
   const [sections, setSections] = useState<PrintSection[]>(DEFAULT_SECTIONS[mode])
   const [data, setData] = useState<ReportPayload | null>(null)
+  const [logoResolved, setLogoResolved] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [scale, setScale] = useState(88)
@@ -3973,8 +3976,27 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   }, [mode, yearId, level, selectedStudentId, classroomId, pp6StudentsForLevel, yearClassrooms, printMode])
 
   useEffect(() => {
+    const url = data?.school?.logo_url
+    if (!url || url.startsWith('data:')) {
+      setLogoResolved(true)
+      return
+    }
+    let active = true
+    setLogoResolved(false)
+    downscaleImageUrl(url, 320)
+      .then(src => {
+        if (!active || src === url) return
+        setData(prev => (prev?.school && prev.school.logo_url === url)
+          ? { ...prev, school: { ...prev.school, logo_url: src } }
+          : prev)
+      })
+      .finally(() => { if (active) setLogoResolved(true) })
+    return () => { active = false }
+  }, [data?.school?.logo_url])
+
+  useEffect(() => {
     if (!printMode) return
-    if (!data || loading) {
+    if (!data || loading || !logoResolved) {
       (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = false
       return
     }
@@ -4017,7 +4039,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
     }
     void markReady()
     return () => { cancelled = true }
-  }, [printMode, data, loading, mode])
+  }, [printMode, data, loading, logoResolved, mode])
 
   function resetData() {
     setData(null)
@@ -4098,32 +4120,12 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         localStorageSeed[PP6_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp6PrintLayouts)
       }
 
-      const res = await fetch('/api/reports/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          path: window.location.pathname,
-          query: params.toString(),
-          localStorageSeed: Object.keys(localStorageSeed).length > 0 ? localStorageSeed : undefined,
-        }),
+      await downloadReportPdf({
+        path: window.location.pathname,
+        query: params.toString(),
+        fileName,
+        localStorageSeed: Object.keys(localStorageSeed).length > 0 ? localStorageSeed : undefined,
       })
-      if (!res.ok) {
-        let message = 'สร้าง PDF ไม่สำเร็จ'
-        try {
-          const body = await res.json()
-          if (body?.error) message = body.error
-        } catch {}
-        throw new Error(message)
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
     } finally {

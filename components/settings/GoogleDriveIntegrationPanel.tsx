@@ -22,9 +22,21 @@ const EMPTY_STATUS: GoogleDriveConnectionStatus = {
   oauthConfigured: false,
 }
 
-function DriveIcon() {
+const SETUP_STEPS = [
+  { title: 'กดปุ่มเชื่อมต่อ', desc: 'เปิดหน้าล็อกอิน Google ในหน้าต่างใหม่' },
+  { title: 'เลือกบัญชีโรงเรียน', desc: 'ใช้ Gmail ของโรงเรียนที่ต้องการเก็บไฟล์' },
+  { title: 'อนุญาตสิทธิ์', desc: 'ระบบสร้างโฟลเดอร์ให้อัตโนมัติ ไม่ต้อง copy Folder ID' },
+] as const
+
+const BENEFITS = [
+  'อัปโหลด PDF อัตโนมัติหลังอนุมัติครบ',
+  'เก็บใน Google Drive ของโรงเรียน',
+  'เปิดดูเอกสารได้ทันทีจากลิงก์โฟลเดอร์',
+] as const
+
+function DriveIcon({ size = 24 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
       <path fill="#4285F4" d="M8.4 15.6 5.2 9.8 12 9.8z" />
       <path fill="#0F9D58" d="M15.6 15.6 12 9.8h6.8z" />
       <path fill="#FFBA00" d="M5.2 9.8 2 15.6h6.4z" />
@@ -38,6 +50,16 @@ function DriveIcon() {
 function emailInitial(email: string | null) {
   if (!email) return 'G'
   return email.trim().charAt(0).toUpperCase()
+}
+
+function DrivePanelSkeleton() {
+  return (
+    <div className="drive-panel-skeleton" aria-hidden="true">
+      <div className="drive-panel-skeleton-line is-wide" />
+      <div className="drive-panel-skeleton-line" />
+      <div className="drive-panel-skeleton-block" />
+    </div>
+  )
 }
 
 export default function GoogleDriveIntegrationPanel({ active = true }: Props) {
@@ -122,52 +144,70 @@ export default function GoogleDriveIntegrationPanel({ active = true }: Props) {
     notify('error', 'เชื่อมต่อไม่สมบูรณ์ — รัน migration 035 และ 036 บน Supabase แล้วลองใหม่')
   }
 
+  const statusLabel = loading
+    ? 'กำลังตรวจสอบ...'
+    : status.connected
+      ? 'เชื่อมต่อแล้ว'
+      : 'ยังไม่เชื่อมต่อ'
+
   return (
-    <div className="drive-integration">
-      <div className={`drive-integration-hero${status.connected ? ' is-connected' : ''}`}>
-        <div className="drive-integration-icon">
-          <DriveIcon />
+    <div className="drive-panel">
+      <div className={`drive-panel-banner${status.connected ? ' is-connected' : ''}${loading ? ' is-loading' : ''}`}>
+        <div className="drive-panel-banner-icon">
+          <DriveIcon size={28} />
         </div>
-        <div className="drive-integration-hero-body">
-          <div className="drive-integration-hero-top">
-            <div className="drive-integration-title">Google Drive</div>
-            {loading ? (
-              <span className="drive-integration-status is-disconnected">
-                <span className="drive-integration-status-dot" />
-                กำลังตรวจสอบ...
-              </span>
-            ) : (
-              <span className={`drive-integration-status${status.connected ? ' is-connected' : ' is-disconnected'}`}>
-                <span className="drive-integration-status-dot" />
-                {status.connected ? 'เชื่อมต่อแล้ว' : 'ยังไม่เชื่อมต่อ'}
-              </span>
-            )}
+        <div className="drive-panel-banner-body">
+          <div className="drive-panel-banner-top">
+            <strong>Google Drive</strong>
+            <span className={`drive-panel-badge${status.connected ? ' is-on' : ''}`}>
+              <span className="drive-panel-badge-dot" />
+              {statusLabel}
+            </span>
           </div>
-          <p className="drive-integration-subtitle">
+          <p>
             {status.connected
-              ? 'ระบบอัปโหลด PDF อัตโนมัติหลังเอกสารได้รับการอนุมัติครบ'
-              : 'เชื่อมต่อบัญชี Google ของโรงเรียนเพื่อเก็บเอกสารที่อนุมัติแล้ว'}
+              ? 'ระบบพร้อมอัปโหลดเอกสาร PDF ที่อนุมัติแล้วไปยังโฟลเดอร์ของโรงเรียน'
+              : 'เชื่อมต่อบัญชี Google ของโรงเรียนเพื่อเก็บเอกสารอัตโนมัติ'}
           </p>
         </div>
       </div>
 
-      {!status.oauthConfigured ? (
-        <div className="alert alert-error">
-          ผู้ดูแลระบบยังไม่ได้ตั้งค่า Google OAuth (CLIENT_ID / CLIENT_SECRET) บนเซิร์ฟเวอร์
+      {!status.oauthConfigured && !loading && (
+        <div className="drive-panel-alert" role="alert">
+          <strong>ยังเชื่อมต่อไม่ได้</strong>
+          <span>ผู้ดูแลระบบต้องตั้งค่า Google OAuth (CLIENT_ID / CLIENT_SECRET) บนเซิร์ฟเวอร์ก่อน</span>
         </div>
-      ) : loading ? (
-        <p className="drive-integration-subtitle">กำลังโหลดสถานะการเชื่อมต่อ...</p>
+      )}
+
+      {loading ? (
+        <DrivePanelSkeleton />
       ) : status.connected ? (
-        <>
-          <div className="drive-integration-account">
-            <div className="drive-integration-avatar">{emailInitial(status.email)}</div>
-            <div>
-              <div className="drive-integration-account-label">บัญชีที่เชื่อมต่อ</div>
-              <div className="drive-integration-account-email">{status.email || 'Google Account'}</div>
+        <div className="drive-panel-connected">
+          <div className="drive-panel-account">
+            <div className="drive-panel-avatar">{emailInitial(status.email)}</div>
+            <div className="drive-panel-account-text">
+              <span className="drive-panel-account-label">บัญชีที่เชื่อมต่อ</span>
+              <strong>{status.email || 'Google Account'}</strong>
             </div>
           </div>
 
-          <div className="drive-integration-actions">
+          {status.folderId && (
+            <a
+              className="drive-panel-folder"
+              href={`https://drive.google.com/drive/folders/${status.folderId}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="drive-panel-folder-icon" aria-hidden="true">📁</span>
+              <span className="drive-panel-folder-text">
+                <strong>เปิดโฟลเดอร์เอกสารโรงเรียน</strong>
+                <span>ดูไฟล์ PDF ที่อัปโหลดแล้วใน Google Drive</span>
+              </span>
+              <span className="drive-panel-folder-arrow" aria-hidden="true">↗</span>
+            </a>
+          )}
+
+          <div className="drive-panel-actions">
             {status.folderId && (
               <a
                 href={`https://drive.google.com/drive/folders/${status.folderId}`}
@@ -175,47 +215,59 @@ export default function GoogleDriveIntegrationPanel({ active = true }: Props) {
                 rel="noreferrer"
                 className="btn btn-primary"
               >
-                เปิดโฟลเดอร์ใน Google Drive
+                เปิด Google Drive
               </a>
             )}
             <LoadingButton
-              className="drive-integration-disconnect"
+              className="drive-panel-disconnect"
               loading={disconnecting}
+              loadingText="กำลังยกเลิก..."
               type="button"
               onClick={handleDisconnect}
             >
               ยกเลิกการเชื่อมต่อ
             </LoadingButton>
           </div>
-        </>
-      ) : (
-        <>
-          <div className="drive-integration-steps">
-            <div className="drive-integration-step">
-              <div className="drive-integration-step-num">1</div>
-              <div className="drive-integration-step-text">กดปุ่มเชื่อมต่อ Google Drive</div>
-            </div>
-            <div className="drive-integration-step">
-              <div className="drive-integration-step-num">2</div>
-              <div className="drive-integration-step-text">ล็อกอินด้วยบัญชีโรงเรียน</div>
-            </div>
-            <div className="drive-integration-step">
-              <div className="drive-integration-step-num">3</div>
-              <div className="drive-integration-step-text">กดอนุญาตให้ระบบสร้างโฟลเดอร์</div>
-            </div>
-          </div>
+        </div>
+      ) : status.oauthConfigured ? (
+        <div className="drive-panel-setup">
+          <ul className="drive-panel-benefits">
+            {BENEFITS.map(item => (
+              <li key={item}>
+                <span className="drive-panel-benefit-check" aria-hidden="true">✓</span>
+                {item}
+              </li>
+            ))}
+          </ul>
 
-          <div className="drive-integration-connect-wrap">
-            <GoogleDriveConnectButton
-              className="drive-connect-btn"
-              onConnected={handleConnected}
-              onFinished={() => { void reloadStatus() }}
-              onError={message => notify('error', `เชื่อมต่อ Google Drive ไม่สำเร็จ: ${message}`)}
-            />
-            <span className="drive-integration-subtitle">ไม่ต้อง copy Folder ID เอง</span>
+          <div className="drive-panel-cta">
+            <div className="drive-panel-steps">
+              <p className="drive-panel-steps-title">ขั้นตอนการเชื่อมต่อ</p>
+              <ol>
+                {SETUP_STEPS.map((step, index) => (
+                  <li key={step.title}>
+                    <span className="drive-panel-step-num">{index + 1}</span>
+                    <span className="drive-panel-step-body">
+                      <strong>{step.title}</strong>
+                      <span>{step.desc}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="drive-panel-cta-action">
+              <GoogleDriveConnectButton
+                className="drive-panel-connect-btn"
+                onConnected={handleConnected}
+                onFinished={() => { void reloadStatus() }}
+                onError={message => notify('error', `เชื่อมต่อ Google Drive ไม่สำเร็จ: ${message}`)}
+              />
+              <p className="drive-panel-cta-hint">เชื่อมต่อครั้งเดียว ใช้งานได้ทันที · ไม่ต้องบันทึกฟอร์มด้านล่าง</p>
+            </div>
           </div>
-        </>
-      )}
+        </div>
+      ) : null}
     </div>
   )
 }

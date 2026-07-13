@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { flushSync } from 'react-dom'
 import {
   clearActivityDoneColumn,
@@ -21,12 +22,31 @@ import {
   saveWeightHeight,
 } from '@/app/classroom-admin/actions'
 import LoadingButton from '@/components/LoadingButton'
-import { CLASSROOM_ADMIN_PRINT_STYLES } from '@/components/classroom-admin/classroom-admin-print-styles'
+import ClassroomAdminPrintLayoutTuner, { useClassroomAdminPrintLayoutsState } from '@/components/classroom-admin/ClassroomAdminPrintLayoutTuner'
+import { CLASSROOM_ADMIN_PRINT_STYLES, classroomAdminPrintStyles } from '@/components/classroom-admin/classroom-admin-print-styles'
+import { waitForReportFonts } from '@/lib/report-font-faces'
+import { downscaleImageUrl } from '@/lib/downscale-image-url'
+import {
+  classroomAdminSectionLayoutStyle,
+  saveClassroomAdminPrintLayouts,
+  type ClassroomAdminPrintSection,
+} from '@/lib/classroom-admin-print-layout'
+import { ClassroomAdminPrintLayoutsProvider } from '@/lib/classroom-admin-print-layout-context'
 import {
   directorActingPositionLine,
   directorDisplayName,
   directorSchoolLine,
 } from '@/lib/school-director'
+import {
+  CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS,
+  classroomAdminStandardTableWidthStyle,
+} from '@/lib/classroom-admin-standard-table-columns'
+import {
+  classroomAdminPrintLayoutSeed,
+  downloadClassroomAdminPdf,
+} from '@/lib/classroom-admin-pdf-export'
+import { resolveClassroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
+import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
 import { DAILY_STATUS_LABELS, nextDailyDisplay, toDailyDb, toDailyDisplay } from '@/lib/daily-attendance'
 import { useAppAlert } from '@/lib/use-app-alert'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
@@ -190,6 +210,12 @@ function modeKicker(mode: Mode, activityType?: ActivityType) {
 }
 
 export default function ClassroomAdminEntry({ mode, title, description, activityType, activityLabel }: Props) {
+  const searchParams = useSearchParams()
+  const printMode = searchParams.get('print') === '1'
+  const documentTitle = useMemo(
+    () => resolveClassroomAdminDocumentTitle({ mode, activityType }),
+    [mode, activityType],
+  )
   const [loading, setLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
   const [role, setRole] = useState('')
@@ -197,12 +223,18 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [currentUserName, setCurrentUserName] = useState('')
   const [schoolName, setSchoolName] = useState('')
   const [schoolLogoUrl, setSchoolLogoUrl] = useState('')
+  const [logoSrc, setLogoSrc] = useState('')
+  const [logoResolved, setLogoResolved] = useState(true)
   const [directorNameField, setDirectorNameField] = useState('')
   const [actingDirector, setActingDirector] = useState('')
   const [actingDirectorPosition, setActingDirectorPosition] = useState('')
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printScale, setPrintScale] = useState(50)
   const [pdfExporting, setPdfExporting] = useState(false)
+  const [layoutTunerOpen, setLayoutTunerOpen] = useState(false)
+  const [layoutTunerSection, setLayoutTunerSection] = useState<ClassroomAdminPrintSection>('monthly')
+  const [layoutSaved, setLayoutSaved] = useState(false)
+  const { layouts: printLayouts, setLayouts: setPrintLayouts } = useClassroomAdminPrintLayoutsState()
   const [years, setYears] = useState<Year[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [yearId, setYearId] = useState('')
@@ -239,6 +271,21 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     () => classrooms.filter(c => !yearId || c.academic_year_id === yearId),
     [classrooms, yearId],
   )
+
+  useEffect(() => {
+    if (!schoolLogoUrl) {
+      setLogoSrc('')
+      setLogoResolved(true)
+      return
+    }
+    let active = true
+    setLogoResolved(false)
+    downscaleImageUrl(schoolLogoUrl, 320)
+      .then(src => { if (active) setLogoSrc(src) })
+      .finally(() => { if (active) setLogoResolved(true) })
+    return () => { active = false }
+  }, [schoolLogoUrl])
+
   const schoolDirector = useMemo(() => ({
     name: schoolName,
     director_name: directorNameField,
@@ -250,6 +297,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const directorSignSchool = directorSchoolLine(schoolDirector, 'ยังไม่กำหนด')
 
   useEffect(() => {
+    const isPrint = searchParams.get('print') === '1'
     fetchClassroomAdminContext().then(data => {
       setRole(data.role)
       setCanEdit(data.canEdit)
@@ -263,11 +311,45 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       setClassrooms(data.classrooms)
       const activeYear = data.years.find((y: Year) => y.is_active) || data.years[0]
       const firstClassroom = data.classrooms.find((c: Classroom) => !activeYear || c.academic_year_id === activeYear.id) || data.classrooms[0]
-      setYearId(activeYear?.id || '')
-      setClassroomId(firstClassroom?.id || '')
+      if (isPrint) {
+        setYearId(searchParams.get('year') || activeYear?.id || '')
+        setClassroomId(searchParams.get('classroom') || firstClassroom?.id || '')
+        if (searchParams.get('monthkey')) setMonthKey(searchParams.get('monthkey')!)
+        if (searchParams.get('term')) setTerm(searchParams.get('term') === '2' ? 2 : 1)
+        if (searchParams.get('month')) setMonth(Number(searchParams.get('month')))
+        if (searchParams.get('date')) setDate(searchParams.get('date')!)
+      } else {
+        setYearId(activeYear?.id || '')
+        setClassroomId(firstClassroom?.id || '')
+      }
       setLoading(false)
     })
-  }, [])
+  }, [searchParams])
+
+  useEffect(() => {
+    if (!printMode) return
+    if (loading || isPending || !classroomId || students.length === 0 || !logoResolved) {
+      (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = false
+      return
+    }
+    let cancelled = false
+    const markReady = async () => {
+      try {
+        await waitForReportFonts()
+      } catch {}
+      const images = Array.from(document.querySelectorAll<HTMLImageElement>('.attendance-print-sheet img'))
+      await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise<void>(resolve => {
+        img.addEventListener('load', () => resolve(), { once: true })
+        img.addEventListener('error', () => resolve(), { once: true })
+      })))
+      await new Promise(requestAnimationFrame)
+      await new Promise(requestAnimationFrame)
+      await new Promise(resolve => setTimeout(resolve, 300))
+      if (!cancelled) (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = true
+    }
+    void markReady()
+    return () => { cancelled = true }
+  }, [printMode, loading, isPending, classroomId, students.length, logoResolved, monthKey, term, month, date])
 
   useEffect(() => {
     if (!classroomId) return
@@ -414,12 +496,15 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const boardMonthTabs = mode === 'weightHeight'
     ? MONTHS.map(item => item.value)
     : ATTENDANCE_TERMS.find(item => item.value === boardTerm)?.months || ATTENDANCE_TERMS[0].months
+  const isStandardFixedColMode = mode === 'weightHeight' || mode === 'healthInspection'
   const selectedClassroom = classrooms.find(c => c.id === classroomId)
   const homeroomTeacherName = [
     selectedClassroom?.homeroom_teacher_name,
     selectedClassroom?.homeroom_teacher2_name,
   ].filter(Boolean).join(' / ') || (role === 'teacher' ? currentUserName : '')
-  const printBlankRowCount = isMonthlyMode ? Math.max(0, 25 - students.length) : 0
+  const printLayoutSection: ClassroomAdminPrintSection = isMonthlyMode ? 'monthly' : 'standard'
+  const printLayoutStyle = classroomAdminSectionLayoutStyle(printLayoutSection, printLayouts[printLayoutSection])
+  const printBlankRowCount = isMonthlyMode ? Math.max(0, printLayouts.monthly.minBlankRows - students.length) : 0
   const printRows = isMonthlyMode
     ? [
         ...students.map((student, index) => ({ type: 'student' as const, student, number: student.student_number || index + 1 })),
@@ -501,17 +586,18 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         ? attendanceValue
         : activityType === 'saving'
           ? (activityValue ? String(activityValue) : '')
-          : (activityValue ? '✓' : '')
+          : classroomAdminDoneMark(activityValue)
       const attendanceClass = mode === 'attendance' && attendanceValue
-        ? (attendanceValue === '/' ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
-        : ''
+        ? (attendanceValue === CLASSROOM_ADMIN_CHECK_MARK ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
+        : mode === 'activity' && displayValue === CLASSROOM_ADMIN_CHECK_MARK
+          ? 'attendance-print-status-present'
+          : ''
       return (
         <td
           key={day}
           className={[
             'attendance-print-status-cell',
             attendanceClass,
-            mode === 'activity' && displayValue ? 'attendance-print-value-done' : '',
             closedWeekend ? 'is-weekend' : '',
             openWeekend ? 'is-open-weekend' : '',
           ].filter(Boolean).join(' ')}
@@ -687,7 +773,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     const ok = window.confirm(
       mode === 'attendance'
         ? 'ยืนยันบันทึกมา (/) ให้ทุกช่องที่ยังว่างในเดือนนี้?'
-        : `ยืนยันบันทึก ✓ ให้ทุกช่องที่ยังว่างในเดือนนี้?`,
+        : `ยืนยันบันทึก ${CLASSROOM_ADMIN_CHECK_MARK} ให้ทุกช่องที่ยังว่างในเดือนนี้?`,
     )
     if (!ok) return
     setAttendancePendingAction('fill')
@@ -835,7 +921,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(printTitle)}</title>
-  <style>${CLASSROOM_ADMIN_PRINT_STYLES}</style>
+  <style>${classroomAdminPrintStyles(window.location.origin)}</style>
   <style>
     body { margin: 0; background: #ffffff; }
     .attendance-print-window { display: grid; place-items: start center; padding: 0; }
@@ -861,18 +947,21 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function renderPrintableAttendanceDocument({ preview = false }: { preview?: boolean } = {}) {
-    const documentTitle = mode === 'attendance' ? 'แบบบันทึกเวลาเรียนรายวัน' : title
     const documentMeta = isMonthlyMode
       ? `${termLabel} · ห้อง ${currentClassLabel(classrooms, classroomId)} · เดือน${thaiMonthTitle(monthKey, years, yearId)}`
       : `ห้อง ${currentClassLabel(classrooms, classroomId)} · เดือน${MONTHS.find(m => m.value === month)?.label || ''}${years.find(y => y.id === yearId)?.year_be ? ` พ.ศ.${years.find(y => y.id === yearId)?.year_be}` : ''}`
+    const standardTableFieldCount = mode === 'weightHeight' ? 3 : INSPECTION_FIELDS.length
 
     return (
-      <section className={`attendance-print-sheet ${preview ? 'is-preview' : ''}`}>
+      <section
+        className={`attendance-print-sheet ${preview ? 'is-preview' : ''}`}
+        style={printLayoutStyle}
+      >
         <header className="attendance-print-head">
           <div className="attendance-print-logo-slot">
             {schoolLogoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={schoolLogoUrl} alt="โลโก้โรงเรียน" />
+              <img src={logoSrc || schoolLogoUrl} alt="โลโก้โรงเรียน" />
             ) : (
               <span>ตรา</span>
             )}
@@ -1009,9 +1098,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 return (
                   <tr key={row.student.id}>
                     <td>{row.number}</td>
-                    <td className="attendance-print-student-name">
-                      <span className="attendance-print-student-name-text">{studentName(row.student)}</span>
-                    </td>
+                    <td className="attendance-print-student-name">{studentName(row.student)}</td>
                     {renderPrintDayCells(bodyRowIndex, row)}
                     {summary && (
                       <>
@@ -1035,17 +1122,22 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             </tbody>
           </table>
         ) : (
-          <table className="attendance-print-table attendance-print-standard-table">
+          <table
+            className={`attendance-print-table attendance-print-standard-table${isStandardFixedColMode ? ' attendance-print-inspection-table' : ''}`}
+            style={isStandardFixedColMode ? classroomAdminStandardTableWidthStyle(standardTableFieldCount) : undefined}
+          >
             <colgroup>
-              <col className="attendance-print-number-col" />
-              <col className="attendance-print-name-col" />
+              <col className={isStandardFixedColMode ? 'attendance-print-inspection-number-col' : 'attendance-print-number-col'} />
+              <col className={isStandardFixedColMode ? 'attendance-print-inspection-name-col' : 'attendance-print-name-col'} />
               {mode === 'weightHeight' ? (
                 <>
-                  <col />
-                  <col />
-                  <col />
+                  <col className="attendance-print-inspection-field-col" />
+                  <col className="attendance-print-inspection-field-col" />
+                  <col className="attendance-print-inspection-field-col" />
                 </>
-              ) : INSPECTION_FIELDS.map(field => <col key={field.key} />)}
+              ) : INSPECTION_FIELDS.map(field => (
+                <col key={field.key} className="attendance-print-inspection-field-col" />
+              ))}
             </colgroup>
             <thead>
               <tr>
@@ -1067,9 +1159,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 return (
                   <tr key={student.id}>
                     <td>{student.student_number || index + 1}</td>
-                    <td className="attendance-print-student-name">
-                      <span className="attendance-print-student-name-text">{studentName(student)}</span>
-                    </td>
+                    <td className="attendance-print-student-name">{studentName(student)}</td>
                     {mode === 'weightHeight' ? (
                       <>
                         <td>{weightRow.weight || ''}</td>
@@ -1110,7 +1200,6 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
   async function exportAttendanceExcel() {
     const XLSX = await import('xlsx')
-    const documentTitle = mode === 'attendance' ? 'แบบบันทึกเวลาเรียนรายวัน' : title
     const headerRows: (string | number)[][] = [
       [documentTitle],
       [schoolName || 'ชื่อโรงเรียน', isMonthlyMode ? termLabel : '', currentClassLabel(classrooms, classroomId), isMonthlyMode ? `เดือน${thaiMonthTitle(monthKey, years, yearId)}` : `เดือน${MONTHS.find(m => m.value === month)?.label || ''}`],
@@ -1153,7 +1242,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 if (holiday || !schoolDay) return ''
                 if (mode === 'attendance') return attendanceDisplayValue(row.student.id, day) || ''
                 const value = monthlyActivityValues[row.student.id]?.[day] ?? 0
-                return activityType === 'saving' ? (value || '') : (value ? '✓' : '')
+                return activityType === 'saving' ? (value || '') : classroomAdminDoneMark(value)
               }),
               ...(summary ? [summary['ม'], summary['ป'], summary['ล'], summary['ข']] : []),
               ...(isSavingMode ? [
@@ -1194,8 +1283,18 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       ...(isMonthlyMode ? days.map(() => ({ wch: activityType === 'saving' ? 6 : 4 })) : []),
       ...(mode === 'attendance' ? [{ wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }] : []),
       ...(isSavingMode ? [{ wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 }] : []),
-      ...(mode === 'weightHeight' ? [{ wch: 14 }, { wch: 14 }, { wch: 22 }] : []),
-      ...(mode === 'healthInspection' ? INSPECTION_FIELDS.map(() => ({ wch: 12 })) : []),
+      ...(mode === 'weightHeight' ? [
+        { wch: 4 },
+        { wch: 24 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 10 },
+      ] : []),
+      ...(mode === 'healthInspection' ? [
+        { wch: 4 },
+        { wch: 24 },
+        ...INSPECTION_FIELDS.map(() => ({ wch: 10 })),
+      ] : []),
     ]
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, documentTitle.slice(0, 31))
@@ -1205,68 +1304,38 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
   async function exportAttendancePdf() {
     if (pdfExporting) return
-    const source = document.querySelector('.attendance-print-only .attendance-print-sheet') as HTMLElement | null
-    if (!source) {
-      notify('error', 'ไม่พบเอกสารสำหรับสร้าง PDF')
+    if (!classroomId || students.length === 0) {
+      notify('error', 'ไม่พบข้อมูลสำหรับสร้าง PDF')
       return
     }
 
     setPdfExporting(true)
-    const host = document.createElement('div')
-    host.style.position = 'fixed'
-    host.style.left = '-10000px'
-    host.style.top = '0'
-    host.style.width = '1122px'
-    host.style.background = '#ffffff'
-    host.style.zIndex = '-1'
-
-    const clone = source.cloneNode(true) as HTMLElement
-    clone.classList.add('is-pdf-export')
-    clone.querySelectorAll('.attendance-print-holiday-name').forEach(node => {
-      const el = node as HTMLElement
-      el.style.writingMode = 'horizontal-tb'
-      el.style.textOrientation = 'mixed'
-      el.style.transform = 'none'
-      el.style.textAlign = 'center'
-      el.style.whiteSpace = 'normal'
-    })
-    clone.style.width = '1122px'
-    clone.style.height = '790px'
-    clone.style.minHeight = '0'
-    clone.style.overflow = 'hidden'
-    clone.style.boxShadow = 'none'
-    clone.style.transform = 'none'
-    host.appendChild(clone)
-    document.body.appendChild(host)
-
     try {
-      const html2pdf = (await import('html2pdf.js')).default
-      const documentTitle = mode === 'attendance' ? 'แบบบันทึกเวลาเรียนรายวัน' : title
+      const params = new URLSearchParams()
+      params.set('print', '1')
+      params.set('classroom', classroomId)
+      if (yearId) params.set('year', yearId)
+      if (isMonthlyMode) {
+        params.set('monthkey', monthKey)
+        params.set('term', String(boardTerm))
+      } else {
+        params.set('term', String(term))
+        params.set('month', String(month))
+        if (date) params.set('date', date)
+      }
+
       const fileName = `${documentTitle}_${currentClassLabel(classrooms, classroomId)}_${isMonthlyMode ? thaiMonthTitle(monthKey, years, yearId) : MONTHS.find(m => m.value === month)?.label || ''}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
-      await html2pdf()
-        .set({
-          filename: fileName,
-          margin: 0,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale: 2.4,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            scrollX: 0,
-            scrollY: 0,
-            windowWidth: 1122,
-            windowHeight: 790,
-          },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
-          pagebreak: { mode: ['css', 'legacy'] },
-        })
-        .from(clone)
-        .save()
+
+      await downloadClassroomAdminPdf({
+        path: window.location.pathname,
+        query: params.toString(),
+        fileName,
+        localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),
+      })
     } catch (error) {
       console.error(error)
-      notify('error', 'สร้าง PDF ไม่สำเร็จ')
+      notify('error', error instanceof Error ? error.message : 'สร้าง PDF ไม่สำเร็จ')
     } finally {
-      host.remove()
       setPdfExporting(false)
     }
   }
@@ -1347,12 +1416,12 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     return (
       <button
         type="button"
-        className={`${cellClass} ${value ? 'is-done' : ''}`}
+        className={`${cellClass} ${value ? 'is-present' : ''}`}
         disabled={disabled}
         title={holiday || (value ? 'ทำแล้ว' : 'ยังไม่ทำ')}
       onClick={() => autoSaveActivity(student.id, day, value ? 0 : 1)}
       >
-      {schoolDay && value ? '✓' : ''}
+      {schoolDay && value ? CLASSROOM_ADMIN_CHECK_MARK : ''}
       </button>
     )
   }
@@ -1427,17 +1496,34 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     )
   }
 
-  if (loading) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>กำลังโหลด...</div>
+  if (loading && !printMode) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>กำลังโหลด...</div>
 
   return (
-    <div className="page-stack classroom-admin-page">
+    <ClassroomAdminPrintLayoutsProvider layouts={printLayouts}>
+    <div className={`page-stack classroom-admin-page${printMode ? ' classroom-admin-page--print' : ''}`}>
       <AlertModal />
       <style>{CLASSROOM_ADMIN_PRINT_STYLES}</style>
+      {!printMode && (
+      <ClassroomAdminPrintLayoutTuner
+        open={layoutTunerOpen}
+        onClose={() => setLayoutTunerOpen(false)}
+        activeSection={layoutTunerSection}
+        onActiveSectionChange={setLayoutTunerSection}
+        layouts={printLayouts}
+        onChange={setPrintLayouts}
+        onSave={() => {
+          saveClassroomAdminPrintLayouts(printLayouts)
+          setLayoutSaved(true)
+          window.setTimeout(() => setLayoutSaved(false), 2000)
+        }}
+        saved={layoutSaved}
+      />
+      )}
       <div className="attendance-print-only">
         {renderPrintableAttendanceDocument()}
       </div>
 
-      {printPreviewOpen && (
+      {!printMode && printPreviewOpen && (
         <div className="print-preview-backdrop">
           <div className="print-preview-shell">
             <div className="print-preview-toolbar">
@@ -1525,6 +1611,17 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             >
               บันทึก
             </LoadingButton>
+            <button
+              type="button"
+              className={`btn btn-secondary classroom-admin-board-button pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
+              style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }}
+              onClick={() => {
+                setLayoutTunerSection(printLayoutSection)
+                setLayoutTunerOpen(open => !open)
+              }}
+            >
+              {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
+            </button>
             <button type="button" className="btn btn-secondary classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={exportAttendancePdf} disabled={!classroomId || students.length === 0 || pdfExporting}>
               {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
             </button>
@@ -1605,7 +1702,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       <div className="classroom-admin-print-header">
         <div>
           <div className="classroom-admin-print-kicker">ระบบ ปพ.5 ออนไลน์</div>
-          <h1>{mode === 'attendance' ? 'แบบบันทึกเวลาเรียนรายวัน' : title}</h1>
+          <h1>{documentTitle}</h1>
           <p>
             ห้อง {currentClassLabel(classrooms, classroomId)}
             {isMonthlyMode ? ` · เดือน${thaiMonthTitle(monthKey, years, yearId)}` : ''}
@@ -1623,13 +1720,13 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         ) : students.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>ยังไม่มีนักเรียนในห้องนี้</div>
         ) : mode === 'weightHeight' ? (
-          <table className="thai-table class-subjects-table classroom-admin-table">
+          <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-weight-table">
             <colgroup>
-              <col style={{ width: 54 }} />
-              <col />
-              <col style={{ width: 150 }} />
-              <col style={{ width: 150 }} />
-              <col style={{ width: 150 }} />
+              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.numberPx }} />
+              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.namePx }} />
+              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx }} />
+              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx }} />
+              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx }} />
             </colgroup>
             <thead>
               <tr>
@@ -1664,9 +1761,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         ) : mode === 'healthInspection' ? (
           <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-health-table">
             <colgroup>
-              <col style={{ width: 54 }} />
-              <col style={{ width: 220 }} />
-              {INSPECTION_FIELDS.map(field => <col key={field.key} style={{ width: 118 }} />)}
+              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.numberPx }} />
+              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.namePx }} />
+              {INSPECTION_FIELDS.map(field => (
+                <col key={field.key} style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx }} />
+              ))}
             </colgroup>
             <thead>
               <tr>
@@ -1704,7 +1803,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               <span className="classroom-admin-attendance-toolbar-note">
                 {mode === 'attendance'
                   ? 'ช่องว่าง = ยังไม่บันทึก · คลิกเพื่อวน / → ข → ล → ป'
-                  : 'ช่องว่าง = ยังไม่ทำ · คลิกเพื่อสลับ ✓'}
+                  : `ช่องว่าง = ยังไม่ทำ · คลิกเพื่อสลับ ${CLASSROOM_ADMIN_CHECK_MARK}`}
               </span>
               {canEdit ? (
               <div className="classroom-admin-attendance-toolbar-actions">
@@ -1991,7 +2090,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           )}
           {mode === 'activity' && activityType !== 'saving' && (
             <>
-              <span className="legend-pill legend-green">✓ ทำแล้ว</span>
+              <span className="legend-pill legend-green">{CLASSROOM_ADMIN_CHECK_MARK} ทำแล้ว</span>
               <span className="legend-pill legend-red">ว่าง = ยังไม่ทำ</span>
               {isAttendanceDefaultMode && <span className="legend-pill legend-amber">อ้างอิงจากมาเรียน แต่แก้รายช่องได้</span>}
               <span className="legend-pill legend-gray">วันหยุดจะไม่รับบันทึก</span>
@@ -2037,5 +2136,6 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         </div>
       )}
     </div>
+    </ClassroomAdminPrintLayoutsProvider>
   )
 }

@@ -1,4 +1,11 @@
-export const CLASSROOM_ADMIN_PRINT_STYLES = `
+import { reportFontFaceCss } from '@/lib/report-font-faces'
+import { REPORT_FONT_FAMILY } from '@/lib/report-font'
+import { CLASSROOM_ADMIN_A4_LANDSCAPE_CSS } from '@/lib/classroom-admin-a4-landscape'
+
+const CA_PAGE_W = CLASSROOM_ADMIN_A4_LANDSCAPE_CSS.width
+const CA_PAGE_MIN_H = CLASSROOM_ADMIN_A4_LANDSCAPE_CSS.minHeight
+
+const CLASSROOM_ADMIN_PRINT_RULES = `
   .classroom-admin-print-header { display: none; }
   .classroom-admin-print-row, .classroom-admin-print-signatures { display: none; }
   .attendance-print-only { display: none; }
@@ -25,53 +32,74 @@ export const CLASSROOM_ADMIN_PRINT_STYLES = `
     transform-origin: top center;
   }
   .attendance-print-sheet {
-    width: 1122px; min-height: 794px; padding: 16px 18px 12px; background: #FFFFFF;
+    width: ${CA_PAGE_W}; min-height: ${CA_PAGE_MIN_H};
+    padding: var(--ca-pad-top, 16px) var(--ca-pad-x, 18px) var(--ca-pad-bottom, 12px);
+    background: #FFFFFF;
     color: #111827; box-shadow: 0 18px 45px rgba(15,23,42,0.16);
-    font-family: 'Sarabun', sans-serif;
+    font-family: ${REPORT_FONT_FAMILY};
   }
   .attendance-print-head {
     display: grid; justify-items: center; gap: 3px;
     margin-bottom: 6px; text-align: center;
   }
   .attendance-print-logo-slot {
-    width: 42px; height: 42px; display: grid; place-items: center;
+    width: var(--ca-logo-size, 42px); height: var(--ca-logo-size, 42px); display: grid; place-items: center;
     border: 1px solid #CBD5E1; border-radius: 50%; color: #94A3B8; font-size: 11px; overflow: hidden;
   }
   .attendance-print-logo-slot img { width: 100%; height: 100%; object-fit: contain; }
-  .attendance-print-head h1 { margin: 0; font-size: 16px; line-height: 1.05; font-weight: 900; color: #111827; }
-  .attendance-print-school { margin-top: 2px; font-size: 16px; font-weight: 900; color: #111827; }
-  .attendance-print-head p { margin: 1px 0 0; font-size: 11px; font-weight: 800; color: #334155; }
+  .attendance-print-head h1 { margin: 0; font-size: var(--ca-font-h1, 16px); line-height: 1.05; font-weight: 900; color: #111827; }
+  .attendance-print-school { margin-top: var(--ca-head-line-gap, 2px); font-size: var(--ca-font-school, 16px); font-weight: 900; color: #111827; }
+  .attendance-print-head p { margin: var(--ca-head-line-gap, 1px) 0 0; font-size: var(--ca-font-meta, 11px); font-weight: 800; color: #334155; }
   .attendance-print-table {
-    width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 8px; line-height: 1;
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border-spacing: 0;
+    font-size: var(--ca-font-table, 8px);
+    line-height: 1.2;
   }
-  .attendance-print-number-col { width: 42px; }
-  .attendance-print-name-col { width: 190px; }
-  .attendance-print-summary-col { width: 40px; }
+  .attendance-print-table.attendance-print-inspection-table {
+    width: var(--ca-inspection-table-w, auto);
+    max-width: 100%;
+  }
+  .attendance-print-sheet.is-pdf-export .attendance-print-inspection-table {
+    width: var(--ca-inspection-table-w) !important;
+    max-width: var(--ca-inspection-table-w) !important;
+  }
+  .attendance-print-number-col { width: var(--ca-number-col-w, 42px); }
+  .attendance-print-name-col { width: var(--ca-name-col-w, 190px); }
+  .attendance-print-summary-col { width: var(--ca-summary-col-w, 40px); }
   .attendance-print-table th,
   .attendance-print-table td {
-    border: 1px solid #111827; padding: 2px 2px; height: 19px;
-    text-align: center; vertical-align: middle; color: #111827;
+    border: 1px solid #111827;
+    padding: 1px 2px;
+    box-sizing: border-box;
+    height: max(23px, var(--ca-row-h, 23px));
+    min-height: max(23px, var(--ca-row-h, 23px));
+    max-height: max(23px, var(--ca-row-h, 23px));
+    text-align: center;
+    vertical-align: middle;
+    color: #111827;
+    overflow: hidden;
+    line-height: 1.2;
+  }
+  .attendance-print-table tbody tr {
+    height: max(23px, var(--ca-row-h, 23px));
+    min-height: max(23px, var(--ca-row-h, 23px));
+    max-height: max(23px, var(--ca-row-h, 23px));
   }
   .attendance-print-table th { background: #BFEAF4; font-weight: 900; }
-  .attendance-print-month-title { background: #BFEAF4 !important; font-size: 10px; }
-  .attendance-print-summary-title { background: #C4B5FD !important; font-size: 10px; }
-  .attendance-print-student-name { text-align: left !important; padding: 1px 2px 2px 6px !important; font-size: 11px !important; font-weight: 900; line-height: 1.05 !important; vertical-align: middle !important; }
-  .attendance-print-student-name-text { display: block; line-height: 1.05 !important; }
-  .attendance-print-sheet.is-pdf-export .attendance-print-student-name {
-    padding-top: 0 !important;
-    padding-bottom: 3px !important;
-    vertical-align: top !important;
-  }
-  .attendance-print-sheet.is-pdf-export .attendance-print-table th,
-  .attendance-print-sheet.is-pdf-export .attendance-print-table td {
-    padding-top: 0 !important;
-    padding-bottom: 3px !important;
-    vertical-align: top !important;
-    line-height: 1 !important;
-  }
-  .attendance-print-sheet.is-pdf-export .attendance-print-student-name-text {
-    transform: translateY(-2px);
-    line-height: 1 !important;
+  .attendance-print-month-title { background: #BFEAF4 !important; font-size: var(--ca-font-month-title, 10px); }
+  .attendance-print-summary-title { background: #C4B5FD !important; font-size: var(--ca-font-summary-title, 10px); }
+  .attendance-print-student-name {
+    text-align: left !important;
+    padding: 1px 2px 1px 6px !important;
+    font-size: var(--ca-font-name, 11px) !important;
+    font-weight: 900;
+    line-height: 1.2 !important;
+    vertical-align: middle !important;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .attendance-print-status-cell.attendance-ม,
   .attendance-print-status-cell.attendance-print-status-present,
@@ -107,7 +135,7 @@ export const CLASSROOM_ADMIN_PRINT_STYLES = `
     writing-mode: horizontal-tb;
     text-orientation: mixed;
     color: #111827 !important;
-    font-size: 7px;
+    font-size: var(--ca-font-holiday, 7px);
     font-weight: 900;
     line-height: 1.15;
     text-align: center;
@@ -126,28 +154,46 @@ export const CLASSROOM_ADMIN_PRINT_STYLES = `
   .attendance-print-summary-leave,
   .attendance-print-summary-absent { background: #FEE2E2 !important; font-weight: 900; }
   .attendance-print-standard-table {
-    margin-top: 8px; font-size: 10px;
+    margin-top: 8px; font-size: var(--ca-font-standard-table, 10px);
   }
   .attendance-print-standard-table th,
   .attendance-print-standard-table td {
-    height: 24px; padding: 4px 6px;
+    height: max(24px, var(--ca-standard-row-h, 24px));
+    min-height: max(24px, var(--ca-standard-row-h, 24px));
+    max-height: max(24px, var(--ca-standard-row-h, 24px));
+    padding: 2px 4px;
+    line-height: 1.2;
+  }
+  .attendance-print-standard-table tbody tr {
+    height: max(24px, var(--ca-standard-row-h, 24px));
+    min-height: max(24px, var(--ca-standard-row-h, 24px));
+    max-height: max(24px, var(--ca-standard-row-h, 24px));
   }
   .attendance-print-standard-table .attendance-print-student-name {
-    font-size: 12px !important;
+    font-size: var(--ca-font-standard-name, 12px) !important;
+  }
+  .attendance-print-inspection-table .attendance-print-inspection-number-col {
+    width: var(--ca-inspection-number-col-w, 20px);
+  }
+  .attendance-print-inspection-table .attendance-print-inspection-name-col {
+    width: var(--ca-inspection-name-col-w, 320px);
+  }
+  .attendance-print-inspection-table .attendance-print-inspection-field-col {
+    width: var(--ca-inspection-field-col-w, 90px);
   }
   .attendance-print-value-done { background: #CFF8D8 !important; color: #14532D !important; font-weight: 900; }
   .attendance-print-value-alert { background: #FEE2E2 !important; color: #7F1D1D !important; font-weight: 900; }
   .attendance-print-signatures {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 120px; margin-top: 32px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: var(--ca-signature-gap, 120px); margin-top: var(--ca-signature-margin-top, 32px);
   }
-  .attendance-print-signatures > div { text-align: center; font-size: 12px; color: #111827; }
+  .attendance-print-signatures > div { text-align: center; font-size: var(--ca-font-signature, 12px); color: #111827; }
   .attendance-print-sign-line { width: 260px; margin: 0 auto 4px; line-height: 1.15; }
-  .attendance-print-signatures strong { display: block; min-height: 15px; font-size: 12px; font-weight: 900; line-height: 1.15; }
-  .attendance-print-signatures span { display: block; margin-top: 2px; font-size: 11px; line-height: 1.15; }
+  .attendance-print-signatures strong { display: block; min-height: 15px; font-size: var(--ca-font-signature, 12px); font-weight: 900; line-height: 1.15; }
+  .attendance-print-signatures span { display: block; margin-top: 2px; font-size: var(--ca-font-signature-role, 11px); line-height: 1.15; }
   @media print {
-    @page { size: A4 landscape; margin: 8mm; }
+    @page { size: A4 landscape; margin: 0; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    html, body { width: 100%; background: #fff !important; color: #111827 !important; font-size: 10px !important; }
+    html, body { width: 100%; background: #fff !important; color: #111827 !important; font-size: 10px !important; font-family: ${REPORT_FONT_FAMILY} !important; }
     .sidebar, .sidebar-overlay, .navbar, .navbar-menu-backdrop, .navbar-dropdown,
     .classroom-admin-page > :not(style):not(.attendance-print-only), .print-preview-backdrop, .no-print {
       display: none !important;
@@ -254,4 +300,52 @@ export const CLASSROOM_ADMIN_PRINT_STYLES = `
     .classroom-admin-signature-name { margin-top: 1mm; font-weight: 900; }
     .classroom-admin-signature-role { margin-top: 1mm; font-size: 9px; }
   }
+  .pp5-tuner-toggle.active {
+    border-color: #2563eb !important;
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+  }
+  .classroom-admin-page--print {
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+    background: #fff !important;
+  }
+  .classroom-admin-page--print .attendance-print-only {
+    display: block !important;
+  }
+  .classroom-admin-page--print .attendance-print-sheet {
+    width: ${CA_PAGE_W} !important;
+    min-height: ${CA_PAGE_MIN_H} !important;
+    box-shadow: none !important;
+    margin: 0 auto;
+  }
+  .classroom-admin-page--print .classroom-admin-top-card,
+  .classroom-admin-page--print .classroom-admin-print-header,
+  .classroom-admin-page--print .classroom-admin-table-card,
+  .classroom-admin-page--print .classroom-admin-page-legend,
+  .classroom-admin-page--print .teacher-assignment-actions,
+  .classroom-admin-page--print .print-preview-backdrop {
+    display: none !important;
+  }
+  body:has(.classroom-admin-page--print) .sidebar,
+  body:has(.classroom-admin-page--print) .navbar,
+  body:has(.classroom-admin-page--print) .sidebar-overlay,
+  body:has(.classroom-admin-page--print) .app-topbar {
+    display: none !important;
+  }
+  body:has(.classroom-admin-page--print) .main-content,
+  body:has(.classroom-admin-page--print) .content-shell,
+  body:has(.classroom-admin-page--print) .page-stack {
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
 `
+
+export function classroomAdminPrintStyles(origin = '') {
+  return `${reportFontFaceCss(origin)}${CLASSROOM_ADMIN_PRINT_RULES}`
+}
+
+export const CLASSROOM_ADMIN_PRINT_STYLES = classroomAdminPrintStyles()

@@ -8,12 +8,16 @@ export async function POST(req: NextRequest) {
   let path = '/'
   let query = ''
   let landscape = false
+  let emulateMedia: 'screen' | 'print' | undefined
   let localStorageSeed: Record<string, string> | undefined
   try {
     const body = await req.json()
     path = typeof body?.path === 'string' ? body.path : '/'
     query = typeof body?.query === 'string' ? body.query : ''
     landscape = body?.landscape === true
+    if (body?.emulateMedia === 'screen' || body?.emulateMedia === 'print') {
+      emulateMedia = body.emulateMedia
+    }
     if (body?.localStorageSeed && typeof body.localStorageSeed === 'object' && !Array.isArray(body.localStorageSeed)) {
       localStorageSeed = Object.fromEntries(
         Object.entries(body.localStorageSeed).filter((entry): entry is [string, string] => (
@@ -41,6 +45,7 @@ export async function POST(req: NextRequest) {
       query,
       sessionToken: session,
       landscape,
+      emulateMedia,
       localStorageSeed,
     })
     return new NextResponse(new Uint8Array(pdf), {

@@ -22,3 +22,15 @@ export const REPORT_FONT_PRELOADS = FONT_FILES.map(({ file }) => ({
   href: `/fonts/th-sarabun-new/${file}`,
   type: 'font/woff',
 }))
+
+export async function waitForReportFonts() {
+  try {
+    if ('fonts' in document) await document.fonts.ready
+    for (let i = 0; i < 100; i++) {
+      if (document.fonts.check('16px "TH Sarabun New"') || document.fonts.check('700 16px "TH Sarabun New"')) return
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+  } catch {
+    // ignore
+  }
+}

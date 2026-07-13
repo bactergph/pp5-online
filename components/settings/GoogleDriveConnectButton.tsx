@@ -131,11 +131,11 @@ export default function GoogleDriveConnectButton({ onConnected, onError, onFinis
 
   return (
     <LoadingButton
-      className={className || 'btn btn-primary'}
+      className={className || 'drive-panel-connect-btn'}
       loading={connecting}
+      loadingText="กำลังเชื่อมต่อ..."
       type="button"
       onClick={openConnectPopup}
-      style={{ width: 'fit-content' }}
     >
       <DriveIcon />
       เชื่อมต่อ Google Drive

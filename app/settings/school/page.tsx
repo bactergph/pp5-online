@@ -9,6 +9,7 @@ import { fetchMySchool, saveSchool, searchSchools, setMySchool, createAndSetMySc
 import GoogleDriveIntegrationPanel from '@/components/settings/GoogleDriveIntegrationPanel'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
+import { downscaleImageFile } from '@/lib/downscale-image-url'
 
 type School = {
   id: string; name: string; department: string; area_office: string
@@ -103,8 +104,10 @@ function ImageUploadBox({ label, value, type, schoolId, onUploaded }: {
       return
     }
     setState(s => ({ ...s, uploading: true, error: null }))
+    const resized = await downscaleImageFile(file, 512)
+    const uploadName = resized === file ? file.name : file.name.replace(/\.[^./\\]+$/, '') + '.png'
     const fd = new FormData()
-    fd.append('file', file)
+    fd.append('file', resized, uploadName)
     fd.append('type', type)
     fd.append('school_id', schoolId)
     const res = await fetch('/api/upload/school-file', { method: 'POST', body: fd })
@@ -698,29 +701,31 @@ export default function SchoolSettingsPage() {
 
           {school.id && (
             <section
-              className="card-padded school-settings-card"
+              className={`card-padded school-settings-card${activeTab === 'integrations' ? ' school-settings-card--drive' : ''}`}
               style={{ display: activeTab === 'integrations' ? 'block' : 'none' }}
               role="tabpanel"
             >
-              <div className="school-card-head">
-                <div>
-                  <div className="section-title">เชื่อมต่อ Google Drive</div>
-                  <p>เก็บเอกสาร PDF ที่อนุมัติแล้วไปยัง Google Drive ของโรงเรียนโดยอัตโนมัติ</p>
-                </div>
-              </div>
-
               <GoogleDriveIntegrationPanel active={activeTab === 'integrations'} />
             </section>
           )}
         </div>
 
-        <div className="school-save-bar">
-          <div>
-            <strong>{school.name || 'ข้อมูลโรงเรียน'}</strong>
-            <span>ตรวจสอบข้อมูลให้ครบก่อนบันทึก</span>
+        {activeTab !== 'integrations' ? (
+          <div className="school-save-bar">
+            <div>
+              <strong>{school.name || 'ข้อมูลโรงเรียน'}</strong>
+              <span>ตรวจสอบข้อมูลให้ครบก่อนบันทึก</span>
+            </div>
+            <LoadingButton type="submit" loading={saving} className="btn btn-primary btn-lg">บันทึกข้อมูล</LoadingButton>
           </div>
-          <LoadingButton type="submit" loading={saving} className="btn btn-primary btn-lg">บันทึกข้อมูล</LoadingButton>
-        </div>
+        ) : (
+          <div className="school-save-bar school-save-bar--drive">
+            <div>
+              <strong>{school.name || 'ข้อมูลโรงเรียน'}</strong>
+              <span>การเชื่อมต่อ Google Drive บันทึกทันทีเมื่อกดปุ่มเชื่อมต่อ — ไม่ต้องกดบันทึกฟอร์ม</span>
+            </div>
+          </div>
+        )}
       </form>
     </div>
   )

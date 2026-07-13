@@ -1,8 +1,28 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { downloadBlob, revokeBlobUrl } from '@/lib/download-blob'
+import { useSearchParams } from 'next/navigation'
 import { fetchClassroomAdminExportContext, fetchClassroomAdminExportData } from './actions'
+import ClassroomAdminPrintLayoutTuner, { useClassroomAdminPrintLayoutsState } from '@/components/classroom-admin/ClassroomAdminPrintLayoutTuner'
+import { classroomAdminPrintStyles } from '@/components/classroom-admin/classroom-admin-print-styles'
+import { CLASSROOM_ADMIN_A4_LANDSCAPE_CSS } from '@/lib/classroom-admin-a4-landscape'
 import { toDailyDisplay } from '@/lib/daily-attendance'
+import {
+  classroomAdminPrintSectionForReport,
+  classroomAdminSectionLayoutStyle,
+  saveClassroomAdminPrintLayouts,
+  type ClassroomAdminPrintSection,
+} from '@/lib/classroom-admin-print-layout'
+import { ClassroomAdminPrintLayoutsProvider } from '@/lib/classroom-admin-print-layout-context'
+import { reportFontFaceCss, waitForReportFonts } from '@/lib/report-font-faces'
+import { classroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
+import { classroomAdminStandardTableWidthStyle, CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS } from '@/lib/classroom-admin-standard-table-columns'
+import {
+  classroomAdminPrintLayoutSeed,
+  downloadClassroomAdminPdf,
+} from '@/lib/classroom-admin-pdf-export'
+import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
+import { REPORT_FONT_FAMILY } from '@/lib/report-font'
+import { downscaleImageUrl } from '@/lib/downscale-image-url'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; academic_year_id: string }
@@ -65,6 +85,7 @@ const REPORT_TYPES: { key: ReportType; label: string; hint: string }[] = [
   { key: 'health', label: 'น้ำหนัก-ส่วนสูง', hint: 'BMI รายเดือน' },
   { key: 'inspection', label: 'ตรวจสุขภาพ', hint: 'สุขอนามัย' },
 ]
+const PREVIEW_SCALE_OPTIONS = [50, 60, 70, 80, 90, 100, 125, 150] as const
 const INSPECTION_FIELDS = [
   { key: 'nails', label: 'เล็บ' },
   { key: 'hair', label: 'ผม' },
@@ -96,6 +117,14 @@ function dayLabel(monthKey: string, day: number) {
   return ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'][new Date(`${monthKey}-${String(day).padStart(2, '0')}T00:00:00`).getDay()]
 }
 
+function dayDateKey(monthKey: string, day: number) {
+  return `${monthKey}-${String(day).padStart(2, '0')}`
+}
+
+function holidayColumnLabel(day: number, name: string) {
+  return `วันที่ ${day}: ${name}`
+}
+
 function summaryFor(student: Student, data: ExportData) {
   const out = { 'ม': 0, 'ป': 0, 'ล': 0, 'ข': 0 } as Record<string, number>
   ;(data.schoolDays || []).forEach(day => {
@@ -111,10 +140,16 @@ function attendanceExportDisplay(studentId: string, day: number, data: ExportDat
 }
 
 export default function ClassroomAdminExportPage() {
+  const searchParams = useSearchParams()
+  const printMode = searchParams.get('print') === '1'
+  const embedMode = searchParams.get('embed') === '1'
+  const deepLinkMode = printMode || embedMode
   const [years, setYears] = useState<Year[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [schoolName, setSchoolName] = useState('')
   const [schoolLogoUrl, setSchoolLogoUrl] = useState('')
+  const [logoSrc, setLogoSrc] = useState('')
+  const [logoResolved, setLogoResolved] = useState(true)
   const [yearId, setYearId] = useState('')
   const [classroomId, setClassroomId] = useState('')
   const [monthKey, setMonthKey] = useState('')
@@ -125,10 +160,11 @@ export default function ClassroomAdminExportPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [pdfExporting, setPdfExporting] = useState(false)
-  const [previewScale, setPreviewScale] = useState(88)
-  const [printMode] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1')
-  const [embedMode] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('embed') === '1')
-  const deepLinkMode = printMode || embedMode
+  const [layoutTunerOpen, setLayoutTunerOpen] = useState(false)
+  const [layoutTunerSection, setLayoutTunerSection] = useState<ClassroomAdminPrintSection>('monthly')
+  const [layoutSaved, setLayoutSaved] = useState(false)
+  const { layouts: printLayouts, setLayouts: setPrintLayouts } = useClassroomAdminPrintLayoutsState()
+  const [previewScale, setPreviewScale] = useState(100)
   const loadRequestRef = useRef(0)
 
   useEffect(() => {
@@ -139,16 +175,13 @@ export default function ClassroomAdminExportPage() {
       setClassrooms(result.classrooms as Classroom[])
 
       if (deepLinkMode) {
-        const params = new URLSearchParams(window.location.search)
-        const monthkeyParam = params.get('monthkey')
-        const termParam = params.get('term')
-        const yearParam = params.get('year')
-        const classroomParam = params.get('classroom')
-        const monthsParam = params.get('months')
-        const reportsParam = params.get('reports')
-        const nextTerm = termParam === '2' ? 2 : 1
-        setMonthKey(monthkeyParam || currentMonthKey())
+        const nextTerm = searchParams.get('term') === '2' ? 2 : 1
+        setMonthKey(searchParams.get('monthkey') || currentMonthKey())
         setTerm(nextTerm)
+        const yearParam = searchParams.get('year')
+        const classroomParam = searchParams.get('classroom')
+        const monthsParam = searchParams.get('months')
+        const reportsParam = searchParams.get('reports')
         if (yearParam) setYearId(yearParam)
         if (classroomParam) setClassroomId(classroomParam)
         if (monthsParam) setSelectedMonths(monthsParam.split(',').map(Number).filter(n => !Number.isNaN(n)))
@@ -171,12 +204,26 @@ export default function ClassroomAdminExportPage() {
       setYearId(active?.id || '')
       setClassroomId(firstClass?.id || '')
     })
-  }, [deepLinkMode])
+  }, [deepLinkMode, searchParams])
 
   const filteredClassrooms = useMemo(
     () => classrooms.filter(c => !yearId || c.academic_year_id === yearId),
     [classrooms, yearId],
   )
+
+  useEffect(() => {
+    if (!schoolLogoUrl) {
+      setLogoSrc('')
+      setLogoResolved(true)
+      return
+    }
+    let active = true
+    setLogoResolved(false)
+    downscaleImageUrl(schoolLogoUrl, 320)
+      .then(src => { if (active) setLogoSrc(src) })
+      .finally(() => { if (active) setLogoResolved(true) })
+    return () => { active = false }
+  }, [schoolLogoUrl])
 
   function handleYearChange(nextYearId: string) {
     setYearId(nextYearId)
@@ -201,6 +248,9 @@ export default function ClassroomAdminExportPage() {
   async function loadSelectedMonths(): Promise<Record<number, ExportData> | null> {
     if (!yearId || !classroomId || !monthKey || selectedMonths.length === 0 || selectedReports.length === 0) return null
     const requestId = ++loadRequestRef.current
+    if (printMode) {
+      (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = false
+    }
     setIsLoading(true)
     setError('')
     try {
@@ -248,7 +298,7 @@ export default function ClassroomAdminExportPage() {
       img.addEventListener('error', () => resolve(), { once: true })
     })))
 
-    const printStyles = document.querySelector('.classroom-export-page > style')?.textContent || ''
+    const printStyles = classroomAdminPrintStyles(window.location.origin)
     const firstData = sourceData[selectedMonths.find(month => sourceData[month]) || selectedMonths[0]]
     const printTitle = `เล่มรายงานธุรการ_${firstData?.classroom?.level || ''}-${firstData?.classroom?.room || ''}_${selectedMonths.join('-')}`.trim()
     const escapeHtml = (value: string) => value
@@ -354,34 +404,24 @@ export default function ClassroomAdminExportPage() {
     setPdfExporting(true)
     setError('')
     try {
-      const firstData = sourceData[selectedMonths.find(month => sourceData[month]) || selectedMonths[0]]
-      const fileName = `เล่มรายงานธุรการ_${firstData?.classroom?.level || ''}-${firstData?.classroom?.room || ''}_${selectedMonths.join('-')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
-
       const params = new URLSearchParams()
       params.set('print', '1')
+      params.set('monthkey', monthKey)
+      params.set('term', String(term))
       if (yearId) params.set('year', yearId)
       if (classroomId) params.set('classroom', classroomId)
-      if (monthKey) params.set('monthkey', monthKey)
-      params.set('term', String(term))
       params.set('months', selectedMonths.join(','))
       params.set('reports', selectedReports.join(','))
 
-      const res = await fetch('/api/reports/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: window.location.pathname, query: params.toString(), landscape: true }),
+      const firstData = sourceData[selectedMonths.find(month => sourceData[month]) || selectedMonths[0]]
+      const fileName = `เล่มรายงานธุรการ_${firstData?.classroom?.level || ''}-${firstData?.classroom?.room || ''}_${selectedMonths.join('-')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+
+      await downloadClassroomAdminPdf({
+        path: window.location.pathname,
+        query: params.toString(),
+        fileName,
+        localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),
       })
-      if (!res.ok) {
-        let message = 'สร้าง PDF ไม่สำเร็จ'
-        try {
-          const body = await res.json()
-          if (body?.error) message = body.error
-        } catch {}
-        throw new Error(message)
-      }
-      const blob = await res.blob()
-      const { manualUrl } = downloadBlob(blob, fileName)
-      window.setTimeout(() => revokeBlobUrl(manualUrl), 60_000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
     } finally {
@@ -405,7 +445,11 @@ export default function ClassroomAdminExportPage() {
   }, [yearId, classroomId, monthKey, term, selectedMonthsKey])
 
   useEffect(() => {
-    if (!deepLinkMode || !hasData || !printMode) return
+    if (!printMode) return
+    if (isLoading || !hasData || !logoResolved) {
+      (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = false
+      return
+    }
     let cancelled = false
     const markReady = async () => {
       try {
@@ -418,19 +462,13 @@ export default function ClassroomAdminExportPage() {
       })))
       await new Promise(requestAnimationFrame)
       await new Promise(requestAnimationFrame)
-      if (printMode) await new Promise(resolve => setTimeout(resolve, 300))
+      await new Promise(resolve => setTimeout(resolve, 300))
       if (!cancelled) (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = true
     }
     void markReady()
     return () => { cancelled = true }
-  }, [deepLinkMode, printMode, hasData])
-  const reportLabel = (type: ReportType) => type === 'attendance'
-    ? 'แบบบันทึกเวลาเรียนรายวัน'
-    : type === 'health'
-      ? 'น้ำหนัก - ส่วนสูง'
-      : type === 'inspection'
-        ? 'ตรวจสุขภาพ'
-        : ACTIVITY_LABELS[type]
+  }, [printMode, isLoading, hasData, logoResolved, activeMonths.length, selectedReports.length])
+  const reportLabel = (type: ReportType) => classroomAdminDocumentTitle(type)
 
   function renderReportSheet(type: ReportType, data: ExportData, sheetMonthKey: string) {
     const monthly = type === 'attendance' || ['brushing', 'milk', 'lunch', 'cleaning', 'saving'].includes(type)
@@ -438,20 +476,88 @@ export default function ClassroomAdminExportPage() {
     const printRows = monthly
       ? [
           ...(data.students || []).map((student, index) => ({ type: 'student' as const, student, number: student.student_number || index + 1 })),
-          ...Array.from({ length: Math.max(0, 25 - (data.students?.length || 0)) }, (_, index) => ({ type: 'blank' as const, number: (data.students?.length || 0) + index + 1 })),
+          ...Array.from({ length: Math.max(0, printLayouts.monthly.minBlankRows - (data.students?.length || 0)) }, (_, index) => ({ type: 'blank' as const, number: (data.students?.length || 0) + index + 1 })),
         ]
       : []
-    const isClosed = (day: number) => !(data.schoolDays || []).includes(day)
-    const isHoliday = (day: number) => Boolean(data.holidays?.some(item => item.date === `${sheetMonthKey}-${String(day).padStart(2, '0')}`))
-    const isOpenWeekend = (day: number) => Boolean(data.weekendSchoolDays?.some(item => item.date === `${sheetMonthKey}-${String(day).padStart(2, '0')}`))
+    const holidayMap = Object.fromEntries((data.holidays || []).map(item => [item.date, item.name]))
+    const holidayRowSpan = (data.students || []).length
+    const isClosedWeekend = (day: number) => !(data.schoolDays || []).includes(day)
+    const isOpenWeekend = (day: number) => Boolean(data.weekendSchoolDays?.some(item => item.date === dayDateKey(sheetMonthKey, day)))
+    const isHoliday = (day: number) => Boolean(holidayMap[dayDateKey(sheetMonthKey, day)])
+    const isSchoolDay = (day: number) => (data.schoolDays || []).includes(day) && !isHoliday(day)
+
+    function renderExportPrintDayCells(
+      bodyRowIndex: number,
+      row: (typeof printRows)[number] | null,
+    ) {
+      return days.map(day => {
+        const dateKey = dayDateKey(sheetMonthKey, day)
+        const holiday = holidayMap[dateKey]
+        if (holiday) {
+          if (bodyRowIndex < holidayRowSpan) {
+            if (bodyRowIndex > 0) return null
+            return (
+              <td
+                key={day}
+                rowSpan={holidayRowSpan}
+                className="attendance-print-status-cell attendance-print-holiday-cell is-holiday"
+                title={holidayColumnLabel(day, holiday)}
+              >
+                <div className="attendance-print-holiday-stack">
+                  <span className="attendance-print-holiday-name">{holiday}</span>
+                </div>
+              </td>
+            )
+          }
+          return <td key={day} className="attendance-print-empty-cell">&nbsp;</td>
+        }
+
+        if (!row || row.type === 'blank') {
+          return <td key={day} className="attendance-print-empty-cell">&nbsp;</td>
+        }
+
+        const closedWeekend = isClosedWeekend(day)
+        const openWeekend = isOpenWeekend(day)
+        const schoolDay = isSchoolDay(day)
+        const attendanceValue = type === 'attendance' && schoolDay ? attendanceExportDisplay(row.student.id, day, data) : ''
+        const activityValue = type !== 'attendance' && schoolDay ? (data.activities?.[type as ActivityType]?.[row.student.id]?.[day] || 0) : 0
+        const displayValue = type === 'attendance'
+          ? attendanceValue
+          : type === 'saving'
+            ? (activityValue ? String(activityValue) : '')
+            : classroomAdminDoneMark(activityValue)
+        const attendanceClass = type === 'attendance' && attendanceValue
+          ? (attendanceValue === '/' ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
+          : type !== 'attendance' && type !== 'saving' && displayValue === CLASSROOM_ADMIN_CHECK_MARK
+            ? 'attendance-print-status-present'
+            : ''
+
+        return (
+          <td
+            key={day}
+            className={[
+              'attendance-print-status-cell',
+              attendanceClass,
+              closedWeekend ? 'is-weekend' : '',
+              openWeekend ? 'is-open-weekend' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            {displayValue}
+          </td>
+        )
+      })
+    }
+
+    const sheetLayoutSection = classroomAdminPrintSectionForReport(type)
+    const sheetLayoutStyle = classroomAdminSectionLayoutStyle(sheetLayoutSection, printLayouts[sheetLayoutSection])
 
     return (
-      <section className="attendance-print-sheet" key={`${type}-${sheetMonthKey}`}>
+      <section className="attendance-print-sheet" key={`${type}-${sheetMonthKey}`} style={sheetLayoutStyle}>
         <header className="attendance-print-head">
           <div className="attendance-print-logo-slot">
             {schoolLogoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={schoolLogoUrl} alt="โลโก้โรงเรียน" />
+              <img src={logoSrc || schoolLogoUrl} alt="โลโก้โรงเรียน" />
             ) : (
               <span>ตรา</span>
             )}
@@ -491,10 +597,11 @@ export default function ClassroomAdminExportPage() {
                     key={day}
                     className={[
                       'attendance-print-day',
-                      isClosed(day) ? 'is-weekend' : '',
+                      isClosedWeekend(day) ? 'is-weekend' : '',
                       isOpenWeekend(day) ? 'is-open-weekend' : '',
                       isHoliday(day) ? 'is-holiday' : '',
                     ].filter(Boolean).join(' ')}
+                    title={isHoliday(day) ? holidayColumnLabel(day, holidayMap[dayDateKey(sheetMonthKey, day)]) : undefined}
                   >
                     {day}
                   </th>
@@ -510,20 +617,29 @@ export default function ClassroomAdminExportPage() {
               </tr>
               <tr>
                 {days.map(day => (
-                  <th key={`weekday-${type}-${day}`} className={`attendance-print-weekday ${isClosed(day) ? 'is-weekend' : ''}`}>
+                  <th
+                    key={`weekday-${type}-${day}`}
+                    className={[
+                      'attendance-print-weekday',
+                      isClosedWeekend(day) ? 'is-weekend' : '',
+                      isOpenWeekend(day) ? 'is-open-weekend' : '',
+                      isHoliday(day) ? 'is-holiday' : '',
+                    ].filter(Boolean).join(' ')}
+                    title={isHoliday(day) ? holidayColumnLabel(day, holidayMap[dayDateKey(sheetMonthKey, day)]) : undefined}
+                  >
                     {dayLabel(sheetMonthKey, day)}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {printRows.map(row => {
+              {printRows.map((row, bodyRowIndex) => {
                 if (row.type === 'blank') {
                   return (
                     <tr key={`${type}-blank-${row.number}`}>
                       <td>{row.number}</td>
                       <td>&nbsp;</td>
-                      {days.map(day => <td key={day} className="attendance-print-empty-cell">&nbsp;</td>)}
+                      {renderExportPrintDayCells(bodyRowIndex, row)}
                       {type === 'attendance' && (
                         <>
                           <td className="attendance-print-summary-good">&nbsp;</td>
@@ -540,31 +656,8 @@ export default function ClassroomAdminExportPage() {
                 return (
                   <tr key={`${type}-${row.student.id}`}>
                     <td>{row.number}</td>
-                    <td className="attendance-print-student-name"><span className="attendance-print-student-name-text">{studentName(row.student)}</span></td>
-                    {days.map(day => {
-                      const closed = isClosed(day)
-                      const attendanceValue = type === 'attendance' && !closed ? attendanceExportDisplay(row.student.id, day, data) : ''
-                      const activityValue = type !== 'attendance' && !closed ? (data.activities?.[type as ActivityType]?.[row.student.id]?.[day] || 0) : 0
-                      const displayValue = type === 'attendance'
-                        ? attendanceValue
-                        : type === 'saving'
-                          ? (activityValue ? String(activityValue) : '')
-                          : (activityValue ? '✓' : '')
-                      return (
-                        <td
-                          key={day}
-                          className={[
-                            'attendance-print-status-cell',
-                            type === 'attendance' && attendanceValue ? `attendance-print-status-${attendanceValue}` : '',
-                            type !== 'attendance' && displayValue ? 'attendance-print-value-done' : '',
-                            closed ? 'is-weekend' : '',
-                            isHoliday(day) ? 'is-holiday' : '',
-                          ].filter(Boolean).join(' ')}
-                        >
-                          {isHoliday(day) ? '' : displayValue}
-                        </td>
-                      )
-                    })}
+                    <td className="attendance-print-student-name">{studentName(row.student)}</td>
+                    {renderExportPrintDayCells(bodyRowIndex, row)}
                     {summary && (
                       <>
                         <td className="attendance-print-summary-good">{summary['ม']}</td>
@@ -579,7 +672,28 @@ export default function ClassroomAdminExportPage() {
             </tbody>
           </table>
         ) : (
-          <table className="attendance-print-table attendance-print-standard-table">
+          <table
+            className={`attendance-print-table attendance-print-standard-table${type === 'health' || type === 'inspection' ? ' attendance-print-inspection-table' : ''}`}
+            style={type === 'health' || type === 'inspection'
+              ? classroomAdminStandardTableWidthStyle(type === 'health' ? 4 : INSPECTION_FIELDS.length)
+              : undefined}
+          >
+            {(type === 'health' || type === 'inspection') && (
+              <colgroup>
+                <col className="attendance-print-inspection-number-col" />
+                <col className="attendance-print-inspection-name-col" />
+                {type === 'health' ? (
+                  <>
+                    <col className="attendance-print-inspection-field-col" />
+                    <col className="attendance-print-inspection-field-col" />
+                    <col className="attendance-print-inspection-field-col" />
+                    <col className="attendance-print-inspection-field-col" />
+                  </>
+                ) : INSPECTION_FIELDS.map(field => (
+                  <col key={field.key} className="attendance-print-inspection-field-col" />
+                ))}
+              </colgroup>
+            )}
             <thead>
               <tr>
                 <th>เลขที่</th>
@@ -601,7 +715,7 @@ export default function ClassroomAdminExportPage() {
                 return (
                   <tr key={`${type}-${student.id}`}>
                     <td>{student.student_number || index + 1}</td>
-                    <td className="attendance-print-student-name"><span className="attendance-print-student-name-text">{studentName(student)}</span></td>
+                    <td className="attendance-print-student-name">{studentName(student)}</td>
                     {type === 'health' ? (
                       <>
                         <td>{health?.weight ?? ''}</td>
@@ -637,17 +751,25 @@ export default function ClassroomAdminExportPage() {
   }
 
   return (
-    <div className={`page-stack classroom-export-page${embedMode ? ' classroom-export-page--embed' : ''}`}>
+    <ClassroomAdminPrintLayoutsProvider layouts={printLayouts}>
+    <div className={`page-stack classroom-export-page${embedMode ? ' classroom-export-page--embed' : ''}${printMode ? ' classroom-export-page--print' : ''}`}>
       <ExportPageStyles />
-      {!embedMode && (
-      <div className="classroom-export-page-title no-print">
-        <span>รายงาน</span>
-        <h1>พิมพ์เล่มเอกสารธุรการชั้นเรียน</h1>
-      </div>
-      )}
-
+      <ClassroomAdminPrintLayoutTuner
+        open={layoutTunerOpen}
+        onClose={() => setLayoutTunerOpen(false)}
+        activeSection={layoutTunerSection}
+        onActiveSectionChange={setLayoutTunerSection}
+        layouts={printLayouts}
+        onChange={setPrintLayouts}
+        onSave={() => {
+          saveClassroomAdminPrintLayouts(printLayouts)
+          setLayoutSaved(true)
+          window.setTimeout(() => setLayoutSaved(false), 2000)
+        }}
+        saved={layoutSaved}
+      />
       <div className="classroom-export-workspace">
-      {!embedMode && (
+      {!embedMode && !printMode && (
       <div className="classroom-export-control-card no-print">
         <div className="classroom-export-panel-section">
           <span>1</span>
@@ -738,40 +860,46 @@ export default function ClassroomAdminExportPage() {
             {isLoading ? 'กำลังโหลดข้อมูล...' : canGenerate ? `พร้อมสร้าง ${selectedMonths.length} เดือน · ${selectedReports.length} หมวด` : 'เลือกเดือนและหมวดรายงานก่อน'}
           </div>
         </div>
-
-        <div className="classroom-export-actions classroom-export-actions-main">
-          <button type="button" onClick={printExportDocument} className="classroom-export-primary-btn" disabled={!canGenerate || isLoading || pdfExporting}>พิมพ์</button>
-          <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={!canGenerate || pdfExporting || isLoading}>
-            {pdfExporting ? 'กำลังสร้าง' : 'บันทึก PDF'}
-          </button>
-          <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn" disabled={!canGenerate || isLoading}>Excel</button>
-        </div>
       </div>
       )}
 
       {error && <div className="alert alert-error no-print">{error}</div>}
 
       <div className="classroom-export-preview-pane">
-      {hasData ? (
-        <div className="classroom-export-preview">
-          {!embedMode && (
-          <div className="classroom-export-preview-head no-print">
-            <div>
-              <span>ตัวอย่างเอกสาร</span>
-              <strong>ตัวอย่างเล่มรายงาน ({selectedReports.length} หมวด)</strong>
-            </div>
-            <div className="classroom-export-preview-actions">
-              <label>
-                ขนาด
-                <select value={previewScale} onChange={e => setPreviewScale(Number(e.target.value))}>
-                  {[50, 60, 75, 88, 90, 100, 110, 125].map(value => <option key={value} value={value}>{value}%</option>)}
-                </select>
-              </label>
-            </div>
+      {!embedMode && !printMode && (
+        <div className="classroom-export-preview-toolbar no-print">
+          <label>
+            <span>ขนาด</span>
+            <select value={previewScale} onChange={e => setPreviewScale(Number(e.target.value))} disabled={!hasData}>
+              {PREVIEW_SCALE_OPTIONS.map(value => (
+                <option key={value} value={value}>{value}%</option>
+              ))}
+            </select>
+          </label>
+          <div className="classroom-export-preview-toolbar-actions">
+            <button
+              type="button"
+              className={`classroom-export-secondary-btn pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
+              onClick={() => setLayoutTunerOpen(open => !open)}
+              disabled={!canGenerate}
+            >
+              {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
+            </button>
+            <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn" disabled={!canGenerate || isLoading}>Excel</button>
+            <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={!canGenerate || pdfExporting || isLoading}>
+              {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
+            </button>
+            <button type="button" onClick={printExportDocument} className="classroom-export-primary-btn" disabled={!canGenerate || isLoading || pdfExporting}>พิมพ์</button>
           </div>
-          )}
-          <div className="classroom-export-preview-stage" style={{ transform: `scale(${(embedMode ? 72 : previewScale) / 100})` }}>
-            <div className="classroom-export-book">
+        </div>
+      )}
+      {hasData ? (
+        <div className="classroom-export-preview-card">
+          <div className="classroom-export-preview-stage">
+            <div
+              className={`classroom-export-book${printMode ? ' is-pdf-export' : ''}`}
+              style={printMode ? undefined : { transform: `scale(${(embedMode ? 72 : previewScale) / 100})`, transformOrigin: 'top center' }}
+            >
               {activeMonths.flatMap(month => {
                 const sheetData = dataByMonth[month]
                 const sheetMonthKey = setMonthInKey(monthKey, month)
@@ -791,39 +919,27 @@ export default function ClassroomAdminExportPage() {
       </div>
       </div>
     </div>
+    </ClassroomAdminPrintLayoutsProvider>
   )
 }
 
 function ExportPageStyles() {
+  const fontFaces = reportFontFaceCss()
+  const caPageW = CLASSROOM_ADMIN_A4_LANDSCAPE_CSS.width
+  const caPageH = CLASSROOM_ADMIN_A4_LANDSCAPE_CSS.height
   return (
     <style>{`
+${fontFaces}
       .classroom-export-page {
         --export-border: #D7DEE8;
         --export-ink: #0F172A;
         --export-muted: #64748B;
-        gap: 14px;
-      }
-      .classroom-export-page-title {
-        display: grid;
-        justify-items: center;
-        gap: 2px;
-        margin-top: -8px;
-      }
-      .classroom-export-page-title span {
-        color: #64748B;
-        font-size: 12px;
-        font-weight: 800;
-      }
-      .classroom-export-page-title h1 {
-        margin: 0;
-        color: #0F172A;
-        font-size: clamp(22px, 3vw, 30px);
-        font-weight: 900;
+        gap: 0;
       }
       .classroom-export-workspace {
         display: grid;
-        grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
-        gap: 16px;
+        grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+        gap: 10px;
         align-items: start;
       }
       .classroom-export-hero {
@@ -921,14 +1037,15 @@ function ExportPageStyles() {
       }
       .classroom-export-control-card {
         display: grid;
-        gap: 14px;
-        padding: 18px;
+        gap: 10px;
+        padding: 12px;
         border: 1px solid #E2E8F0;
-        border-radius: 18px;
+        border-radius: 14px;
         background: #FFFFFF;
-        box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
         position: sticky;
-        top: 12px;
+        top: 0;
+        font-size: 12px;
       }
       .classroom-export-panel-section {
         display: flex;
@@ -963,14 +1080,14 @@ function ExportPageStyles() {
         display: inline-flex;
         justify-content: center;
         align-items: center;
-        gap: 6px;
-        min-height: 38px;
-        padding: 8px 12px;
+        gap: 4px;
+        min-height: 32px;
+        padding: 6px 8px;
         border: 0;
         border-radius: 999px;
         background: rgba(255,255,255,0.62);
         color: #475569;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 900;
         white-space: nowrap;
         cursor: pointer;
@@ -1173,21 +1290,75 @@ function ExportPageStyles() {
         margin-left: auto;
         text-decoration: none;
       }
-      .classroom-export-preview {
-        display: grid;
-        gap: 12px;
-      }
       .classroom-export-preview-pane {
-        min-height: calc(100vh - 150px);
-        padding: 16px;
+        min-width: 0;
+        display: grid;
+        gap: 0;
+        align-content: start;
+        overflow: visible;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        min-height: calc(100vh - 88px);
+      }
+      .classroom-export-preview-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 46px;
+        padding: 6px 12px;
+        background: #FFFFFF;
         border: 1px solid #D7DEE8;
-        border-radius: 18px;
+        border-radius: 10px 10px 0 0;
+        border-bottom: 4px solid #E5EBF2;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+      }
+      .classroom-export-preview-toolbar label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #64748B;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .classroom-export-preview-toolbar select {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 1px solid #CBD5E1;
+        border-radius: 8px;
+        background: #FFFFFF;
+        color: #0F172A;
+        font-weight: 800;
+      }
+      .classroom-export-preview-toolbar-actions {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .classroom-export-preview-toolbar-actions button {
+        min-height: 34px;
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+      .classroom-export-preview-card {
+        padding: 12px 16px 20px;
+        border: 1px solid #D7DEE8;
+        border-top: 0;
+        border-radius: 0 0 12px 12px;
         background: #E8EEF6;
         box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
         overflow: auto;
+        min-height: calc(100vh - 140px);
       }
       .classroom-export-preview-empty {
-        min-height: calc(100vh - 190px);
+        min-height: calc(100vh - 140px);
         display: grid;
         place-items: center;
         color: #64748B;
@@ -1264,8 +1435,13 @@ function ExportPageStyles() {
         font-weight: 800;
       }
       .classroom-export-preview-stage {
-        transform-origin: top center;
-        justify-self: start;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        width: 100%;
+        margin: 0 auto;
+        padding: 8px 0 24px;
+        overflow: visible;
       }
       .classroom-export-preview.is-modal .classroom-export-preview-stage {
         overflow: visible;
@@ -1278,15 +1454,19 @@ function ExportPageStyles() {
       .classroom-export-book {
         display: grid;
         gap: 18px;
-        justify-items: start;
+        justify-items: center;
+        width: ${caPageW};
+        max-width: none;
+        margin: 0 auto;
+        transform-origin: top center;
       }
       .classroom-export-book.is-pdf-export {
         display: block;
         gap: 0;
+        transform: none !important;
       }
       .classroom-export-book.is-pdf-export .attendance-print-sheet {
-        height: 790px;
-        min-height: 0;
+        height: ${caPageH};
         overflow: hidden;
         box-shadow: none;
         break-after: page;
@@ -1297,13 +1477,16 @@ function ExportPageStyles() {
         page-break-after: auto;
       }
       .attendance-print-sheet {
-        width: 1122px;
-        min-height: 794px;
-        padding: 16px 18px 12px;
+        display: flex;
+        flex-direction: column;
+        width: ${caPageW};
+        height: ${caPageH};
+        overflow: hidden;
+        padding: var(--ca-pad-top, 16px) var(--ca-pad-x, 18px) var(--ca-pad-bottom, 12px);
         background: #FFFFFF;
         color: #111827;
         box-shadow: 0 18px 45px rgba(15,23,42,0.16);
-        font-family: 'Sarabun', sans-serif;
+        font-family: ${REPORT_FONT_FAMILY};
         break-after: page;
         page-break-after: always;
       }
@@ -1317,10 +1500,11 @@ function ExportPageStyles() {
         gap: 3px;
         margin-bottom: 6px;
         text-align: center;
+        flex: 0 0 auto;
       }
       .attendance-print-logo-slot {
-        width: 42px;
-        height: 42px;
+        width: var(--ca-logo-size, 42px);
+        height: var(--ca-logo-size, 42px);
         display: grid;
         place-items: center;
         border: 1px solid #CBD5E1;
@@ -1336,41 +1520,58 @@ function ExportPageStyles() {
       }
       .attendance-print-head h1 {
         margin: 0;
-        font-size: 16px;
+        font-size: var(--ca-font-h1, 16px);
         line-height: 1.05;
         font-weight: 900;
         color: #111827;
       }
       .attendance-print-school {
-        margin-top: 2px;
-        font-size: 16px;
+        margin-top: var(--ca-head-line-gap, 2px);
+        font-size: var(--ca-font-school, 16px);
         font-weight: 900;
         color: #111827;
       }
       .attendance-print-head p {
-        margin: 1px 0 0;
-        font-size: 11px;
+        margin: var(--ca-head-line-gap, 1px) 0 0;
+        font-size: var(--ca-font-meta, 11px);
         font-weight: 800;
         color: #334155;
       }
       .attendance-print-table {
         width: 100%;
+        flex: 0 0 auto;
         table-layout: fixed;
         border-collapse: collapse;
-        font-size: 8px;
-        line-height: 1;
+        border-spacing: 0;
+        font-size: var(--ca-font-table, 8px);
+        line-height: 1.2;
+        letter-spacing: var(--ca-letter-spacing, 0);
       }
-      .attendance-print-number-col { width: 42px; }
-      .attendance-print-name-col { width: 190px; }
-      .attendance-print-summary-col { width: 40px; }
+      .attendance-print-table.attendance-print-inspection-table {
+        width: var(--ca-inspection-table-w, auto);
+        max-width: 100%;
+      }
+      .classroom-export-book.is-pdf-export .attendance-print-inspection-table {
+        width: var(--ca-inspection-table-w) !important;
+        max-width: var(--ca-inspection-table-w) !important;
+      }
+      .attendance-print-number-col { width: var(--ca-number-col-w, 42px); }
+      .attendance-print-name-col { width: var(--ca-name-col-w, 190px); }
+      .attendance-print-summary-col { width: var(--ca-summary-col-w, 40px); }
       .attendance-print-table th,
       .attendance-print-table td {
         border: 1px solid #111827;
-        padding: 2px;
-        height: 19px;
+        padding: 1px 2px;
+        box-sizing: border-box;
         text-align: center;
         vertical-align: middle;
         color: #111827;
+        overflow: hidden;
+        line-height: 1.2;
+      }
+      .attendance-print-table tbody tr,
+      .attendance-print-table tbody td {
+        height: var(--ca-row-h, 20px);
       }
       .attendance-print-table th {
         background: #BFEAF4;
@@ -1378,35 +1579,23 @@ function ExportPageStyles() {
       }
       .attendance-print-month-title {
         background: #BFEAF4 !important;
-        font-size: 10px;
+        font-size: var(--ca-font-month-title, 10px);
       }
       .attendance-print-summary-title {
         background: #C4B5FD !important;
-        font-size: 10px;
+        font-size: var(--ca-font-summary-title, 10px);
       }
       .attendance-print-student-name {
         text-align: left !important;
-        padding: 1px 2px 2px 6px !important;
-        font-size: 11px !important;
+        padding: 1px 2px 1px 6px !important;
+        font-size: var(--ca-font-name, 11px) !important;
         font-weight: 900;
-        line-height: 1.05 !important;
+        line-height: 1.2 !important;
         vertical-align: middle !important;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       }
-      .attendance-print-student-name-text {
-        display: block;
-        line-height: 1.05 !important;
-      }
-      .classroom-export-book.is-pdf-export .attendance-print-table th,
-      .classroom-export-book.is-pdf-export .attendance-print-table td {
-        padding-top: 0 !important;
-        padding-bottom: 3px !important;
-        vertical-align: top !important;
-        line-height: 1 !important;
-      }
-      .classroom-export-book.is-pdf-export .attendance-print-student-name-text {
-        transform: translateY(-2px);
-        line-height: 1 !important;
-      }
+      .attendance-print-status-cell.attendance-print-status-present,
       .attendance-print-status-cell.attendance-print-status-ม,
       .attendance-print-status-cell:not(.is-weekend):not(.is-holiday):not(:empty) {
         background: #CFF8D8;
@@ -1435,21 +1624,71 @@ function ExportPageStyles() {
         background: #FF5B5F !important;
         color: #111827;
       }
+      .attendance-print-holiday-cell {
+        background: #FF5B5F !important;
+        padding: 0 !important;
+        vertical-align: middle !important;
+        position: relative;
+      }
+      .attendance-print-holiday-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        padding: 4px 2px;
+        box-sizing: border-box;
+      }
+      .attendance-print-holiday-name {
+        display: block;
+        writing-mode: horizontal-tb;
+        text-orientation: mixed;
+        color: #111827 !important;
+        font-size: var(--ca-font-holiday, 7px);
+        font-weight: 900;
+        line-height: 1.15;
+        text-align: center;
+        white-space: normal;
+        word-break: break-word;
+        overflow: hidden;
+        max-width: 100%;
+      }
+      .classroom-export-book.is-pdf-export .attendance-print-holiday-name {
+        writing-mode: horizontal-tb !important;
+        text-orientation: mixed !important;
+        transform: none !important;
+      }
       .attendance-print-summary-good { background: #DCFCE7 !important; font-weight: 900; }
       .attendance-print-summary-sick { background: #FEF3C7 !important; font-weight: 900; }
       .attendance-print-summary-leave,
       .attendance-print-summary-absent { background: #FEE2E2 !important; font-weight: 900; }
       .attendance-print-standard-table {
         margin-top: 8px;
-        font-size: 10px;
+        font-size: var(--ca-font-standard-table, 10px);
       }
       .attendance-print-standard-table th,
       .attendance-print-standard-table td {
-        height: 24px;
-        padding: 4px 6px;
+        padding: 2px 4px;
+        line-height: 1.2;
+      }
+      .attendance-print-standard-table tbody tr,
+      .attendance-print-standard-table tbody th,
+      .attendance-print-standard-table tbody td {
+        height: var(--ca-standard-row-h, 24px);
       }
       .attendance-print-standard-table .attendance-print-student-name {
-        font-size: 12px !important;
+        font-size: var(--ca-font-standard-name, 12px) !important;
+      }
+      .attendance-print-inspection-table .attendance-print-inspection-number-col {
+        width: ${CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.numberPx}px;
+      }
+      .attendance-print-inspection-table .attendance-print-inspection-name-col {
+        width: ${CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.namePx}px;
+      }
+      .attendance-print-inspection-table .attendance-print-inspection-field-col {
+        width: ${CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx}px;
       }
       .attendance-print-value-done {
         background: #CFF8D8 !important;
@@ -1464,12 +1703,14 @@ function ExportPageStyles() {
       .attendance-print-signatures {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 120px;
-        margin-top: 32px;
+        gap: var(--ca-signature-gap, 120px);
+        flex: 0 0 auto;
+        margin-top: auto;
+        padding-top: var(--ca-signature-margin-top, 20px);
       }
       .attendance-print-signatures > div {
         text-align: center;
-        font-size: 12px;
+        font-size: var(--ca-font-signature, 12px);
         color: #111827;
       }
       .attendance-print-sign-line {
@@ -1480,14 +1721,14 @@ function ExportPageStyles() {
       .attendance-print-signatures strong {
         display: block;
         min-height: 15px;
-        font-size: 12px;
+        font-size: var(--ca-font-signature, 12px);
         font-weight: 900;
         line-height: 1.15;
       }
       .attendance-print-signatures span {
         display: block;
         margin-top: 2px;
-        font-size: 11px;
+        font-size: var(--ca-font-signature-role, 11px);
         line-height: 1.15;
       }
       .classroom-export-sheet {
@@ -1729,6 +1970,65 @@ function ExportPageStyles() {
           align-items: flex-start;
           flex-direction: column;
         }
+      }
+      .classroom-export-page--print {
+        padding: 0 !important;
+        margin: 0 !important;
+        min-height: 0 !important;
+        background: #fff !important;
+      }
+      .classroom-export-page--print .classroom-export-workspace {
+        display: block !important;
+      }
+      .classroom-export-page--print .classroom-export-preview-pane,
+      .classroom-export-page--print .classroom-export-preview-card {
+        width: auto !important;
+        max-width: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: #fff !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+      }
+      .classroom-export-page--print .classroom-export-preview-stage {
+        transform: none !important;
+        width: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+      }
+      .classroom-export-page--print .classroom-export-book {
+        display: block !important;
+        gap: 0 !important;
+        transform: none !important;
+      }
+      .classroom-export-page--print .classroom-export-book .attendance-print-sheet {
+        display: flex !important;
+        flex-direction: column !important;
+        width: ${caPageW} !important;
+        height: ${caPageH} !important;
+        margin: 0 auto !important;
+        padding: var(--ca-pad-top, 16px) var(--ca-pad-x, 18px) var(--ca-pad-bottom, 12px) !important;
+        box-shadow: none !important;
+        overflow: hidden !important;
+        break-after: page;
+        page-break-after: always;
+      }
+      body:has(.classroom-export-page--print) .sidebar,
+      body:has(.classroom-export-page--print) .navbar,
+      body:has(.classroom-export-page--print) .sidebar-overlay,
+      body:has(.classroom-export-page--print) .app-topbar {
+        display: none !important;
+      }
+      body:has(.classroom-export-page--print) .main-content,
+      body:has(.classroom-export-page--print) .content-shell,
+      body:has(.classroom-export-page--print) .page-stack {
+        width: auto !important;
+        max-width: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
       }
       @media print {
         @page {

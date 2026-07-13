@@ -1,4 +1,5 @@
 import { appOrigin } from '@/lib/app-origin'
+import { CLASSROOM_ADMIN_A4_LANDSCAPE_PX_96DPI } from '@/lib/classroom-admin-a4-landscape'
 import { reportFontFaceCss } from '@/lib/report-font-faces'
 import type { Browser } from 'puppeteer-core'
 
@@ -7,8 +8,16 @@ export { appOrigin }
 const isProd = process.env.NODE_ENV === 'production'
 
 /** A4 @ 96dpi — ให้ layout ตรงกับ 210×297mm */
-const A4_VIEWPORT = { width: 794, height: 1123, deviceScaleFactor: 1 as const }
-const A4_LANDSCAPE_VIEWPORT = { width: 1123, height: 794, deviceScaleFactor: 1 as const }
+const A4_VIEWPORT = {
+  width: CLASSROOM_ADMIN_A4_LANDSCAPE_PX_96DPI.height,
+  height: CLASSROOM_ADMIN_A4_LANDSCAPE_PX_96DPI.width,
+  deviceScaleFactor: 1 as const,
+}
+const A4_LANDSCAPE_VIEWPORT = {
+  width: CLASSROOM_ADMIN_A4_LANDSCAPE_PX_96DPI.width,
+  height: CLASSROOM_ADMIN_A4_LANDSCAPE_PX_96DPI.height,
+  deviceScaleFactor: 1 as const,
+}
 
 async function waitForReportFonts(page: import('puppeteer-core').Page, origin: string) {
   await page.evaluate(async (baseOrigin) => {
@@ -71,6 +80,8 @@ export type GenerateReportPdfInput = {
   query: string
   sessionToken: string
   landscape?: boolean
+  /** บังคับชนิด media ตอนสร้าง PDF ('screen' = ให้ PDF ตรงกับ preview บนจอ) */
+  emulateMedia?: 'screen' | 'print'
   /** ใส่ค่า layout จาก localStorage ของ browser ก่อนโหลดหน้า print=1 */
   localStorageSeed?: Record<string, string>
 }
@@ -112,7 +123,7 @@ export async function generateReportPdf(input: GenerateReportPdfInput): Promise<
     })
     await page.waitForFunction('window.__REPORT_READY__ === true', { timeout: 120000 })
     await waitForReportFonts(page, input.origin)
-    await page.emulateMediaType('screen')
+    await page.emulateMediaType(input.emulateMedia ?? (input.landscape ? 'print' : 'screen'))
 
     const pdf = input.landscape
       ? await page.pdf({
