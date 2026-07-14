@@ -237,6 +237,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [printScale, setPrintScale] = useState(50)
   const [pdfExporting, setPdfExporting] = useState(false)
   const [layoutTunerOpen, setLayoutTunerOpen] = useState(false)
+  const [layoutTunerEnabled, setLayoutTunerEnabled] = useState(true)
   const [layoutTunerSection, setLayoutTunerSection] = useState<ClassroomAdminPrintSection>('monthly')
   const [layoutSaved, setLayoutSaved] = useState(false)
   const { layouts: printLayouts, setLayouts: setPrintLayouts } = useClassroomAdminPrintLayoutsState()
@@ -306,6 +307,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     fetchClassroomAdminContext().then(data => {
       setRole(data.role)
       setCanEdit(data.canEdit)
+      setLayoutTunerEnabled(data.layoutTunerEnabled !== false)
       setCurrentUserName(data.currentUserName || '')
       setSchoolName(data.schoolName || '')
       setSchoolLogoUrl(data.schoolLogoUrl || '')
@@ -1682,6 +1684,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             >
               บันทึก
             </LoadingButton>
+            {layoutTunerEnabled && (
             <button
               type="button"
               className={`btn btn-secondary classroom-admin-board-button pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
@@ -1693,6 +1696,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             >
               {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
             </button>
+            )}
             <button type="button" className="btn btn-secondary classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={exportAttendancePdf} disabled={!classroomId || students.length === 0 || pdfExporting}>
               {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
             </button>

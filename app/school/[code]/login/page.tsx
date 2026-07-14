@@ -13,7 +13,6 @@ export default async function SchoolLoginPage({ params }: { params: Promise<{ co
       <div className="auth-scout-page" style={{ placeItems: 'center', justifyContent: 'center' }}>
         <div className="auth-scout-card" style={{ textAlign: 'center', maxWidth: 400 }}>
           <p style={{ color: '#6B5D45', margin: 0 }}>ไม่พบโรงเรียนนี้ — ตรวจสอบลิงก์อีกครั้ง</p>
-          <a href="/" className="auth-scout-footer" style={{ display: 'inline-block', marginTop: 16 }}>‹ กลับหน้าแรก</a>
         </div>
       </div>
     )
@@ -26,7 +25,6 @@ export default async function SchoolLoginPage({ params }: { params: Promise<{ co
       logoUrl={school.logo_url}
       programName={school.program_name || 'ระบบ ปพ.5 ออนไลน์'}
       createdBy={school.created_by}
-      showDemo
     />
   )
 }

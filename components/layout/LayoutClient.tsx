@@ -1,9 +1,10 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import Sidebar from './Sidebar'
 import Navbar from './Navbar'
+import NavigationProgress from './NavigationProgress'
 
 type Props = {
   children: React.ReactNode
@@ -13,6 +14,7 @@ type Props = {
   userFullName: string
   isHomeroom: boolean
   schoolCode: string | null
+  hasSchool?: boolean
   isActingDirector?: boolean
 }
 
@@ -24,10 +26,18 @@ function LayoutClientInner({
   userFullName,
   isHomeroom,
   schoolCode,
+  hasSchool = false,
   isActingDirector = false,
 }: Props) {
+  const pathname = usePathname()
   const searchParams = useSearchParams()
-  const chromeless = searchParams.get('embed') === '1' || searchParams.get('print') === '1'
+  // onboarding wizard: ไม่โชว์ sidebar/navbar — โหลดเต็มจอเลยหลังเลือกโรงเรียน
+  const onSchoolSettings = pathname === '/settings/school' || pathname.endsWith('/settings/school')
+  const chromeless =
+    searchParams.get('embed') === '1'
+    || searchParams.get('print') === '1'
+    || searchParams.get('onboarding') === '1'
+    || (onSchoolSettings && userRole === 'admin' && !hasSchool)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
@@ -39,6 +49,7 @@ function LayoutClientInner({
   if (chromeless) {
     return (
       <div className="app-shell app-shell--chromeless">
+        <NavigationProgress />
         <main className="main-content main-content--chromeless">
           {children}
         </main>
@@ -48,6 +59,7 @@ function LayoutClientInner({
 
   return (
     <div className="app-shell">
+      <NavigationProgress />
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

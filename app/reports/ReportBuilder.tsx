@@ -3826,6 +3826,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   }, [deepLinkMode, embedMode, init, mode])
 
   const userRole = init?.role || ''
+  // super admin เปิด/ปิดเมนู "ปรับ layout" ต่อโรงเรียน (ค่าเริ่มต้น = เปิด)
+  const layoutTunerEnabled = init?.layoutTunerEnabled !== false
   const years = useMemo(() => (init?.years || []) as ReportYear[], [init])
   const classrooms = useMemo(() => (init?.classrooms || []) as ReportClassroom[], [init])
   const yearClassrooms = useMemo(
@@ -4406,21 +4408,6 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
             </div>
           )}
 
-          {(mode === 'pp5-subject' || mode === 'pp5-class' || mode === 'pp6') && (
-            <DocumentSignaturePanel
-              variant={mode === 'pp5-subject' ? 'pp5_subject' : mode === 'pp5-class' ? 'pp5_class' : 'pp6'}
-              classSubjectId={mode === 'pp5-subject' ? classSubjectId : undefined}
-              classroomId={classroomId || data?.classroom?.id || ''}
-              reportTerm={reportTerm}
-              disabled={mode === 'pp5-subject' ? !classSubjectId : !(classroomId || data?.classroom?.id)}
-              compact
-              onSignatureChange={async () => {
-                if (mode === 'pp5-subject') await loadSubjectPreview()
-                else await loadClassPreview()
-              }}
-            />
-          )}
-
           {(loading || !data) && (
             <span className="report-loading-note">
               {mode === 'pp5-subject'
@@ -4436,6 +4423,20 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         )}
 
         <main className="report-preview-panel">
+          {!embedMode && !printMode && (mode === 'pp5-subject' || mode === 'pp5-class' || mode === 'pp6') && (
+            <DocumentSignaturePanel
+              variant={mode === 'pp5-subject' ? 'pp5_subject' : mode === 'pp5-class' ? 'pp5_class' : 'pp6'}
+              classSubjectId={mode === 'pp5-subject' ? classSubjectId : undefined}
+              classroomId={classroomId || data?.classroom?.id || ''}
+              reportTerm={reportTerm}
+              disabled={mode === 'pp5-subject' ? !classSubjectId : !(classroomId || data?.classroom?.id)}
+              compact
+              onSignatureChange={async () => {
+                if (mode === 'pp5-subject') await loadSubjectPreview()
+                else await loadClassPreview()
+              }}
+            />
+          )}
           {!embedMode && !printMode && (
           <div className="report-preview-toolbar">
             <label>
@@ -4447,6 +4448,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               </select>
             </label>
             <div className="report-preview-actions">
+              {layoutTunerEnabled && (
               <button
                 type="button"
                 onClick={() => setPp5TunerOpen(open => !open)}
@@ -4455,6 +4457,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               >
                 {pp5TunerOpen ? 'ปิดปรับ layout' : mode === 'pp6' ? 'ปรับ layout ปพ.6' : 'ปรับ layout ปพ.5'}
               </button>
+              )}
               <button type="button" onClick={savePdf} disabled={!data || pdfExporting} className="btn btn-secondary">
                 {pdfExporting ? <><span className="report-button-spinner" />กำลังสร้าง...</> : 'บันทึก PDF'}
               </button>

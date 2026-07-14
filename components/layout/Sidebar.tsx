@@ -53,6 +53,7 @@ const ICON_BY_PREFIX: Record<string, string> = {
   '/evaluation/summary': I.star,
   '/evaluation': I.star,
   '/settings': SETTINGS_ICON,
+  '/classrooms/homeroom': I.users,
   '/classrooms': I.class,
   '/students': I.users,
   '/scores': I.pen,
@@ -317,7 +318,7 @@ const ASSIGN: NavItem = {
     { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
     { href: '/settings/evaluation-criteria', label: 'เกณฑ์ประเมิน', icon: ic(I.doc) },
     { href: '/settings/class-subjects', label: 'กำหนดครูผู้สอน', icon: ic(I.users) },
-    { href: '/classrooms', label: 'ครูประจำชั้น', icon: ic(I.class) },
+    { href: '/classrooms/homeroom', label: 'ครูประจำชั้น', icon: ic(I.class) },
     { href: '/score-config',   label: 'สัดส่วนคะแนน', icon: ic(I.sliders) },
   ],
 }
@@ -349,13 +350,14 @@ const ADMIN_SETTINGS: NavItem = {
       icon: ic(I.book),
       tone: 'indigo',
       children: [
+        { href: '/classrooms', label: 'ชั้นเรียน', icon: ic(I.class) },
         { href: '/students', label: 'ข้อมูลนักเรียน', icon: ic(I.class) },
         { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
         { href: '/settings/evaluation-criteria', label: 'เกณฑ์ประเมิน', icon: ic(I.doc) },
         { href: '/settings/users', label: 'ข้อมูลบุคลากร', icon: ic(I.users) },
         { href: '/settings/class-subjects', label: 'จัดครูเข้าสอน', icon: ic(I.pen) },
         { href: '/score-config', label: 'สัดส่วนคะแนน', icon: ic(I.sliders) },
-        { href: '/classrooms', label: 'ครูประจำชั้น', icon: ic(I.users) },
+        { href: '/classrooms/homeroom', label: 'ครูประจำชั้น', icon: ic(I.users) },
         { href: '/settings/import-dmc', label: 'นำเข้า DMC', icon: ic(I.export) },
       ],
     },
@@ -453,7 +455,7 @@ function renderSubmenuLink(
   const icon = leafIcon(child)
   return (
     <Link
-      key={child.href}
+      key={`${child.href}::${child.label}`}
       href={childHref}
       onClick={opts.onClose}
       data-sidebar-current={opts.isCurrent(child.href) ? 'true' : undefined}

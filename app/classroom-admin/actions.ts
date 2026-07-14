@@ -267,10 +267,15 @@ export async function fetchClassroomAdminContext() {
     school = schoolWithPosition.data
   }
 
+  // อ่านสวิตช์เมนู "ปรับ layout" แบบ defensive (ถ้าคอลัมน์ยังไม่มี ให้ถือว่าเปิด)
+  const tunerR = await db.from('schools').select('layout_tuner_enabled').eq('id', sid).maybeSingle()
+  const layoutTunerEnabled = (tunerR.data as { layout_tuner_enabled?: boolean } | null)?.layout_tuner_enabled !== false
+
   return {
     role: session.role,
     canEdit: canEdit(session) && session.role !== 'principal',
     currentUserName: session.fullName,
+    layoutTunerEnabled,
     schoolName: school?.name || '',
     schoolLogoUrl: school?.logo_url || '',
     directorName: school?.director_name || '',

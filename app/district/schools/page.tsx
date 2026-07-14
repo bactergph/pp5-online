@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { loadDistrictDefaults } from '../settings/page'
-import { fetchSchools, createSchool, updateSchool, bulkInsertSchools } from './actions'
+import { fetchSchools, createSchool, updateSchool, bulkInsertSchools, setSchoolLayoutTuner, setAllSchoolsLayoutTuner } from './actions'
 import type { OBECSchool } from '@/app/api/district/schools/import/route'
 import LoadingButton from '@/components/LoadingButton'
 import { useAppAlert } from '@/lib/use-app-alert'
@@ -10,6 +10,7 @@ type School = {
   id: string; name: string; department: string; area_office: string
   district: string; province: string; address: string; phone: string
   document_prefix: string; director_name: string; admin_name: string | null
+  layout_tuner_enabled: boolean
 }
 
 export default function DistrictSchoolsPage() {
@@ -39,6 +40,30 @@ export default function DistrictSchoolsPage() {
     const data = await fetchSchools()
     setSchools(data as School[])
     setLoading(false)
+  }
+
+  const [tunerBusyId, setTunerBusyId] = useState<string | null>(null)
+  const [tunerBulkBusy, setTunerBulkBusy] = useState(false)
+
+  async function handleToggleTuner(school: School) {
+    const next = !school.layout_tuner_enabled
+    setTunerBusyId(school.id)
+    // optimistic
+    setSchools(prev => prev.map(s => s.id === school.id ? { ...s, layout_tuner_enabled: next } : s))
+    const { error } = await setSchoolLayoutTuner(school.id, next)
+    setTunerBusyId(null)
+    if (error) {
+      setSchools(prev => prev.map(s => s.id === school.id ? { ...s, layout_tuner_enabled: !next } : s))
+      notify('error', error)
+    }
+  }
+
+  async function handleToggleTunerAll(enabled: boolean) {
+    setTunerBulkBusy(true)
+    const { error } = await setAllSchoolsLayoutTuner(enabled)
+    setTunerBulkBusy(false)
+    if (error) notify('error', error)
+    else { notify('success', enabled ? 'เปิดเมนูปรับ layout ทุกโรงเรียนแล้ว' : 'ปิดเมนูปรับ layout ทุกโรงเรียนแล้ว'); load() }
   }
 
   function openAdd() {
@@ -183,6 +208,20 @@ export default function DistrictSchoolsPage() {
         ))}
       </div>
 
+      {/* เมนูปรับ layout — คุมทั้งเขต */}
+      <div className="control-card" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>เมนู “ปรับ layout”</div>
+          <p style={{ margin: '2px 0 0', color: 'var(--text-3)', fontSize: 12 }}>
+            เปิดอยู่ {schools.filter(s => s.layout_tuner_enabled).length} / {schools.length} โรงเรียน — สลับรายโรงเรียนได้ในตารางด้านล่าง
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <LoadingButton className="btn btn-secondary" loading={tunerBulkBusy} onClick={() => handleToggleTunerAll(true)}>เปิดทั้งหมด</LoadingButton>
+          <LoadingButton className="btn btn-ghost" loading={tunerBulkBusy} onClick={() => handleToggleTunerAll(false)}>ปิดทั้งหมด</LoadingButton>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="filter-bar control-card">
         <input
@@ -280,6 +319,7 @@ export default function DistrictSchoolsPage() {
                   <th style={{ width: '120px' }}>อำเภอ</th>
                   <th style={{ width: '160px' }}>ผู้อำนวยการ</th>
                   <th style={{ width: '150px' }}>ผู้ดูแลระบบ</th>
+                  <th style={{ width: '110px' }}>ปรับ layout</th>
                   <th style={{ width: '70px' }}>จัดการ</th>
                 </tr>
               </thead>
@@ -303,6 +343,26 @@ export default function DistrictSchoolsPage() {
                           ยังไม่มี
                         </span>
                       )}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTuner(s)}
+                        disabled={tunerBusyId === s.id}
+                        title={s.layout_tuner_enabled ? 'คลิกเพื่อปิดเมนูปรับ layout' : 'คลิกเพื่อเปิดเมนูปรับ layout'}
+                        aria-pressed={s.layout_tuner_enabled}
+                        style={{
+                          position: 'relative', width: 40, height: 22, borderRadius: 100, border: 'none',
+                          cursor: tunerBusyId === s.id ? 'wait' : 'pointer', padding: 0,
+                          background: s.layout_tuner_enabled ? '#4F46E5' : '#CBD5E1',
+                          transition: 'background 0.15s', opacity: tunerBusyId === s.id ? 0.6 : 1,
+                        }}>
+                        <span style={{
+                          position: 'absolute', top: 2, left: s.layout_tuner_enabled ? 20 : 2,
+                          width: 18, height: 18, borderRadius: '50%', background: 'white',
+                          transition: 'left 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                        }} />
+                      </button>
                     </td>
                     <td>
                       <button onClick={() => { setEdit(s); setShowForm(true); clearAlert() }}

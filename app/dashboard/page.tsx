@@ -58,8 +58,17 @@ async function getDistrictStats() {
 
 export default async function DashboardPage() {
   const s = await verifySession()
-  // admin ที่ยังไม่ได้เลือกโรงเรียน → onboarding ไปเลือกโรงเรียนก่อน
-  if (s.role === 'admin' && !s.schoolId) redirect('/settings/school')
+  // admin: กด "ตั้งค่าภายหลัง" ได้ชั่วคราว (cookie) — แต่ถ้าตั้งค่ายังไม่ครบและไม่มี cookie จะเด้ง onboarding
+  // ไม่บังคับโลโก้ / Google Drive / นำเข้านักเรียน
+  if (s.role === 'admin') {
+    const { cookies } = await import('next/headers')
+    const skipped = (await cookies()).get('onboarding_skipped')?.value === '1'
+    if (!skipped) {
+      const { getAdminOnboardingGate, onboardingUrl } = await import('@/lib/onboarding-complete')
+      const gate = await getAdminOnboardingGate(s.schoolId)
+      if (!gate.complete) redirect(onboardingUrl(gate.step))
+    }
+  }
   const effectiveRole = s.isHomeroom ? 'homeroom' : s.role
   const isDistrict = s.role === 'district'
 

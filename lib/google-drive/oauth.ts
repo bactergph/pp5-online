@@ -23,20 +23,20 @@ export function isGoogleOAuthConfigured() {
   )
 }
 
-export function googleOAuthRedirectUri() {
+export function googleOAuthRedirectUri(origin?: string) {
   if (process.env.GOOGLE_OAUTH_REDIRECT_URI) {
     return process.env.GOOGLE_OAUTH_REDIRECT_URI
   }
-  return `${appOrigin()}/api/integrations/google-drive/callback`
+  return `${origin ?? appOrigin()}/api/integrations/google-drive/callback`
 }
 
-export function createGoogleOAuthClient() {
+export function createGoogleOAuthClient(origin?: string) {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET
   if (!clientId || !clientSecret) {
     throw new Error('ยังไม่ได้ตั้งค่า GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET')
   }
-  return new google.auth.OAuth2(clientId, clientSecret, googleOAuthRedirectUri())
+  return new google.auth.OAuth2(clientId, clientSecret, googleOAuthRedirectUri(origin))
 }
 
 export async function createGoogleOAuthState(payload: { schoolId: string; userId: string; popup?: boolean }) {
@@ -60,8 +60,8 @@ export async function verifyGoogleOAuthState(state: string) {
   }
 }
 
-export function buildGoogleAuthUrl(state: string) {
-  const oauth2 = createGoogleOAuthClient()
+export function buildGoogleAuthUrl(state: string, origin?: string) {
+  const oauth2 = createGoogleOAuthClient(origin)
   return oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -71,8 +71,8 @@ export function buildGoogleAuthUrl(state: string) {
   })
 }
 
-export async function exchangeGoogleAuthCode(code: string) {
-  const oauth2 = createGoogleOAuthClient()
+export async function exchangeGoogleAuthCode(code: string, origin?: string) {
+  const oauth2 = createGoogleOAuthClient(origin)
   const { tokens } = await oauth2.getToken(code)
   oauth2.setCredentials(tokens)
 

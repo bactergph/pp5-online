@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from 'next'
-import { sarabun } from '@/lib/fonts'
+import { kanit, sarabun } from '@/lib/fonts'
 import './globals.css'
+import './glass-login.css'
 
 export const metadata: Metadata = {
-  title: 'ระบบ ปพ.5 ออนไลน์',
-  description: 'ระบบบันทึกผลการเรียน ปพ.5 และธุรการชั้นเรียน สำหรับโรงเรียนประถมศึกษา',
+  title: 'จารย์เสก (Jarn-Sek) - ระบบจัดการงานวิชาการครู',
+  description: 'เสก ปพ.5, ปพ.6, ธุรการชั้นเรียน, ตารางสอน ให้เสร็จไวในพริบตา',
 }
 
 export const viewport: Viewport = {
@@ -14,7 +15,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="th" className={sarabun.variable}>
+    <html lang="th" className={`${sarabun.variable} ${kanit.variable}`}>
       <body className={sarabun.className}>{children}</body>
     </html>
   )

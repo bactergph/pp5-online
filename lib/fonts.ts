@@ -1,8 +1,15 @@
-import { Sarabun } from 'next/font/google'
+import { Kanit, Sarabun } from 'next/font/google'
 
 export const sarabun = Sarabun({
   subsets: ['thai', 'latin'],
   weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-sarabun',
+})
+
+export const kanit = Kanit({
+  subsets: ['thai', 'latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-kanit',
 })

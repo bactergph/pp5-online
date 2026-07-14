@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
+import GlassLoginShell from '@/components/auth/GlassLoginShell'
+import PasswordInput from '@/components/auth/PasswordInput'
 
 const PREFIXES = ['นาย', 'นาง', 'นางสาว']
 
@@ -11,85 +13,175 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setLoading(true); setError(null)
+    setLoading(true)
+    setError(null)
     const fd = new FormData(e.currentTarget)
     if ((fd.get('password') as string) !== (fd.get('password2') as string)) {
-      setLoading(false); setError('รหัสผ่านทั้งสองช่องไม่ตรงกัน'); return
+      setLoading(false)
+      setError('รหัสผ่านทั้งสองช่องไม่ตรงกัน')
+      return
     }
     const res = await fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: fd.get('email'), password: fd.get('password'),
-        prefix: fd.get('prefix'), full_name: fd.get('full_name'), position: fd.get('position'),
+        email: fd.get('email'),
+        password: fd.get('password'),
+        prefix: fd.get('prefix'),
+        full_name: fd.get('full_name'),
+        position: fd.get('position'),
       }),
     })
     const j = await res.json()
     setLoading(false)
-    if (!res.ok) { setError(j.error || 'สมัครไม่สำเร็จ'); return }
+    if (!res.ok) {
+      setError(j.error || 'สมัครไม่สำเร็จ')
+      return
+    }
     setDone(true)
   }
 
+  if (done) {
+    return (
+      <GlassLoginShell
+        wide
+        formTitle="สมัครเรียบร้อย"
+        formSubtitle="บัญชีถูกสร้างแล้ว — รอผู้ดูแลระบบอนุมัติก่อนเข้าใช้งาน"
+        footer={(
+          <p>
+            พร้อมแล้ว? <Link href="/login">ไปหน้าเข้าสู่ระบบ</Link>
+          </p>
+        )}
+      >
+        <div className="jarnsek-login__success">
+          <div className="jarnsek-login__success-icon" aria-hidden>✓</div>
+          <p>
+            บัญชีของคุณกำลังรอผู้ดูแลระบบอนุมัติ
+            <br />
+            เมื่ออนุมัติแล้วจะเข้าสู่ระบบได้ และเลือกโรงเรียนของคุณ
+          </p>
+          <Link href="/login" className="jarnsek-login__submit jarnsek-login__submit--link">
+            ไปหน้าเข้าสู่ระบบ
+          </Link>
+        </div>
+      </GlassLoginShell>
+    )
+  }
+
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0F2F8', padding: 24, fontFamily: 'Sarabun, sans-serif' }}>
-      <div style={{ width: '100%', maxWidth: 460 }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1F36' }}>สมัครใช้งานระบบ ปพ.5 ออนไลน์</h1>
-          <p style={{ fontSize: 14, color: '#9CA3AF', marginTop: 4 }}>สำหรับครู/ผู้ดูแลโรงเรียนที่ต้องการใช้ระบบ</p>
+    <GlassLoginShell
+      wide
+      formTitle="สมัครใช้งาน"
+      formSubtitle="สำหรับครูและผู้ดูแลโรงเรียนที่ต้องการใช้จารย์เสก"
+      footer={(
+        <p>
+          มีบัญชีแล้ว? <Link href="/login">เข้าสู่ระบบ</Link>
+        </p>
+      )}
+    >
+      <form onSubmit={handleSubmit} className="jarnsek-login__form">
+        {error && (
+          <div className="auth-scout-error" role="alert">
+            {error}
+          </div>
+        )}
+
+        <div className="jarnsek-login__grid jarnsek-login__grid--name">
+          <div className="jarnsek-login__field">
+            <label className="jarnsek-login__label" htmlFor="prefix">คำนำหน้า</label>
+            <select id="prefix" name="prefix" className="jarnsek-login__input jarnsek-login__input--plain" defaultValue="นาย">
+              {PREFIXES.map((p) => (
+                <option key={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div className="jarnsek-login__field">
+            <label className="jarnsek-login__label" htmlFor="full_name">ชื่อ-นามสกุล *</label>
+            <input
+              id="full_name"
+              name="full_name"
+              className="jarnsek-login__input jarnsek-login__input--plain"
+              required
+              placeholder="สมชาย ใจดี"
+              autoComplete="name"
+            />
+          </div>
         </div>
 
-        <div style={{ background: 'white', borderRadius: 20, padding: 32, boxShadow: '0 10px 40px rgba(92,107,192,0.12)', border: '1px solid #E8EAFF' }}>
-          {done ? (
-            <div style={{ textAlign: 'center', padding: '12px 0' }}>
-              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 28 }}>✓</div>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#065F46', marginBottom: 8 }}>สมัครเรียบร้อย — รออนุมัติ</h2>
-              <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7 }}>
-                บัญชีของคุณถูกสร้างแล้ว กำลังรอผู้ดูแลระบบอนุมัติ<br />
-                เมื่ออนุมัติแล้วจะเข้าสู่ระบบได้ และเลือกโรงเรียนของคุณ
-              </p>
-              <Link href="/login" className="btn btn-primary" style={{ marginTop: 20, display: 'inline-block' }}>ไปหน้าเข้าสู่ระบบ</Link>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {error && <div className="alert alert-error">{error}</div>}
-              <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 10 }}>
-                <div>
-                  <label className="form-label">คำนำหน้า</label>
-                  <select name="prefix" className="form-input" defaultValue="นาย">{PREFIXES.map(p => <option key={p}>{p}</option>)}</select>
-                </div>
-                <div>
-                  <label className="form-label">ชื่อ-นามสกุล *</label>
-                  <input name="full_name" className="form-input" required placeholder="สมชาย ใจดี" />
-                </div>
-              </div>
-              <div>
-                <label className="form-label">ตำแหน่ง</label>
-                <input name="position" className="form-input" placeholder="ครู / ผู้อำนวยการ ..." />
-              </div>
-              <div>
-                <label className="form-label">อีเมล *</label>
-                <input name="email" type="email" className="form-input" required placeholder="you@email.com" autoComplete="email" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <label className="form-label">รหัสผ่าน *</label>
-                  <input name="password" type="password" className="form-input" required minLength={8} placeholder="≥ 8 ตัวอักษร" />
-                </div>
-                <div>
-                  <label className="form-label">ยืนยันรหัสผ่าน *</label>
-                  <input name="password2" type="password" className="form-input" required minLength={8} />
-                </div>
-              </div>
-              <button type="submit" disabled={loading} className="btn btn-primary btn-lg" style={{ marginTop: 6 }}>
-                {loading ? 'กำลังสมัคร...' : 'สมัครใช้งาน'}
-              </button>
-              <p style={{ textAlign: 'center', fontSize: 13, color: '#9CA3AF' }}>
-                มีบัญชีแล้ว? <Link href="/login" style={{ color: '#4F46E5', fontWeight: 600 }}>เข้าสู่ระบบ</Link>
-              </p>
-            </form>
-          )}
+        <div className="jarnsek-login__field">
+          <label className="jarnsek-login__label" htmlFor="position">ตำแหน่ง</label>
+          <input
+            id="position"
+            name="position"
+            className="jarnsek-login__input jarnsek-login__input--plain"
+            placeholder="ครู / ผู้อำนวยการ ..."
+          />
         </div>
-      </div>
-    </div>
+
+        <div className="jarnsek-login__field">
+          <label className="jarnsek-login__label" htmlFor="email">อีเมล *</label>
+          <div className="jarnsek-login__control">
+            <span className="jarnsek-login__ico" aria-hidden>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M4 6h16v12H4V6z" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M4 7l8 6 8-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              className="jarnsek-login__input"
+              required
+              placeholder="you@email.com"
+              autoComplete="email"
+            />
+          </div>
+        </div>
+
+        <div className="jarnsek-login__grid">
+          <div className="jarnsek-login__field">
+            <label className="jarnsek-login__label" htmlFor="password">รหัสผ่าน *</label>
+            <div className="jarnsek-login__control jarnsek-login__control--password">
+              <span className="jarnsek-login__ico" aria-hidden>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M8 11V8a4 4 0 018 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <PasswordInput id="password" name="password" placeholder="≥ 8 ตัวอักษร" autoComplete="new-password" minLength={8} />
+            </div>
+          </div>
+          <div className="jarnsek-login__field">
+            <label className="jarnsek-login__label" htmlFor="password2">ยืนยันรหัสผ่าน *</label>
+            <div className="jarnsek-login__control jarnsek-login__control--password">
+              <span className="jarnsek-login__ico" aria-hidden>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M8 11V8a4 4 0 018 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <PasswordInput id="password2" name="password2" placeholder="ยืนยันอีกครั้ง" autoComplete="new-password" minLength={8} />
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" className="jarnsek-login__submit" disabled={loading}>
+          {loading ? (
+            <>
+              <span className="auth-signin-spinner" aria-hidden />
+              กำลังสมัคร...
+            </>
+          ) : (
+            <>
+              สมัครใช้งาน
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </>
+          )}
+        </button>
+      </form>
+    </GlassLoginShell>
   )
 }

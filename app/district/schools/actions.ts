@@ -18,6 +18,7 @@ type SchoolRow = SchoolPayload & {
   id: string
   director_name?: string | null
   created_by?: string | null
+  layout_tuner_enabled?: boolean | null
 }
 type AdminRow = {
   id: string
@@ -31,7 +32,7 @@ export async function fetchSchools() {
 
   let schoolsQ = client
     .from('schools')
-    .select('id,name,department,area_office,district,province,address,phone,document_prefix,director_name,created_by')
+    .select('id,name,department,area_office,district,province,address,phone,document_prefix,director_name,created_by,layout_tuner_enabled')
     .order('district').order('name')
 
   // กรองเฉพาะเขตของ district admin นี้ (ถ้ากำหนดแล้ว)
@@ -71,6 +72,8 @@ export async function fetchSchools() {
   return schools.map(s => ({
     ...s,
     admin_name: adminMap[s.id] ?? null,
+    // ค่าเริ่มต้นเป็นเปิด (true) ถ้ายังไม่เคยตั้ง/คอลัมน์ยังไม่มี
+    layout_tuner_enabled: s.layout_tuner_enabled !== false,
   }))
 }
 
@@ -114,6 +117,51 @@ export async function updateSchool(id: string, payload: SchoolPayload) {
       targetLabel: payload.name,
       description: `Super Admin แก้ไขโรงเรียน ${payload.name}`,
       metadata: { fields: Object.keys(payload) },
+    })
+  }
+  return { error: error?.message }
+}
+
+/** เปิด/ปิดเมนู "ปรับ layout" ของโรงเรียนเดียว (super admin เท่านั้น) */
+export async function setSchoolLayoutTuner(id: string, enabled: boolean) {
+  const session = await requireDistrict()
+  const client = createServerClient()
+  const { data: target } = await client.from('schools').select('name').eq('id', id).maybeSingle()
+  const { error } = await client.from('schools').update({ layout_tuner_enabled: enabled }).eq('id', id)
+  if (!error) {
+    await logActivity({
+      actor: session,
+      schoolId: id,
+      action: 'update',
+      module: 'district_schools',
+      targetType: 'school',
+      targetId: id,
+      targetLabel: target?.name ?? null,
+      description: `Super Admin ${enabled ? 'เปิด' : 'ปิด'}เมนูปรับ layout ของ ${target?.name ?? ''}`.trim(),
+      metadata: { layout_tuner_enabled: enabled },
+    })
+  }
+  return { error: error?.message }
+}
+
+/** เปิด/ปิดเมนู "ปรับ layout" ทุกโรงเรียนในเขตของ super admin นี้ */
+export async function setAllSchoolsLayoutTuner(enabled: boolean) {
+  const session = await requireDistrict()
+  const client = createServerClient()
+  let query = client.from('schools').update({ layout_tuner_enabled: enabled }).not('id', 'is', null)
+  if (session.areaOffice) {
+    query = query.eq('area_office', session.areaOffice) as typeof query
+  }
+  const { error } = await query
+  if (!error) {
+    await logActivity({
+      actor: session,
+      schoolId: null,
+      action: 'update',
+      module: 'district_schools',
+      targetType: 'school',
+      description: `Super Admin ${enabled ? 'เปิด' : 'ปิด'}เมนูปรับ layout ทุกโรงเรียน`,
+      metadata: { layout_tuner_enabled: enabled, areaOffice: session.areaOffice ?? null },
     })
   }
   return { error: error?.message }

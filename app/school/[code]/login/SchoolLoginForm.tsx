@@ -6,20 +6,6 @@ import ScoutAuthLayout from '@/components/auth/ScoutAuthLayout'
 import PasswordInput from '@/components/auth/PasswordInput'
 
 const PREFIXES = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นาง', 'นางสาว']
-const DEMO_PASSWORD = 'test1234'
-const SCHOOL_DEMO_ACCOUNTS = [
-  { label: 'Admin โรงเรียน', email: 'laghaim03@gmail.com', description: 'จัดการข้อมูลโรงเรียน' },
-  { label: 'ผู้อำนวยการ', username: 'principal_demo', description: 'อนุมัติขั้นสุดท้าย' },
-  { label: 'รองผู้อำนวยการ', username: 'rongporo', description: 'ลงนามรองผอ.' },
-  { label: 'หัวหน้าวิชาการ', username: 'acad', description: 'ลงนามหัวหน้าวิชาการ' },
-  { label: 'หัวหน้างานวัดผล', username: 'measurement_demo', description: 'ลงนามหัวหน้างานวัดผล' },
-  { label: 'หัวหน้ากลุ่มสาระ', username: 'subject_head_demo', description: 'ลงนามหัวหน้ากลุ่มสาระ' },
-  { label: 'ครูประจำชั้น', username: 'homeroom_demo', description: 'ปพ.5 รวมชั้น / ปพ.6' },
-  { label: 'ครูผู้สอน 1', username: 'teacher_demo_1', description: 'เสนอเซ็น ปพ.5 รายวิชา' },
-  { label: 'ครูผู้สอน 2', username: 'teacher_demo_2', description: 'ทดสอบครูหลายคน' },
-  { label: 'ครูผู้สอน 3', username: 'teacher_demo_3', description: 'ทดสอบสิทธิ์รายวิชา' },
-  { label: 'ครูสอน+ประจำชั้น', username: 'teacher_homeroom_demo', description: 'สอนและประจำชั้น' },
-]
 
 type Props = {
   schoolId: string
@@ -27,10 +13,9 @@ type Props = {
   logoUrl: string | null
   programName: string
   createdBy: string | null
-  showDemo?: boolean
 }
 
-export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, programName, createdBy, showDemo }: Props) {
+export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, programName, createdBy }: Props) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,147 +32,89 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
     if (result?.error) setError(result.error)
   }
 
-  async function doEmailLogin(email: string, password: string) {
-    setLoading(true); setError(null)
-    const data = new FormData()
-    data.set('email', email.trim())
-    data.set('schoolId', schoolId)
-    data.set('password', password)
-    const result = await login(undefined, data)
-    setLoading(false)
-    if (result?.error) setError(result.error)
-  }
-
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    await doLogin(fd.get('username') as string, fd.get('password') as string)
+    await doLogin(String(fd.get('username') || ''), String(fd.get('password') || ''))
   }
 
   async function handleRegister(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setLoading(true); setError(null)
     const fd = new FormData(e.currentTarget)
-    if ((fd.get('password') as string) !== (fd.get('password2') as string)) {
-      setLoading(false); setError('รหัสผ่านทั้งสองช่องไม่ตรงกัน'); return
-    }
+    const password = String(fd.get('password') || '')
+    const password2 = String(fd.get('password2') || '')
+    if (password.length < 6) { setLoading(false); setError('รหัสผ่านต้องมีอย่างน้อย 6 ตัว'); return }
+    if (password !== password2) { setLoading(false); setError('รหัสผ่านไม่ตรงกัน'); return }
+
     const res = await fetch('/api/school-register', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        schoolId, username: fd.get('username'), prefix: fd.get('prefix'),
-        full_name: fd.get('full_name'), password: fd.get('password'),
+        schoolId,
+        prefix: fd.get('prefix'),
+        full_name: fd.get('full_name'),
+        username: fd.get('username'),
+        password,
       }),
     })
-    const j = await res.json()
+    const json = await res.json().catch(() => ({}))
     setLoading(false)
-    if (!res.ok) { setError(j.error || 'สมัครไม่สำเร็จ'); return }
+    if (!res.ok) { setError(json.error || 'สมัครไม่สำเร็จ'); return }
     setRegistered(true)
+    setMode('login')
   }
 
   return (
     <ScoutAuthLayout
-      brandTitle={schoolName}
-      brandSubtitle={programName}
-      brandTagline="หลักสูตรแกนกลาง 2551"
-      cardTitle="เข้าสู่ระบบ"
-      cardSubtitle={programName}
+      brandTitle={programName || 'ระบบ ปพ.5'}
+      brandSubtitle="ออนไลน์"
+      brandTagline={schoolName}
       logoUrl={logoUrl}
-      footer={createdBy ? (
-        <p className="auth-scout-footer" style={{ fontSize: 12, color: '#B8A88A' }}>
-          ผู้ดูแล: {createdBy}
-        </p>
-      ) : undefined}
-    >
-      <div className="auth-scout-tabs">
-        <button
-          type="button"
-          className={`auth-scout-tab${mode === 'login' ? ' auth-scout-tab--active' : ''}`}
-          onClick={() => { setMode('login'); setError(null) }}
-        >
-          เข้าสู่ระบบ
-        </button>
-        <button
-          type="button"
-          className={`auth-scout-tab${mode === 'register' ? ' auth-scout-tab--active' : ''}`}
-          onClick={() => { setMode('register'); setError(null) }}
-        >
-          สมัครสมาชิก
-        </button>
-      </div>
-
-      {error && <div className="auth-scout-error" role="alert">{error}</div>}
-
-      {registered ? (
-        <div className="auth-scout-success">
-          <div className="auth-scout-success__icon">✓</div>
-          <h2 style={{ fontSize: 17, fontWeight: 700, color: '#065F46', marginBottom: 6 }}>สมัครเรียบร้อย — รออนุมัติ</h2>
-          <p style={{ fontSize: 14, color: '#6B5D45', lineHeight: 1.7, margin: 0 }}>
-            รอผู้ดูแลโรงเรียนอนุมัติ แล้วจึงเข้าสู่ระบบด้วย username ได้
-          </p>
-          <button
-            type="button"
-            className="auth-scout-submit"
-            style={{ marginTop: 18 }}
-            onClick={() => { setRegistered(false); setMode('login') }}
-          >
-            ไปหน้าเข้าสู่ระบบ
-          </button>
-        </div>
-      ) : mode === 'login' ? (
-        <>
-          <form onSubmit={handleLogin}>
-            <div className="auth-scout-field">
-              <label className="auth-scout-label" htmlFor="username">ชื่อผู้ใช้</label>
-              <input
-                id="username"
-                name="username"
-                className="auth-scout-input"
-                placeholder="ชื่อผู้ใช้"
-                required
-                autoComplete="username"
-              />
-            </div>
-            <div className="auth-scout-field">
-              <label className="auth-scout-label" htmlFor="school-password">รหัสผ่าน</label>
-              <PasswordInput id="school-password" name="password" placeholder="รหัสผ่าน" />
-            </div>
-            <div className="auth-scout-links">
-              <a href="/">‹ กลับหน้าแรก</a>
-              <span style={{ color: '#B8A88A', fontSize: 13 }}>ลืมรหัสผ่าน ?</span>
-            </div>
-            <button type="submit" className="auth-scout-submit" disabled={loading}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
-            </button>
-          </form>
-
-          {showDemo && (
-            <>
-              <div className="auth-scout-divider">ทดสอบระบบ</div>
-              <div className="auth-scout-demo-grid">
-                {SCHOOL_DEMO_ACCOUNTS.map(account => (
-                  <button
-                    key={'username' in account ? account.username : account.email}
-                    type="button"
-                    className="auth-scout-demo-btn"
-                    disabled={loading}
-                    onClick={() => 'username' in account
-                      ? doLogin(account.username, DEMO_PASSWORD)
-                      : doEmailLogin(account.email, DEMO_PASSWORD)}
-                  >
-                    <span>{account.label}</span>
-                    <span>{'username' in account ? account.username : account.email}</span>
-                  </button>
-                ))}
-              </div>
-              <p style={{ fontSize: 11, color: '#9A8B72', textAlign: 'center', marginTop: 10 }}>
-                รหัสผ่านทดสอบทุกบัญชี: {DEMO_PASSWORD}
-              </p>
-            </>
+      cardTitle={mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
+      cardSubtitle={createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกชื่อผู้ใช้และรหัสผ่าน'}
+      footer={(
+        <p className="auth-scout-footer">
+          {mode === 'login' ? (
+            <>ยังไม่มีบัญชี? <button type="button" onClick={() => { setMode('register'); setError(null) }} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit', padding: 0 }}>สมัครใช้งาน</button></>
+          ) : (
+            <>มีบัญชีแล้ว? <button type="button" onClick={() => { setMode('login'); setError(null) }} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit', padding: 0 }}>เข้าสู่ระบบ</button></>
           )}
-        </>
+        </p>
+      )}
+    >
+      {error && <div className="auth-scout-error" role="alert">{error}</div>}
+      {registered && mode === 'login' && (
+        <div className="alert alert-success" style={{ marginBottom: 14, fontSize: 13 }}>สมัครสำเร็จ — รอผู้ดูแลโรงเรียนอนุมัติก่อนเข้าใช้งาน</div>
+      )}
+
+      {mode === 'login' ? (
+        <form onSubmit={handleLogin}>
+          <div className="auth-scout-field">
+            <label className="auth-scout-label" htmlFor="username">ชื่อผู้ใช้</label>
+            <input
+              id="username"
+              name="username"
+              className="auth-scout-input"
+              placeholder="ชื่อผู้ใช้"
+              required
+              autoComplete="username"
+            />
+          </div>
+          <div className="auth-scout-field">
+            <label className="auth-scout-label" htmlFor="school-password">รหัสผ่าน</label>
+            <PasswordInput id="school-password" name="password" placeholder="รหัสผ่าน" />
+          </div>
+          <div className="auth-scout-links" style={{ justifyContent: 'flex-end' }}>
+            <span style={{ color: '#B8A88A', fontSize: 13 }}>ลืมรหัสผ่าน ?</span>
+          </div>
+          <button type="submit" className="auth-scout-submit" disabled={loading}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
+          </button>
+        </form>
       ) : (
         <form onSubmit={handleRegister}>
           <div className="auth-scout-register-grid">

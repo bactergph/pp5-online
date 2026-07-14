@@ -40,6 +40,7 @@ export default async function AppLayout({ children, title = 'ระบบ ปพ
       userFullName={session.fullName}
       isHomeroom={session.isHomeroom}
       schoolCode={schoolCode}
+      hasSchool={Boolean(session.schoolId)}
       isActingDirector={isActingDirector}
     >
       {children}

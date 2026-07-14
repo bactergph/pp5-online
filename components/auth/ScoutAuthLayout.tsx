@@ -11,6 +11,7 @@ type Props = {
   brandTagline?: string
   logoUrl?: string | null
   showBrandLogos?: boolean
+  variant?: 'default' | 'signin'
   footer?: ReactNode
 }
 
@@ -39,10 +40,15 @@ export default function ScoutAuthLayout({
   brandTagline = 'หลักสูตรแกนกลาง 2551',
   logoUrl,
   showBrandLogos = true,
+  variant = 'default',
   footer,
 }: Props) {
+  const isSignin = variant === 'signin'
+
   return (
-    <div className="auth-scout-page">
+    <div className={`auth-scout-page${isSignin ? ' auth-scout-page--signin' : ''}`}>
+      <div className="auth-scout-orbs" aria-hidden />
+
       <div className="auth-scout-mobile-header">
         <div className="auth-scout-mobile-header__logo">
           {logoUrl ? (
@@ -58,7 +64,7 @@ export default function ScoutAuthLayout({
       </div>
 
       <div className="auth-scout-body">
-        <div className="auth-scout-card">
+        <div className={`auth-scout-card${isSignin ? ' auth-scout-card--signin' : ''}`}>
           {showBrandLogos && (
             <div className="auth-scout-card__logos auth-scout-card__logos--desktop">
               {logoUrl ? (
@@ -67,6 +73,13 @@ export default function ScoutAuthLayout({
               ) : (
                 <BrandMark />
               )}
+            </div>
+          )}
+
+          {isSignin && (
+            <div className="auth-signin-brand">
+              <p className="auth-signin-brand__name">{brandTitle} {brandSubtitle}</p>
+              <p className="auth-signin-brand__tag">{brandTagline}</p>
             </div>
           )}
 

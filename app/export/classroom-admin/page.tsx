@@ -179,6 +179,7 @@ export default function ClassroomAdminExportPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [pdfExporting, setPdfExporting] = useState(false)
   const [layoutTunerOpen, setLayoutTunerOpen] = useState(false)
+  const [layoutTunerEnabled, setLayoutTunerEnabled] = useState(true)
   const [layoutTunerSection, setLayoutTunerSection] = useState<ClassroomAdminPrintSection>('monthly')
   const [layoutSaved, setLayoutSaved] = useState(false)
   const { layouts: printLayouts, setLayouts: setPrintLayouts } = useClassroomAdminPrintLayoutsState()
@@ -191,6 +192,7 @@ export default function ClassroomAdminExportPage() {
       setSchoolLogoUrl(result.school?.logo_url || '')
       setYears(result.years as Year[])
       setClassrooms(result.classrooms as Classroom[])
+      setLayoutTunerEnabled(result.layoutTunerEnabled !== false)
 
       if (deepLinkMode) {
         const nextTerm = searchParams.get('term') === '2' ? 2 : 1
@@ -938,6 +940,7 @@ export default function ClassroomAdminExportPage() {
             </select>
           </label>
           <div className="classroom-export-preview-toolbar-actions">
+            {layoutTunerEnabled && (
             <button
               type="button"
               className={`classroom-export-secondary-btn pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
@@ -946,6 +949,7 @@ export default function ClassroomAdminExportPage() {
             >
               {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
             </button>
+            )}
             <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn" disabled={!canGenerate || isLoading}>Excel</button>
             <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={!canGenerate || pdfExporting || isLoading}>
               {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}

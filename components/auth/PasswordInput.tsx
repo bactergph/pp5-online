@@ -8,6 +8,7 @@ type Props = {
   required?: boolean
   autoComplete?: string
   id?: string
+  minLength?: number
 }
 
 export default function PasswordInput({
@@ -16,6 +17,7 @@ export default function PasswordInput({
   required = true,
   autoComplete = 'current-password',
   id,
+  minLength,
 }: Props) {
   const [visible, setVisible] = useState(false)
   const inputId = id || name
@@ -29,6 +31,7 @@ export default function PasswordInput({
         placeholder={placeholder}
         required={required}
         autoComplete={autoComplete}
+        minLength={minLength}
         className="auth-scout-input"
       />
       <button

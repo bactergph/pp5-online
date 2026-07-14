@@ -521,9 +521,14 @@ export async function fetchReportInit(mode?: ReportMode) {
     teacherNameMap = Object.fromEntries(((teachers || []) as DbRow[]).map(teacher => [asText(teacher.id), userFullName(teacher)]))
   }
 
+  // อ่านสวิตช์เมนู "ปรับ layout" แบบ defensive (ถ้าคอลัมน์ยังไม่มี ให้ถือว่าเปิด)
+  const tunerR = await db.from('schools').select('layout_tuner_enabled').eq('id', schoolId).maybeSingle()
+  const layoutTunerEnabled = (tunerR.data as { layout_tuner_enabled?: boolean } | null)?.layout_tuner_enabled !== false
+
   return {
     role: session.role,
     school,
+    layoutTunerEnabled,
     years: yearsR.data || [],
     classrooms: classrooms.map(classroom => ({
       ...classroom,

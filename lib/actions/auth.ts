@@ -71,7 +71,26 @@ export async function login(
   }
 
   let redirectTo = '/dashboard'
-  if (effectiveSchoolId && userProfile.role !== 'district') {
+  const { cookies } = await import('next/headers')
+  // ทุกครั้งที่ login ใหม่ → ล้างการข้าม onboarding ของ session ก่อน
+  // (กด "ตั้งค่าภายหลัง" ใช้ได้ในรอบนี้ แต่รอบ login ถัดไปจะตรวจความครบอีก)
+  ;(await cookies()).delete('onboarding_skipped')
+
+  if (userProfile.role === 'admin') {
+    const { getAdminOnboardingGate, onboardingUrl } = await import('@/lib/onboarding-complete')
+    const gate = await getAdminOnboardingGate(effectiveSchoolId)
+    if (!gate.complete) {
+      redirectTo = onboardingUrl(gate.step)
+    } else if (effectiveSchoolId) {
+      const { data: school } = await serverClient
+        .from('schools')
+        .select('code')
+        .eq('id', effectiveSchoolId)
+        .maybeSingle()
+      const code = requestedSchoolCode || (school?.code ? String(school.code).trim().toLowerCase() : '')
+      if (code) redirectTo = `/school/${code}/dashboard`
+    }
+  } else if (effectiveSchoolId && userProfile.role !== 'district') {
     const { data: school } = await serverClient
       .from('schools')
       .select('code')
@@ -113,5 +132,9 @@ export async function logout() {
 
   await supabase.auth.signOut()
   await deleteSession()
+  try {
+    const { cookies } = await import('next/headers')
+    ;(await cookies()).delete('onboarding_skipped')
+  } catch { /* ignore */ }
   redirect(redirectTo)
 }
