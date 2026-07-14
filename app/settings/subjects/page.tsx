@@ -5,6 +5,7 @@ import {
   saveSubject,
   deleteSubject,
   bulkUpsertSubjects,
+  syncSubjectsFromGlobal,
   fetchEvaluationSettings,
   createEvaluationSetting,
   saveEvaluationSetting,
@@ -69,13 +70,13 @@ const SUBJECT_GROUPS = [
 
 const GROUP_COLOR: Record<string, string> = {
   'ภาษาไทย': '#DB2777',
-  'คณิตศาสตร์': '#2563EB',
+  'คณิตศาสตร์': '#8B6B45',
   'วิทยาศาสตร์และเทคโนโลยี': '#059669',
   'สังคมศึกษา ศาสนา และวัฒนธรรม': '#D97706',
   'สุขศึกษาและพลศึกษา': '#DC2626',
-  'ศิลปะ': '#7C3AED',
+  'ศิลปะ': '#C49212',
   'การงานอาชีพ': '#0891B2',
-  'ภาษาต่างประเทศ': '#4F46E5',
+  'ภาษาต่างประเทศ': '#8B6B45',
 }
 
 const empty = {
@@ -233,6 +234,7 @@ export default function SubjectsPage() {
   const [showPaste, setShowPaste] = useState(false)
   const [grid, setGrid] = useState<GridRow[]>(() => Array.from({ length: 10 }, blankRow))
   const [pasteSaving, setPasteSaving] = useState(false)
+  const [syncBusy, setSyncBusy] = useState(false)
   const validRows = gridToRows(grid)
   const evaluationKind = activeTab === 'activities' ? 'activities' as const : null
   const currentSettings = evaluationKind ? evaluationSettings[evaluationKind] : []
@@ -522,6 +524,16 @@ export default function SubjectsPage() {
     if (error) { notify('error', error); return }
     notify('success', `เพิ่ม/อัปเดต ${count} วิชาเรียบร้อย`)
     setShowPaste(false); clearGrid(); load()
+  }
+
+  async function handleSyncGlobal() {
+    if (!confirm('นำเข้าโครงสร้างรายวิชากลางเข้าโรงเรียนนี้?\nวิชาที่มีรหัสซ้ำจะถูกอัปเดต')) return
+    setSyncBusy(true); clearAlert()
+    const { error, count } = await syncSubjectsFromGlobal()
+    setSyncBusy(false)
+    if (error) { notify('error', error); return }
+    notify('success', `นำเข้าจากโครงสร้างกลาง ${count} รายวิชา`)
+    load()
   }
 
   async function handleClubSave(e: React.FormEvent<HTMLFormElement>) {
@@ -825,6 +837,9 @@ export default function SubjectsPage() {
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <LoadingButton className="btn btn-ghost" loading={syncBusy} loadingText="กำลังนำเข้า..." onClick={handleSyncGlobal}>
+                  จากโครงสร้างกลาง
+                </LoadingButton>
                 <button type="button" onClick={() => { setShowPaste(true); setShowForm(false) }} className="btn btn-secondary">วางจากตาราง</button>
                 <button type="button" onClick={openAdd} className="btn btn-primary">+ เพิ่มรายวิชา</button>
               </div>

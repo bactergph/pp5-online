@@ -46,7 +46,7 @@ const STYLES = `
     min-height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid #CBD5E1;
     background: #fff; color: #334155; font-size: 12px; font-weight: 800; cursor: pointer;
   }
-  .sub-btn.primary { border-color: #7C3AED; background: #7C3AED; color: #fff; }
+  .sub-btn.primary { border-color: #C49212; background: #C49212; color: #fff; }
   .sub-table-wrap {
     overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
   }
@@ -63,8 +63,8 @@ const STYLES = `
   }
   .schedule-empty { padding: 28px; text-align: center; color: #64748B; font-size: 13px; font-weight: 700; }
   .sub-day-label {
-    padding: 10px 14px; border-radius: 12px; border: 1px solid #E0E7FF; background: #EEF2FF;
-    color: #3730A3; font-size: 12.5px; font-weight: 700;
+    padding: 10px 14px; border-radius: 12px; border: 1px solid #EFE6D8; background: #F5EDE3;
+    color: #5C4330; font-size: 12.5px; font-weight: 700;
   }
 `
 

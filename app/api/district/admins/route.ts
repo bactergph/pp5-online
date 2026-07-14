@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { createServerClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/audit'
+import { seedEvaluationSettingsForSchool } from '@/lib/evaluation-settings-seed'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -17,19 +18,6 @@ export async function POST(req: NextRequest) {
   }
 
   const adminClient = createServerClient()
-
-  // ดึง areaOffice จาก app_metadata (authoritative)
-  const { data: authUser } = await adminClient.auth.admin.getUserById(session.userId)
-  const areaOffice = (authUser?.user?.app_metadata?.area_office as string) || null
-
-  // ตรวจว่า school อยู่ในเขตของ district admin นี้
-  if (areaOffice) {
-    const { data: school } = await adminClient
-      .from('schools').select('area_office').eq('id', school_id).maybeSingle()
-    if (!school || school.area_office !== areaOffice) {
-      return NextResponse.json({ error: 'โรงเรียนนี้ไม่อยู่ในเขตพื้นที่ของคุณ' }, { status: 403 })
-    }
-  }
 
   // ตรวจว่าโรงเรียนนี้มีผู้ดูแลอยู่แล้วหรือยัง
   const { data: existing } = await adminClient
@@ -83,6 +71,8 @@ export async function POST(req: NextRequest) {
     description: `เพิ่มผู้ดูแลโรงเรียน ${full_name}`,
     metadata: { email },
   })
+
+  await seedEvaluationSettingsForSchool(school_id)
 
   return NextResponse.json({ success: true, userId: authData.user.id })
 }

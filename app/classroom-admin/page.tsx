@@ -4,7 +4,7 @@ import Link from 'next/link'
 const GROUPS = [
   {
     title: 'เวลาเรียนรายวัน',
-    color: '#4F46E5', bg: '#EEF2FF',
+    color: '#8B6B45', bg: '#F5EDE3',
     icon: 'M9 11l3 3L22 4 M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11',
     items: [
       { href: '/classroom-admin/daily-attendance', label: 'บันทึกเวลาเรียนรายวัน' },
@@ -44,7 +44,7 @@ const GROUPS = [
   },
   {
     title: 'แปรงฟัน',
-    color: '#7C3AED', bg: '#F5F3FF',
+    color: '#C49212', bg: '#F5F3FF',
     icon: 'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z M12 8v8 M8 12h8',
     items: [
       { href: '/classroom-admin/brushing', label: 'บันทึกแปรงฟันรายวัน' },

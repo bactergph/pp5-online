@@ -33,8 +33,8 @@ const STYLES = `
   }
   .sched-export-actions { display: flex; gap: 10px; flex-wrap: wrap; }
   .sched-export-btn {
-    min-height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid #7C3AED;
-    background: #7C3AED; color: #fff; font-size: 12px; font-weight: 800; cursor: pointer;
+    min-height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid #C49212;
+    background: #C49212; color: #fff; font-size: 12px; font-weight: 800; cursor: pointer;
   }
   .sched-export-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .sched-export-preview {
@@ -58,7 +58,7 @@ const STYLES = `
     border: 1px solid #CBD5E1; padding: 6px 4px; text-align: center; vertical-align: middle;
   }
   .sched-print-table th { background: #F1F5F9; font-weight: 900; font-size: 9px; }
-  .sched-print-table td.day-col { background: #EEF2FF; font-weight: 900; }
+  .sched-print-table td.day-col { background: #F5EDE3; font-weight: 900; }
   .sched-print-table td.break-col { background: #FFFBEB; color: #B45309; font-size: 8px; }
   .sched-print-cell { min-height: 32px; font-weight: 700; line-height: 1.3; }
   .sched-print-cell .sub { font-size: 8px; color: #64748B; font-weight: 600; }

@@ -110,7 +110,7 @@ export default function DistrictSchoolCleanupPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      {AlertModal}
+      <AlertModal />
 
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 800 }}>ล้างข้อมูลโรงเรียนไม่ใช้งาน</h1>

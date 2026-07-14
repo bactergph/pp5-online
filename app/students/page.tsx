@@ -227,7 +227,7 @@ export default function StudentsPage() {
                         <td style={{ color: 'var(--text-3)' }}>{s.student_code || '-'}</td>
                         <td>{s.prefix}{s.first_name} {s.last_name}</td>
                         <td style={{ textAlign: 'center' }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: s.gender === 'M' ? '#1D4ED8' : '#DB2777' }}>{s.gender === 'M' ? 'ช' : 'ญ'}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: s.gender === 'M' ? '#6B4F32' : '#DB2777' }}>{s.gender === 'M' ? 'ช' : 'ญ'}</span>
                         </td>
                         <td style={{ fontSize: 13 }}>{formatThaiDate(s.birth_date)}</td>
                         <td style={{ fontSize: 13, color: 'var(--text-3)' }}>{s.birth_date ? calculateAge(s.birth_date).display : '-'}</td>

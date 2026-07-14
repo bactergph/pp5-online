@@ -5,13 +5,13 @@ import { logActivity } from '@/lib/audit'
 
 type SchoolPayload = {
   name: string
-  department?: string
-  area_office?: string
-  district?: string
-  province?: string
-  address?: string
-  phone?: string
-  document_prefix?: string
+  department?: string | null
+  area_office?: string | null
+  district?: string | null
+  province?: string | null
+  address?: string | null
+  phone?: string | null
+  document_prefix?: string | null
 }
 
 type SchoolRow = SchoolPayload & {
@@ -26,55 +26,85 @@ type AdminRow = {
   full_name: string
 }
 
-export async function fetchSchools() {
+export async function fetchSchoolCatalogStats() {
   const session = await requireDistrict()
   const client = createServerClient()
-
-  let schoolsQ = client
-    .from('schools')
-    .select('id,name,department,area_office,district,province,address,phone,document_prefix,director_name,created_by,layout_tuner_enabled')
-    .order('district').order('name')
-
-  // กรองเฉพาะเขตของ district admin นี้ (ถ้ากำหนดแล้ว)
-  if (session.areaOffice) {
-    schoolsQ = schoolsQ.eq('area_office', session.areaOffice) as typeof schoolsQ
-  }
-
-  const [schoolsRes, adminsRes] = await Promise.all([
-    schoolsQ,
-    client.from('users')
-      .select('id, school_id, full_name')
-      .eq('role', 'admin')
-      .eq('is_active', true)
+  const [{ count: total }, adminsRes] = await Promise.all([
+    client.from('schools').select('*', { count: 'exact', head: true }),
+    client.from('users').select('school_id').eq('role', 'admin').eq('is_active', true).not('school_id', 'is', null),
   ])
-
-  const schools = (schoolsRes.data || []) as SchoolRow[]
-  const admins = (adminsRes.data || []) as AdminRow[]
-
-  // Repair older rows where an admin created/selected a school, but users.school_id
-  // was not persisted. Only link when created_by uniquely matches one admin.
-  for (const admin of admins) {
-    if (admin.school_id) continue
-    const ownedSchools = schools.filter(s =>
-      s.created_by?.trim() &&
-      admin.full_name?.trim() &&
-      s.created_by.trim() === admin.full_name.trim()
-    )
-    if (ownedSchools.length !== 1) continue
-    const schoolId = ownedSchools[0].id
-    const { error } = await client.from('users').update({ school_id: schoolId }).eq('id', admin.id)
-    if (!error) admin.school_id = schoolId
+  const withAdmin = new Set((adminsRes.data || []).map(a => a.school_id).filter(Boolean)).size
+  return {
+    total: total ?? 0,
+    withAdmin,
+    withoutAdmin: Math.max(0, (total ?? 0) - withAdmin),
   }
+}
+
+export async function fetchSchoolCatalog(opts?: {
+  q?: string
+  filterAdmin?: 'all' | 'has' | 'none'
+  page?: number
+  pageSize?: number
+}) {
+  const session = await requireDistrict()
+  const client = createServerClient()
+  const q = (opts?.q || '').trim()
+  const filterAdmin = opts?.filterAdmin || 'all'
+  const page = Math.max(1, opts?.page || 1)
+  const pageSize = Math.min(100, Math.max(10, opts?.pageSize || 50))
+
+  const { data: admins } = await client
+    .from('users')
+    .select('school_id, full_name')
+    .eq('role', 'admin')
+    .eq('is_active', true)
 
   const adminMap = Object.fromEntries(
-    admins.filter(u => u.school_id).map(u => [u.school_id, u.full_name])
+    (admins || [])
+      .filter(u => u.school_id)
+      .map(u => [u.school_id as string, u.full_name as string]),
   )
-  return schools.map(s => ({
+  const adminIds = Object.keys(adminMap)
+
+  if (filterAdmin === 'has' && adminIds.length === 0) {
+    return { rows: [], total: 0, page, pageSize }
+  }
+
+  let query = client
+    .from('schools')
+    .select('id,name,department,area_office,district,province,address,phone,document_prefix,director_name,layout_tuner_enabled', { count: 'exact' })
+
+  if (q.length >= 2) {
+    const safe = q.replace(/,/g, ' ')
+    query = query.or(
+      `name.ilike.%${safe}%,district.ilike.%${safe}%,province.ilike.%${safe}%,area_office.ilike.%${safe}%`,
+    )
+  }
+
+  if (filterAdmin === 'has') {
+    query = query.in('id', adminIds)
+  } else if (filterAdmin === 'none' && adminIds.length > 0) {
+    query = query.not('id', 'in', `(${adminIds.join(',')})`)
+  }
+
+  const from = (page - 1) * pageSize
+  const { data, count, error } = await query.order('name').range(from, from + pageSize - 1)
+  if (error) throw new Error(error.message)
+
+  const rows = ((data || []) as SchoolRow[]).map(s => ({
     ...s,
     admin_name: adminMap[s.id] ?? null,
-    // ค่าเริ่มต้นเป็นเปิด (true) ถ้ายังไม่เคยตั้ง/คอลัมน์ยังไม่มี
     layout_tuner_enabled: s.layout_tuner_enabled !== false,
   }))
+
+  return { rows, total: count ?? 0, page, pageSize }
+}
+
+/** @deprecated ใช้ fetchSchoolCatalog แทนเมื่อมีโรงเรียนจำนวนมาก */
+export async function fetchSchools() {
+  const { rows } = await fetchSchoolCatalog({ page: 1, pageSize: 100 })
+  return rows
 }
 
 export async function createSchool(payload: SchoolPayload) {
@@ -144,15 +174,11 @@ export async function setSchoolLayoutTuner(id: string, enabled: boolean) {
   return { error: error?.message }
 }
 
-/** เปิด/ปิดเมนู "ปรับ layout" ทุกโรงเรียนในเขตของ super admin นี้ */
+/** เปิด/ปิดเมนู "ปรับ layout" ทุกโรงเรียน */
 export async function setAllSchoolsLayoutTuner(enabled: boolean) {
   const session = await requireDistrict()
   const client = createServerClient()
-  let query = client.from('schools').update({ layout_tuner_enabled: enabled }).not('id', 'is', null)
-  if (session.areaOffice) {
-    query = query.eq('area_office', session.areaOffice) as typeof query
-  }
-  const { error } = await query
+  const { error } = await client.from('schools').update({ layout_tuner_enabled: enabled }).not('id', 'is', null)
   if (!error) {
     await logActivity({
       actor: session,
@@ -161,7 +187,7 @@ export async function setAllSchoolsLayoutTuner(enabled: boolean) {
       module: 'district_schools',
       targetType: 'school',
       description: `Super Admin ${enabled ? 'เปิด' : 'ปิด'}เมนูปรับ layout ทุกโรงเรียน`,
-      metadata: { layout_tuner_enabled: enabled, areaOffice: session.areaOffice ?? null },
+      metadata: { layout_tuner_enabled: enabled },
     })
   }
   return { error: error?.message }
@@ -190,21 +216,32 @@ export async function deleteSchools(ids: string[]) {
 export async function bulkInsertSchools(rows: SchoolPayload[]) {
   const session = await requireDistrict()
   const client = createServerClient()
-  const withArea = rows.map(r => ({
-    ...r,
-    area_office: r.area_office || session.areaOffice || undefined,
+  const payload = rows.map(r => ({
+    name: r.name,
+    area_office: r.area_office || null,
+    district: r.district || null,
+    province: r.province || null,
+    address: r.address || null,
+    phone: r.phone || null,
+    department: r.department || null,
+    document_prefix: r.document_prefix || null,
   }))
-  const { error } = await client.from('schools').insert(withArea)
-  if (!error) {
-    await logActivity({
-      actor: session,
-      schoolId: null,
-      action: 'import',
-      module: 'district_schools',
-      targetType: 'school',
-      description: `Super Admin นำเข้าโรงเรียน ${rows.length} รายการ`,
-      metadata: { count: rows.length, areaOffice: session.areaOffice ?? null },
-    })
+
+  const BATCH = 500
+  for (let i = 0; i < payload.length; i += BATCH) {
+    const chunk = payload.slice(i, i + BATCH)
+    const { error } = await client.from('schools').insert(chunk)
+    if (error) return { error: error.message }
   }
-  return { error: error?.message }
+
+  await logActivity({
+    actor: session,
+    schoolId: null,
+    action: 'import',
+    module: 'district_schools',
+    targetType: 'school',
+    description: `Super Admin นำเข้าโรงเรียน ${rows.length} รายการ`,
+    metadata: { count: rows.length },
+  })
+  return { error: undefined as string | undefined }
 }

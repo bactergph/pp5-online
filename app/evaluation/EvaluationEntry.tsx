@@ -76,7 +76,7 @@ const CONFIG: Record<EvaluationKind, { title: string; subtitle: string; accent: 
   reading: {
     title: 'การอ่าน คิดวิเคราะห์ และเขียน',
     subtitle: 'ประเมินอ่าน คิดวิเคราะห์ และเขียน ระดับคะแนน 0-3',
-    accent: '#6366F1',
+    accent: '#B8956A',
     columns: READING_COLUMNS,
   },
   competency: {
@@ -141,13 +141,13 @@ const STYLES = `
   .eval-character-level-cell { text-align:center; color:#be185d; font-weight:950; }
   .eval-character-result-cell { text-align:center; font-weight:950; }
   .eval-character-table .eval-select { min-width:58px; padding:6px 5px; }
-  .eval-reading-group-head { background:#eef2ff !important; color:#3730a3 !important; border-bottom-color:#c7d2fe !important; }
+  .eval-reading-group-head { background:#F5EDE3 !important; color:#5C4330 !important; border-bottom-color:#E8D9C4 !important; }
   .eval-reading-sub-head { background:#f8fafc !important; color:#475569 !important; }
   .eval-reading-max-head { background:#ede9fe !important; color:#5b21b6 !important; }
   .eval-reading-score-cell { text-align:center; padding:6px !important; }
   .eval-reading-total-cell { text-align:center; background:#f5f3ff !important; color:#5b21b6; font-weight:900; }
-  .eval-reading-grand-cell { text-align:center; background:#eef2ff !important; color:#3730a3; font-weight:950; }
-  .eval-reading-level-cell { text-align:center; color:#4f46e5; font-weight:950; }
+  .eval-reading-grand-cell { text-align:center; background:#F5EDE3 !important; color:#5C4330; font-weight:950; }
+  .eval-reading-level-cell { text-align:center; color:#8B6B45; font-weight:950; }
   .eval-reading-result-cell { text-align:center; font-weight:950; }
   .eval-select { width:100%; min-width:76px; border:1px solid #dbe3ef; border-radius:8px; padding:7px 8px; font:inherit; font-weight:800; text-align:center; background:#fff; color:#334155; }
   .eval-reading-table .eval-select { min-width:58px; padding:6px 5px; }

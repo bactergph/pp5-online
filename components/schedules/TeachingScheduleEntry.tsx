@@ -27,10 +27,10 @@ const STYLES = `
     background: #fff; color: #0F172A; font-size: 13px; font-weight: 800;
   }
   .schedule-info {
-    padding: 12px 14px; border-radius: 12px; border: 1px solid #E0E7FF; background: #EEF2FF;
-    color: #3730A3; font-size: 12.5px; font-weight: 700; line-height: 1.5;
+    padding: 12px 14px; border-radius: 12px; border: 1px solid #EFE6D8; background: #F5EDE3;
+    color: #5C4330; font-size: 12.5px; font-weight: 700; line-height: 1.5;
   }
-  .schedule-info a { color: #4F46E5; font-weight: 800; }
+  .schedule-info a { color: #8B6B45; font-weight: 800; }
   .schedule-grid-card {
     overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);

@@ -733,9 +733,9 @@ const HOURLY_STYLES = `
     border: 0; background: transparent; padding: 12px 16px; font-size: 13px; font-weight: 700;
     color: #64748B; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
   }
-  .hourly-week-tab:hover { color: #2563EB; }
+  .hourly-week-tab:hover { color: #8B6B45; }
   .hourly-week-tab.is-active {
-    color: #2563EB; font-weight: 900; border-bottom-color: #2563EB;
+    color: #8B6B45; font-weight: 900; border-bottom-color: #8B6B45;
   }
   .hourly-table-wrap { overflow: auto; max-width: 100%; max-height: calc(100vh - 320px); }
   .hourly-table { border-collapse: separate; border-spacing: 0; white-space: nowrap; min-width: max-content; width: 100%; }
@@ -756,7 +756,7 @@ const HOURLY_STYLES = `
     font-size: 13px !important; border-bottom: 2px solid #94A3B8 !important;
   }
   .hourly-week-head {
-    background: linear-gradient(180deg, #DBEAFE 0%, #BFDBFE 100%) !important;
+    background: linear-gradient(180deg, #F5EDE3 0%, #BFDBFE 100%) !important;
     color: #1E3A8A !important;
     border-bottom: 2px solid #60A5FA !important;
     padding: 10px 8px !important;
@@ -766,7 +766,7 @@ const HOURLY_STYLES = `
     display: block; font-size: 14px; font-weight: 900; letter-spacing: 0.02em;
   }
   .hourly-week-head-date {
-    display: block; margin-top: 3px; font-size: 11px; font-weight: 800; color: #1D4ED8;
+    display: block; margin-top: 3px; font-size: 11px; font-weight: 800; color: #6B4F32;
   }
   .hourly-slot-head {
     width: 52px; min-width: 52px;

@@ -1,11 +1,6 @@
-import ComingSoon from '@/components/ComingSoon'
+import { redirect } from 'next/navigation'
 
-export default function DistrictOverviewPage() {
-  return (
-    <ComingSoon
-      title="ภาพรวมเขต"
-      desc="สรุปข้อมูลผลการเรียน เวลาเรียน และสถิติทุกโรงเรียนในสังกัด"
-      phase="Phase 2"
-    />
-  )
+/** เลิกใช้ภาพรวมเขต */
+export default function DistrictOverviewRedirect() {
+  redirect('/dashboard')
 }

@@ -31,7 +31,7 @@ const PREFIXES = ['นาย', 'นาง', 'นางสาว']
 
 const ROLE_BADGE: Record<string, { bg: string; color: string }> = {
   district:      { bg: '#EDE9FE', color: '#6D28D9' },
-  admin:         { bg: '#DBEAFE', color: '#1D4ED8' },
+  admin:         { bg: '#F5EDE3', color: '#6B4F32' },
   principal:     { bg: '#FEF3C7', color: '#92400E' },
   deputy_principal: { bg: '#FFEDD5', color: '#9A3412' },
   academic_head: { bg: '#D1FAE5', color: '#065F46' },
@@ -404,7 +404,7 @@ export default function UsersPage() {
                     <div style={{ display: 'flex', gap: '12px' }}>
                       <button onClick={() => openEdit(user)} style={{ fontSize: '13px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>แก้ไข</button>
                       <button onClick={() => { setResetTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` }); setNewPassword(''); setResetMsg(null) }}
-                        style={{ fontSize: '13px', color: '#7C3AED', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                        style={{ fontSize: '13px', color: '#C49212', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         รีเซ็ตรหัสผ่าน
                       </button>
                       <button onClick={() => handleToggleActive(user)} style={{ fontSize: '13px', color: user.is_active ? '#D97706' : '#059669', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>

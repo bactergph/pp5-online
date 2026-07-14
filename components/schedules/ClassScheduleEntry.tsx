@@ -55,7 +55,7 @@ const STYLES = `
     border-radius: 999px; border: 1px solid #E2E8F0; background: #fff; color: #475569;
     font-size: 12px; font-weight: 800; text-decoration: none;
   }
-  .schedule-tab.is-active { border-color: #7C3AED; background: #F3E8FF; color: #6D28D9; }
+  .schedule-tab.is-active { border-color: #C49212; background: #F3E8FF; color: #6D28D9; }
   .schedule-filters {
     display: grid; grid-template-columns: 140px minmax(200px, 1fr); gap: 12px; align-items: end;
     padding: 14px; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
@@ -67,10 +67,10 @@ const STYLES = `
     background: #fff; color: #0F172A; font-size: 13px; font-weight: 800;
   }
   .schedule-info {
-    padding: 12px 14px; border-radius: 12px; border: 1px solid #E0E7FF; background: #EEF2FF;
-    color: #3730A3; font-size: 12.5px; font-weight: 700; line-height: 1.5;
+    padding: 12px 14px; border-radius: 12px; border: 1px solid #EFE6D8; background: #F5EDE3;
+    color: #5C4330; font-size: 12.5px; font-weight: 700; line-height: 1.5;
   }
-  .schedule-info a { color: #4F46E5; font-weight: 800; }
+  .schedule-info a { color: #8B6B45; font-weight: 800; }
   .schedule-toolbar {
     display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
     padding: 12px 14px; border: 1px solid #E5E7EB; border-radius: 14px; background: #FAFBFC;
@@ -79,7 +79,7 @@ const STYLES = `
     min-height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid #CBD5E1;
     background: #fff; color: #334155; font-size: 11.5px; font-weight: 800; cursor: pointer;
   }
-  .schedule-toolbar-btn.primary { border-color: #7C3AED; background: #7C3AED; color: #fff; }
+  .schedule-toolbar-btn.primary { border-color: #C49212; background: #C49212; color: #fff; }
   .schedule-toolbar-btn.danger { border-color: #FECACA; background: #FEF2F2; color: #991B1B; }
   .schedule-grid-card {
     overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;

@@ -4698,8 +4698,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           min-height: 38px;
           padding: 0 12px;
           border-radius: 999px;
-          background: #EEF2FF;
-          color: #4338CA;
+          background: #F5EDE3;
+          color: #6B4F32;
           font-size: 13px;
           font-weight: 800;
         }
@@ -7254,9 +7254,9 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           gap: 8px;
         }
         .pp5-tuner-toggle.active {
-          border-color: #2563eb;
+          border-color: #8B6B45;
           background: #eff6ff;
-          color: #1d4ed8;
+          color: #6B4F32;
         }
         .report-preview-toolbar .btn {
           display: inline-flex;

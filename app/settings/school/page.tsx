@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import type { CSSProperties } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import StaffPicker, { type StaffOption } from '@/components/StaffPicker'
-import { fetchMySchool, saveSchool, searchSchools, setMySchool, createAndSetMySchool, updateSchoolActingDirector, fetchSubjectGroupHeads, saveSubjectGroupHeads, fetchSchoolStaff, saveSchoolLeaders } from '../actions'
+import { fetchMySchool, saveSchool, searchSchools, setMySchool, updateSchoolActingDirector, fetchSubjectGroupHeads, saveSubjectGroupHeads, fetchSchoolStaff, saveSchoolLeaders } from '../actions'
 import GoogleDriveIntegrationPanel from '@/components/settings/GoogleDriveIntegrationPanel'
 import DmcImportTool, { type DmcImportAction } from '@/components/settings/DmcImportTool'
 import ClassroomManager from '@/components/settings/ClassroomManager'
@@ -43,7 +43,7 @@ const schoolSettingTabs = Array.isArray(SCHOOL_SETTING_TABS) ? SCHOOL_SETTING_TA
 
 // ── ขั้นตอน onboarding (wizard เต็มจอสำหรับผู้ใช้ใหม่) ──
 const ONBOARDING_STEPS: { key: string; label: string; title: string; desc: string; icon: string }[] = [
-  { key: 'school', label: 'เลือกโรงเรียน', title: 'เลือกโรงเรียนของคุณ', desc: 'ค้นหาโรงเรียนจากระบบ หรือสร้างใหม่หากยังไม่มี', icon: 'M3 21h18 M5 21V7l7-4 7 4v14 M9 21v-6h6v6' },
+  { key: 'school', label: 'เลือกโรงเรียน', title: 'เลือกโรงเรียนของคุณ', desc: 'ค้นหาและเลือกโรงเรียนจากฐานข้อมูลที่สำนักงานเขตเตรียมไว้', icon: 'M3 21h18 M5 21V7l7-4 7 4v14 M9 21v-6h6v6' },
   { key: 'general', label: 'ข้อมูลทั่วไป', title: 'ข้อมูลทั่วไป', desc: 'ข้อมูลที่ใช้บนเอกสารราชการและรายงานของโรงเรียน', icon: 'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5' },
   { key: 'leaders', label: 'ผู้บริหาร/ผู้รับผิดชอบ', title: 'ผู้บริหารและผู้รับผิดชอบ', desc: 'ชื่อที่ใช้ลงนามในเอกสารและรายงานสรุป', icon: 'M12 12a4 4 0 100-8 4 4 0 000 8z M4 22a8 8 0 0116 0' },
   { key: 'login', label: 'สร้างหน้า login', title: 'สร้างหน้า login โรงเรียน', desc: 'ตั้ง URL โรงเรียนสำหรับลิงก์เข้าระบบของครูและบุคลากร', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
@@ -90,8 +90,8 @@ const schoolTabStyle: CSSProperties = {
 
 const activeSchoolTabStyle: CSSProperties = {
   border: '1px solid #BFDBFE',
-  background: '#DBEAFE',
-  color: '#1D4ED8',
+  background: '#F5EDE3',
+  color: '#6B4F32',
   boxShadow: '0 8px 20px rgba(37, 99, 235, 0.12)',
 }
 
@@ -198,7 +198,6 @@ export default function SchoolSettingsPage() {
   const [results, setResults] = useState<{ id: string; name: string; area_office: string; district: string; province: string }[]>([])
   const [busy, setBusy] = useState(false)
   const [pickerErr, setPickerErr] = useState<string | null>(null)
-  const [createMode, setCreateMode] = useState(false)
   const [reselect, setReselect] = useState(false)   // กดเปลี่ยนโรงเรียน
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<SchoolSettingsTab>(() => {
@@ -358,18 +357,6 @@ export default function SchoolSettingsPage() {
     if (headsError) { notify('error', headsError); return }
     goStep(step + 1)
   }
-  async function handleCreateSchool(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setBusy(true); setPickerErr(null)
-    const fd = new FormData(e.currentTarget)
-    const { error } = await createAndSetMySchool({
-      name: (fd.get('name') as string).trim(),
-      area_office: (fd.get('area_office') as string).trim() || null,
-      district: (fd.get('district') as string).trim() || null,
-      province: (fd.get('province') as string).trim() || null,
-    })
-    if (error) { setBusy(false); setPickerErr(error); return }
-    afterSchoolChosen()
-  }
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -497,7 +484,7 @@ export default function SchoolSettingsPage() {
     )
   }
 
-  // ── การ์ดเลือก/สร้างโรงเรียน (ใช้ทั้งใน wizard ขั้นแรก และตอนกดเปลี่ยนโรงเรียน) ──
+  // ── การ์ดเลือกโรงเรียนจากฐานข้อมูล (onboarding และเปลี่ยนโรงเรียน) ──
   const firstTime = !school.id
   const onboardingMode = firstTime || inOnboarding
 
@@ -505,63 +492,40 @@ export default function SchoolSettingsPage() {
     <>
       {pickerErr && <div className="alert alert-error" style={{ marginBottom: 16 }}>{pickerErr}</div>}
       <div className="onboarding-card">
-        <div className="onboarding-seg" role="tablist" aria-label="เลือกวิธีตั้งค่าโรงเรียน">
-          <button type="button" role="tab" aria-selected={!createMode} onClick={() => setCreateMode(false)} className={`onboarding-seg-btn${!createMode ? ' is-active' : ''}`}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-            ค้นหาโรงเรียน
-          </button>
-          <button type="button" role="tab" aria-selected={createMode} onClick={() => setCreateMode(true)} className={`onboarding-seg-btn${createMode ? ' is-active' : ''}`}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-            สร้างโรงเรียนใหม่
-          </button>
-        </div>
         <div className="onboarding-body">
-          {!createMode ? (
-            <>
-              <div className="onboarding-search">
-                <svg className="onboarding-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-                <input className="form-input onboarding-search-input" placeholder="พิมพ์ชื่อโรงเรียน (อย่างน้อย 2 ตัวอักษร)" value={q} onChange={e => doSearch(e.target.value)} autoFocus />
+          <p style={{ margin: '0 0 14px', color: 'var(--text-2)', fontSize: 14, lineHeight: 1.55 }}>
+            ค้นหาโรงเรียนจากฐานข้อมูล แล้วกดเลือก — ระบบจะผูกบัญชีของคุณกับโรงเรียนนั้นโดยตรง
+          </p>
+          <div className="onboarding-search">
+            <svg className="onboarding-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+            <input className="form-input onboarding-search-input" placeholder="พิมพ์ชื่อโรงเรียน (อย่างน้อย 2 ตัวอักษร)" value={q} onChange={e => doSearch(e.target.value)} autoFocus />
+          </div>
+          <div className="onboarding-results">
+            {results.map(r => (
+              <button key={r.id} onClick={() => pickSchool(r.id)} disabled={busy} className="onboarding-result">
+                <span className="onboarding-result-avatar" aria-hidden>{r.name?.trim().charAt(0) || '?'}</span>
+                <span className="onboarding-result-text">
+                  <span className="onboarding-result-name">{r.name}</span>
+                  <span className="onboarding-result-meta">{[r.area_office, r.district, r.province].filter(Boolean).join(' · ') || 'ไม่มีข้อมูลพื้นที่'}</span>
+                </span>
+                <svg className="onboarding-result-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+              </button>
+            ))}
+            {q.trim().length < 2 && results.length === 0 && (
+              <div className="onboarding-empty">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+                <p>เริ่มพิมพ์ชื่อโรงเรียนเพื่อค้นหาจากฐานข้อมูล</p>
               </div>
-              <div className="onboarding-results">
-                {results.map(r => (
-                  <button key={r.id} onClick={() => pickSchool(r.id)} disabled={busy} className="onboarding-result">
-                    <span className="onboarding-result-avatar" aria-hidden>{r.name?.trim().charAt(0) || '?'}</span>
-                    <span className="onboarding-result-text">
-                      <span className="onboarding-result-name">{r.name}</span>
-                      <span className="onboarding-result-meta">{[r.area_office, r.district, r.province].filter(Boolean).join(' · ') || 'ไม่มีข้อมูลพื้นที่'}</span>
-                    </span>
-                    <svg className="onboarding-result-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-                  </button>
-                ))}
-                {q.trim().length < 2 && results.length === 0 && (
-                  <div className="onboarding-empty">
-                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-                    <p>เริ่มพิมพ์ชื่อโรงเรียนเพื่อค้นหา</p>
-                  </div>
-                )}
-                {q.trim().length >= 2 && results.length === 0 && (
-                  <div className="onboarding-empty">
-                    <p style={{ fontWeight: 600, color: 'var(--text-2)' }}>ไม่พบ “{q.trim()}”</p>
-                    <button type="button" className="btn btn-secondary" onClick={() => setCreateMode(true)} style={{ marginTop: 4 }}>+ สร้างโรงเรียนใหม่</button>
-                  </div>
-                )}
+            )}
+            {q.trim().length >= 2 && results.length === 0 && (
+              <div className="onboarding-empty">
+                <p style={{ fontWeight: 600, color: 'var(--text-2)' }}>ไม่พบ “{q.trim()}”</p>
+                <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-3)' }}>
+                  ให้สำนักงานเขตเพิ่มโรงเรียนในเมนู 「ฐานข้อมูลโรงเรียน」 ก่อน
+                </p>
               </div>
-            </>
-          ) : (
-            <form onSubmit={handleCreateSchool} className="onboarding-create-grid">
-              <div className="onboarding-create-wide">
-                <label className="form-label">ชื่อโรงเรียน *</label>
-                <input name="name" className="form-input" required placeholder="บ้าน..." autoFocus />
-              </div>
-              <div><label className="form-label">สำนักงานเขตพื้นที่</label><input name="area_office" className="form-input" placeholder="สพป.บึงกาฬ" /></div>
-              <div><label className="form-label">จังหวัด</label><input name="province" className="form-input" /></div>
-              <div className="onboarding-create-wide"><label className="form-label">อำเภอ</label><input name="district" className="form-input" /></div>
-              <p className="onboarding-create-hint">ข้อมูลเพิ่มเติมกรอกในขั้นตอนถัดไปได้เลย</p>
-              <div className="onboarding-create-actions">
-                <LoadingButton type="submit" loading={busy} loadingText="กำลังสร้าง...">สร้างและไปต่อ</LoadingButton>
-              </div>
-            </form>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </>
@@ -611,7 +575,7 @@ export default function SchoolSettingsPage() {
         <div className="onboarding-orbs" aria-hidden />
         <div className="onboarding-wizard">
           <aside className="wizard-rail">
-            <div className="onboarding-brand"><span className="onboarding-brand-dot" />ระบบ ปพ.5 ออนไลน์</div>
+            <div className="onboarding-brand"><span className="onboarding-brand-dot" />จารย์เสก · Jarn-Sek</div>
             <p className="wizard-rail-title">ตั้งค่าเริ่มต้น</p>
             <ol className="wizard-steps">
               {ONBOARDING_STEPS.map((s, i) => {
@@ -835,7 +799,7 @@ export default function SchoolSettingsPage() {
             </svg>
           </div>
           <h1 className="onboarding-title">เปลี่ยนโรงเรียน</h1>
-          <p className="onboarding-subtitle">ค้นหาหรือสร้างโรงเรียนใหม่ที่ต้องการใช้งาน</p>
+          <p className="onboarding-subtitle">ค้นหาและเลือกโรงเรียนจากฐานข้อมูลที่ต้องการใช้งาน</p>
         </div>
         {schoolPickerCard}
         <div style={{ textAlign: 'center', marginTop: 18 }}>

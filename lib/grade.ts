@@ -23,7 +23,7 @@ export function gradeLabel(g: number): string {
 
 export function gradeColor(g: number): string {
   if (g >= 3.5) return '#059669'
-  if (g >= 2.5) return '#2563EB'
+  if (g >= 2.5) return '#8B6B45'
   if (g >= 1) return '#D97706'
   return '#DC2626'
 }

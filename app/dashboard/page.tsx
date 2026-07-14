@@ -103,15 +103,15 @@ export default async function DashboardPage() {
       {/* Welcome */}
       <div className="hero-panel page-hero" style={{
         background: isDistrict
-          ? 'linear-gradient(135deg, #111827 0%, #4338CA 52%, #0891B2 100%)'
-          : 'linear-gradient(135deg, #4338CA 0%, #4F46E5 50%, #6366F1 100%)',
+          ? 'linear-gradient(135deg, #2C2419 0%, #6B4F32 52%, #C49212 100%)'
+          : 'linear-gradient(135deg, #6B4F32 0%, #8B6B45 50%, #C49212 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: '16px',
       }}>
         <div>
-          <p className="page-hero-kicker" style={{ color: 'rgba(219,234,254,0.86)', marginBottom: '6px' }}>
+          <p className="page-hero-kicker" style={{ color: 'rgba(255,248,231,0.9)', marginBottom: '6px' }}>
             {isDistrict ? 'ระบบจัดการสมาชิก' : 'ยินดีต้อนรับ'}
           </p>
           <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'white', marginBottom: '6px' }}>
@@ -135,7 +135,7 @@ export default async function DashboardPage() {
           ) : (
             <svg width="38" height="38" viewBox="0 0 28 28" fill="none">
               <path d="M14 2L26 8V14C26 20.6 20.8 26 14 28C7.2 26 2 20.6 2 14V8L14 2Z" fill="white" fillOpacity="0.9"/>
-              <path d="M9 13H19M9 17H15M11 9H17" stroke="#4338CA" strokeWidth="1.8" strokeLinecap="round"/>
+              <path d="M9 13H19M9 17H15M11 9H17" stroke="#6B4F32" strokeWidth="1.8" strokeLinecap="round"/>
             </svg>
           )}
         </div>
@@ -175,11 +175,11 @@ export default async function DashboardPage() {
       {isDistrict && districtStats && (
         <div className="responsive-grid-sm">
           {[
-            { label: 'สมาชิกโรงเรียน', value: districtStats.total, icon: <UserIcon/>, color: '#4F46E5' },
+            { label: 'สมาชิกโรงเรียน', value: districtStats.total, icon: <UserIcon/>, color: '#8B6B45' },
             { label: 'ใช้งานอยู่', value: districtStats.active, icon: <GridIcon/>, color: '#059669' },
             { label: 'รออนุมัติ / ระงับ', value: districtStats.pending, icon: <AlertIcon/>, color: districtStats.pending > 0 ? '#D97706' : '#059669' },
             { label: 'โรงเรียนในระบบ', value: districtStats.schools, icon: <HomeIcon/>, color: '#0891B2' },
-            { label: 'มีลิงก์เข้าโรงเรียน', value: districtStats.schoolsWithCode, icon: <DocIcon/>, color: '#7C3AED' },
+            { label: 'มีลิงก์เข้าโรงเรียน', value: districtStats.schoolsWithCode, icon: <DocIcon/>, color: '#C49212' },
             { label: 'ผู้ใช้ทั้งหมด', value: districtStats.memberUsers, icon: <BookIcon/>, color: '#DB2777' },
           ].map(m => (
             <div key={m.label} className="stat-card">
@@ -208,7 +208,7 @@ export default async function DashboardPage() {
       {/* Stats — school roles */}
       {!isDistrict && (
         <div className="responsive-grid-sm">
-          <StatCard icon={<HomeIcon/>} label="ห้องเรียน" value={schoolStats?.classrooms ?? '-'} color="#4F46E5" bg="#EEF2FF"/>
+          <StatCard icon={<HomeIcon/>} label="ห้องเรียน" value={schoolStats?.classrooms ?? '-'} color="#8B6B45" bg="#F5EDE3"/>
           <StatCard icon={<BookIcon/>} label="รายวิชา" value={schoolStats?.subjects ?? '-'} color="#0891B2" bg="#ECFEFF"/>
           <StatCard icon={<UserIcon/>} label="นักเรียน" value={schoolStats?.students ?? '-'} color="#059669" bg="#ECFDF5"/>
           <StatCard icon={<DocIcon/>} label="ปพ.5 ที่เปิดบันทึก" value={schoolStats?.pp5 ?? '-'} color="#D97706" bg="#FFFBEB"/>
@@ -232,34 +232,31 @@ type QL = { href: string; icon: ReactNode; label: string; desc: string; color: s
 
 function getQuickLinks(role: string): QL[] {
   const all: Record<string, QL> = {
-    schools:    { href: '/district/schools',          icon: <HomeIcon/>,  label: 'ฐานข้อมูลโรงเรียน',        desc: 'เพิ่ม แก้ไข และเตรียมข้อมูลโรงเรียนลูกค้า', color: '#4F46E5', bg: '#EEF2FF' },
+    schools:    { href: '/district/schools',          icon: <HomeIcon/>,  label: 'ฐานข้อมูลโรงเรียน',        desc: 'เพิ่ม แก้ไข และเตรียมข้อมูลโรงเรียนลูกค้า', color: '#8B6B45', bg: '#F5EDE3' },
     admins:     { href: '/district/admins',           icon: <UserIcon/>,  label: 'สมาชิกโรงเรียน',           desc: 'อนุมัติ ระงับ รีเซ็ตรหัสผ่าน และตั้งโควตาผู้ใช้', color: '#0891B2', bg: '#ECFEFF' },
-    overview:   { href: '/district/overview',         icon: <GridIcon/>,  label: 'ภาพรวมลูกค้า',             desc: 'ดูสถานะการใช้งานและข้อมูลรวมของโรงเรียน', color: '#059669', bg: '#ECFDF5' },
-    d_scores:   { href: '/district/results/scores',   icon: <EditIcon/>,  label: 'ข้อมูลผลการเรียน',         desc: 'ตรวจภาพรวมคะแนนและความพร้อมของข้อมูล', color: '#D97706', bg: '#FFFBEB' },
-    d_attend:   { href: '/district/results/attendance',icon: <ClockIcon/>,label: 'ข้อมูลเวลาเรียน',          desc: 'ดูภาพรวมการใช้งานเวลาเรียนรายโรงเรียน', color: '#7C3AED', bg: '#F5F3FF' },
+    subjects:   { href: '/district/subjects',         icon: <BookIcon/>,  label: 'โครงสร้างรายวิชากลาง',     desc: 'แม่แบบรายวิชาให้โรงเรียนนำไปใช้',           color: '#059669', bg: '#ECFDF5' },
     d_export:   { href: '/district/reports/export',   icon: <DocIcon/>,   label: 'ส่งออกข้อมูลระบบ',         desc: 'Export ข้อมูลเพื่อบริการลูกค้าและสำรองข้อมูล', color: '#DB2777', bg: '#FDF2F8' },
-    d_settings: { href: '/district/settings',         icon: <BookIcon/>,  label: 'ตั้งค่าระบบสมาชิก',        desc: 'ค่าเริ่มต้นของระบบ แพ็กเกจ และรอบปีใช้งาน', color: '#374151', bg: '#F3F4F6' },
-    school:     { href: '/settings/school',           icon: <HomeIcon/>,  label: 'ตั้งค่าโรงเรียน',        desc: 'ข้อมูลโรงเรียน ผู้บริหาร',               color: '#4F46E5', bg: '#EEF2FF' },
+    school:     { href: '/settings/school',           icon: <HomeIcon/>,  label: 'ตั้งค่าโรงเรียน',        desc: 'ข้อมูลโรงเรียน ผู้บริหาร',               color: '#8B6B45', bg: '#F5EDE3' },
     users:      { href: '/settings/users',            icon: <UserIcon/>,  label: 'จัดการชื่อผู้ใช้งาน',     desc: 'เพิ่ม แก้ไข ครูและบัญชีผู้ใช้งาน',        color: '#0891B2', bg: '#ECFEFF' },
     classrooms: { href: '/classrooms',                icon: <GridIcon/>,  label: 'ชั้นเรียน',              desc: 'จัดการห้องเรียน ครูประจำชั้น',            color: '#059669', bg: '#ECFDF5' },
     scores:     { href: '/scores',                    icon: <EditIcon/>,  label: 'บันทึกคะแนน',            desc: 'กรอกคะแนนระหว่างเรียน กลางภาค ปลายภาค', color: '#D97706', bg: '#FFFBEB' },
-    attendance: { href: '/attendance/hourly',         icon: <ClockIcon/>, label: 'เช็คเวลาเรียนรายวิชา',   desc: 'เช็คชื่อตามคาบสอน สำหรับ ปพ.5',          color: '#7C3AED', bg: '#F5F3FF' },
+    attendance: { href: '/attendance/hourly',         icon: <ClockIcon/>, label: 'เช็คเวลาเรียนรายวิชา',   desc: 'เช็คชื่อตามคาบสอน สำหรับ ปพ.5',          color: '#C49212', bg: '#F5F3FF' },
     admin_att:  { href: '/classroom-admin',           icon: <DocIcon/>,   label: 'ธุรการชั้นเรียน',        desc: 'เวลาเรียน น้ำหนัก/ส่วนสูง ตรวจสุขภาพ',  color: '#DB2777', bg: '#FDF2F8' },
     students:   { href: '/students',                  icon: <UserIcon/>,  label: 'ข้อมูลนักเรียน',         desc: 'ทะเบียนนักเรียนในห้องเรียน',             color: '#059669', bg: '#ECFDF5' },
     eval_sum:   { href: '/evaluation/summary/reading',icon: <GridIcon/>,  label: 'สรุปการประเมินชั้นเรียน', desc: 'ดูสรุปอ่านคิดวิเคราะห์/กิจกรรม เลือกชั้นได้', color: '#0891B2', bg: '#ECFEFF' },
     sign:       { href: '/documents/sign',            icon: <EditIcon/>,  label: 'ลงนาม',                  desc: 'ตรวจและลงนาม ปพ.5 ปพ.6 ธุรการชั้นเรียน', color: '#9D174D', bg: '#FDF2F8' },
     export_pp:  { href: '/export/pp5-all',            icon: <DocIcon/>,   label: 'Export ปพ.5 / ปพ.6',     desc: 'ออกเอกสาร ปพ.5 ทั้งเล่ม และ ปพ.6',       color: '#D97706', bg: '#FFFBEB' },
-    report_st:  { href: '/reports/status',            icon: <GridIcon/>,  label: 'สถานะการบันทึก',         desc: 'ชั้นที่บันทึกธุรการ/กรอก ปพ.5 แล้ว',      color: '#7C3AED', bg: '#F5F3FF' },
+    report_st:  { href: '/reports/status',            icon: <GridIcon/>,  label: 'สถานะการบันทึก',         desc: 'ชั้นที่บันทึกธุรการ/กรอก ปพ.5 แล้ว',      color: '#C49212', bg: '#F5F3FF' },
     assign:     { href: '/settings/users',            icon: <UserIcon/>,  label: 'มอบหมายครู',             desc: 'กำหนดวิชาสอน และครูประจำชั้น',           color: '#0E7490', bg: '#ECFEFF' },
     evaluation: { href: '/evaluation/character',      icon: <GridIcon/>,  label: 'การวัดและประเมินผล',     desc: 'คุณลักษณะ 8 ข้อ · อ่านคิดวิเคราะห์ · กิจกรรมพัฒนาผู้เรียน', color: '#0891B2', bg: '#ECFEFF' },
     homeroom_pp:{ href: '/homeroom/pp5',              icon: <DocIcon/>,   label: 'ปพ.5 / ปพ.6 ห้องเรียน',  desc: 'ดูและ Export ของนักเรียนประจำชั้น',       color: '#B45309', bg: '#FFFBEB' },
     exp_subj:   { href: '/export/pp5-subject',        icon: <DocIcon/>,   label: 'Export ปพ.5 รายวิชา',    desc: 'ส่งออก ปพ.5 ของวิชาที่สอน',              color: '#D97706', bg: '#FFFBEB' },
-    rpt_indiv:  { href: '/reports/individual',        icon: <UserIcon/>,  label: 'รายงานรายบุคคล',         desc: 'ดูพัฒนาการนักเรียนรายคน ทุกชั้น',         color: '#7C3AED', bg: '#F5F3FF' },
+    rpt_indiv:  { href: '/reports/individual',        icon: <UserIcon/>,  label: 'รายงานรายบุคคล',         desc: 'ดูพัฒนาการนักเรียนรายคน ทุกชั้น',         color: '#C49212', bg: '#F5F3FF' },
   }
 
   switch (role) {
     case 'district':
-      return [all.admins, all.schools, all.overview, all.d_export]
+      return [all.admins, all.schools, all.subjects, all.d_export]
     case 'admin':
       return [all.school, all.users, all.classrooms, all.eval_sum, all.report_st, all.export_pp]
     case 'principal':

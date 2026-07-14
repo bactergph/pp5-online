@@ -26,7 +26,7 @@ import {
   type EvaluationKind,
   type EvaluationSetting,
 } from '@/lib/evaluation-settings'
-import { buildDefaultEvaluationRows } from '@/lib/evaluation-settings-seed'
+import { buildDefaultEvaluationRows, seedEvaluationSettingsForSchool } from '@/lib/evaluation-settings-seed'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
 
 async function requireSchoolSession() {
@@ -55,7 +55,7 @@ function asText(value: unknown) {
 export async function fetchMySchool() {
   const session = await requireSchoolSession()
   const db = createServerClient()
-  if (!session.schoolId) return null   // ยังไม่ได้เลือกโรงเรียน → ให้หน้าแสดงตัวเลือกเลือก/สร้าง
+  if (!session.schoolId) return null   // ยังไม่ได้เลือกโรงเรียน → ให้หน้าแสดงตัวเลือกค้นหาจากฐานข้อมูล
   const { data } = await db.from('schools').select('*').eq('id', session.schoolId).maybeSingle()
   return data
 }
@@ -144,99 +144,54 @@ export async function searchSchools(q: string) {
   if (!hasRole(session, ADMIN_ROLES)) return []
   if (!q || q.trim().length < 2) return []
   const db = createServerClient()
+  const safe = q.trim().replace(/,/g, ' ')
   const { data } = await db.from('schools')
     .select('id, name, area_office, district, province')
-    .ilike('name', `%${q.trim()}%`)
+    .or(`name.ilike.%${safe}%,district.ilike.%${safe}%,province.ilike.%${safe}%`)
     .limit(20)
   return data || []
 }
 
-// เลือกโรงเรียนจาก catalog → ก๊อปข้อมูลเป็น "record ของกลุ่มตัวเอง" (ไม่แชร์ row กับ admin อื่น)
+// เลือกโรงเรียนจากฐานข้อมูล → ผูก users.school_id ตรงกับแถวนั้น (ไม่ก๊อปสร้างโรงเรียนใหม่)
 export async function setMySchool(catalogId: string) {
   const session = await requireSchoolSession()
   if (session.role !== 'admin') return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้น' }
   const db = createServerClient()
-  const { data: cat } = await db.from('schools')
-    .select('name, area_office, district, province, address, phone')
-    .eq('id', catalogId).maybeSingle()
-  if (!cat) return { error: 'ไม่พบโรงเรียนที่เลือก' }
-  if (session.schoolId) {
-    // มีโรงเรียนของกลุ่มอยู่แล้ว → อัปเดตข้อมูลจาก catalog (school_id + code เดิม คงที่ → ลิงก์/ครูไม่กระทบ)
-    const { error } = await db.from('schools').update(cat).eq('id', session.schoolId)
-    if (!error) {
-      await db.from('users').update({ school_id: session.schoolId }).eq('id', session.userId)
-      await logActivity({
-        actor: session,
-        schoolId: session.schoolId,
-        action: 'update',
-        module: 'school',
-        targetType: 'school',
-        targetId: session.schoolId,
-        targetLabel: cat.name,
-        description: `เลือก/อัปเดตโรงเรียนจากฐานข้อมูล: ${cat.name}`,
-        metadata: { catalogId },
-      })
-    }
-    return { error: error?.message ?? null }
-  }
-  const { data: created, error } = await db.from('schools')
-    .insert({ ...cat, created_by: session.fullName }).select('id').single()
-  if (error || !created) return { error: error?.message || 'สร้างไม่สำเร็จ' }
-  await db.from('users').update({ school_id: created.id }).eq('id', session.userId)
-  await createSession({ ...session, schoolId: created.id })
-  await logActivity({
-    actor: { ...session, schoolId: created.id },
-    schoolId: created.id,
-    action: 'create',
-    module: 'school',
-    targetType: 'school',
-    targetId: created.id,
-    targetLabel: cat.name,
-    description: `สร้างโรงเรียนจากฐานข้อมูล: ${cat.name}`,
-    metadata: { catalogId },
-  })
-  return { error: null }
-}
+  const { data: school } = await db.from('schools')
+    .select('id, name')
+    .eq('id', catalogId)
+    .maybeSingle()
+  if (!school) return { error: 'ไม่พบโรงเรียนที่เลือก' }
 
-// สร้างโรงเรียนใหม่ (หรืออัปเดตของกลุ่มเดิม) + ผูกให้ admin คนปัจจุบัน
-export async function createAndSetMySchool(payload: Record<string, string | null>) {
-  const session = await requireSchoolSession()
-  if (session.role !== 'admin') return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้น' }
-  if (!payload.name || !String(payload.name).trim()) return { error: 'กรุณากรอกชื่อโรงเรียน' }
-  const db = createServerClient()
-  const row = { ...payload, created_by: session.fullName }
-  if (session.schoolId) {
-    const { error } = await db.from('schools').update(row).eq('id', session.schoolId)
-    if (!error) {
-      await db.from('users').update({ school_id: session.schoolId }).eq('id', session.userId)
-      await logActivity({
-        actor: session,
-        schoolId: session.schoolId,
-        action: 'update',
-        module: 'school',
-        targetType: 'school',
-        targetId: session.schoolId,
-        targetLabel: String(payload.name || 'โรงเรียน'),
-        description: `แก้ไขข้อมูลโรงเรียน ${payload.name || ''}`.trim(),
-        metadata: { fields: Object.keys(payload) },
-      })
-    }
-    return { error: error?.message ?? null }
+  // โรงเรียนนี้มีผู้ดูแลคนอื่นอยู่แล้วหรือไม่
+  const { data: otherAdmin } = await db.from('users')
+    .select('id, full_name')
+    .eq('school_id', catalogId)
+    .eq('role', 'admin')
+    .eq('is_active', true)
+    .neq('id', session.userId)
+    .maybeSingle()
+  if (otherAdmin) {
+    return { error: `โรงเรียนนี้มีผู้ดูแลอยู่แล้ว (${otherAdmin.full_name})` }
   }
-  const { data, error } = await db.from('schools').insert(row).select('id').single()
-  if (error || !data) return { error: error?.message || 'สร้างโรงเรียนไม่สำเร็จ' }
-  await db.from('users').update({ school_id: data.id }).eq('id', session.userId)
-  await createSession({ ...session, schoolId: data.id })
+
+  const { error } = await db.from('users')
+    .update({ school_id: catalogId })
+    .eq('id', session.userId)
+  if (error) return { error: error.message }
+
+  await createSession({ ...session, schoolId: catalogId })
+  await seedEvaluationSettingsForSchool(catalogId)
   await logActivity({
-    actor: { ...session, schoolId: data.id },
-    schoolId: data.id,
-    action: 'create',
+    actor: { ...session, schoolId: catalogId },
+    schoolId: catalogId,
+    action: 'update',
     module: 'school',
     targetType: 'school',
-    targetId: data.id,
-    targetLabel: String(payload.name || 'โรงเรียน'),
-    description: `สร้างโรงเรียนใหม่ ${payload.name || ''}`.trim(),
-    metadata: { fields: Object.keys(payload) },
+    targetId: catalogId,
+    targetLabel: school.name,
+    description: `เลือกโรงเรียนจากฐานข้อมูล: ${school.name}`,
+    metadata: { catalogId },
   })
   return { error: null }
 }
@@ -2434,4 +2389,44 @@ export async function bulkUpsertSubjects(rows: {
     })
   }
   return { error: error?.message, count: data?.length ?? 0 }
+}
+
+/** ดึงรายวิชากลางที่ active ให้โรงเรียนดู/นำเข้า */
+export async function fetchGlobalSubjectsForSchool() {
+  const session = await requireSchoolSession()
+  if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return []
+  const db = createServerClient()
+  const { data, error } = await db
+    .from('global_subjects')
+    .select('code,name,short_name,subject_group,type,hours_per_year,credits,max_score')
+    .eq('is_active', true)
+    .order('subject_group')
+    .order('sort_order')
+    .order('code')
+  if (error) {
+    if (error.message.includes('global_subjects') || error.message.includes('schema cache')) return []
+    throw new Error(error.message)
+  }
+  return data || []
+}
+
+/** นำเข้าโครงสร้างรายวิชากลางเข้าโรงเรียน (upsert ตามรหัสวิชา) */
+export async function syncSubjectsFromGlobal() {
+  const session = await requireSchoolSession()
+  if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', count: 0 }
+  if (!session.schoolId) return { error: 'ไม่พบโรงเรียน', count: 0 }
+  const rows = await fetchGlobalSubjectsForSchool()
+  if (!rows.length) {
+    return { error: 'ยังไม่มีโครงสร้างรายวิชากลางในระบบ', count: 0 }
+  }
+  return bulkUpsertSubjects(rows.map(r => ({
+    code: r.code,
+    name: r.name,
+    short_name: r.short_name,
+    subject_group: r.subject_group,
+    type: r.type || 'พื้นฐาน',
+    hours_per_year: r.hours_per_year || 0,
+    credits: Number(r.credits) || 0,
+    max_score: r.max_score || 100,
+  })))
 }

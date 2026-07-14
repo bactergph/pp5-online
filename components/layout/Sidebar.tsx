@@ -82,18 +82,8 @@ const ADMINS_MANAGE: NavItem = { href: '/district/admins', label: 'สมาช�
 const SCHOOLS_MANAGE: NavItem = { href: '/district/schools', label: 'ฐานข้อมูลโรงเรียน', icon: ic(I.building) }
 const GLOBAL_HOLIDAYS: NavItem = { href: '/district/holidays', label: 'วันหยุดกลาง', icon: ic(I.clock) }
 const GLOBAL_TERM_CALENDARS: NavItem = { href: '/district/term-calendars', label: 'เปิด-ปิดภาคเรียนกลาง', icon: ic(I.sliders) }
-const DISTRICT_OVERVIEW: NavItem = { href: '/district/overview', label: 'ภาพรวมเขต', icon: ic(I.chart) }
-const DISTRICT_RESULTS: NavItem = {
-  href: '/district/results',
-  label: 'ผลลัพธ์รวม',
-  icon: ic(I.chart),
-  children: [
-    { href: '/district/results/scores', label: 'สรุปผลการเรียน', icon: ic(I.chart) },
-    { href: '/district/results/attendance', label: 'สรุปเวลาเรียน', icon: ic(I.clock) },
-  ],
-}
+const GLOBAL_SUBJECTS: NavItem = { href: '/district/subjects', label: 'โครงสร้างรายวิชากลาง', icon: ic(I.book) }
 const DISTRICT_REPORT_EXPORT: NavItem = { href: '/district/reports/export', label: 'Export รายงานเขต', icon: ic(I.export) }
-const DISTRICT_SETTINGS: NavItem = { href: '/district/settings', label: 'ตั้งค่าสำนักงานเขต', icon: ic(SETTINGS_ICON) }
 const SCHOOL_CLEANUP: NavItem = { href: '/district/school-cleanup', label: 'ล้างข้อมูลโรงเรียนไม่ใช้งาน', icon: ic(I.sliders) }
 const ACTIVITY_LOG: NavItem = { href: '/activity', label: 'ประวัติการใช้งาน', icon: ic(I.clock) }
 
@@ -375,11 +365,10 @@ const USER_SETTINGS: NavItem = {
 
 // ══════════════════════════════ เมนูแยกราย role (จัดกลุ่มมีหัวข้อ) ══════════════════════════════
 const DISTRICT_NAV: NavSection[] = [
-  { items: [DASHBOARD, DISTRICT_OVERVIEW] },
+  { items: [DASHBOARD] },
   { label: 'สมาชิกและโรงเรียน', items: [SCHOOLS_MANAGE, ADMINS_MANAGE] },
-  { label: 'ผลลัพธ์รวม', items: [DISTRICT_RESULTS, DISTRICT_REPORT_EXPORT] },
-  { label: 'ข้อมูลกลางระบบ', items: [GLOBAL_TERM_CALENDARS, GLOBAL_HOLIDAYS] },
-  { label: 'ระบบ', items: [USER_SETTINGS, DISTRICT_SETTINGS, SCHOOL_CLEANUP, ACTIVITY_LOG] },
+  { label: 'ข้อมูลกลางระบบ', items: [GLOBAL_SUBJECTS, GLOBAL_TERM_CALENDARS, GLOBAL_HOLIDAYS] },
+  { label: 'ระบบ', items: [DISTRICT_REPORT_EXPORT, USER_SETTINGS, SCHOOL_CLEANUP, ACTIVITY_LOG] },
 ]
 const ADMIN_NAV: NavSection[] = [
   { items: [DASHBOARD] },
@@ -639,14 +628,12 @@ export default function Sidebar({
       <div className="sidebar-brand">
         <div className="sidebar-brand-main">
           <div className="sidebar-brand-mark">
-            <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
-              <path d="M14 2L26 8V14C26 20.6 20.8 26 14 28C7.2 26 2 20.6 2 14V8L14 2Z" fill="white" fillOpacity="0.95" />
-              <path d="M9 13H19M9 17H15M11 9H17" stroke="#4338CA" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/jarnsek-logo-sm.png" alt="" />
           </div>
           <div>
-            <div className="sidebar-brand-title">ระบบ ปพ.5</div>
-            <div className="sidebar-brand-subtitle">ออนไลน์</div>
+            <div className="sidebar-brand-title">จารย์เสก</div>
+            <div className="sidebar-brand-subtitle">Jarn-Sek</div>
           </div>
         </div>
         <button onClick={onClose} className="sidebar-close lg:hidden">

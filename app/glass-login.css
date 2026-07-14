@@ -235,6 +235,8 @@
 }
 
 .jarnsek-login__forgot {
+  align-self: flex-end;
+  margin-top: 2px;
   font-size: 13px;
   font-weight: 500;
   color: var(--js-blue);

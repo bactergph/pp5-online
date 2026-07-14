@@ -198,9 +198,9 @@ export default function DistrictAdminsPage() {
                     <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: 'white', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: '200px', overflowY: 'auto', marginTop: '4px' }}>
                       {schools.filter(s => s.name.includes(schoolSearch)).slice(0, 30).map(s => (
                         <div key={s.id} onMouseDown={() => { setSelectedSchoolId(s.id); setSchoolSearch(s.name); setShowSchoolDrop(false) }}
-                          style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', background: selectedSchoolId === s.id ? '#EEF2FF' : 'white' }}
+                          style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', background: selectedSchoolId === s.id ? '#F5EDE3' : 'white' }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F5')}
-                          onMouseLeave={e => (e.currentTarget.style.background = selectedSchoolId === s.id ? '#EEF2FF' : 'white')}>
+                          onMouseLeave={e => (e.currentTarget.style.background = selectedSchoolId === s.id ? '#F5EDE3' : 'white')}>
                           {s.name}
                         </div>
                       ))}
@@ -334,7 +334,7 @@ export default function DistrictAdminsPage() {
             style={{
               padding: '7px 14px', borderRadius: '100px', fontSize: '12px', fontWeight: 600,
               border: 'none', cursor: 'pointer',
-              background: filterStatus === s ? (s === 'inactive' ? '#DC2626' : s === 'active' ? '#059669' : '#4F46E5') : 'var(--bg-2)',
+              background: filterStatus === s ? (s === 'inactive' ? '#DC2626' : s === 'active' ? '#059669' : '#8B6B45') : 'var(--bg-2)',
               color: filterStatus === s ? 'white' : 'var(--text-2)',
             }}>
             {s === 'all' ? `ทั้งหมด ${admins.length}` : s === 'active' ? `ใช้งาน ${activeCount}` : `รออนุมัติ ${admins.length - activeCount}`}
@@ -350,7 +350,7 @@ export default function DistrictAdminsPage() {
             if (!admin) return null
             return [
               { label: 'แก้ไขข้อมูล', color: 'var(--text)', action: () => { openEdit(admin); setOpenMenuId(null) } },
-              { label: 'รีเซ็ตรหัสผ่าน', color: '#7C3AED', action: () => { setResetTarget({ id: admin.id, name: `${admin.prefix} ${admin.full_name}` }); setNewPassword(''); setResetMsg(null); setOpenMenuId(null) } },
+              { label: 'รีเซ็ตรหัสผ่าน', color: '#C49212', action: () => { setResetTarget({ id: admin.id, name: `${admin.prefix} ${admin.full_name}` }); setNewPassword(''); setResetMsg(null); setOpenMenuId(null) } },
               { label: 'ตั้งโควต้าผู้ใช้', color: '#0891B2', action: () => { setQuotaTarget({ id: admin.id, name: `${admin.prefix} ${admin.full_name}` }); setQuotaVal(String(admin.quota ?? 15)); setOpenMenuId(null) } },
               { label: admin.is_active ? 'ระงับการใช้งาน' : 'เปิดใช้งาน', color: admin.is_active ? '#D97706' : '#059669', action: async () => { await toggleAdminActive(admin.id, !admin.is_active); setOpenMenuId(null); loadData() } },
               { label: 'ลบผู้ดูแล', color: '#DC2626', action: () => { setSelected(new Set([admin.id])); setShowDeleteConfirm(true); setOpenMenuId(null) } },
@@ -415,7 +415,7 @@ export default function DistrictAdminsPage() {
                 const isSelected = selected.has(admin.id)
                 const menuOpen = openMenuId === admin.id
                 return ( // menuOpen ใช้ highlight ปุ่ม ⋯ เท่านั้น
-                  <tr key={admin.id} style={{ background: isSelected ? '#EEF2FF' : undefined }}>
+                  <tr key={admin.id} style={{ background: isSelected ? '#F5EDE3' : undefined }}>
                     <td style={{ textAlign: 'center' }}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(admin.id)}
                         style={{ width: '15px', height: '15px', accentColor: 'var(--primary)', cursor: 'pointer' }} />

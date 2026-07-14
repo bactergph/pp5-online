@@ -280,7 +280,7 @@ export default function ScoreConfigPage() {
                       <th style={{ textAlign: 'center', width: 56, background: 'var(--bg-2)' }}>หน่วย</th>
                       {Array.from({ length: maxUnits }, (_, i) => <th key={i} style={{ textAlign: 'center', width: 48 }}>{term === 1 ? i + 1 : maxUnits + i + 1}</th>)}
                       <th style={{ textAlign: 'center', width: 64, background: '#FEF3C7' }}>กลางภาค</th>
-                      <th style={{ textAlign: 'center', width: 64, background: '#DBEAFE' }}>ปลายภาค</th>
+                      <th style={{ textAlign: 'center', width: 64, background: '#F5EDE3' }}>ปลายภาค</th>
                       <th style={{ textAlign: 'center', width: 60 }}>รวม</th>
                     </tr>
                   </thead>

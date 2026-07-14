@@ -478,7 +478,7 @@ export default function DmcImportTool({
                     height: '100%',
                     width: `${fileLoadPct}%`,
                     borderRadius: 999,
-                    background: fileLoadPct >= 100 ? 'linear-gradient(90deg, #16a34a, #22c55e)' : 'linear-gradient(90deg, #2563eb, #3b82f6)',
+                    background: fileLoadPct >= 100 ? 'linear-gradient(90deg, #16a34a, #22c55e)' : 'linear-gradient(90deg, #8B6B45, #3b82f6)',
                     transition: 'width 0.28s ease, background 0.2s ease',
                   }}
                 />
@@ -558,7 +558,7 @@ export default function DmcImportTool({
                     <td>{r.prefix}</td>
                     <td style={{ fontWeight: 500 }}>{r.first_name}</td>
                     <td>{r.last_name}</td>
-                    <td style={{ textAlign: 'center' }}><span style={{ fontWeight: 700, fontSize: 12, color: r.gender === 'M' ? '#1D4ED8' : '#DB2777' }}>{r.gender === 'M' ? 'ช' : 'ญ'}</span></td>
+                    <td style={{ textAlign: 'center' }}><span style={{ fontWeight: 700, fontSize: 12, color: r.gender === 'M' ? '#6B4F32' : '#DB2777' }}>{r.gender === 'M' ? 'ช' : 'ญ'}</span></td>
                     <td style={{ fontSize: 12 }}>{r.birth_date || '-'}</td>
                   </tr>
                 ))}

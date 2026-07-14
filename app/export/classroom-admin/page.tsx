@@ -1013,16 +1013,16 @@ ${fontFaces}
         gap: 24px;
         align-items: center;
         padding: 26px;
-        border: 1px solid rgba(99, 102, 241, 0.16);
+        border: 1px solid rgba(184, 149, 106, 0.16);
         border-radius: 30px;
-        background: radial-gradient(circle at top left, rgba(79, 70, 229, 0.18), transparent 34%), linear-gradient(135deg, #FFFFFF 0%, #F8FAFF 52%, #EEF2FF 100%);
-        box-shadow: 0 24px 50px rgba(79, 70, 229, 0.12);
+        background: radial-gradient(circle at top left, rgba(139, 107, 69, 0.18), transparent 34%), linear-gradient(135deg, #FFFFFF 0%, #FFFDF9 52%, #F5EDE3 100%);
+        box-shadow: 0 24px 50px rgba(139, 107, 69, 0.12);
       }
       .classroom-export-hero-copy span,
       .classroom-export-preview-head span,
       .classroom-export-cover span {
         display: inline-flex;
-        color: #4F46E5;
+        color: #8B6B45;
         font-size: 11px;
         font-weight: 900;
         letter-spacing: 0.1em;
@@ -1071,14 +1071,14 @@ ${fontFaces}
         background: #FFEDD5;
       }
       .classroom-export-preview-btn {
-        color: #1D4ED8;
+        color: #6B4F32;
         background: #EFF6FF;
         box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14);
       }
       .classroom-export-pdf-btn {
-        color: #3730A3;
-        background: #EEF2FF;
-        box-shadow: 0 10px 18px rgba(79, 70, 229, 0.14);
+        color: #5C4330;
+        background: #F5EDE3;
+        box-shadow: 0 10px 18px rgba(139, 107, 69, 0.14);
       }
       .classroom-export-close-btn {
         color: #475569;
@@ -1125,8 +1125,8 @@ ${fontFaces}
         width: 22px;
         height: 22px;
         border-radius: 8px;
-        color: #1D4ED8;
-        background: #DBEAFE;
+        color: #6B4F32;
+        background: #F5EDE3;
         font-size: 11px;
         font-weight: 900;
       }
@@ -1160,7 +1160,7 @@ ${fontFaces}
       }
       .classroom-export-report-tabs button.is-selected {
         color: #FFFFFF;
-        background: linear-gradient(135deg, #1D4ED8, #2563EB);
+        background: linear-gradient(135deg, #6B4F32, #8B6B45);
         box-shadow: 0 10px 18px rgba(37, 99, 235, 0.24);
       }
       .classroom-export-control-title {
@@ -1218,11 +1218,11 @@ ${fontFaces}
         outline: none;
       }
       .classroom-export-controls select:focus {
-        border-color: #818CF8;
-        box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.16);
+        border-color: #C4A574;
+        box-shadow: 0 0 0 4px rgba(184, 149, 106, 0.16);
       }
       .classroom-export-load-btn {
-        color: #1D4ED8 !important;
+        color: #6B4F32 !important;
         background: #EFF6FF !important;
         box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14);
       }
@@ -1237,10 +1237,10 @@ ${fontFaces}
         gap: 8px;
       }
       .classroom-export-presets button {
-        border: 1px solid #C7D2FE;
+        border: 1px solid #E8D9C4;
         border-radius: 10px;
         background: #F8FAFC;
-        color: #3730A3;
+        color: #5C4330;
         padding: 8px 10px;
         font-size: 12px;
         font-weight: 900;
@@ -1267,7 +1267,7 @@ ${fontFaces}
       }
       .classroom-export-month-tabs button.is-active {
         color: #FFFFFF;
-        background: #1D4ED8;
+        background: #6B4F32;
       }
       .classroom-export-month-tabs button.is-summary {
         color: #92400E;
@@ -1322,12 +1322,12 @@ ${fontFaces}
         font-weight: 700;
       }
       .classroom-export-report-grid button.is-selected {
-        border-color: #4F46E5;
-        background: linear-gradient(135deg, #EEF2FF, #FFFFFF);
-        box-shadow: 0 12px 24px rgba(79, 70, 229, 0.12);
+        border-color: #8B6B45;
+        background: linear-gradient(135deg, #F5EDE3, #FFFFFF);
+        box-shadow: 0 12px 24px rgba(139, 107, 69, 0.12);
       }
       .classroom-export-report-grid button.is-selected strong {
-        color: #3730A3;
+        color: #5C4330;
       }
       .classroom-export-pdf-btn.is-loading {
         opacity: 0.75;
@@ -1799,7 +1799,7 @@ ${fontFaces}
       .classroom-export-sheet {
         position: relative;
         overflow: hidden;
-        background: linear-gradient(#FFFFFF, #FFFFFF) padding-box, linear-gradient(135deg, rgba(79, 70, 229, 0.45), rgba(14, 165, 233, 0.25), rgba(15, 23, 42, 0.12)) border-box;
+        background: linear-gradient(#FFFFFF, #FFFFFF) padding-box, linear-gradient(135deg, rgba(139, 107, 69, 0.45), rgba(14, 165, 233, 0.25), rgba(15, 23, 42, 0.12)) border-box;
         border: 1px solid transparent;
         border-radius: 28px;
         box-shadow: 0 28px 70px rgba(15, 23, 42, 0.14);
@@ -1827,8 +1827,8 @@ ${fontFaces}
         height: 78px;
         border-radius: 24px;
         color: white;
-        background: linear-gradient(135deg, #4338CA, #0891B2);
-        box-shadow: 0 18px 32px rgba(67, 56, 202, 0.24);
+        background: linear-gradient(135deg, #6B4F32, #0891B2);
+        box-shadow: 0 18px 32px rgba(107, 79, 50, 0.24);
         font-size: 14px;
         font-weight: 900;
         text-align: center;
@@ -1931,8 +1931,8 @@ ${fontFaces}
         position: sticky;
         top: 0;
         z-index: 3;
-        background: #EEF2FF;
-        color: #312E81;
+        background: #F5EDE3;
+        color: #3F2E1F;
         font-weight: 900;
       }
       .classroom-export-month-table thead tr:nth-child(2) th {
@@ -1956,7 +1956,7 @@ ${fontFaces}
       .classroom-export-month-table th:first-child,
       .classroom-export-simple-table th:first-child {
         z-index: 5;
-        background: #EEF2FF;
+        background: #F5EDE3;
       }
       .classroom-export-month-table th:nth-child(2),
       .classroom-export-month-table td:nth-child(2),
@@ -1974,7 +1974,7 @@ ${fontFaces}
       .classroom-export-month-table th:nth-child(2),
       .classroom-export-simple-table th:nth-child(2) {
         z-index: 5;
-        background: #EEF2FF;
+        background: #F5EDE3;
       }
       .classroom-export-month-table tbody tr:nth-child(even) td,
       .classroom-export-simple-table tbody tr:nth-child(even) td {

@@ -10,8 +10,8 @@ const STYLES = `
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
   .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
   .period-info {
-    padding: 12px 14px; border-radius: 12px; border: 1px solid #E0E7FF; background: #EEF2FF;
-    color: #3730A3; font-size: 12.5px; font-weight: 700;
+    padding: 12px 14px; border-radius: 12px; border: 1px solid #EFE6D8; background: #F5EDE3;
+    color: #5C4330; font-size: 12.5px; font-weight: 700;
   }
   .period-table-wrap {
     overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
@@ -34,7 +34,7 @@ const STYLES = `
     background: #fff; color: #334155; font-size: 12px; font-weight: 800; cursor: pointer;
   }
   .period-btn.primary {
-    border-color: #7C3AED; background: #7C3AED; color: #fff;
+    border-color: #C49212; background: #C49212; color: #fff;
   }
   .schedule-empty { padding: 28px; text-align: center; color: #64748B; font-size: 13px; font-weight: 700; }
 `

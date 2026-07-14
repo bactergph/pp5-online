@@ -47,10 +47,7 @@ export default function LoginPage() {
         </div>
 
         <div className="jarnsek-login__field">
-          <div className="jarnsek-login__label-row">
-            <label className="jarnsek-login__label" htmlFor="password">รหัสผ่าน</label>
-            <a href="/register" className="jarnsek-login__forgot">ลืมรหัสผ่าน?</a>
-          </div>
+          <label className="jarnsek-login__label" htmlFor="password">รหัสผ่าน</label>
           <div className="jarnsek-login__control jarnsek-login__control--password">
             <span className="jarnsek-login__ico" aria-hidden>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -60,6 +57,7 @@ export default function LoginPage() {
             </span>
             <PasswordInput id="password" name="password" placeholder="กรอกรหัสผ่าน" />
           </div>
+          <a href="/register" className="jarnsek-login__forgot">ลืมรหัสผ่าน?</a>
         </div>
 
         <button type="submit" className="jarnsek-login__submit" disabled={pending}>

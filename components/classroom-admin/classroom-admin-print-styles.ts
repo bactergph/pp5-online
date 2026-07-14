@@ -301,9 +301,9 @@ const CLASSROOM_ADMIN_PRINT_RULES = `
     .classroom-admin-signature-role { margin-top: 1mm; font-size: 9px; }
   }
   .pp5-tuner-toggle.active {
-    border-color: #2563eb !important;
+    border-color: #8B6B45 !important;
     background: #eff6ff !important;
-    color: #1d4ed8 !important;
+    color: #6B4F32 !important;
   }
   .classroom-admin-page--print {
     padding: 0 !important;

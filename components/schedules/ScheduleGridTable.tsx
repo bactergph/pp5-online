@@ -14,7 +14,7 @@ const GRID_STYLES = `
     font-size: 11px; font-weight: 900; white-space: nowrap;
   }
   .schedule-grid-table th.col-day {
-    min-width: 72px; position: sticky; left: 0; z-index: 2; background: #EEF2FF;
+    min-width: 72px; position: sticky; left: 0; z-index: 2; background: #F5EDE3;
   }
   .schedule-grid-table th.col-period { min-width: 108px; }
   .schedule-grid-table th .period-time {
@@ -25,7 +25,7 @@ const GRID_STYLES = `
     writing-mode: vertical-rl; text-orientation: mixed; padding: 12px 4px;
   }
   .schedule-grid-table td.day-col {
-    position: sticky; left: 0; z-index: 1; background: #EEF2FF;
+    position: sticky; left: 0; z-index: 1; background: #F5EDE3;
     color: #1E3A8A; font-size: 12px; font-weight: 900; padding: 8px 10px;
   }
   .schedule-grid-table td.cell { min-width: 108px; padding: 6px; vertical-align: top; }

@@ -33,7 +33,7 @@ const SCORE_ENTRY_STYLES = `
   .score-entry-title { display: flex; align-items: center; gap: 12px; }
   .score-entry-title-mark {
     display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px;
-    color: #7C3AED; background: #F3E8FF;
+    color: #C49212; background: #F3E8FF;
   }
   .score-entry-title h1 { margin: 0; color: #111827; font-size: 22px; font-weight: 900; line-height: 1.1; }
   .score-entry-title p { margin: 4px 0 0; color: #64748B; font-size: 12.5px; font-weight: 700; }
@@ -56,7 +56,7 @@ const SCORE_ENTRY_STYLES = `
     border: 0; background: transparent; padding: 10px 4px; color: #64748B;
     font-size: 13px; font-weight: 900; cursor: pointer; border-bottom: 2px solid transparent;
   }
-  .score-entry-tab.is-active { color: #6D28D9; border-bottom-color: #7C3AED; }
+  .score-entry-tab.is-active { color: #6D28D9; border-bottom-color: #C49212; }
   .score-summary-pills { display: flex; gap: 8px; flex-wrap: wrap; }
   .score-summary-pills span {
     display: inline-flex; align-items: center; gap: 4px; padding: 7px 10px;
@@ -88,10 +88,10 @@ const SCORE_ENTRY_STYLES = `
   .score-entry-table .score-sticky-name { position: sticky; left: 46px; z-index: 3; min-width: 190px; }
   .score-entry-table thead .score-sticky-no,
   .score-entry-table thead .score-sticky-name { z-index: 5; background: #F8FAFC; }
-  .score-max-label { color: #7C3AED !important; font-weight: 900; }
+  .score-max-label { color: #C49212 !important; font-weight: 900; }
   .score-unit-head { background: #ECFDF5 !important; color: #047857 !important; }
   .score-mid-head { background: #FEF3C7 !important; color: #92400E !important; }
-  .score-final-head { background: #DBEAFE !important; color: #1D4ED8 !important; }
+  .score-final-head { background: #F5EDE3 !important; color: #6B4F32 !important; }
   .score-total-head { background: #EDE9FE !important; color: #5B21B6 !important; }
   .score-year-head { background: #FCE7F3 !important; color: #BE185D !important; }
   .score-input {
