@@ -1,10 +1,10 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import LoadingButton from '@/components/LoadingButton'
-import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota } from './actions'
+import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, searchSchoolsForAdminAssign } from './actions'
 import { useAppAlert } from '@/lib/use-app-alert'
 
-type School = { id: string; name: string }
+type School = { id: string; name: string; district?: string | null; province?: string | null }
 type Stat = { students: number; principal: number; academic_head: number; homeroom: number; teacher_only: number; totalUsers: number }
 type Admin = {
   id: string; email: string; prefix: string; full_name: string
@@ -29,6 +29,9 @@ export default function DistrictAdminsPage() {
   const [schoolSearch, setSchoolSearch] = useState('')
   const [selectedSchoolId, setSelectedSchoolId] = useState('')
   const [showSchoolDrop, setShowSchoolDrop] = useState(false)
+  const [schoolResults, setSchoolResults] = useState<School[]>([])
+  const [schoolSearching, setSchoolSearching] = useState(false)
+  const schoolSearchSeq = useRef(0)
 
   // reset password modal
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null)
@@ -75,13 +78,33 @@ export default function DistrictAdminsPage() {
   }
 
   function openAdd() {
-    setEditAdmin(null); setSelectedSchoolId(''); setSchoolSearch(''); setFormError(''); setShowForm(true)
+    setEditAdmin(null); setSelectedSchoolId(''); setSchoolSearch(''); setSchoolResults([]); setFormError(''); setShowForm(true)
   }
   function openEdit(admin: Admin) {
     setEditAdmin(admin)
     setSelectedSchoolId(admin.school_id || '')
-    setSchoolSearch(schools.find(s => s.id === admin.school_id)?.name || '')
+    setSchoolSearch(admin.school?.name || schools.find(s => s.id === admin.school_id)?.name || '')
+    setSchoolResults([])
     setFormError(''); setShowForm(true)
+  }
+
+  async function onSchoolSearchChange(value: string) {
+    setSchoolSearch(value)
+    setSelectedSchoolId('')
+    setShowSchoolDrop(true)
+    const seq = ++schoolSearchSeq.current
+    const q = value.trim()
+    if (q.length < 1) { setSchoolResults([]); setSchoolSearching(false); return }
+    setSchoolSearching(true)
+    try {
+      const rows = await searchSchoolsForAdminAssign(q)
+      if (seq !== schoolSearchSeq.current) return
+      setSchoolResults(rows as School[])
+    } catch {
+      if (seq !== schoolSearchSeq.current) return
+      setSchoolResults([])
+    }
+    setSchoolSearching(false)
   }
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
@@ -186,26 +209,34 @@ export default function DistrictAdminsPage() {
                 <div style={{ gridColumn: '1 / -1', position: 'relative' }}>
                   <label className="form-label">โรงเรียน *</label>
                   <input type="hidden" name="school_id" value={selectedSchoolId} />
-                  <input type="text" className="form-input" placeholder="พิมพ์ชื่อโรงเรียนเพื่อค้นหา..."
+                  <input type="text" className="form-input" placeholder="พิมพ์ชื่อโรงเรียน / อำเภอ / จังหวัด เพื่อค้นหา..."
                     value={schoolSearch} autoComplete="off"
-                    onChange={e => { setSchoolSearch(e.target.value); setSelectedSchoolId(''); setShowSchoolDrop(true) }}
+                    onChange={e => onSchoolSearchChange(e.target.value)}
                     onFocus={() => setShowSchoolDrop(true)}
-                    onBlur={() => setTimeout(() => setShowSchoolDrop(false), 150)}
+                    onBlur={() => setTimeout(() => setShowSchoolDrop(false), 180)}
                     style={{ borderColor: selectedSchoolId ? '#059669' : undefined }}
                   />
                   {selectedSchoolId && <div style={{ fontSize: '11px', color: '#059669', marginTop: '4px' }}>✓ เลือกแล้ว</div>}
-                  {showSchoolDrop && schoolSearch.length >= 1 && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: 'white', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: '200px', overflowY: 'auto', marginTop: '4px' }}>
-                      {schools.filter(s => s.name.includes(schoolSearch)).slice(0, 30).map(s => (
+                  {showSchoolDrop && schoolSearch.trim().length >= 1 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: 'white', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: '240px', overflowY: 'auto', marginTop: '4px' }}>
+                      {schoolSearching && (
+                        <div style={{ padding: '12px 14px', fontSize: '13px', color: 'var(--text-3)' }}>กำลังค้นหา...</div>
+                      )}
+                      {!schoolSearching && schoolResults.map(s => (
                         <div key={s.id} onMouseDown={() => { setSelectedSchoolId(s.id); setSchoolSearch(s.name); setShowSchoolDrop(false) }}
                           style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border)', background: selectedSchoolId === s.id ? '#F5EDE3' : 'white' }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#F5F5F5')}
                           onMouseLeave={e => (e.currentTarget.style.background = selectedSchoolId === s.id ? '#F5EDE3' : 'white')}>
-                          {s.name}
+                          <div style={{ fontWeight: 600 }}>{s.name}</div>
+                          {(s.district || s.province) && (
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                              {[s.district, s.province].filter(Boolean).join(' · ')}
+                            </div>
+                          )}
                         </div>
                       ))}
-                      {schools.filter(s => s.name.includes(schoolSearch)).length === 0 && (
-                        <div style={{ padding: '12px 14px', fontSize: '13px', color: 'var(--text-3)' }}>ไม่พบโรงเรียน</div>
+                      {!schoolSearching && schoolResults.length === 0 && (
+                        <div style={{ padding: '12px 14px', fontSize: '13px', color: 'var(--text-3)' }}>ไม่พบโรงเรียนในฐานข้อมูล</div>
                       )}
                     </div>
                   )}

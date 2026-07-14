@@ -13,10 +13,22 @@ type AdminRow = {
   is_active: boolean
   school_id: string | null
 }
-type SchoolRow = { id: string; name: string; created_by?: string | null }
+type SchoolRow = { id: string; name: string; created_by?: string | null; district?: string | null; province?: string | null }
 
-function normalizedOwner(value: string | null | undefined) {
-  return (value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+/** ค้นหาโรงเรียนจากฐานข้อมูลทั้งระบบ (เลือกตอนเพิ่ม/แก้ผู้ดูแล) */
+export async function searchSchoolsForAdminAssign(q: string) {
+  await requireDistrict()
+  const term = q.trim().replace(/,/g, ' ')
+  if (term.length < 1) return [] as SchoolRow[]
+  const db = createServerClient()
+  const { data, error } = await db
+    .from('schools')
+    .select('id, name, district, province')
+    .or(`name.ilike.%${term}%,district.ilike.%${term}%,province.ilike.%${term}%`)
+    .order('name')
+    .limit(40)
+  if (error) throw new Error(error.message)
+  return (data || []) as SchoolRow[]
 }
 
 // Super Admin: เห็น admin ทุกคน ทุกโรงเรียน (ไม่ scope เขต) + นับ นร./ครู/วิชา ของแต่ละโรงเรียน
@@ -24,70 +36,26 @@ export async function fetchAdminsAndSchools() {
   await requireDistrict()
   const db = createServerClient()
 
-  const [adminsRes, schoolsRes] = await Promise.all([
-    db.from('users')
-      .select('id, email, prefix, full_name, position, is_active, school_id')
-      .eq('role', 'admin')
-      .order('is_active', { ascending: true })   // รออนุมัติ (is_active=false) ขึ้นก่อน
-      .order('full_name'),
-    db.from('schools').select('id, name, created_by').order('name'),
-  ])
+  // ไม่โหลด schools ทั้งประเทศ (~หลายหมื่นแถว / ติด limit 1000 ของ Supabase)
+  // ดึงเฉพาะโรงเรียนที่ผูกกับ admin อยู่แล้ว สำหรับแสดงในตาราง
+  const adminsRes = await db.from('users')
+    .select('id, email, prefix, full_name, position, is_active, school_id')
+    .eq('role', 'admin')
+    .order('is_active', { ascending: true })
+    .order('full_name')
   const admins = (adminsRes.data || []) as AdminRow[]
-  const schools = (schoolsRes.data || []) as SchoolRow[]
 
-  // Legacy repair: older school-selection flows could create/update a school
-  // without writing users.school_id. Match the school's created_by against the
-  // admin identity, then link it back so Super Admin no longer sees "ยังไม่ได้กำหนด".
-  for (const admin of admins) {
-    if (admin.school_id) continue
-    let authFullName = ''
-    try {
-      const { data } = await db.auth.admin.getUserById(admin.id)
-      authFullName = String(data?.user?.user_metadata?.full_name || '')
-    } catch { /* best-effort repair */ }
-    const ownerKeys = new Set([
-      normalizedOwner(admin.full_name),
-      normalizedOwner(`${admin.prefix || ''} ${admin.full_name || ''}`),
-      normalizedOwner(admin.email),
-      normalizedOwner(authFullName),
-    ].filter(Boolean))
-    const ownedSchools = schools.filter(s =>
-      s.created_by?.trim() &&
-      ownerKeys.has(normalizedOwner(s.created_by))
-    )
-    if (ownedSchools.length !== 1) continue
-    const schoolId = ownedSchools[0].id
-    const { error } = await db.from('users').update({ school_id: schoolId }).eq('id', admin.id)
-    if (!error) admin.school_id = schoolId
-  }
-
-  // Final safe repair for legacy/demo data: if there is exactly one unassigned
-  // admin and exactly one school that no admin owns, link them. Avoid guessing
-  // when there are multiple possible matches.
-  const assignedSchoolIds = new Set(admins.map(a => a.school_id).filter(Boolean))
-  const remainingAdmins = admins.filter(a => !a.school_id)
-  const unownedSchools = schools.filter(s => !assignedSchoolIds.has(s.id))
-  if (remainingAdmins.length === 1 && unownedSchools.length === 1) {
-    const admin = remainingAdmins[0]
-    const schoolId = unownedSchools[0].id
-    const { error } = await db.from('users').update({ school_id: schoolId }).eq('id', admin.id)
-    if (!error) admin.school_id = schoolId
-  }
-
-  const schoolMap: Record<string, SchoolRow> = Object.fromEntries(schools.map(s => [s.id, s]))
-
-  // Some legacy rows already have users.school_id but the broad schools query can
-  // miss the referenced school. Fetch linked schools explicitly so the table does
-  // not show "ยังไม่ได้กำหนด" when the admin is actually linked.
+  const schoolMap: Record<string, SchoolRow> = {}
+  const schools: SchoolRow[] = []
   const linkedSchoolIds = [...new Set(admins.map(a => a.school_id).filter(Boolean))] as string[]
-  const missingSchoolIds = linkedSchoolIds.filter(id => !schoolMap[id])
-  if (missingSchoolIds.length > 0) {
+  for (let i = 0; i < linkedSchoolIds.length; i += 200) {
+    const chunk = linkedSchoolIds.slice(i, i + 200)
     const { data: linkedSchools } = await db.from('schools')
-      .select('id, name')
-      .in('id', missingSchoolIds)
+      .select('id, name, district, province')
+      .in('id', chunk)
     for (const school of (linkedSchools || []) as SchoolRow[]) {
       schoolMap[school.id] = school
-      if (!schools.some(s => s.id === school.id)) schools.push(school)
+      schools.push(school)
     }
   }
 
