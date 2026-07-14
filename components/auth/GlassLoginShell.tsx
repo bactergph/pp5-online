@@ -82,7 +82,7 @@ export default function GlassLoginShell({
 
             <p className="jarnsek-login__brand-name">จารย์เสก</p>
 
-            <span className="jarnsek-login__badge jarnsek-login__desktop-only">
+            <span className="jarnsek-login__badge">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M15 4V2M15 16v-2M8 9H6M22 9h-2M18.36 5.64l1.42-1.42M18.36 12.36l1.42 1.42M4.22 4.22l1.42 1.42M4.22 13.78l1.42-1.42" stroke="#FDE047" strokeWidth="1.8" strokeLinecap="round" />
                 <path d="M9 15l-6 6M14.5 4.5l5 5-8.5 8.5H6v-5L14.5 4.5z" stroke="#FDE047" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -91,14 +91,11 @@ export default function GlassLoginShell({
             </span>
 
             <p className="jarnsek-login__slogan">
-              <span className="jarnsek-login__slogan-mobile">เสกงานวิชาการให้เสร็จในพริบตา</span>
-              <span className="jarnsek-login__slogan-desktop">
-                เสก ปพ.5, ปพ.6,
-                <br />
-                <span>ธุรการชั้นเรียน, ตารางสอน</span>
-                <br />
-                ให้เสร็จไว... ในพริบตา!
-              </span>
+              เสก ปพ.5, ปพ.6,
+              <br />
+              <span>ธุรการชั้นเรียน, ตารางสอน</span>
+              <br />
+              ให้เสร็จไว... ในพริบตา!
             </p>
 
             <p className="jarnsek-login__desc jarnsek-login__desktop-only">

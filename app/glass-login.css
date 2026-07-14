@@ -177,7 +177,7 @@
 }
 
 .jarnsek-login__brand-name {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: clamp(1.85rem, 7vw, 2.15rem);
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -194,7 +194,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   padding: 6px 14px;
   border-radius: 999px;
   font-size: 12px;
@@ -209,19 +209,11 @@
 
 .jarnsek-login__slogan {
   margin: 0;
-  font-size: 0.98rem;
-  font-weight: 500;
-  line-height: 1.45;
-  color: rgba(255, 246, 232, 0.95);
-  max-width: 18rem;
-}
-
-.jarnsek-login__slogan-mobile {
-  display: inline;
-}
-
-.jarnsek-login__slogan-desktop {
-  display: none;
+  font-size: clamp(0.98rem, 3.6vw, 1.15rem);
+  font-weight: 600;
+  line-height: 1.5;
+  color: #fff6e8;
+  max-width: 20rem;
 }
 
 .jarnsek-login__slogan span {
@@ -629,6 +621,7 @@ a.jarnsek-login__submit--link {
 
   .jarnsek-login__badge {
     display: inline-flex !important;
+    margin-bottom: 16px;
   }
 
   .jarnsek-login__desc {
@@ -645,14 +638,6 @@ a.jarnsek-login__submit--link {
     font-weight: 600;
     max-width: none;
     color: #fff6e8;
-  }
-
-  .jarnsek-login__slogan-mobile {
-    display: none;
-  }
-
-  .jarnsek-login__slogan-desktop {
-    display: inline;
   }
 
   .jarnsek-login__main {
