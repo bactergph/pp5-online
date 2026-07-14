@@ -8,54 +8,122 @@
   --js-cream: #f7f1e8;
   --js-ink: #2c2419;
   --js-blue: #1e3a5f;
+  --js-safe-b: env(safe-area-inset-bottom, 0px);
+  --js-safe-t: env(safe-area-inset-top, 0px);
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   min-height: 100svh;
+  min-height: 100dvh;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  padding: 16px;
+  padding:
+    max(12px, var(--js-safe-t))
+    16px
+    max(16px, calc(12px + var(--js-safe-b)))
+    16px;
   box-sizing: border-box;
   font-family: var(--font-kanit), 'Kanit', 'Sarabun', sans-serif;
   background:
-    radial-gradient(ellipse 70% 50% at 10% 0%, rgba(232, 185, 35, 0.18), transparent 55%),
-    radial-gradient(ellipse 60% 45% at 100% 100%, rgba(139, 107, 69, 0.16), transparent 50%),
-    linear-gradient(160deg, #f3ebe0 0%, #e8dcc9 55%, #efe6d8 100%);
+    radial-gradient(ellipse 80% 45% at 50% -10%, rgba(232, 185, 35, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 40% at 100% 100%, rgba(139, 107, 69, 0.18), transparent 50%),
+    linear-gradient(165deg, #f4ebe0 0%, #e6d8c4 48%, #f0e6d7 100%);
   color: var(--js-ink);
+  overflow-x: hidden;
+}
+
+.jarnsek-login__atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.jarnsek-login__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.35;
+  animation: jarnsek-orb-float 12s ease-in-out infinite;
+}
+
+.jarnsek-login__orb--a {
+  width: 240px;
+  height: 240px;
+  top: -60px;
+  left: -40px;
+  background: #f5d76e;
+}
+
+.jarnsek-login__orb--b {
+  width: 200px;
+  height: 200px;
+  bottom: 10%;
+  right: -50px;
+  background: #b8956a;
+  animation-delay: -4s;
+  opacity: 0.28;
+}
+
+@keyframes jarnsek-orb-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(12px, 18px) scale(1.06); }
 }
 
 .jarnsek-login__card {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 64rem;
+  max-width: 26rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 1.5rem;
-  background: #fffdf9;
-  border: 1px solid rgba(184, 149, 106, 0.28);
-  box-shadow:
-    0 25px 50px -12px rgba(67, 48, 28, 0.22),
-    0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  animation: jarnsek-rise 0.55s ease-out both;
 }
 
+@keyframes jarnsek-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Mobile hero: brand first, full-bleed khaki plane ── */
 .jarnsek-login__promo {
   position: relative;
   overflow: hidden;
-  width: 100%;
-  padding: 28px 24px 32px;
+  width: calc(100% + 32px);
+  margin: 0 -16px;
+  padding: 28px 24px 44px;
   color: #fffaf3;
-  background: linear-gradient(145deg, #6b4f32 0%, #8b6b45 42%, #b8956a 100%);
+  background:
+    radial-gradient(ellipse 90% 70% at 70% 0%, rgba(245, 215, 110, 0.28), transparent 55%),
+    linear-gradient(155deg, #5c4228 0%, #8b6b45 48%, #b8956a 100%);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
+  align-items: center;
+  text-align: center;
+  clip-path: ellipse(120% 100% at 50% 0%);
 }
 
 .jarnsek-login__glow {
   position: absolute;
-  width: 16rem;
-  height: 16rem;
+  width: 14rem;
+  height: 14rem;
   border-radius: 50%;
   background: #f5d76e;
-  opacity: 0.18;
+  opacity: 0.2;
   filter: blur(48px);
   pointer-events: none;
 }
@@ -63,33 +131,63 @@
 .jarnsek-login__glow--tl {
   top: 0;
   right: 0;
-  transform: translate(40%, -40%);
+  transform: translate(35%, -35%);
 }
 
 .jarnsek-login__glow--br {
   bottom: 0;
   left: 0;
   background: #fff;
-  opacity: 0.12;
-  transform: translate(-40%, 40%);
+  opacity: 0.1;
+  transform: translate(-35%, 35%);
 }
 
 .jarnsek-login__promo-body {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
 }
 
 .jarnsek-login__logo-wrap {
-  display: none;
-  margin: 0 auto 18px;
-  width: min(100%, 300px);
+  display: block;
+  margin: 0 auto 10px;
+  width: min(52vw, 168px);
+  animation: jarnsek-logo-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes jarnsek-logo-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .jarnsek-login__logo {
   width: 100%;
   height: auto;
   display: block;
-  filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.32));
+}
+
+.jarnsek-login__brand-name {
+  margin: 0 0 8px;
+  font-size: clamp(1.85rem, 7vw, 2.15rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff8e7;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.22);
+  line-height: 1.15;
+}
+
+.jarnsek-login__desktop-only {
+  display: none !important;
 }
 
 .jarnsek-login__badge {
@@ -110,11 +208,20 @@
 }
 
 .jarnsek-login__slogan {
-  margin: 0 0 16px;
-  font-size: clamp(1.1rem, 3vw, 1.4rem);
-  font-weight: 600;
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 500;
   line-height: 1.45;
-  color: #fff6e8;
+  color: rgba(255, 246, 232, 0.95);
+  max-width: 18rem;
+}
+
+.jarnsek-login__slogan-mobile {
+  display: inline;
+}
+
+.jarnsek-login__slogan-desktop {
+  display: none;
 }
 
 .jarnsek-login__slogan span {
@@ -140,6 +247,8 @@
   font-size: 14px;
   font-weight: 500;
   color: #fff8e7;
+  text-align: left;
+  width: 100%;
 }
 
 .jarnsek-login__feature {
@@ -163,47 +272,52 @@
   flex-shrink: 0;
 }
 
+/* ── Form panel (mobile) ── */
 .jarnsek-login__main {
   width: 100%;
-  padding: 28px 24px;
-  background: #fffdf9;
+  margin-top: -18px;
+  padding: 22px 0 8px;
+  background: transparent;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  animation: jarnsek-rise 0.6s ease-out 0.12s both;
 }
 
 .jarnsek-login__form-wrap {
   width: 100%;
-  max-width: 28rem;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
+  padding: 22px 18px 20px;
+  border-radius: 22px;
+  background: rgba(255, 253, 249, 0.94);
+  border: 1px solid rgba(184, 149, 106, 0.22);
+  box-shadow:
+    0 18px 40px -18px rgba(67, 48, 28, 0.28),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  backdrop-filter: blur(10px);
 }
 
 .jarnsek-login__mobile-logo {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 12px;
-}
-
-.jarnsek-login__mobile-logo-img {
-  width: 120px;
-  height: auto;
-  filter: drop-shadow(0 6px 14px rgba(107, 79, 50, 0.2));
+  display: none;
 }
 
 .jarnsek-login__form-head {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  text-align: center;
 }
 
 .jarnsek-login__form-title {
-  margin: 0 0 8px;
-  font-size: clamp(1.45rem, 4vw, 1.75rem);
+  margin: 0 0 6px;
+  font-size: 1.35rem;
   font-weight: 700;
   color: var(--js-khaki-deep);
+  letter-spacing: 0.01em;
 }
 
 .jarnsek-login__form-sub {
   margin: 0;
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 300;
   color: #7a6a55;
   line-height: 1.5;
@@ -212,17 +326,17 @@
 .jarnsek-login__form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .jarnsek-login__field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .jarnsek-login__label {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   color: #4a3d2e;
 }
@@ -237,11 +351,15 @@
 .jarnsek-login__forgot {
   align-self: flex-end;
   margin-top: 2px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
   font-size: 13px;
   font-weight: 500;
   color: var(--js-blue);
   text-decoration: none;
   white-space: nowrap;
+  padding: 4px 2px;
 }
 
 .jarnsek-login__forgot:hover {
@@ -255,7 +373,7 @@
 
 .jarnsek-login__ico {
   position: absolute;
-  left: 16px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: #b8956a;
@@ -267,15 +385,18 @@
 .jarnsek-login__input {
   width: 100%;
   box-sizing: border-box;
+  min-height: 50px;
   padding: 14px 16px 14px 44px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid #e2d5c3;
   background: #fffaf3;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px; /* กัน iOS zoom */
   color: #374151;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .jarnsek-login__input::placeholder {
@@ -295,15 +416,18 @@
 .jarnsek-login__control--password .auth-scout-input {
   width: 100%;
   box-sizing: border-box;
-  padding: 14px 44px 14px 44px;
-  border-radius: 12px;
+  min-height: 50px;
+  padding: 14px 48px 14px 44px;
+  border-radius: 14px;
   border: 1px solid #e2d5c3;
   background: #fffaf3;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px;
   color: #374151;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .jarnsek-login__control--password .auth-scout-input:focus {
@@ -314,24 +438,30 @@
 
 .jarnsek-login__control--password .auth-scout-password__toggle {
   color: #b8956a;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .jarnsek-login__submit {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: 52px;
   padding: 14px 18px;
   border: none;
-  border-radius: 12px;
+  border-radius: 14px;
   font-family: inherit;
   font-size: 17px;
   font-weight: 700;
   color: #3b2a12;
   background: linear-gradient(90deg, #f5d76e 0%, #e8b923 45%, #d4a017 100%);
-  box-shadow: 0 10px 24px -6px rgba(196, 146, 18, 0.45);
+  box-shadow: 0 12px 28px -8px rgba(196, 146, 18, 0.5);
   cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
 }
@@ -352,11 +482,11 @@
 }
 
 .jarnsek-login__form-foot {
-  margin-top: 28px;
-  padding-top: 22px;
+  margin-top: 20px;
+  padding-top: 18px;
   border-top: 1px solid #eee4d6;
   text-align: center;
-  font-size: 15px;
+  font-size: 14.5px;
   color: #6b5c4a;
 }
 
@@ -364,6 +494,7 @@
   font-weight: 700;
   color: var(--js-blue);
   text-decoration: none;
+  padding: 4px;
 }
 
 .jarnsek-login__form-foot a:hover {
@@ -377,21 +508,21 @@
 }
 
 .jarnsek-login__card--wide {
-  max-width: 68rem;
+  max-width: 26rem;
 }
 
 .jarnsek-login__form-wrap--wide {
-  max-width: 32rem;
+  max-width: none;
 }
 
 .jarnsek-login__grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 14px;
 }
 
 .jarnsek-login__grid--name {
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: 1fr;
 }
 
 .jarnsek-login__input--plain {
@@ -441,43 +572,134 @@ a.jarnsek-login__submit--link {
   border-top-color: #3b2a12;
 }
 
-@media (max-width: 520px) {
-  .jarnsek-login__grid,
-  .jarnsek-login__grid--name {
-    grid-template-columns: 1fr;
-  }
-}
-
+/* ── Desktop: restore split card ── */
 @media (min-width: 768px) {
   .jarnsek-login {
+    align-items: center;
     padding: 32px;
   }
 
+  .jarnsek-login__atmosphere {
+    display: none;
+  }
+
   .jarnsek-login__card {
+    max-width: 64rem;
     flex-direction: row;
     min-height: 600px;
+    border-radius: 1.5rem;
+    background: #fffdf9;
+    border: 1px solid rgba(184, 149, 106, 0.28);
+    box-shadow:
+      0 25px 50px -12px rgba(67, 48, 28, 0.22),
+      0 0 0 1px rgba(255, 255, 255, 0.5) inset;
   }
 
   .jarnsek-login__card--wide {
+    max-width: 68rem;
     min-height: 640px;
   }
 
   .jarnsek-login__promo {
     width: 44%;
+    margin: 0;
     padding: 36px 28px 40px;
+    clip-path: none;
+    text-align: left;
+    align-items: stretch;
+    justify-content: center;
+  }
+
+  .jarnsek-login__promo-body {
+    align-items: flex-start;
   }
 
   .jarnsek-login__logo-wrap {
-    display: block;
+    width: min(100%, 300px);
+    margin: 0 auto 18px;
   }
 
-  .jarnsek-login__mobile-logo {
+  .jarnsek-login__brand-name {
     display: none;
+  }
+
+  .jarnsek-login__desktop-only {
+    display: revert !important;
+  }
+
+  .jarnsek-login__badge {
+    display: inline-flex !important;
+  }
+
+  .jarnsek-login__desc {
+    display: block !important;
+  }
+
+  .jarnsek-login__features {
+    display: flex !important;
+  }
+
+  .jarnsek-login__slogan {
+    margin: 0 0 16px;
+    font-size: clamp(1.1rem, 3vw, 1.4rem);
+    font-weight: 600;
+    max-width: none;
+    color: #fff6e8;
+  }
+
+  .jarnsek-login__slogan-mobile {
+    display: none;
+  }
+
+  .jarnsek-login__slogan-desktop {
+    display: inline;
   }
 
   .jarnsek-login__main {
     width: 56%;
+    margin-top: 0;
     padding: 48px 52px;
+    background: #fffdf9;
+    justify-content: center;
+    animation: none;
+  }
+
+  .jarnsek-login__form-wrap {
+    max-width: 28rem;
+    margin: 0 auto;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .jarnsek-login__form-wrap--wide {
+    max-width: 32rem;
+  }
+
+  .jarnsek-login__form-head {
+    text-align: left;
+    margin-bottom: 24px;
+  }
+
+  .jarnsek-login__form-title {
+    font-size: clamp(1.45rem, 4vw, 1.75rem);
+  }
+
+  .jarnsek-login__form-sub {
+    font-size: 15px;
+  }
+
+  .jarnsek-login__form {
+    gap: 18px;
+  }
+
+  .jarnsek-login__form-foot {
+    margin-top: 28px;
+    padding-top: 22px;
+    font-size: 15px;
   }
 
   .jarnsek-login__desc {
@@ -487,10 +709,30 @@ a.jarnsek-login__submit--link {
   .jarnsek-login__features {
     font-size: 15px;
   }
+
+  .jarnsek-login__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .jarnsek-login__grid--name {
+    grid-template-columns: 110px 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .jarnsek-login__grid,
+  .jarnsek-login__grid--name {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .jarnsek-login__card,
+  .jarnsek-login__main,
+  .jarnsek-login__logo-wrap,
+  .jarnsek-login__orb,
   .jarnsek-login__submit {
+    animation: none !important;
     transition: none;
   }
 }

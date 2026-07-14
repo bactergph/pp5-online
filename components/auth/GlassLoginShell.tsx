@@ -57,6 +57,11 @@ export default function GlassLoginShell({
 }: Props) {
   return (
     <div className="jarnsek-login">
+      <div className="jarnsek-login__atmosphere" aria-hidden>
+        <div className="jarnsek-login__orb jarnsek-login__orb--a" />
+        <div className="jarnsek-login__orb jarnsek-login__orb--b" />
+      </div>
+
       <div className={`jarnsek-login__card${wide ? ' jarnsek-login__card--wide' : ''}`}>
         <aside className="jarnsek-login__promo">
           <div className="jarnsek-login__glow jarnsek-login__glow--tl" aria-hidden />
@@ -71,11 +76,13 @@ export default function GlassLoginShell({
                 height={512}
                 priority
                 className="jarnsek-login__logo"
-                sizes="(max-width: 767px) 220px, 300px"
+                sizes="(max-width: 767px) 200px, 300px"
               />
             </div>
 
-            <span className="jarnsek-login__badge">
+            <p className="jarnsek-login__brand-name">จารย์เสก</p>
+
+            <span className="jarnsek-login__badge jarnsek-login__desktop-only">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <path d="M15 4V2M15 16v-2M8 9H6M22 9h-2M18.36 5.64l1.42-1.42M18.36 12.36l1.42 1.42M4.22 4.22l1.42 1.42M4.22 13.78l1.42-1.42" stroke="#FDE047" strokeWidth="1.8" strokeLinecap="round" />
                 <path d="M9 15l-6 6M14.5 4.5l5 5-8.5 8.5H6v-5L14.5 4.5z" stroke="#FDE047" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -84,19 +91,22 @@ export default function GlassLoginShell({
             </span>
 
             <p className="jarnsek-login__slogan">
-              เสก ปพ.5, ปพ.6,
-              <br />
-              <span>ธุรการชั้นเรียน, ตารางสอน</span>
-              <br />
-              ให้เสร็จไว... ในพริบตา!
+              <span className="jarnsek-login__slogan-mobile">เสกงานวิชาการให้เสร็จในพริบตา</span>
+              <span className="jarnsek-login__slogan-desktop">
+                เสก ปพ.5, ปพ.6,
+                <br />
+                <span>ธุรการชั้นเรียน, ตารางสอน</span>
+                <br />
+                ให้เสร็จไว... ในพริบตา!
+              </span>
             </p>
 
-            <p className="jarnsek-login__desc">
+            <p className="jarnsek-login__desc jarnsek-login__desktop-only">
               บอกลาการอดหลับอดนอนทำเอกสาร! แอปผู้ช่วยแบบครบวงจรของครูยุคใหม่
               จัดการทุกความวุ่นวายให้จบในที่เดียว ง่าย... จนเหมือนร่ายมนต์
             </p>
 
-            <ul className="jarnsek-login__features">
+            <ul className="jarnsek-login__features jarnsek-login__desktop-only">
               {FEATURES.map((f) => (
                 <li
                   key={f.label}
@@ -114,20 +124,8 @@ export default function GlassLoginShell({
 
         <main className="jarnsek-login__main">
           <div className={`jarnsek-login__form-wrap${wide ? ' jarnsek-login__form-wrap--wide' : ''}`}>
-            <div className="jarnsek-login__mobile-logo">
-              <Image
-                src="/brand/jarnsek-logo-sm.png"
-                alt="จารย์เสก"
-                width={320}
-                height={320}
-                priority
-                className="jarnsek-login__mobile-logo-img"
-                sizes="120px"
-              />
-            </div>
-
             <header className="jarnsek-login__form-head">
-              <h2 className="jarnsek-login__form-title">{formTitle}</h2>
+              <h1 className="jarnsek-login__form-title">{formTitle}</h1>
               <p className="jarnsek-login__form-sub">{formSubtitle}</p>
             </header>
 

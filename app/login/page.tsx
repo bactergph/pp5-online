@@ -10,7 +10,7 @@ export default function LoginPage() {
   return (
     <GlassLoginShell
       formTitle="เข้าสู่ระบบ"
-      formSubtitle="ใช้อีเมลและรหัสผ่านที่สมัครไว้กับจารย์เสก"
+      formSubtitle="กรอกอีเมลและรหัสผ่านของท่าน"
       footer={(
         <p>
           ยังไม่มีบัญชี? <a href="/register">สมัครใช้งาน</a>
