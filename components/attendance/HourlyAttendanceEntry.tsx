@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import {
   fetchScoreInit, fetchScoreClassrooms, fetchScoreSubjects,
@@ -87,6 +87,8 @@ export default function HourlyAttendanceEntry() {
   const [clearingAll, setClearingAll] = useState(false)
   const [error, setError] = useState('')
   const [weekTab, setWeekTab] = useState(0)
+  const skipYearFetch = useRef(true)
+  const skipClassFetch = useRef(true)
 
   const subjectMap = useMemo(() => Object.fromEntries(subjects.map(s => [s.id, s])), [subjects])
   const selectedSubject = subjectMap[items.find(i => i.id === selectedCS)?.subject_id || '']
@@ -100,23 +102,41 @@ export default function HourlyAttendanceEntry() {
       setUserRole(String(d.role || ''))
       setYears(d.years as Year[])
       setSubjects(d.subjects as Subject[])
-      const active = (d.years as Year[]).find(y => y.is_active) || (d.years as Year[])[0]
-      if (active) setSelectedYear(active.id)
+      const list = (d.classrooms || []) as Classroom[]
+      const csList = (d.classSubjects || []) as CS[]
+      setClassrooms(list)
+      setItems(csList)
+      skipYearFetch.current = true
+      skipClassFetch.current = true
+      setSelectedYear(d.activeYearId || '')
+      setSelectedClass(list[0]?.id || '')
+      setSelectedCS(csList[0]?.id || '')
       setLoading(false)
     })
   }, [])
 
   useEffect(() => {
     if (!selectedYear) return
+    if (skipYearFetch.current) {
+      skipYearFetch.current = false
+      return
+    }
     void fetchScoreClassrooms(selectedYear).then(cs => {
       const list = cs as Classroom[]
+      skipClassFetch.current = true
       setClassrooms(list)
       setSelectedClass(list[0]?.id || '')
+      setItems([])
+      setSelectedCS('')
     })
   }, [selectedYear])
 
   useEffect(() => {
     if (!selectedClass) return
+    if (skipClassFetch.current) {
+      skipClassFetch.current = false
+      return
+    }
     void fetchScoreSubjects(selectedClass).then(data => {
       const list = data as CS[]
       setItems(list)

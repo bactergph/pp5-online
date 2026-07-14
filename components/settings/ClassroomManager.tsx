@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
 import {
@@ -44,6 +44,7 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<typeof empty>(empty)
   const [alertModal, setAlertModal] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
+  const skipYearFetch = useRef(true)
 
   const [yearBeInput, setYearBeInput] = useState(defaultYearBe())
   const [levelRooms, setLevelRooms] = useState<Record<string, number>>({})
@@ -58,7 +59,14 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
   }
 
   useEffect(() => { init() }, [])
-  useEffect(() => { if (selectedYear) loadClassrooms(selectedYear) }, [selectedYear])
+  useEffect(() => {
+    if (!selectedYear) return
+    if (skipYearFetch.current) {
+      skipYearFetch.current = false
+      return
+    }
+    void loadClassrooms(selectedYear)
+  }, [selectedYear])
 
   // sync ปีเมื่อเปลี่ยนปีที่เลือก / โหลดครั้งแรก
   useEffect(() => {
@@ -81,9 +89,10 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
     setYears(data.years as Year[])
     setTeachers(data.teachers as Teacher[])
     setCanManage(data.canManage)
-    const active = (data.years as Year[]).find(y => y.is_active) || (data.years as Year[])[0]
-    if (active) setSelectedYear(active.id)
-    else setLoading(false)
+    setClassrooms((data.classrooms || []) as Classroom[])
+    skipYearFetch.current = true
+    setSelectedYear(data.activeYearId || '')
+    setLoading(false)
   }
 
   async function loadClassrooms(yearId: string) {

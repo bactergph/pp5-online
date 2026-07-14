@@ -1,6 +1,7 @@
 // session.ts - จัดการ session ด้วย JWT + cookie
 // ใช้ jose library เข้ารหัส/ถอดรหัส session
 import 'server-only'
+import { cache } from 'react'
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 
@@ -62,9 +63,9 @@ export async function deleteSession() {
   cookieStore.delete('session')
 }
 
-// อ่าน session จาก cookie
-export async function getSession(): Promise<SessionPayload | null> {
+// อ่าน session จาก cookie (cache ใน 1 request — layout + server actions ซ้ำได้โดยไม่ decrypt ซ้ำ)
+export const getSession = cache(async (): Promise<SessionPayload | null> => {
   const cookieStore = await cookies()
   const cookie = cookieStore.get('session')?.value
   return await decrypt(cookie)
-}
+})
