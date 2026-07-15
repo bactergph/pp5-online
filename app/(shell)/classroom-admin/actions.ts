@@ -159,7 +159,6 @@ async function syncAttendanceActivitiesFromDates(
   rows: { student_id: string; date: string; status: AttendanceStatus }[],
 ) {
   if (rows.length === 0) return null
-  const db = createServerClient()
   const resolveTerm = await fetchAcademicYearTermResolver(academicYearId)
   const payload = rows.flatMap(row => ATTENDANCE_SYNC_ACTIVITY_TYPES.map(activityType => ({
     student_id: row.student_id,
@@ -181,22 +180,26 @@ async function fetchDailyActivityRows(
   activityType: ActivityType,
   start: string,
   end?: string,
+  manualOverridesOnly = false,
 ) {
   const db = createServerClient()
   const base = db.from('daily_activities')
-  const query = (select: string) => {
+  const query = (select: string, filterManualOverride: boolean) => {
     let q = base.select(select)
       .eq('classroom_id', classroomId)
       .eq('activity_type', activityType)
     if (end) q = q.gte('date', start).lte('date', end)
     else q = q.eq('date', start)
+    if (filterManualOverride) q = q.eq('is_manual_override', true)
     return q
   }
 
-  const withOverride = await query('student_id, date, value, is_manual_override')
+  const withOverride = await query('student_id, date, value, is_manual_override', manualOverridesOnly)
   if (!withOverride.error) return (withOverride.data ?? []) as unknown as ActivityRecord[]
 
-  const withoutOverride = await query('student_id, date, value')
+  // รองรับฐานข้อมูลเก่าที่ยังไม่มี is_manual_override โดยไม่ใช้ filter คอลัมน์ดังกล่าว
+  const withoutOverride = await query('student_id, date, value', false)
+  if (manualOverridesOnly) return []
   return (withoutOverride.data ?? []) as unknown as ActivityRecord[]
 }
 
@@ -205,7 +208,11 @@ async function upsertDailyActivities(rows: Record<string, unknown>[]) {
   const withOverride = await db.from('daily_activities').upsert(rows, { onConflict: 'student_id,date,activity_type' })
   if (!withOverride.error) return withOverride
 
-  const fallbackRows = rows.map(({ is_manual_override: _unused, ...row }) => row)
+  const fallbackRows = rows.map(row => {
+    const fallback = { ...row }
+    delete fallback.is_manual_override
+    return fallback
+  })
   return db.from('daily_activities').upsert(fallbackRows, { onConflict: 'student_id,date,activity_type' })
 }
 
@@ -213,11 +220,6 @@ export async function fetchClassroomAdminContext() {
   const session = await requireClassroomAdminSession()
   const db = createServerClient()
   const sid = session.schoolId || ''
-
-  const yearsRes = await db.from('academic_years')
-    .select('id, year_be, is_active')
-    .eq('school_id', sid)
-    .order('year_be', { ascending: false })
 
   let classroomQuery = db.from('classrooms')
     .select('id, level, room, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id')
@@ -229,35 +231,46 @@ export async function fetchClassroomAdminContext() {
     classroomQuery = classroomQuery.or(`homeroom_teacher_id.eq.${session.userId},homeroom_teacher2_id.eq.${session.userId}`)
   }
 
-  const classroomsRes = await classroomQuery
+  const [yearsRes, classroomsRes, schoolWithPosition] = await Promise.all([
+    db.from('academic_years')
+      .select('id, year_be, is_active')
+      .eq('school_id', sid)
+      .order('year_be', { ascending: false }),
+    classroomQuery,
+    db.from('schools')
+      .select('name, logo_url, director_name, acting_director, acting_director_position, layout_tuner_enabled')
+      .eq('id', sid)
+      .maybeSingle(),
+  ])
   const classrooms = classroomsRes.data || []
   const classroomIds = classrooms.map(c => c.id)
   const teacherIds = Array.from(new Set(classrooms.flatMap(c => [c.homeroom_teacher_id, c.homeroom_teacher2_id]).filter(Boolean)))
-  let countMap: Record<string, number> = {}
-  if (classroomIds.length > 0) {
-    const { data: students } = await db.from('students').select('classroom_id').in('classroom_id', classroomIds)
-    countMap = (students || []).reduce((acc: Record<string, number>, row: { classroom_id: string }) => {
+
+  const [studentsRes, teachersRes] = await Promise.all([
+    classroomIds.length > 0
+      ? db.from('students').select('classroom_id').in('classroom_id', classroomIds)
+      : Promise.resolve({ data: [] }),
+    teacherIds.length > 0
+      ? db.from('users').select('id, full_name').in('id', teacherIds)
+      : Promise.resolve({ data: [] }),
+  ])
+  const countMap = (studentsRes.data || []).reduce((acc: Record<string, number>, row: { classroom_id: string }) => {
       acc[row.classroom_id] = (acc[row.classroom_id] || 0) + 1
       return acc
     }, {})
-  }
-  let teacherNameMap: Record<string, string> = {}
-  if (teacherIds.length > 0) {
-    const { data: teachers } = await db.from('users').select('id, full_name').in('id', teacherIds)
-    teacherNameMap = Object.fromEntries((teachers || []).map(t => [t.id, t.full_name]))
-  }
+  const teacherNameMap: Record<string, string> = Object.fromEntries(
+    (teachersRes.data || []).map(t => [t.id, t.full_name]),
+  )
+
   let school: {
     name: string | null
     logo_url: string | null
     director_name: string | null
     acting_director: string | null
     acting_director_position?: string | null
+    layout_tuner_enabled?: boolean | null
   } | null = null
-  const schoolWithPosition = await db.from('schools')
-    .select('name, logo_url, director_name, acting_director, acting_director_position')
-    .eq('id', sid)
-    .maybeSingle()
-  if (schoolWithPosition.error?.message?.includes('acting_director_position')) {
+  if (schoolWithPosition.error) {
     const fallback = await db.from('schools')
       .select('name, logo_url, director_name, acting_director')
       .eq('id', sid)
@@ -267,9 +280,8 @@ export async function fetchClassroomAdminContext() {
     school = schoolWithPosition.data
   }
 
-  // อ่านสวิตช์เมนู "ปรับ layout" แบบ defensive (ถ้าคอลัมน์ยังไม่มี ให้ถือว่าเปิด)
-  const tunerR = await db.from('schools').select('layout_tuner_enabled').eq('id', sid).maybeSingle()
-  const layoutTunerEnabled = (tunerR.data as { layout_tuner_enabled?: boolean } | null)?.layout_tuner_enabled !== false
+  // ถ้าฐานข้อมูลเก่ายังไม่มีคอลัมน์ ให้เปิดไว้ตามพฤติกรรมเดิม
+  const layoutTunerEnabled = school?.layout_tuner_enabled !== false
 
   return {
     role: session.role,
@@ -935,7 +947,6 @@ export async function saveDailyActivity(
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
   if (!date || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
 
-  const db = createServerClient()
   const payload = rows.map(row => ({
     student_id: row.student_id,
     classroom_id: classroomId,
@@ -972,15 +983,16 @@ export async function fetchMonthlyActivity(classroomId: string, academicYearId: 
 
   const db = createServerClient()
   const range = monthRange(monthKey)
+  const attendanceSynced = isAttendanceSyncedActivity(activityType)
   const [students, records, holidaysRes, attendanceRes, weekendSchoolDays] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
-    fetchDailyActivityRows(classroomId, activityType, range.start, range.end),
+    fetchDailyActivityRows(classroomId, activityType, range.start, range.end, attendanceSynced),
     db.from('holidays')
       .select('date, name')
       .eq('academic_year_id', academicYearId)
       .gte('date', range.start)
       .lte('date', range.end),
-    isAttendanceSyncedActivity(activityType)
+    attendanceSynced
       ? db.from('daily_attendance')
         .select('student_id, date, status')
         .eq('classroom_id', classroomId)
@@ -990,7 +1002,7 @@ export async function fetchMonthlyActivity(classroomId: string, academicYearId: 
     fetchWeekendSchoolDaysForRange(academicYearId, range.start, range.end),
   ])
 
-  const attendanceDefaults: Record<string, Record<number, number>> = isAttendanceSyncedActivity(activityType)
+  const attendanceDefaults: Record<string, Record<number, number>> = attendanceSynced
     ? students.reduce((acc: Record<string, Record<number, number>>, student) => {
       acc[student.id] = {}
       for (let day = 1; day <= range.days; day += 1) {
@@ -1000,18 +1012,14 @@ export async function fetchMonthlyActivity(classroomId: string, academicYearId: 
     }, {})
     : {}
 
-  if (isAttendanceSyncedActivity(activityType)) {
+  if (attendanceSynced) {
     ;(attendanceRes.data || []).forEach(row => {
       attendanceDefaults[row.student_id] = attendanceDefaults[row.student_id] || {}
       attendanceDefaults[row.student_id][dayOf(row.date)] = isDailyPresent(row.status as AttendanceStatus) ? 1 : 0
     })
   }
 
-  const activityOverrides = isAttendanceSyncedActivity(activityType)
-    ? records.filter(row => row.is_manual_override === true)
-    : records
-
-  const mergedRecords = activityOverrides.reduce((acc: Record<string, Record<number, number>>, row) => {
+  const mergedRecords = records.reduce((acc: Record<string, Record<number, number>>, row) => {
     acc[row.student_id] = acc[row.student_id] || {}
     acc[row.student_id][dayOf(row.date || '')] = Number(row.value ?? 0)
     return acc
@@ -1033,7 +1041,6 @@ export async function saveMonthlyActivity(
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
   if (!monthKey || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
 
-  const db = createServerClient()
   const teachingRows = await filterRowsForTeachingDays(access.classroom.academic_year_id, monthKey, rows)
   if (teachingRows.length === 0) return { error: 'ไม่มีวันเปิดสอนให้บันทึก', count: 0 }
   const payload = teachingRows.map(row => ({
@@ -1074,13 +1081,16 @@ export async function fetchWeightHeight(classroomId: string, academicYearId: str
   const [students, recordsRes] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
     db.from('student_health')
-      .select('student_id, measured_date, weight, height, bmi, bmi_result, height_result')
+      .select('student_id, measured_date, weight, height, bmi, bmi_result, height_result, students!inner(classroom_id)')
       .eq('academic_year_id', academicYearId)
-      .eq('month', month),
+      .eq('month', month)
+      .eq('students.classroom_id', classroomId),
   ])
-  const studentIds = new Set(students.map(s => s.id))
-  const records = (recordsRes.data || []).filter(r => studentIds.has(r.student_id))
-  return { error: null, students, records: Object.fromEntries(records.map(r => [r.student_id, r])) }
+  return {
+    error: null,
+    students,
+    records: Object.fromEntries((recordsRes.data || []).map(r => [r.student_id, r])),
+  }
 }
 
 export async function saveWeightHeight(
@@ -1136,14 +1146,17 @@ export async function fetchHealthInspection(classroomId: string, academicYearId:
   const [students, recordsRes] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
     db.from('health_inspection')
-      .select('student_id, nails, hair, ears, nose, teeth, skin, clothes, inspected_date')
+      .select('student_id, nails, hair, ears, nose, teeth, skin, clothes, inspected_date, students!inner(classroom_id)')
       .eq('academic_year_id', academicYearId)
       .eq('term', term)
-      .eq('month', month),
+      .eq('month', month)
+      .eq('students.classroom_id', classroomId),
   ])
-  const studentIds = new Set(students.map(s => s.id))
-  const records = (recordsRes.data || []).filter(r => studentIds.has(r.student_id))
-  return { error: null, students, records: Object.fromEntries(records.map(r => [r.student_id, r])) }
+  return {
+    error: null,
+    students,
+    records: Object.fromEntries((recordsRes.data || []).map(r => [r.student_id, r])),
+  }
 }
 
 export async function saveHealthInspection(

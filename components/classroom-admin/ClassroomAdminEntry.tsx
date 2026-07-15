@@ -1,5 +1,5 @@
 'use client'
-import { Fragment, useEffect, useMemo, useState, useTransition } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { flushSync } from 'react-dom'
 import {
@@ -236,6 +236,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printScale, setPrintScale] = useState(50)
   const [pdfExporting, setPdfExporting] = useState(false)
+  const [printRenderRequested, setPrintRenderRequested] = useState(false)
+  const pendingPrintWindowRef = useRef<Window | null>(null)
   const [layoutTunerOpen, setLayoutTunerOpen] = useState(false)
   const [layoutTunerEnabled, setLayoutTunerEnabled] = useState(true)
   const [layoutTunerSection, setLayoutTunerSection] = useState<ClassroomAdminPrintSection>('monthly')
@@ -250,6 +252,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [term, setTerm] = useState<1 | 2>(1)
   const [month, setMonth] = useState(currentMonth())
   const [students, setStudents] = useState<Student[]>([])
+  const [recordsLoadedKey, setRecordsLoadedKey] = useState('')
   const [attendanceValues, setAttendanceValues] = useState<Record<string, AttendanceStatus>>({})
   const [activityValues, setActivityValues] = useState<Record<string, number>>({})
   const [monthlyAttendanceValues, setMonthlyAttendanceValues] = useState<Record<string, Record<number, AttendanceStatus>>>({})
@@ -272,6 +275,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const hasMonthlyBulkTools = mode === 'attendance'
     || (mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType)))
   const monthlyHeaderRowSpan = hasMonthlyBulkTools ? 4 : 3
+  const recordsRequestKey = [classroomId, yearId, mode, activityType || '', date, month, monthKey, term].join('|')
+  const recordsLoaded = Boolean(classroomId) && recordsLoadedKey === recordsRequestKey
 
   const filteredClassrooms = useMemo(
     () => classrooms.filter(c => !yearId || c.academic_year_id === yearId),
@@ -386,6 +391,20 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     return () => window.clearTimeout(timer)
   }, [hasMonthlyBulkTools, attendanceConfirmPhase, attendanceConfirmCountdown])
 
+  useEffect(() => {
+    if (!printRenderRequested) return
+    const frame = window.requestAnimationFrame(() => {
+      const printWindow = pendingPrintWindowRef.current
+      pendingPrintWindowRef.current = null
+      if (printWindow) printAttendanceDocument(printWindow)
+      else window.print()
+      setPrintRenderRequested(false)
+    })
+    return () => window.cancelAnimationFrame(frame)
+    // printAttendanceDocument reads the committed print DOM and latest render state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printRenderRequested])
+
   const attendanceToolbarConfirmIdle = attendanceConfirmPhase === 'idle'
 
   function resetAttendanceToolbarConfirm() {
@@ -396,45 +415,50 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
   function loadRecords() {
     clearAlert()
+    const requestKey = recordsRequestKey
     startTransition(async () => {
-      if (mode === 'attendance') {
-        const result = await fetchMonthlyAttendance(classroomId, yearId, monthKey)
-        if (result.error) { notify('error', result.error); return }
-        setStudents(result.students)
-        setMonthDays(result.days || 31)
-        setHolidays(result.holidays)
-        setWeekendSchoolDays(result.weekendSchoolDays || [])
-        setMonthlyAttendanceValues(Object.fromEntries(result.students.map(s => [s.id, result.records[s.id] || {}])))
-      } else if (mode === 'activity' && activityType) {
-        setMonthlyActivityValues({})
-        const result = await fetchMonthlyActivity(classroomId, yearId, monthKey, activityType)
-        if (result.error) { notify('error', result.error); return }
-        setStudents(result.students)
-        setMonthDays(result.days || 31)
-        setHolidays(result.holidays)
-        setWeekendSchoolDays(result.weekendSchoolDays || [])
-        setMonthlyActivityValues(Object.fromEntries(result.students.map(s => [s.id, result.records[s.id] || {}])))
-      } else if (mode === 'weightHeight') {
-        const result = await fetchWeightHeight(classroomId, yearId, month)
-        if (result.error) { notify('error', result.error); return }
-        setStudents(result.students)
-        setWeightRows(Object.fromEntries(result.students.map(s => {
-          const r = result.records[s.id]
-          return [s.id, {
-            weight: r?.weight != null ? String(r.weight) : '',
-            height: r?.height != null ? String(r.height) : '',
-            bmi: r?.bmi ?? null,
-            bmi_result: r?.bmi_result ?? null,
-          }]
-        })))
-      } else if (mode === 'healthInspection') {
-        const result = await fetchHealthInspection(classroomId, yearId, term, month)
-        if (result.error) { notify('error', result.error); return }
-        setStudents(result.students)
-        setInspectionRows(Object.fromEntries(result.students.map(s => {
-          const r = result.records[s.id]
-          return [s.id, Object.fromEntries(INSPECTION_FIELDS.map(f => [f.key, r?.[f.key] || 'ผ่าน'])) as Record<InspectionField, string>]
-        })))
+      try {
+        if (mode === 'attendance') {
+          const result = await fetchMonthlyAttendance(classroomId, yearId, monthKey)
+          if (result.error) { notify('error', result.error); return }
+          setStudents(result.students)
+          setMonthDays(result.days || 31)
+          setHolidays(result.holidays)
+          setWeekendSchoolDays(result.weekendSchoolDays || [])
+          setMonthlyAttendanceValues(Object.fromEntries(result.students.map(s => [s.id, result.records[s.id] || {}])))
+        } else if (mode === 'activity' && activityType) {
+          setMonthlyActivityValues({})
+          const result = await fetchMonthlyActivity(classroomId, yearId, monthKey, activityType)
+          if (result.error) { notify('error', result.error); return }
+          setStudents(result.students)
+          setMonthDays(result.days || 31)
+          setHolidays(result.holidays)
+          setWeekendSchoolDays(result.weekendSchoolDays || [])
+          setMonthlyActivityValues(Object.fromEntries(result.students.map(s => [s.id, result.records[s.id] || {}])))
+        } else if (mode === 'weightHeight') {
+          const result = await fetchWeightHeight(classroomId, yearId, month)
+          if (result.error) { notify('error', result.error); return }
+          setStudents(result.students)
+          setWeightRows(Object.fromEntries(result.students.map(s => {
+            const r = result.records[s.id]
+            return [s.id, {
+              weight: r?.weight != null ? String(r.weight) : '',
+              height: r?.height != null ? String(r.height) : '',
+              bmi: r?.bmi ?? null,
+              bmi_result: r?.bmi_result ?? null,
+            }]
+          })))
+        } else if (mode === 'healthInspection') {
+          const result = await fetchHealthInspection(classroomId, yearId, term, month)
+          if (result.error) { notify('error', result.error); return }
+          setStudents(result.students)
+          setInspectionRows(Object.fromEntries(result.students.map(s => {
+            const r = result.records[s.id]
+            return [s.id, Object.fromEntries(INSPECTION_FIELDS.map(f => [f.key, r?.[f.key] || 'ผ่าน'])) as Record<InspectionField, string>]
+          })))
+        }
+      } finally {
+        setRecordsLoadedKey(requestKey)
       }
     })
   }
@@ -905,12 +929,13 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     if (result.error) notify('error', result.error)
   }
 
-  function printAttendanceDocument() {
+  function printAttendanceDocument(printWindow: Window) {
     const container = document.querySelector('.attendance-print-only') as HTMLElement | null
     const sheets = container
       ? Array.from(container.querySelectorAll<HTMLElement>('.attendance-print-sheet'))
       : []
     if (!container || sheets.length === 0) {
+      printWindow.close()
       window.print()
       return
     }
@@ -922,13 +947,6 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;')
-    const printWindow = window.open('', '_blank', 'width=1200,height=800')
-
-    if (!printWindow) {
-      window.print()
-      return
-    }
-
     const sheetsHtml = sheets.map(sheet => sheet.outerHTML).join('')
     printWindow.document.open()
     printWindow.document.write(`<!doctype html>
@@ -959,7 +977,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function printCurrentPage() {
-    printAttendanceDocument()
+    pendingPrintWindowRef.current = window.open('', '_blank', 'width=1200,height=800')
+    setPrintRenderRequested(true)
   }
 
   function renderPrintableAttendanceDocument({ preview = false }: { preview?: boolean } = {}) {
@@ -1592,9 +1611,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         saved={layoutSaved}
       />
       )}
-      <div className="attendance-print-only">
-        {renderPrintableAttendanceDocument()}
-      </div>
+      {(printMode || printRenderRequested) && (
+        <div className="attendance-print-only">
+          {renderPrintableAttendanceDocument()}
+        </div>
+      )}
 
       {!printMode && printPreviewOpen && (
         <div className="print-preview-backdrop">
@@ -1731,13 +1752,15 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากการมาเรียน แต่แก้รายช่องได้</span>}
         </div>
 
-        <DocumentSignaturePanel
-          variant="classroom_admin"
-          classroomId={classroomId}
-          reportTerm={boardTerm}
-          disabled={!classroomId}
-          compact
-        />
+        {recordsLoaded && (
+          <DocumentSignaturePanel
+            variant="classroom_admin"
+            classroomId={classroomId}
+            reportTerm={boardTerm}
+            disabled={!classroomId}
+            compact
+          />
+        )}
       </div>
 
       {isSavingMode && savingStats && (
