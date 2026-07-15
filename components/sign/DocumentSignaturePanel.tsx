@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import LoadingButton from '@/components/LoadingButton'
 import { useAppAlert } from '@/lib/use-app-alert'
 import {
   cancelClassDocumentProposal,
@@ -41,6 +40,8 @@ type Props = {
   classSubjectId?: string
   classroomId?: string
   reportTerm: number
+  /** ธุรการชั้นเรียน — เซ็นรายเดือน */
+  reportMonth?: number | null
   disabled?: boolean
   compact?: boolean
   onSignatureChange?: () => void | Promise<void>
@@ -72,6 +73,7 @@ export default function DocumentSignaturePanel({
   classSubjectId,
   classroomId,
   reportTerm,
+  reportMonth,
   disabled,
   compact,
   onSignatureChange,
@@ -85,7 +87,12 @@ export default function DocumentSignaturePanel({
   const [rejectNote, setRejectNote] = useState('')
 
   const signTerm = approvalTermFromReport(reportTerm)
-  const ready = variant === 'pp5_subject' ? Boolean(classSubjectId) : Boolean(classroomId)
+  const signMonth = variant === 'classroom_admin' ? (reportMonth ?? null) : null
+  const ready = variant === 'pp5_subject'
+    ? Boolean(classSubjectId)
+    : variant === 'classroom_admin'
+      ? Boolean(classroomId && signMonth)
+      : Boolean(classroomId)
 
   const reload = useCallback(async () => {
     if (!ready) {
@@ -108,7 +115,7 @@ export default function DocumentSignaturePanel({
         setHistory(nextHistory)
       } else if (classroomId) {
         const [nextState, nextHistory] = await Promise.all([
-          fetchClassDocApprovalStatus(variantToDocType(variant)!, classroomId, signTerm),
+          fetchClassDocApprovalStatus(variantToDocType(variant)!, classroomId, signTerm, signMonth),
           fetchDocumentApprovalSubmissionHistory({
             variant,
             classroomId,
@@ -123,7 +130,7 @@ export default function DocumentSignaturePanel({
     } finally {
       setLoading(false)
     }
-  }, [variant, classSubjectId, classroomId, signTerm, ready, notify])
+  }, [variant, classSubjectId, classroomId, signTerm, signMonth, ready, notify])
 
   useEffect(() => { void reload() }, [reload])
 
@@ -144,7 +151,7 @@ export default function DocumentSignaturePanel({
       if (variant === 'pp5_subject' && classSubjectId) {
         result = await putPp5SubjectSignature(classSubjectId, signTerm)
       } else if (classroomId) {
-        result = await putClassDocumentSignature(variantToDocType(variant)!, classroomId, signTerm)
+        result = await putClassDocumentSignature(variantToDocType(variant)!, classroomId, signTerm, signMonth)
       } else {
         result = { error: 'ข้อมูลไม่ครบ' }
       }
@@ -168,7 +175,7 @@ export default function DocumentSignaturePanel({
       if (variant === 'pp5_subject' && classSubjectId) {
         result = await proposePp5Subject(classSubjectId, signTerm)
       } else if (classroomId) {
-        result = await proposeClassDocument(variantToDocType(variant)!, classroomId, signTerm)
+        result = await proposeClassDocument(variantToDocType(variant)!, classroomId, signTerm, signMonth)
       } else {
         result = { error: 'ข้อมูลไม่ครบ' }
       }
@@ -190,7 +197,7 @@ export default function DocumentSignaturePanel({
       if (variant === 'pp5_subject' && classSubjectId) {
         result = await signPp5Subject(classSubjectId, signTerm, decision, note)
       } else if (classroomId) {
-        result = await signClassDocument(variantToDocType(variant)!, classroomId, signTerm, decision, note)
+        result = await signClassDocument(variantToDocType(variant)!, classroomId, signTerm, decision, note, signMonth)
       } else {
         result = { error: 'ข้อมูลไม่ครบ' }
       }
@@ -224,7 +231,7 @@ export default function DocumentSignaturePanel({
       if (variant === 'pp5_subject' && classSubjectId) {
         result = await cancelPp5SubjectProposal(classSubjectId, signTerm)
       } else if (classroomId) {
-        result = await cancelClassDocumentProposal(variantToDocType(variant)!, classroomId, signTerm)
+        result = await cancelClassDocumentProposal(variantToDocType(variant)!, classroomId, signTerm, signMonth)
       } else {
         result = { error: 'ข้อมูลไม่ครบ' }
       }
@@ -240,67 +247,93 @@ export default function DocumentSignaturePanel({
   if (!ready) return null
 
   const actionsLocked = Boolean(disabled)
-  const showInitiatorActions = state?.isInitiator && (state.canPutSignature || state.canShowPropose) && !actionsLocked
+  const awaitingState = loading || !state
+  const showInitiatorActions = compact
+    ? !actionsLocked && (awaitingState || Boolean(state?.isInitiator && (state.canPutSignature || state.canShowPropose)))
+    : Boolean(state?.isInitiator && (state.canPutSignature || state.canShowPropose) && !actionsLocked)
   const proposeLabel = state?.canRepropose ? 'เสนอเซ็นอีกครั้ง' : 'เสนอเซ็น'
+  const putLabel = state?.canRepropose ? 'ใส่ลายเซ็นใหม่' : 'ใส่ลายเซ็น'
+  const putReady = !awaitingState && !busy && !actionsLocked && Boolean(state?.canPutSignature)
+  const proposeReady = !awaitingState && !busy && !actionsLocked && Boolean(state?.canPropose)
 
   return (
     <>
       <section className={`sign-panel sign-panel--simple${compact ? ' sign-panel--compact' : ''}`} aria-label="ลายเซ็น">
         <div className="sign-panel__head">
           <span>ลายเซ็น</span>
-          {loading ? (
-            <span className="sign-panel__brief">กำลังโหลด...</span>
-          ) : state ? (
+          {state ? (
             <span className={`sign-panel__badge sign-panel__badge--${state.status}`}>
               {state.status_label}
               {state.status === 'in_review' && state.next_step ? ` · ${state.next_step}` : ''}
             </span>
-          ) : null}
+          ) : (
+            <span className="sign-panel__badge sign-panel__badge--draft">ยังไม่พร้อม</span>
+          )}
         </div>
 
         {showInitiatorActions && (
           <>
-            <p className="sign-panel__hint">
-              {state?.canRepropose
-                ? 'เอกสารรอบก่อนเสร็จแล้ว — กดเสนอเซ็นอีกครั้งเพื่อส่งรอบใหม่'
-                : 'ใส่ลายเซ็นเพื่อพิมพ์ได้ทันที — กดเสนอเซ็นเมื่อต้องการส่งเข้าสายอนุมัติ'}
-            </p>
+            {!compact && (
+              <p className="sign-panel__hint">
+                {state?.canRepropose
+                  ? 'เอกสารรอบก่อนเสร็จแล้ว — กดเสนอเซ็นอีกครั้งเพื่อส่งรอบใหม่'
+                  : 'ใส่ลายเซ็นเพื่อพิมพ์ได้ทันที — กดเสนอเซ็นเมื่อต้องการส่งเข้าสายอนุมัติ'}
+              </p>
+            )}
             <div className="sign-panel__dual-actions">
-              <LoadingButton
-                className="sign-panel__btn sign-panel__btn--signature"
-                loading={busy}
+              <button
+                type="button"
+                className={`sign-panel__btn sign-panel__btn--signature${putReady ? '' : ' is-dimmed'}`}
+                disabled={!putReady}
                 onClick={handlePutSignature}
               >
-                {state?.canRepropose ? 'ใส่ลายเซ็นใหม่' : 'ใส่ลายเซ็น'}
-              </LoadingButton>
-              <LoadingButton
-                className={`sign-panel__btn sign-panel__btn--propose${!state?.canPropose ? ' is-disabled' : ''}`}
-                loading={busy}
-                disabled={!state?.canPropose}
+                {putLabel}
+              </button>
+              <button
+                type="button"
+                className={`sign-panel__btn sign-panel__btn--propose${proposeReady ? '' : ' is-dimmed'}`}
+                disabled={!proposeReady}
                 onClick={handlePropose}
               >
                 {proposeLabel}
-              </LoadingButton>
+              </button>
             </div>
           </>
         )}
 
         {actionsLocked && state?.isInitiator && (state.canPutSignature || state.canShowPropose) && (
-          <p className="sign-panel__hint">บันทึกข้อมูลก่อนดำเนินการลายเซ็น</p>
+          <div className="sign-panel__dual-actions">
+            <button type="button" className="sign-panel__btn sign-panel__btn--signature is-dimmed" disabled>
+              {putLabel}
+            </button>
+            <button type="button" className="sign-panel__btn sign-panel__btn--propose is-dimmed" disabled>
+              {proposeLabel}
+            </button>
+          </div>
         )}
 
         {state?.canSign && !actionsLocked && (
           <div className="sign-panel__dual-actions">
             {!state.isDirectorStep ? (
-              <LoadingButton className="sign-panel__btn sign-panel__btn--propose" loading={busy} onClick={() => handleSign()}>
+              <button
+                type="button"
+                className={`sign-panel__btn sign-panel__btn--propose${busy ? ' is-dimmed' : ''}`}
+                disabled={busy}
+                onClick={() => handleSign()}
+              >
                 ลงนาม
-              </LoadingButton>
+              </button>
             ) : (
               <>
-                <LoadingButton className="sign-panel__btn sign-panel__btn--approve" loading={busy} onClick={() => handleSign('approve')}>
+                <button
+                  type="button"
+                  className={`sign-panel__btn sign-panel__btn--approve${busy ? ' is-dimmed' : ''}`}
+                  disabled={busy}
+                  onClick={() => handleSign('approve')}
+                >
                   อนุมัติ
-                </LoadingButton>
-                <button type="button" className="sign-panel__btn sign-panel__btn--ghost" onClick={() => setRejectOpen(true)}>
+                </button>
+                <button type="button" className="sign-panel__btn sign-panel__btn--ghost" disabled={busy} onClick={() => setRejectOpen(true)}>
                   ไม่อนุมัติ
                 </button>
               </>
@@ -310,19 +343,22 @@ export default function DocumentSignaturePanel({
 
         {state?.canCancelProposal && !actionsLocked && (
           <>
-            <p className="sign-panel__hint sign-panel__hint--warning">
-              {state.hasApproverSignatures
-                ? 'มีผู้อนุมัติลงนามแล้ว — ยกเลิกได้เฉพาะผู้บริหาร'
-                : 'ยังไม่มีผู้อนุมัติลงนาม — ครูเจ้าของเอกสารยกเลิกได้'}
-            </p>
+            {!compact && (
+              <p className="sign-panel__hint sign-panel__hint--warning">
+                {state.hasApproverSignatures
+                  ? 'มีผู้อนุมัติลงนามแล้ว — ยกเลิกได้เฉพาะผู้บริหาร'
+                  : 'ยังไม่มีผู้อนุมัติลงนาม — ครูเจ้าของเอกสารยกเลิกได้'}
+              </p>
+            )}
             <div className="sign-panel__dual-actions">
-              <LoadingButton
-                className="sign-panel__btn sign-panel__btn--cancel"
-                loading={busy}
+              <button
+                type="button"
+                className={`sign-panel__btn sign-panel__btn--cancel${busy ? ' is-dimmed' : ''}`}
+                disabled={busy}
                 onClick={handleCancelProposal}
               >
                 ยกเลิกเสนอเซ็น
-              </LoadingButton>
+              </button>
             </div>
           </>
         )}
@@ -335,9 +371,14 @@ export default function DocumentSignaturePanel({
               <button type="button" className="sign-panel__btn sign-panel__btn--ghost" onClick={() => setRejectOpen(false)}>
                 ยกเลิก
               </button>
-              <LoadingButton className="sign-panel__btn sign-panel__btn--danger" loading={busy} onClick={() => handleSign('reject', rejectNote)}>
+              <button
+                type="button"
+                className={`sign-panel__btn sign-panel__btn--danger${busy ? ' is-dimmed' : ''}`}
+                disabled={busy}
+                onClick={() => handleSign('reject', rejectNote)}
+              >
                 ยืนยัน
-              </LoadingButton>
+              </button>
             </div>
           </div>
         )}

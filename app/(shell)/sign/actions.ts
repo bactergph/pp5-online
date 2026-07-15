@@ -39,6 +39,10 @@ import {
   pp5SubjectCancelProposalReset,
   pp5SubjectHasApproverSignatures,
 } from '@/lib/approvals/cancel-proposal'
+import {
+  findClassDocumentApproval,
+  findClassDocumentApprovalExact,
+} from '@/lib/approvals/class-doc-lookup'
 
 async function requireSession() {
   const session = await getSession()
@@ -253,7 +257,7 @@ export async function fetchClassDocQueue(docTypes?: ClassDocType[]) {
     .in('doc_type', types)
 
   const approvalMap = new Map(
-    (approvals || []).map(a => [`${a.classroom_id}:${a.doc_type}:${a.term}`, a]),
+    (approvals || []).map(a => [`${a.classroom_id}:${a.doc_type}:${a.term}:${a.month ?? 0}`, a]),
   )
 
   const items: Array<{
@@ -261,81 +265,109 @@ export async function fetchClassDocQueue(docTypes?: ClassDocType[]) {
     doc_type: ClassDocType
     classroom_id: string
     term: number
+    month: number | null
     status: string
     status_label: string
     next_step: string | null
-        canSign: boolean
-        canPutSignature: boolean
-        canPropose: boolean
-        canCancelProposal: boolean
+    canSign: boolean
+    canPutSignature: boolean
+    canPropose: boolean
+    canCancelProposal: boolean
     classroom_label: string
     level: string
     academic_year_id: string
   }> = []
 
+  const pushItem = (
+    classroom: (typeof classrooms)[number],
+    docType: ClassDocType,
+    term: number,
+    month: number | null,
+    record: ClassDocumentApproval | { status: string; id?: string; homeroom_signed_at?: string | null },
+  ) => {
+    const fullRecord = {
+      ...record,
+      doc_type: docType,
+      classroom_id: classroom.id,
+      academic_year_id: classroom.academic_year_id,
+      term,
+      month,
+    } as ClassDocumentApproval
+    const next = getClassDocNextStep(fullRecord, school, docType)
+    const canSign = next && next !== 'homeroom'
+      ? canUserSignClassDocStep(
+        session.userId, session.role, next, school,
+        classroom.homeroom_teacher_id, classroom.homeroom_teacher2_id,
+      )
+      : false
+    const isHomeroom = classroom.homeroom_teacher_id === session.userId
+      || classroom.homeroom_teacher2_id === session.userId
+    const canPutSignature = (isHomeroom || session.role === 'admin')
+      && fullRecord.status !== 'approved'
+      && (fullRecord.status === 'draft' || fullRecord.status === 'rejected' || !fullRecord.status)
+      && (docType !== 'classroom_admin' || month != null)
+    const canPropose = (isHomeroom || session.role === 'admin')
+      && Boolean(fullRecord.homeroom_signed_at)
+      && fullRecord.status !== 'approved'
+      && (fullRecord.status === 'draft' || fullRecord.status === 'rejected' || !fullRecord.status)
+    const status = fullRecord.status || 'draft'
+    const hasApproverSignatures = classDocHasApproverSignatures(fullRecord, docType)
+    const canCancelProposal = canUserCancelProposal({
+      role: session.role,
+      userId: session.userId,
+      school,
+      isInitiator: isHomeroom,
+      status,
+      hasApproverSignatures,
+    })
+    const inQueue = fullRecord.status === 'in_review' || fullRecord.status === 'rejected' || canSign || canPutSignature || canPropose || canCancelProposal
+    if (!inQueue) return
+    if (!shouldShowInTeacherTrackingQueue({
+      role: session.role,
+      status,
+      canSign,
+      isOwner: isHomeroom,
+    })) return
+    const monthLabel = month ? ` · เดือน ${month}` : ''
+    items.push({
+      id: ('id' in record && record.id) || null,
+      doc_type: docType,
+      classroom_id: classroom.id,
+      term,
+      month,
+      status,
+      status_label: classDocStatusLabel(fullRecord, school, docType),
+      next_step: next ? CLASS_DOC_STEP_LABELS[next] : null,
+      canSign,
+      canPutSignature,
+      canPropose,
+      canCancelProposal,
+      classroom_label: `${classroom.level}/${classroom.room}${monthLabel}`,
+      level: classroom.level,
+      academic_year_id: classroom.academic_year_id,
+    })
+  }
+
   for (const classroom of classrooms) {
     for (const docType of types) {
+      if (docType === 'classroom_admin') {
+        const rows = (approvals || []).filter(a => a.classroom_id === classroom.id && a.doc_type === docType)
+        for (const record of rows) {
+          pushItem(
+            classroom,
+            docType,
+            Number(record.term) as 1 | 2,
+            record.month == null ? null : Number(record.month),
+            record as ClassDocumentApproval,
+          )
+        }
+        continue
+      }
       for (const term of [1, 2]) {
-        const record = (approvalMap.get(`${classroom.id}:${docType}:${term}`) || {
+        const record = (approvalMap.get(`${classroom.id}:${docType}:${term}:0`) || {
           status: 'draft',
         }) as ClassDocumentApproval
-        const fullRecord = {
-          ...record,
-          doc_type: docType,
-          classroom_id: classroom.id,
-          academic_year_id: classroom.academic_year_id,
-          term,
-        }
-        const next = getClassDocNextStep(fullRecord, school, docType)
-        const canSign = next && next !== 'homeroom'
-          ? canUserSignClassDocStep(
-            session.userId, session.role, next, school,
-            classroom.homeroom_teacher_id, classroom.homeroom_teacher2_id,
-          )
-          : false
-        const isHomeroom = classroom.homeroom_teacher_id === session.userId
-          || classroom.homeroom_teacher2_id === session.userId
-        const canPutSignature = (isHomeroom || session.role === 'admin')
-          && fullRecord.status !== 'approved'
-          && (fullRecord.status === 'draft' || fullRecord.status === 'rejected' || !fullRecord.status)
-        const canPropose = (isHomeroom || session.role === 'admin')
-          && Boolean(fullRecord.homeroom_signed_at)
-          && fullRecord.status !== 'approved'
-          && (fullRecord.status === 'draft' || fullRecord.status === 'rejected' || !fullRecord.status)
-        const status = fullRecord.status || 'draft'
-        const hasApproverSignatures = classDocHasApproverSignatures(fullRecord, docType)
-        const canCancelProposal = canUserCancelProposal({
-          role: session.role,
-          userId: session.userId,
-          school,
-          isInitiator: isHomeroom,
-          status,
-          hasApproverSignatures,
-        })
-        const inQueue = fullRecord.status === 'in_review' || fullRecord.status === 'rejected' || canSign || canPutSignature || canPropose || canCancelProposal
-        if (!inQueue) continue
-        if (!shouldShowInTeacherTrackingQueue({
-          role: session.role,
-          status,
-          canSign,
-          isOwner: isHomeroom,
-        })) continue
-        items.push({
-          id: record.id || null,
-          doc_type: docType,
-          classroom_id: classroom.id,
-          term,
-          status,
-          status_label: classDocStatusLabel(fullRecord, school, docType),
-          next_step: next ? CLASS_DOC_STEP_LABELS[next] : null,
-          canSign,
-          canPutSignature,
-          canPropose,
-          canCancelProposal,
-          classroom_label: `${classroom.level}/${classroom.room}`,
-          level: classroom.level,
-          academic_year_id: classroom.academic_year_id,
-        })
+        pushItem(classroom, docType, term, null, record)
       }
     }
   }
@@ -610,10 +642,12 @@ export async function putClassDocumentSignature(
   docType: ClassDocType,
   classroomId: string,
   term: number,
+  month?: number | null,
 ) {
   const session = await requireSession()
   if (!session.schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
   const db = createServerClient()
+  const periodMonth = docType === 'classroom_admin' ? (month ?? null) : null
 
   const { data: classroom } = await db.from('classrooms')
     .select('id, school_id, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id')
@@ -627,6 +661,10 @@ export async function putClassDocumentSignature(
     return { error: 'เฉพาะครูประจำชั้นใส่ลายเซ็นได้' }
   }
 
+  if (docType === 'classroom_admin' && (periodMonth == null || periodMonth < 1 || periodMonth > 12)) {
+    return { error: 'กรุณาเลือกเดือนก่อนใส่ลายเซ็น' }
+  }
+
   const { data: user } = await db.from('users')
     .select('signature_url')
     .eq('id', session.userId)
@@ -635,12 +673,12 @@ export async function putClassDocumentSignature(
     return { error: 'ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่ ตั้งค่า → ข้อมูลตัวเอง เพื่ออัปโหลดก่อน' }
   }
 
-  const { data: existing } = await db.from('class_document_approvals')
-    .select('id, status')
-    .eq('classroom_id', classroomId)
-    .eq('doc_type', docType)
-    .eq('term', term)
-    .maybeSingle()
+  const existing = await findClassDocumentApprovalExact(db, {
+    classroomId,
+    docType,
+    term,
+    month: periodMonth,
+  })
 
   if (existing?.status === 'in_review') return { error: 'เอกสารอยู่ระหว่างเสนอเซ็นแล้ว แก้ไขลายเซ็นไม่ได้' }
 
@@ -651,6 +689,7 @@ export async function putClassDocumentSignature(
     classroom_id: classroomId,
     academic_year_id: classroom.academic_year_id,
     term,
+    month: periodMonth,
     homeroom_id: session.userId,
     homeroom_signed_at: now,
     status: 'draft',
@@ -671,7 +710,7 @@ export async function putClassDocumentSignature(
     : await db.from('class_document_approvals').insert(payload)
 
   if (error?.message?.includes('class_document_approvals')) {
-    return { error: 'ยังไม่ได้ติดตั้งตารางลงนาม — รัน migration 034_document_approvals.sql' }
+    return { error: 'ยังไม่ได้ติดตั้งตารางลงนาม — รัน migration 034/043' }
   }
   if (error) return { error: error.message }
 
@@ -682,7 +721,9 @@ export async function putClassDocumentSignature(
     module: 'sign',
     targetType: docType,
     targetId: classroomId,
-    description: `ใส่ลายเซ็น ${docType} เทอม ${term}`,
+    description: periodMonth
+      ? `ใส่ลายเซ็น ${docType} เทอม ${term} เดือน ${periodMonth}`
+      : `ใส่ลายเซ็น ${docType} เทอม ${term}`,
   })
   return { success: true }
 }
@@ -691,10 +732,12 @@ export async function proposeClassDocument(
   docType: ClassDocType,
   classroomId: string,
   term: number,
+  month?: number | null,
 ) {
   const session = await requireSession()
   if (!session.schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
   const db = createServerClient()
+  const periodMonth = docType === 'classroom_admin' ? (month ?? null) : null
 
   const { data: classroom } = await db.from('classrooms')
     .select('id, school_id, homeroom_teacher_id, homeroom_teacher2_id')
@@ -708,12 +751,16 @@ export async function proposeClassDocument(
     return { error: 'เฉพาะครูประจำชั้นเสนอเซ็นได้' }
   }
 
-  const { data: existing } = await db.from('class_document_approvals')
-    .select('*')
-    .eq('classroom_id', classroomId)
-    .eq('doc_type', docType)
-    .eq('term', term)
-    .maybeSingle()
+  if (docType === 'classroom_admin' && (periodMonth == null || periodMonth < 1 || periodMonth > 12)) {
+    return { error: 'กรุณาเลือกเดือนก่อนเสนอเซ็น' }
+  }
+
+  const existing = await findClassDocumentApprovalExact(db, {
+    classroomId,
+    docType,
+    term,
+    month: periodMonth,
+  })
 
   if (!existing?.homeroom_signed_at) return { error: 'กรุณาใส่ลายเซ็นก่อนเสนอเซ็น' }
   if (existing.status === 'in_review') return { error: 'เอกสารอยู่ระหว่างเสนอเซ็นแล้ว' }
@@ -724,6 +771,7 @@ export async function proposeClassDocument(
     docKind: docType,
     term,
     classroomId,
+    month: periodMonth,
   }
 
   if (existing.status === 'approved' || existing.status === 'rejected') {
@@ -765,7 +813,9 @@ export async function proposeClassDocument(
     module: 'sign',
     targetType: docType,
     targetId: classroomId,
-    description: `เสนอเซ็น ${docType} เทอม ${term}`,
+    description: periodMonth
+      ? `เสนอเซ็น ${docType} เทอม ${term} เดือน ${periodMonth}`
+      : `เสนอเซ็น ${docType} เทอม ${term}`,
   })
   return { success: true }
 }
@@ -775,10 +825,11 @@ export async function submitClassDocument(
   docType: ClassDocType,
   classroomId: string,
   term: number,
+  month?: number | null,
 ) {
-  const put = await putClassDocumentSignature(docType, classroomId, term)
+  const put = await putClassDocumentSignature(docType, classroomId, term, month)
   if (put.error) return put
-  return proposeClassDocument(docType, classroomId, term)
+  return proposeClassDocument(docType, classroomId, term, month)
 }
 
 export async function signClassDocument(
@@ -787,11 +838,13 @@ export async function signClassDocument(
   term: number,
   decision?: 'approve' | 'reject',
   rejectionNote?: string,
+  month?: number | null,
 ) {
   const session = await requireSession()
   if (!session.schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
   const db = createServerClient()
   const { school } = await loadSchoolContext(session.schoolId)
+  const periodMonth = docType === 'classroom_admin' ? (month ?? null) : null
 
   const { data: classroom } = await db.from('classrooms')
     .select('id, school_id, homeroom_teacher_id, homeroom_teacher2_id')
@@ -799,12 +852,12 @@ export async function signClassDocument(
     .maybeSingle()
   if (!classroom || classroom.school_id !== session.schoolId) return { error: 'ไม่พบห้องเรียน' }
 
-  const { data: record } = await db.from('class_document_approvals')
-    .select('*')
-    .eq('classroom_id', classroomId)
-    .eq('doc_type', docType)
-    .eq('term', term)
-    .maybeSingle()
+  const record = await findClassDocumentApprovalExact(db, {
+    classroomId,
+    docType,
+    term,
+    month: periodMonth,
+  })
   if (!record?.homeroom_signed_at || record.status !== 'in_review') {
     return { error: 'เอกสารยังไม่ได้เสนอเซ็น' }
   }
@@ -839,7 +892,7 @@ export async function signClassDocument(
     try {
       await completeActiveApprovalSubmission(
         db,
-        { schoolId: session.schoolId, docKind: docType, term, classroomId },
+        { schoolId: session.schoolId, docKind: docType, term, classroomId, month: periodMonth },
         updates.status,
         now,
         updates.rejection_note as string | null | undefined,
@@ -868,7 +921,9 @@ export async function signClassDocument(
     module: 'sign',
     targetType: docType,
     targetId: classroomId,
-    description: `ลงนาม ${docType} เทอม ${term}`,
+    description: periodMonth
+      ? `ลงนาม ${docType} เทอม ${term} เดือน ${periodMonth}`
+      : `ลงนาม ${docType} เทอม ${term}`,
   })
   return { success: true }
 }
@@ -946,11 +1001,13 @@ export async function cancelClassDocumentProposal(
   docType: ClassDocType,
   classroomId: string,
   term: number,
+  month?: number | null,
 ) {
   const session = await requireSession()
   if (!session.schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
   const db = createServerClient()
   const { school } = await loadSchoolContext(session.schoolId)
+  const periodMonth = docType === 'classroom_admin' ? (month ?? null) : null
 
   const { data: classroom } = await db.from('classrooms')
     .select('id, school_id, homeroom_teacher_id, homeroom_teacher2_id')
@@ -958,12 +1015,12 @@ export async function cancelClassDocumentProposal(
     .maybeSingle()
   if (!classroom || classroom.school_id !== session.schoolId) return { error: 'ไม่พบห้องเรียน' }
 
-  const { data: record } = await db.from('class_document_approvals')
-    .select('*')
-    .eq('classroom_id', classroomId)
-    .eq('doc_type', docType)
-    .eq('term', term)
-    .maybeSingle()
+  const record = await findClassDocumentApprovalExact(db, {
+    classroomId,
+    docType,
+    term,
+    month: periodMonth,
+  })
   if (!record || record.status !== 'in_review') {
     return { error: 'ไม่มีเอกสารที่กำลังเสนอเซ็นอยู่' }
   }
@@ -989,7 +1046,7 @@ export async function cancelClassDocumentProposal(
   try {
     await completeActiveApprovalSubmission(
       db,
-      { schoolId: session.schoolId, docKind: docType, term, classroomId },
+      { schoolId: session.schoolId, docKind: docType, term, classroomId, month: periodMonth },
       'rejected',
       now,
       'ยกเลิกการเสนอเซ็น',
@@ -1010,7 +1067,9 @@ export async function cancelClassDocumentProposal(
     module: 'sign',
     targetType: docType,
     targetId: classroomId,
-    description: `ยกเลิกเสนอเซ็น ${docType} เทอม ${term}`,
+    description: periodMonth
+      ? `ยกเลิกเสนอเซ็น ${docType} เทอม ${term} เดือน ${periodMonth}`
+      : `ยกเลิกเสนอเซ็น ${docType} เทอม ${term}`,
   })
   return { success: true }
 }
@@ -1086,11 +1145,13 @@ export async function fetchClassDocApprovalStatus(
   docType: ClassDocType,
   classroomId: string,
   term: number,
+  month?: number | null,
 ) {
   const session = await requireSession()
   if (!session.schoolId) return null
   const db = createServerClient()
   const { school } = await loadSchoolContext(session.schoolId)
+  const periodMonth = docType === 'classroom_admin' ? (month ?? null) : null
 
   const { data: classroom } = await db.from('classrooms')
     .select('homeroom_teacher_id, homeroom_teacher2_id')
@@ -1098,15 +1159,15 @@ export async function fetchClassDocApprovalStatus(
     .maybeSingle()
   if (!classroom) return null
 
-  const { data: record } = await db.from('class_document_approvals')
-    .select('*')
-    .eq('classroom_id', classroomId)
-    .eq('doc_type', docType)
-    .eq('term', term)
-    .maybeSingle()
+  const record = await findClassDocumentApproval(db, {
+    classroomId,
+    docType,
+    term,
+    month: periodMonth,
+  })
 
   const full = (record || { status: 'draft' }) as ClassDocumentApproval
-  const merged = { ...full, doc_type: docType, classroom_id: classroomId, term }
+  const merged = { ...full, doc_type: docType, classroom_id: classroomId, term, month: periodMonth }
   const next = getClassDocNextStep(merged, school, docType)
   const isHomeroom = classroom.homeroom_teacher_id === session.userId
     || classroom.homeroom_teacher2_id === session.userId
@@ -1145,6 +1206,7 @@ export async function fetchClassDocApprovalStatus(
     isDirectorStep: next === 'director',
     next_step: next ? CLASS_DOC_STEP_LABELS[next] : null,
     workflow_steps: getClassDocWorkflowProgress(merged, school, docType),
+    month: full.month ?? periodMonth ?? null,
   }
 }
 

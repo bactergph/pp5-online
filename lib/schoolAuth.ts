@@ -5,3 +5,10 @@ export function schoolMemberEmail(username: string, schoolId: string): string {
   const u = username.trim().toLowerCase().replace(/\s+/g, '')
   return `${u}@${schoolId}.pp5.local`
 }
+
+/** username → อีเมลสังเคราะห์ / ถ้าระบุอีเมลจริง (เช่น admin รร.) ให้ใช้ตามนั้น */
+export function resolveSchoolLoginEmail(identifier: string, schoolId: string): string {
+  const value = identifier.trim().toLowerCase().replace(/\s+/g, '')
+  if (value.includes('@')) return value
+  return schoolMemberEmail(value, schoolId)
+}

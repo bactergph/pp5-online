@@ -45,9 +45,9 @@ function mapPp5Subject(row: Pp5Row): ApprovalQueueItem & { class_subject_id: str
   }
 }
 
-function mapClassDoc(row: ClassDocRow): ApprovalQueueItem & { classroom_id: string; doc_type: ClassDocType; term_value: number } {
+function mapClassDoc(row: ClassDocRow): ApprovalQueueItem & { classroom_id: string; doc_type: ClassDocType; term_value: number; month_value: number | null } {
   return {
-    key: `${row.doc_type}:${row.classroom_id}:${row.term}`,
+    key: `${row.doc_type}:${row.classroom_id}:${row.term}:${row.month ?? 0}`,
     title: `${CLASS_DOC_TYPE_LABELS[row.doc_type]} ${row.classroom_label}`,
     subtitle: CLASS_DOC_TYPE_LABELS[row.doc_type],
     term: row.term,
@@ -60,6 +60,7 @@ function mapClassDoc(row: ClassDocRow): ApprovalQueueItem & { classroom_id: stri
     classroom_id: row.classroom_id,
     doc_type: row.doc_type,
     term_value: row.term,
+    month_value: row.month ?? null,
     preview: {
       kind: classDocTypeToPreviewKind(row.doc_type),
       academicYearId: row.academic_year_id,
@@ -149,19 +150,19 @@ export default function SignPp5Client() {
               emptyText="ไม่มีเอกสารในคิว — ครูประจำชั้นส่งขอลงนามจากแท็บนี้"
               onPutSignature={async item => {
                 const row = item as ReturnType<typeof mapClassDoc>
-                const r = await putClassDocumentSignature(row.doc_type, row.classroom_id, row.term_value)
+                const r = await putClassDocumentSignature(row.doc_type, row.classroom_id, row.term_value, row.month_value)
                 if (!r.error) await reload()
                 return r
               }}
               onPropose={async item => {
                 const row = item as ReturnType<typeof mapClassDoc>
-                const r = await proposeClassDocument(row.doc_type, row.classroom_id, row.term_value)
+                const r = await proposeClassDocument(row.doc_type, row.classroom_id, row.term_value, row.month_value)
                 if (!r.error) await reload()
                 return r
               }}
               onSign={async (item, decision, note) => {
                 const row = item as ReturnType<typeof mapClassDoc>
-                const r = await signClassDocument(row.doc_type, row.classroom_id, row.term_value, decision, note)
+                const r = await signClassDocument(row.doc_type, row.classroom_id, row.term_value, decision, note, row.month_value)
                 if (!r.error) await reload()
                 return r
               }}

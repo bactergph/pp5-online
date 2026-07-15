@@ -1,7 +1,9 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { fetchClassroomAdminExportContext, fetchClassroomAdminExportData } from './actions'
+import { fetchClassroomAdminExportContext, fetchClassroomAdminExportData, fetchClassroomAdminExportSignatures, batchProposeClassroomAdminMonths } from './actions'
+import type { ClassroomAdminMonthSignStatus } from './actions'
+import { useAppAlert } from '@/lib/use-app-alert'
 import ClassroomAdminPrintLayoutTuner, { useClassroomAdminPrintLayoutsState } from '@/components/classroom-admin/ClassroomAdminPrintLayoutTuner'
 import { classroomAdminPrintStyles } from '@/components/classroom-admin/classroom-admin-print-styles'
 import { CLASSROOM_ADMIN_A4_LANDSCAPE_CSS } from '@/lib/classroom-admin-a4-landscape'
@@ -30,7 +32,7 @@ import {
 } from '@/lib/print-student-pages'
 
 type Year = { id: string; year_be: number; is_active: boolean }
-type Classroom = { id: string; level: string; room: number; academic_year_id: string }
+type Classroom = { id: string; level: string; room: number; academic_year_id: string; homeroom_teacher_id?: string | null; homeroom_teacher2_id?: string | null }
 type Student = { id: string; student_number: number; prefix: string | null; first_name: string; last_name: string; gender: string; status: string }
 type ActivityType = 'brushing' | 'milk' | 'lunch' | 'cleaning' | 'saving'
 type ReportType = 'attendance' | ActivityType | 'health' | 'inspection'
@@ -168,6 +170,13 @@ export default function ClassroomAdminExportPage() {
   const [schoolLogoUrl, setSchoolLogoUrl] = useState('')
   const [logoSrc, setLogoSrc] = useState('')
   const [logoResolved, setLogoResolved] = useState(true)
+  const [teacherNameById, setTeacherNameById] = useState<Record<string, string>>({})
+  const [directorName, setDirectorName] = useState('ยังไม่กำหนด')
+  const [actingDirectorPosition, setActingDirectorPosition] = useState<string | null>(null)
+  const [signaturesByMonth, setSignaturesByMonth] = useState<Record<number, { homeroom?: string | null; director?: string | null }>>({})
+  const [monthSignStatuses, setMonthSignStatuses] = useState<ClassroomAdminMonthSignStatus[]>([])
+  const [batchProposing, setBatchProposing] = useState(false)
+  const { notify, AlertModal } = useAppAlert('เสนอเซ็นสำเร็จ', 'เสนอเซ็นไม่สำเร็จ')
   const [yearId, setYearId] = useState('')
   const [classroomId, setClassroomId] = useState('')
   const [monthKey, setMonthKey] = useState('')
@@ -193,6 +202,9 @@ export default function ClassroomAdminExportPage() {
       setYears(result.years as Year[])
       setClassrooms(result.classrooms as Classroom[])
       setLayoutTunerEnabled(result.layoutTunerEnabled !== false)
+      setTeacherNameById(result.teacherNameById || {})
+      setDirectorName(result.directorName || 'ยังไม่กำหนด')
+      setActingDirectorPosition(result.actingDirectorPosition || null)
 
       if (deepLinkMode) {
         const nextTerm = searchParams.get('term') === '2' ? 2 : 1
@@ -287,9 +299,43 @@ export default function ClassroomAdminExportPage() {
       }
       const nextData = Object.fromEntries(results.map(([month, result]) => [month, result as ExportData]))
       setDataByMonth(nextData)
+      void loadMonthSignatures(selectedMonths)
       return nextData
     } finally {
       if (requestId === loadRequestRef.current) setIsLoading(false)
+    }
+  }
+
+  async function loadMonthSignatures(months: number[]) {
+    if (!yearId || !classroomId || months.length === 0) {
+      setSignaturesByMonth({})
+      setMonthSignStatuses([])
+      return
+    }
+    const result = await fetchClassroomAdminExportSignatures(classroomId, yearId, term, months)
+    if (result.error) return
+    setSignaturesByMonth(result.signaturesByMonth || {})
+    setMonthSignStatuses(result.statuses || [])
+  }
+
+  async function handleBatchPropose() {
+    if (!classroomId || selectedMonths.length === 0) return
+    setBatchProposing(true)
+    try {
+      const result = await batchProposeClassroomAdminMonths(classroomId, term, selectedMonths)
+      if (result.error && !result.results?.some(r => r.proposed)) {
+        notify('error', result.error)
+        return
+      }
+      notify(
+        result.error ? 'error' : 'success',
+        result.summary || (result.error ? result.error : 'เสนอเป็นชุดเรียบร้อย'),
+      )
+      await loadMonthSignatures(selectedMonths)
+    } catch (err) {
+      notify('error', err instanceof Error ? err.message : 'เสนอเป็นชุดไม่สำเร็จ')
+    } finally {
+      setBatchProposing(false)
     }
   }
 
@@ -456,6 +502,15 @@ export default function ClassroomAdminExportPage() {
   const activeMonths = selectedMonths.filter(month => dataByMonth[month])
   const hasData = activeMonths.length > 0
   const canGenerate = Boolean(yearId && classroomId && selectedMonths.length > 0 && selectedReports.length > 0)
+  const selectedClassroom = filteredClassrooms.find(c => c.id === classroomId)
+  const homeroomTeacherName = selectedClassroom?.homeroom_teacher_id
+    ? (teacherNameById[selectedClassroom.homeroom_teacher_id] || 'ยังไม่กำหนด')
+    : 'ยังไม่กำหนด'
+  const unsignedSelectedCount = selectedMonths.filter(month => {
+    const status = monthSignStatuses.find(item => item.month === month)
+    return !status?.hasSignature
+  }).length
+  const canBatchPropose = Boolean(classroomId && selectedMonths.length > 0 && unsignedSelectedCount > 0 && !isLoading && !batchProposing)
 
   const selectedMonthsKey = selectedMonths.join(',')
 
@@ -797,13 +852,38 @@ export default function ClassroomAdminExportPage() {
 
         <footer className="attendance-print-signatures">
           <div>
-            <div className="attendance-print-sign-line">ลงชื่อ ...........................................</div>
-            <strong>( ยังไม่กำหนด )</strong>
+            <div className="attendance-print-sign-line">
+              ลงชื่อ{' '}
+              {signaturesByMonth[Number(sheetMonthKey.slice(5, 7))]?.homeroom ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={signaturesByMonth[Number(sheetMonthKey.slice(5, 7))]!.homeroom!}
+                  alt=""
+                  className="attendance-print-sign-img"
+                />
+              ) : (
+                '...........................................'
+              )}
+            </div>
+            <strong>( {homeroomTeacherName} )</strong>
             <span>ครูประจำชั้น</span>
           </div>
           <div>
-            <div className="attendance-print-sign-line">ลงชื่อ ...........................................</div>
-            <strong>( ยังไม่กำหนด )</strong>
+            <div className="attendance-print-sign-line">
+              ลงชื่อ{' '}
+              {signaturesByMonth[Number(sheetMonthKey.slice(5, 7))]?.director ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={signaturesByMonth[Number(sheetMonthKey.slice(5, 7))]!.director!}
+                  alt=""
+                  className="attendance-print-sign-img"
+                />
+              ) : (
+                '...........................................'
+              )}
+            </div>
+            <strong>( {directorName} )</strong>
+            {actingDirectorPosition && <span>{actingDirectorPosition}</span>}
             <span>ผู้อำนวยการโรงเรียน{schoolName || 'ยังไม่กำหนด'}</span>
           </div>
         </footer>
@@ -909,6 +989,9 @@ export default function ClassroomAdminExportPage() {
                 }}
               >
                 {MONTH_SHORT_LABELS[month]}
+                {monthSignStatuses.find(item => item.month === month)?.hasSignature ? (
+                  <em className="classroom-export-month-signed" aria-label="มีลายเซ็นแล้ว">เซ็นแล้ว</em>
+                ) : null}
               </button>
             ))}
             <button
@@ -951,6 +1034,15 @@ export default function ClassroomAdminExportPage() {
             </button>
             )}
             <button type="button" onClick={exportExcel} className="classroom-export-secondary-btn" disabled={!canGenerate || isLoading}>Excel</button>
+            <button
+              type="button"
+              onClick={handleBatchPropose}
+              className="classroom-export-propose-btn"
+              disabled={!canBatchPropose}
+              title={unsignedSelectedCount === 0 ? 'เดือนที่เลือกมีลายเซ็นครบแล้ว' : `เสนอเซ็น ${unsignedSelectedCount} เดือนที่ยังไม่มีลายเซ็น`}
+            >
+              {batchProposing ? 'กำลังเสนอ...' : `เสนอเป็นชุด${unsignedSelectedCount ? ` (${unsignedSelectedCount})` : ''}`}
+            </button>
             <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={!canGenerate || pdfExporting || isLoading}>
               {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
             </button>
@@ -983,6 +1075,7 @@ export default function ClassroomAdminExportPage() {
       )}
       </div>
       </div>
+      <AlertModal />
     </div>
     </ClassroomAdminPrintLayoutsProvider>
   )
@@ -1050,6 +1143,7 @@ ${fontFaces}
       .classroom-export-primary-btn,
       .classroom-export-preview-btn,
       .classroom-export-pdf-btn,
+      .classroom-export-propose-btn,
       .classroom-export-close-btn,
       .classroom-export-secondary-btn,
       .classroom-export-controls button {
@@ -1079,6 +1173,29 @@ ${fontFaces}
         color: #5C4330;
         background: #F5EDE3;
         box-shadow: 0 10px 18px rgba(139, 107, 69, 0.14);
+      }
+      .classroom-export-propose-btn {
+        color: #78350F;
+        background: linear-gradient(135deg, #FDE68A, #FBBF24);
+        box-shadow: 0 10px 18px rgba(245, 158, 11, 0.22);
+      }
+      .classroom-export-propose-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .classroom-export-month-signed {
+        display: block;
+        margin-top: 2px;
+        font-size: 9px;
+        font-style: normal;
+        font-weight: 800;
+        color: #15803D;
+        line-height: 1;
+      }
+      .classroom-export-month-tabs button.is-active .classroom-export-month-signed {
+        color: #DCFCE7;
       }
       .classroom-export-close-btn {
         color: #475569;
@@ -1782,6 +1899,19 @@ ${fontFaces}
         width: 260px;
         margin: 0 auto 4px;
         line-height: 1.15;
+        min-height: 42px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 6px;
+      }
+      .attendance-print-sign-img {
+        display: inline-block;
+        height: 42px;
+        width: auto;
+        max-width: 160px;
+        object-fit: contain;
+        vertical-align: bottom;
       }
       .attendance-print-signatures strong {
         display: block;

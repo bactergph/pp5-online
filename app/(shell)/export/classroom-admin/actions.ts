@@ -2,6 +2,12 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { isDailyPresent } from '@/lib/daily-attendance'
+import { loadClassDocReportSignatures } from '@/lib/report-signatures'
+import {
+  fetchClassDocApprovalStatus,
+  proposeClassDocument,
+  putClassDocumentSignature,
+} from '@/app/sign/actions'
 
 type RoleSession = {
   userId: string
@@ -50,8 +56,29 @@ export async function fetchClassroomAdminExportContext() {
   const db = createServerClient()
   const schoolId = session.schoolId || ''
 
-  const [schoolRes, yearsRes] = await Promise.all([
-    db.from('schools').select('id, name, logo_url').eq('id', schoolId).maybeSingle(),
+  let school: {
+    id: string
+    name: string | null
+    logo_url: string | null
+    director_name: string | null
+    acting_director: string | null
+    acting_director_position?: string | null
+  } | null = null
+  const schoolWithPosition = await db.from('schools')
+    .select('id, name, logo_url, director_name, acting_director, acting_director_position')
+    .eq('id', schoolId)
+    .maybeSingle()
+  if (schoolWithPosition.error) {
+    const fallback = await db.from('schools')
+      .select('id, name, logo_url, director_name, acting_director')
+      .eq('id', schoolId)
+      .maybeSingle()
+    school = fallback.data ? { ...fallback.data, acting_director_position: null } : null
+  } else {
+    school = schoolWithPosition.data
+  }
+
+  const [yearsRes] = await Promise.all([
     db.from('academic_years').select('id, year_be, is_active').eq('school_id', schoolId).order('year_be', { ascending: false }),
   ])
 
@@ -71,11 +98,29 @@ export async function fetchClassroomAdminExportContext() {
   // อ่านสวิตช์เมนู "ปรับ layout" แบบ defensive (ถ้าคอลัมน์ยังไม่มี ให้ถือว่าเปิด)
   const tunerR = await db.from('schools').select('layout_tuner_enabled').eq('id', schoolId).maybeSingle()
   const layoutTunerEnabled = (tunerR.data as { layout_tuner_enabled?: boolean } | null)?.layout_tuner_enabled !== false
+
+  const teacherIds = [...new Set(
+    (classroomsRes.data || [])
+      .flatMap(c => [c.homeroom_teacher_id, c.homeroom_teacher2_id])
+      .filter(Boolean) as string[],
+  )]
+  const teachersRes = teacherIds.length
+    ? await db.from('users').select('id, full_name').in('id', teacherIds)
+    : { data: [] as { id: string; full_name: string | null }[] }
+  const teacherNameById = Object.fromEntries(
+    (teachersRes.data || []).map(u => [u.id, u.full_name || 'ยังไม่กำหนด']),
+  )
+
+  const directorName = school?.acting_director || school?.director_name || 'ยังไม่กำหนด'
+
   return {
-    school: schoolRes.data,
+    school,
     years,
     classrooms: classroomsRes.data || [],
     layoutTunerEnabled,
+    teacherNameById,
+    directorName,
+    actingDirectorPosition: school?.acting_director_position || null,
   }
 }
 
@@ -186,5 +231,157 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
     activities,
     health: Object.fromEntries((healthRes.data || []).map(row => [row.student_id, row])),
     inspection: Object.fromEntries((inspectionRes.data || []).map(row => [row.student_id, row])),
+  }
+}
+
+export type ClassroomAdminMonthSignStatus = {
+  month: number
+  hasSignature: boolean
+  status: string
+  statusLabel: string
+  skipped: boolean
+  proposed: boolean
+  error?: string
+}
+
+/** โหลดลายเซ็นรายเดือนสำหรับแสดงในช่องเซ็นเอกสาร */
+export async function fetchClassroomAdminExportSignatures(
+  classroomId: string,
+  academicYearId: string,
+  term: 1 | 2,
+  months: number[],
+) {
+  const session = await requireExportSession()
+  const db = createServerClient()
+
+  const { data: classroom } = await db.from('classrooms')
+    .select('id, school_id, homeroom_teacher_id, homeroom_teacher2_id')
+    .eq('id', classroomId)
+    .maybeSingle()
+  if (!classroom || classroom.school_id !== session.schoolId) {
+    return { error: 'ไม่พบห้องเรียน', signaturesByMonth: {} as Record<number, { homeroom?: string | null; director?: string | null }>, statuses: [] as ClassroomAdminMonthSignStatus[] }
+  }
+
+  const uniqueMonths = [...new Set(months.filter(m => m >= 1 && m <= 12))]
+  const signaturesByMonth: Record<number, { homeroom?: string | null; director?: string | null }> = {}
+  const statuses: ClassroomAdminMonthSignStatus[] = []
+
+  await Promise.all(uniqueMonths.map(async month => {
+    const [sigs, status] = await Promise.all([
+      loadClassDocReportSignatures(db, classroomId, academicYearId, 'classroom_admin', term, month),
+      fetchClassDocApprovalStatus('classroom_admin', classroomId, term, month),
+    ])
+    signaturesByMonth[month] = {
+      homeroom: sigs.homeroom || null,
+      director: sigs.director || null,
+    }
+    statuses.push({
+      month,
+      hasSignature: Boolean(status?.hasDocumentSignature),
+      status: status?.status || 'draft',
+      statusLabel: status?.status_label || 'ยังไม่ใส่ลายเซ็น',
+      skipped: false,
+      proposed: false,
+    })
+  }))
+
+  statuses.sort((a, b) => a.month - b.month)
+  return { error: null as string | null, signaturesByMonth, statuses }
+}
+
+/**
+ * เสนอเซ็นเป็นชุดตามเดือนที่เลือก
+ * - เดือนที่มีลายเซ็นแล้ว → ข้าม (แสดงลายเซ็นในเอกสารอย่างเดียว)
+ * - เดือนที่ยังไม่มี → ใส่ลายเซ็น + เสนอเซ็น
+ */
+export async function batchProposeClassroomAdminMonths(
+  classroomId: string,
+  term: 1 | 2,
+  months: number[],
+) {
+  const session = await requireExportSession()
+  if (!['teacher', 'admin', 'district'].includes(session.role)) {
+    return { error: 'ไม่มีสิทธิ์เสนอเซ็น', results: [] as ClassroomAdminMonthSignStatus[] }
+  }
+
+  const uniqueMonths = [...new Set(months.filter(m => m >= 1 && m <= 12))]
+  const results: ClassroomAdminMonthSignStatus[] = []
+
+  for (const month of uniqueMonths) {
+    const status = await fetchClassDocApprovalStatus('classroom_admin', classroomId, term, month)
+    if (!status) {
+      results.push({
+        month,
+        hasSignature: false,
+        status: 'draft',
+        statusLabel: 'โหลดสถานะไม่สำเร็จ',
+        skipped: true,
+        proposed: false,
+        error: 'โหลดสถานะไม่สำเร็จ',
+      })
+      continue
+    }
+
+    if (status.hasDocumentSignature) {
+      results.push({
+        month,
+        hasSignature: true,
+        status: status.status,
+        statusLabel: status.status_label,
+        skipped: true,
+        proposed: false,
+      })
+      continue
+    }
+
+    const put = await putClassDocumentSignature('classroom_admin', classroomId, term, month)
+    if (put.error) {
+      results.push({
+        month,
+        hasSignature: false,
+        status: status.status,
+        statusLabel: status.status_label,
+        skipped: false,
+        proposed: false,
+        error: put.error,
+      })
+      continue
+    }
+
+    const propose = await proposeClassDocument('classroom_admin', classroomId, term, month)
+    if (propose.error) {
+      results.push({
+        month,
+        hasSignature: true,
+        status: 'draft',
+        statusLabel: 'ใส่ลายเซ็นแล้ว แต่เสนอไม่สำเร็จ',
+        skipped: false,
+        proposed: false,
+        error: propose.error,
+      })
+      continue
+    }
+
+    const next = await fetchClassDocApprovalStatus('classroom_admin', classroomId, term, month)
+    results.push({
+      month,
+      hasSignature: true,
+      status: next?.status || 'in_review',
+      statusLabel: next?.status_label || 'เสนอเซ็นแล้ว',
+      skipped: false,
+      proposed: true,
+    })
+  }
+
+  const proposedCount = results.filter(r => r.proposed).length
+  const skippedCount = results.filter(r => r.skipped && r.hasSignature).length
+  const errorCount = results.filter(r => r.error).length
+
+  return {
+    error: errorCount && !proposedCount
+      ? results.find(r => r.error)?.error || 'เสนอเป็นชุดไม่สำเร็จ'
+      : null as string | null,
+    summary: `เสนอแล้ว ${proposedCount} เดือน · ข้ามที่มีลายเซ็น ${skippedCount} เดือน${errorCount ? ` · ไม่สำเร็จ ${errorCount}` : ''}`,
+    results,
   }
 }

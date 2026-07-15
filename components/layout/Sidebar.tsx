@@ -134,8 +134,8 @@ const CLASSROOM_ADMIN_MAIN: NavItem = {
       ],
     },
     {
-      label: 'เอกสาร',
-      icon: ic(I.doc),
+      label: 'พิมพ์รายงาน',
+      icon: ic(I.export),
       tone: 'docs',
       children: [
         { href: CLASSROOM_PRINT.href, label: 'พิมพ์เล่มเอกสาร', icon: CLASSROOM_PRINT.icon },
@@ -149,7 +149,6 @@ const SCHEDULE_CHECK_VIEW_CHILDREN: Child[] = [
   { href: '/schedules/workload', label: 'ภาระงานสอน', icon: ic(I.chart) },
 ]
 const SCHEDULE_CHECK_MANAGE_CHILDREN: Child[] = [
-  { href: '/settings/class-subjects', label: 'จัดการเข้าสอน', icon: ic(I.users) },
   { href: '/schedules/conflicts', label: 'ตรวจความขัดแย้ง', icon: ic(I.shield) },
   { href: '/schedules/workload', label: 'ภาระงานสอน', icon: ic(I.chart) },
 ]
@@ -331,6 +330,7 @@ const ADMIN_SETTINGS: NavItem = {
       tone: 'sky',
       children: [
         { href: '/settings/school', label: 'ข้อมูลโรงเรียน', icon: ic(I.building) },
+        { href: '/settings/users', label: 'ข้อมูลบุคลากร', icon: ic(I.users) },
         { href: '/settings/academic-year', label: 'ปีการศึกษา', icon: ic(I.calendar) },
         { href: '/settings/holidays', label: 'วันหยุด', icon: ic(I.clock) },
       ],
@@ -341,14 +341,12 @@ const ADMIN_SETTINGS: NavItem = {
       tone: 'indigo',
       children: [
         { href: '/classrooms', label: 'ชั้นเรียน', icon: ic(I.class) },
-        { href: '/students', label: 'ข้อมูลนักเรียน', icon: ic(I.class) },
+        { href: '/students', label: 'นักเรียน', icon: ic(I.class) },
         { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
         { href: '/settings/evaluation-criteria', label: 'เกณฑ์ประเมิน', icon: ic(I.doc) },
-        { href: '/settings/users', label: 'ข้อมูลบุคลากร', icon: ic(I.users) },
         { href: '/settings/class-subjects', label: 'จัดครูเข้าสอน', icon: ic(I.pen) },
         { href: '/score-config', label: 'สัดส่วนคะแนน', icon: ic(I.sliders) },
         { href: '/classrooms/homeroom', label: 'ครูประจำชั้น', icon: ic(I.users) },
-        { href: '/settings/import-dmc', label: 'นำเข้า DMC', icon: ic(I.export) },
       ],
     },
   ],
@@ -374,7 +372,7 @@ const ADMIN_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'ตั้งค่าโรงเรียน', items: [ADMIN_SETTINGS] },
   { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN, SCHEDULE_MANAGE_MAIN] },
-  { label: 'ปพ.5 / ปพ.6', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
+  { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
   { label: 'ติดตามและรายงาน', items: [EVAL_SUMMARY, REPORT_STATUS, EXPORT_FULL, ACTIVITY_LOG] },
 ]
 const PRINCIPAL_NAV: NavSection[] = [
@@ -391,7 +389,7 @@ const ACADEMIC_HEAD_NAV: NavSection[] = [
   { label: 'ภาพรวมโรงเรียน', items: [CLASSROOMS, STUDENTS, EVAL_SUMMARY] },
   { label: 'มอบหมายงานวิชาการ', items: [ASSIGN] },
   { label: 'ตารางเรียน / ตารางสอน', items: [SCHEDULE_MANAGE_MAIN] },
-  { label: 'ปพ.5 / ปพ.6', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
+  { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
   { label: 'ตรวจสอบและอนุมัติ', items: [DOCUMENTS_SIGN_NAV] },
   { label: 'รายงานสำหรับวิชาการ', items: [REPORT_OVERSIGHT, ACTIVITY_LOG] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
@@ -399,16 +397,16 @@ const ACADEMIC_HEAD_NAV: NavSection[] = [
 const TEACHER_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'งานสอนรายวิชา', items: [SCORES, SCORE_CONFIG, ATTENDANCE, SCHEDULE_VIEW_MAIN] },
-  { label: 'ข้อมูลนักเรียน', items: [STUDENTS] },
+  { label: 'นักเรียน', items: [STUDENTS] },
   { label: 'รายงาน / เอกสาร', items: [TEACHER_REPORTS, DOCUMENTS_SIGN_NAV, ACTIVITY_LOG] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
 ]
 const HOMEROOM_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'งานสอนรายวิชา', items: [SCORES, SCORE_CONFIG, ATTENDANCE, SCHEDULE_VIEW_MAIN] },
-  { label: 'ข้อมูลนักเรียน', items: [STUDENTS] },
+  { label: 'นักเรียน', items: [STUDENTS] },
   { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN] },
-  { label: 'ปพ.5 / ปพ.6', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
+  { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
   { label: 'รายงาน / เอกสาร', items: [TEACHER_REPORTS, ACTIVITY_LOG] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
 ]
@@ -531,11 +529,18 @@ export default function Sidebar({
   const pathname = usePathname()
   const navRef = useRef<HTMLElement | null>(null)
   const [expanded, setExpanded] = useState<string[]>([])
+  const [manualExpand, setManualExpand] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     Promise.resolve().then(() => setMounted(true))
   }, [])
+
+  useEffect(() => {
+    // เปลี่ยนหน้าแล้วกลับไปเปิดตามเมนูที่กำลังอยู่
+    setManualExpand(false)
+    setExpanded([])
+  }, [pathname])
 
   const sections = buildNav(navRole, isHomeroom)
   const schoolPrefix = schoolCode && userRole !== 'district' ? `/school/${schoolCode}` : ''
@@ -543,8 +548,6 @@ export default function Sidebar({
     if (!schoolPrefix || !href.startsWith('/') || href.startsWith('/district')) return href
     return `${schoolPrefix}${href}`
   }
-  const toggle = (href: string) =>
-    setExpanded(prev => prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href])
   const isActive = (href: string) => {
     if (!mounted) return false
     const scoped = scopedHref(href)
@@ -562,7 +565,15 @@ export default function Sidebar({
       return hasActiveChild(child.children)
     })
   }
-  const isExpanded = (item: NavItem) => expanded.includes(item.href) || isActive(item.href) || hasActiveChild(item.children)
+  const isExpanded = (item: NavItem) => {
+    if (manualExpand) return expanded.includes(item.href)
+    return isActive(item.href) || hasActiveChild(item.children)
+  }
+  const toggle = (item: NavItem) => {
+    const currentlyOpen = isExpanded(item)
+    setManualExpand(true)
+    setExpanded(currentlyOpen ? [] : [item.href])
+  }
 
   useEffect(() => {
     if (!mounted) return
@@ -598,16 +609,22 @@ export default function Sidebar({
         </Link>
       )
     }
+    const open = isExpanded(item)
     return (
-      <div key={item.href}>
-        <button onClick={() => toggle(item.href)} className={`sidebar-link sidebar-parent ${active ? 'is-active' : ''}`}>
+      <div key={item.href} className={`sidebar-item${open ? ' is-open' : ''}${active ? ' has-active' : ''}`}>
+        <button
+          type="button"
+          onClick={() => toggle(item)}
+          aria-expanded={open}
+          className={`sidebar-link sidebar-parent${active ? ' is-active' : ''}${open ? ' is-open' : ''}`}
+        >
           {left}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"
-            className={`sidebar-chevron ${isExpanded(item) ? 'is-expanded' : ''}`}>
+            className={`sidebar-chevron${open ? ' is-expanded' : ''}`} aria-hidden="true">
             <path d="M9 18l6-6-6-6" />
           </svg>
         </button>
-        {isExpanded(item) && (
+        {open && (
           <div className="sidebar-children sidebar-submenu--cards">
             {renderSubmenuChildren(item.children ?? [], {
               mounted,

@@ -117,24 +117,46 @@ export async function login(
 }
 
 // ============================================================
-// Logout - ลบ session และ logout จาก Supabase
+// Logout - ลบ session ก่อนเสมอ แล้วค่อยออกจาก Supabase Auth
 // ============================================================
 export async function logout() {
-  const session = await getSession()
   let redirectTo = '/login'
 
-  if (session?.schoolId && session.role !== 'district') {
-    const db = createServerClient()
-    const { data } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()
-    const code = data?.code ? String(data.code).trim().toLowerCase() : ''
-    if (code) redirectTo = `/school/${code}/login`
+  try {
+    const session = await getSession()
+    if (session?.schoolId && session.role !== 'district') {
+      const db = createServerClient()
+      const { data } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()
+      const code = data?.code ? String(data.code).trim().toLowerCase() : ''
+      if (code) redirectTo = `/school/${code}/login`
+    }
+  } catch {
+    // ถ้าดึงโรงเรียนไม่สำเร็จ ให้ไปหน้า login กลาง
   }
 
-  await supabase.auth.signOut()
-  await deleteSession()
+  // ลบ cookie ของแอปก่อน — นี่คือสิ่งที่ proxy ใช้ตัดสินว่า login อยู่หรือไม่
+  try {
+    await deleteSession()
+  } catch {
+    // ignore
+  }
+
   try {
     const { cookies } = await import('next/headers')
     ;(await cookies()).delete('onboarding_skipped')
-  } catch { /* ignore */ }
+  } catch {
+    // ignore
+  }
+
+  // Supabase Auth เป็นเสริม ไม่ต้องบล็อกการออกจากระบบถ้าเน็ต/DNS ช้า
+  try {
+    await Promise.race([
+      supabase.auth.signOut(),
+      new Promise<void>(resolve => setTimeout(resolve, 1500)),
+    ])
+  } catch {
+    // ignore
+  }
+
   redirect(redirectTo)
 }

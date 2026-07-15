@@ -60,6 +60,15 @@ export async function createSession(payload: SessionPayload) {
 // ลบ session (logout)
 export async function deleteSession() {
   const cookieStore = await cookies()
+  // ต้องใส่ options ให้ตรงกับตอน set ไม่งั้นบางเบราว์เซอร์ไม่ลบ cookie จริง
+  cookieStore.set('session', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    expires: new Date(0),
+    maxAge: 0,
+    sameSite: 'lax',
+    path: '/',
+  })
   cookieStore.delete('session')
 }
 

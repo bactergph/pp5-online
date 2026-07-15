@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { login } from '@/lib/actions/auth'
-import { schoolMemberEmail } from '@/lib/schoolAuth'
+import { resolveSchoolLoginEmail } from '@/lib/schoolAuth'
 import ScoutAuthLayout from '@/components/auth/ScoutAuthLayout'
 import PasswordInput from '@/components/auth/PasswordInput'
 
@@ -21,10 +21,10 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
   const [error, setError] = useState<string | null>(null)
   const [registered, setRegistered] = useState(false)
 
-  async function doLogin(username: string, password: string) {
+  async function doLogin(identifier: string, password: string) {
     setLoading(true); setError(null)
     const data = new FormData()
-    data.set('email', schoolMemberEmail(username.trim(), schoolId))
+    data.set('email', resolveSchoolLoginEmail(identifier, schoolId))
     data.set('schoolId', schoolId)
     data.set('password', password)
     const result = await login(undefined, data)
@@ -72,7 +72,7 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
       brandTagline={schoolName}
       logoUrl={logoUrl}
       cardTitle={mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
-      cardSubtitle={createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกชื่อผู้ใช้และรหัสผ่าน'}
+      cardSubtitle={createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกชื่อผู้ใช้ หรืออีเมล และรหัสผ่าน'}
       footer={(
         <p className="auth-scout-footer">
           {mode === 'login' ? (
@@ -91,14 +91,15 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
       {mode === 'login' ? (
         <form onSubmit={handleLogin}>
           <div className="auth-scout-field">
-            <label className="auth-scout-label" htmlFor="username">ชื่อผู้ใช้</label>
+            <label className="auth-scout-label" htmlFor="username">ชื่อผู้ใช้ หรืออีเมล</label>
             <input
               id="username"
               name="username"
               className="auth-scout-input"
-              placeholder="ชื่อผู้ใช้"
+              placeholder="username หรือ email"
               required
               autoComplete="username"
+              inputMode="email"
             />
           </div>
           <div className="auth-scout-field">

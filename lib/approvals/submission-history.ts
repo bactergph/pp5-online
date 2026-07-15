@@ -20,6 +20,7 @@ type SubmissionTarget = {
   term: number
   classSubjectId?: string | null
   classroomId?: string | null
+  month?: number | null
 }
 
 function submissionStatusLabel(status: string, rejectionNote?: string | null) {
@@ -48,6 +49,7 @@ function submissionInsertRow(target: SubmissionTarget, submittedBy: string, subm
     school_id: target.schoolId,
     doc_kind: target.docKind,
     term: target.term,
+    month: target.month ?? null,
     class_subject_id: target.docKind === 'pp5_subject' ? target.classSubjectId : null,
     classroom_id: target.docKind === 'pp5_subject' ? null : target.classroomId,
     submitted_at: submittedAt,
@@ -82,6 +84,12 @@ export async function completeActiveApprovalSubmission(
     .eq('status', 'in_review')
     .order('submitted_at', { ascending: false })
     .limit(1)
+
+  if (target.month != null) {
+    query = query.eq('month', target.month)
+  } else {
+    query = query.is('month', null)
+  }
 
   const { data: rows, error: readError } = await query
   if (readError?.message?.includes('document_approval_submissions')) return

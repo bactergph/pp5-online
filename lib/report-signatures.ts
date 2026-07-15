@@ -69,14 +69,34 @@ export async function loadClassDocReportSignatures(
   academicYearId: string,
   docType: ClassDocType,
   term: 1 | 2,
+  month?: number | null,
 ): Promise<ReportDocumentSignatures> {
-  const { data: record } = await db.from('class_document_approvals')
+  let query = db.from('class_document_approvals')
     .select('*')
     .eq('classroom_id', classroomId)
     .eq('doc_type', docType)
     .eq('academic_year_id', academicYearId)
     .eq('term', term)
-    .maybeSingle()
+
+  let record: Record<string, unknown> | null = null
+  if (docType === 'classroom_admin' && month != null) {
+    const { data: byMonth } = await query.eq('month', month).maybeSingle()
+    record = byMonth
+    if (!record) {
+      const { data: legacy } = await db.from('class_document_approvals')
+        .select('*')
+        .eq('classroom_id', classroomId)
+        .eq('doc_type', docType)
+        .eq('academic_year_id', academicYearId)
+        .eq('term', term)
+        .is('month', null)
+        .maybeSingle()
+      record = legacy
+    }
+  } else {
+    const { data } = await query.is('month', null).maybeSingle()
+    record = data
+  }
   if (!record) return {}
 
   const map = await loadSignatureMap(db, [

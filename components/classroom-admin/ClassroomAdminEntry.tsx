@@ -1491,16 +1491,21 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       return (
         <input
           className={`${cellClass} classroom-admin-month-input classroom-admin-saving-input`}
-          type="number"
-          min={0}
-          step="1"
+          type="text"
           inputMode="decimal"
+          pattern="[0-9]*\.?[0-9]*"
           disabled={disabled}
-          value={schoolDay && value ? value : ''}
+          value={schoolDay && value ? String(value) : ''}
           title={holiday || 'จำนวนเงินออม (บาท)'}
           aria-label={`เงินออมวันที่ ${day}`}
-          onChange={e => setMonthlyActivity(student.id, day, Number(e.target.value || 0))}
-          onBlur={e => autoSaveActivity(student.id, day, Number(e.target.value || 0))}
+          onChange={e => {
+            const raw = e.target.value.replace(/[^\d.]/g, '')
+            setMonthlyActivity(student.id, day, raw === '' ? 0 : Number(raw))
+          }}
+          onBlur={e => {
+            const raw = e.target.value.replace(/[^\d.]/g, '')
+            void autoSaveActivity(student.id, day, raw === '' ? 0 : Number(raw))
+          }}
         />
       )
     }
@@ -1530,13 +1535,16 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     if (activityType === 'saving') {
       return (
         <input
-          className="form-input classroom-admin-compact-input"
-          type="number"
-          min={0}
-          step="0.25"
-          value={activityValues[student.id] ?? 0}
+          className="form-input classroom-admin-compact-input classroom-admin-saving-input"
+          type="text"
+          inputMode="decimal"
+          pattern="[0-9]*\.?[0-9]*"
+          value={activityValues[student.id] ?? ''}
           disabled={!canEdit}
-          onChange={e => setActivityValues(v => ({ ...v, [student.id]: Number(e.target.value) }))}
+          onChange={e => {
+            const raw = e.target.value.replace(/[^\d.]/g, '')
+            setActivityValues(v => ({ ...v, [student.id]: raw === '' ? 0 : Number(raw) }))
+          }}
         />
       )
     }
@@ -1651,116 +1659,124 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       )}
 
       <div className="classroom-admin-top-card classroom-admin-attendance-board">
-        <div className="classroom-admin-attendance-board-row" style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <div className="classroom-admin-segment-group" aria-label="เลือกภาคเรียนหรือปีการศึกษา">
-            {mode === 'weightHeight' ? (
-              years.map(y => (
+        <div className="classroom-admin-board-main">
+          <div className="classroom-admin-board-left">
+            <div className="classroom-admin-segment-group" aria-label="เลือกภาคเรียนหรือปีการศึกษา">
+              {mode === 'weightHeight' ? (
+                years.map(y => (
+                  <button
+                    key={y.id}
+                    type="button"
+                    className={`classroom-admin-segment ${yearId === y.id ? 'is-active' : ''}`}
+                    onClick={() => { setYearId(y.id); setClassroomId('') }}
+                  >
+                    {y.year_be}{y.is_active ? ' ปัจจุบัน' : ''}
+                  </button>
+                ))
+              ) : (
+                ATTENDANCE_TERMS.map(item => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={`classroom-admin-segment ${boardTerm === item.value ? 'is-active' : ''}`}
+                    onClick={() => {
+                      setTerm(item.value)
+                      if (isMonthlyMode) setMonthKey(setMonthInKey(monthKey, item.startMonth))
+                      else setMonth(item.startMonth)
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="classroom-admin-month-tabs" aria-label="เลือกเดือน">
+              {boardMonthTabs.map(monthValue => (
                 <button
-                  key={y.id}
+                  key={monthValue}
                   type="button"
-                  className={`classroom-admin-segment ${yearId === y.id ? 'is-active' : ''}`}
-                  style={{ flex: '0 0 auto', minWidth: 86, width: 'auto' }}
-                  onClick={() => { setYearId(y.id); setClassroomId('') }}
-                >
-                  {y.year_be}{y.is_active ? ' ปัจจุบัน' : ''}
-                </button>
-              ))
-            ) : (
-              ATTENDANCE_TERMS.map(item => (
-                <button
-                  key={item.value}
-                  type="button"
-                  className={`classroom-admin-segment ${boardTerm === item.value ? 'is-active' : ''}`}
-                  style={{ flex: '0 0 auto', minWidth: 76, width: 'auto' }}
+                  className={`classroom-admin-month-tab ${boardMonth === monthValue ? 'is-active' : ''}`}
                   onClick={() => {
-                    setTerm(item.value)
-                    if (isMonthlyMode) setMonthKey(setMonthInKey(monthKey, item.startMonth))
-                    else setMonth(item.startMonth)
+                    if (isMonthlyMode) setMonthKey(setMonthInKey(monthKey, monthValue))
+                    else setMonth(monthValue)
                   }}
                 >
-                  {item.label}
+                  {MONTH_SHORT_LABELS[monthValue]}
                 </button>
-              ))
-            )}
+              ))}
+            </div>
           </div>
 
-          <div className="classroom-admin-attendance-controls" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
-            <select className="form-input classroom-admin-class-select" style={{ width: 170, minWidth: 170 }} value={classroomId} onChange={e => setClassroomId(e.target.value)}>
-              <option value="">เลือกห้องเรียน</option>
-              {filteredClassrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room} · {c.student_count} คน</option>)}
-            </select>
-            {(mode === 'weightHeight' || mode === 'healthInspection') && (
-              <label className="classroom-admin-date-field">
-                <span>{mode === 'weightHeight' ? 'วันวัด' : 'วันตรวจ'}</span>
-                <input className="form-input classroom-admin-class-select" type="date" value={date} onChange={e => setDate(e.target.value)} />
-              </label>
-            )}
-            {!isMonthlyMode && (
-              <LoadingButton
-                className="btn btn-primary classroom-admin-board-button"
-                style={{ width: 'auto', minWidth: 92, flex: '0 0 auto' }}
-                loading={isPending}
-                disabled={!canEdit || !classroomId || tableLoading}
-                onClick={handleSave}
-              >
-                บันทึก
-              </LoadingButton>
-            )}
-            {layoutTunerEnabled && (
-            <button
-              type="button"
-              className={`btn btn-secondary classroom-admin-board-button pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
-              style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }}
-              onClick={() => {
-                setLayoutTunerSection(printLayoutSection)
-                setLayoutTunerOpen(open => !open)
-              }}
-            >
-              {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
-            </button>
-            )}
-            <button type="button" className="btn btn-secondary classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={exportAttendancePdf} disabled={!classroomId || tableLoading || students.length === 0 || pdfExporting}>
-              {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
-            </button>
-            <button type="button" className="btn classroom-admin-print-green classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={printCurrentPage} disabled={!classroomId || tableLoading || students.length === 0}>
-              พิมพ์หน้านี้
-            </button>
+          <div className="classroom-admin-board-right">
+            <div className="classroom-admin-attendance-controls">
+              <select className="form-input classroom-admin-class-select" value={classroomId} onChange={e => setClassroomId(e.target.value)}>
+                <option value="">เลือกห้องเรียน</option>
+                {filteredClassrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room} · {c.student_count} คน</option>)}
+              </select>
+              {(mode === 'weightHeight' || mode === 'healthInspection') && (
+                <label className="classroom-admin-date-field">
+                  <span>{mode === 'weightHeight' ? 'วันวัด' : 'วันตรวจ'}</span>
+                  <input className="form-input classroom-admin-class-select" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                </label>
+              )}
+              {!isMonthlyMode && (
+                <LoadingButton
+                  className="btn btn-primary classroom-admin-board-button"
+                  loading={isPending}
+                  disabled={!canEdit || !classroomId || tableLoading}
+                  onClick={handleSave}
+                >
+                  บันทึก
+                </LoadingButton>
+              )}
+              {layoutTunerEnabled && (
+                <button
+                  type="button"
+                  className={`btn btn-secondary classroom-admin-board-button pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
+                  onClick={() => {
+                    setLayoutTunerSection(printLayoutSection)
+                    setLayoutTunerOpen(open => !open)
+                  }}
+                >
+                  {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
+                </button>
+              )}
+              <div className="classroom-admin-print-cluster">
+                <button type="button" className="btn btn-secondary classroom-admin-board-button" onClick={exportAttendancePdf} disabled={!classroomId || tableLoading || students.length === 0 || pdfExporting}>
+                  {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
+                </button>
+                <button type="button" className="btn classroom-admin-print-green classroom-admin-board-button" onClick={printCurrentPage} disabled={!classroomId || tableLoading || students.length === 0}>
+                  พิมพ์หน้านี้
+                </button>
+                {classroomId && (
+                  <div className="classroom-admin-board-sign classroom-admin-board-sign--docked">
+                    <DocumentSignaturePanel
+                      variant="classroom_admin"
+                      classroomId={classroomId}
+                      reportTerm={boardTerm}
+                      reportMonth={boardMonth}
+                      disabled={!classroomId}
+                      compact
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="classroom-admin-month-tabs" aria-label="เลือกเดือน">
-          {boardMonthTabs.map(monthValue => (
-            <button
-              key={monthValue}
-              type="button"
-              className={`classroom-admin-month-tab ${boardMonth === monthValue ? 'is-active' : ''}`}
-              onClick={() => {
-                if (isMonthlyMode) setMonthKey(setMonthInKey(monthKey, monthValue))
-                else setMonth(monthValue)
-              }}
-            >
-              {MONTH_SHORT_LABELS[monthValue]}
-            </button>
-          ))}
+        <div className="classroom-admin-board-intro">
+          <div className="classroom-admin-board-intro-text">
+            <strong className="classroom-admin-board-title">{title}</strong>
+            <span className="classroom-admin-board-desc">{description}</span>
+          </div>
+          <div className="classroom-admin-board-flags">
+            {!canEdit && <span className="badge badge-gray">ดูอย่างเดียว</span>}
+            {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากมาเรียน · แก้รายช่องได้</span>}
+            {tableLoading && <span className="badge badge-gray">กำลังโหลดตาราง...</span>}
+          </div>
         </div>
-
-        <div className="classroom-admin-attendance-meta">
-          <strong className="classroom-admin-board-title">{title}</strong>
-          <span className="classroom-admin-board-desc">{description}</span>
-          {!canEdit && <span className="badge badge-gray">ดูอย่างเดียว</span>}
-          {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากมาเรียน · แก้รายช่องได้</span>}
-          {tableLoading && <span className="badge badge-gray">กำลังโหลดตาราง...</span>}
-        </div>
-
-        {recordsLoaded && (
-          <DocumentSignaturePanel
-            variant="classroom_admin"
-            classroomId={classroomId}
-            reportTerm={boardTerm}
-            disabled={!classroomId}
-            compact
-          />
-        )}
       </div>
 
       {isSavingMode && savingStats && !tableLoading && students.length > 0 && (

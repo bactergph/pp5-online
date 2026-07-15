@@ -77,6 +77,35 @@ const APP_ALERT_STYLES = `
     font-weight: 600;
     line-height: 1.5;
   }
+  .app-alert-actions {
+    display: grid;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .app-alert-btn {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 14px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .app-alert-btn:active {
+    transform: scale(0.98);
+  }
+  .app-alert-btn--success {
+    color: #FFFFFF;
+    background: linear-gradient(180deg, #34D399, #10B981);
+  }
+  .app-alert-btn--error {
+    color: #FFFFFF;
+    background: linear-gradient(180deg, #F87171, #EF4444);
+  }
   @keyframes app-alert-backdrop-in {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -116,7 +145,8 @@ export default function AppAlertModal({
 }) {
   const [mounted, setMounted] = useState(false)
   const [closing, setClosing] = useState(false)
-  const duration = autoCloseMs ?? (type === 'success' ? 1200 : 1800)
+  // error ค้างไว้ให้อ่าน — ปิดด้วยปุ่ม; success ปิดอัตโนมัติ
+  const duration = autoCloseMs ?? (type === 'success' ? 1200 : 0)
 
   useEffect(() => {
     setMounted(true)
@@ -128,6 +158,7 @@ export default function AppAlertModal({
       return
     }
     setClosing(false)
+    if (duration <= 0) return
     const fadeMs = 200
     const closeDelay = Math.max(0, duration - fadeMs)
     const fadeTimer = window.setTimeout(() => setClosing(true), closeDelay)
@@ -138,12 +169,18 @@ export default function AppAlertModal({
     }
   }, [open, duration, onClose])
 
+  function handleClose() {
+    if (closing) return
+    setClosing(true)
+    window.setTimeout(onClose, 200)
+  }
+
   if (!open || !mounted) return null
 
   return createPortal(
     <>
       <style>{APP_ALERT_STYLES}</style>
-      <div className={`app-alert-backdrop ${closing ? 'is-closing' : ''}`} onClick={onClose}>
+      <div className={`app-alert-backdrop ${closing ? 'is-closing' : ''}`} onClick={handleClose}>
         <div
           className="app-alert-card"
           onClick={event => event.stopPropagation()}
@@ -166,6 +203,17 @@ export default function AppAlertModal({
           </div>
           <h3 id="app-alert-title" className="app-alert-title">{title}</h3>
           {message ? <p id="app-alert-message" className="app-alert-message">{message}</p> : null}
+          {type === 'error' || duration <= 0 ? (
+            <div className="app-alert-actions">
+              <button
+                type="button"
+                className={`app-alert-btn app-alert-btn--${type}`}
+                onClick={handleClose}
+              >
+                ปิด
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </>,

@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { useFormStatus } from 'react-dom'
 import Link from 'next/link'
 import { logout } from '@/lib/actions/auth'
 
@@ -9,6 +10,18 @@ type Props = {
   userRole: string
   schoolCode?: string | null
   onMenuClick: () => void
+}
+
+function LogoutButton() {
+  const { pending } = useFormStatus()
+  return (
+    <button type="submit" className="navbar-logout" disabled={pending} aria-busy={pending}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4 M16 17l5-5-5-5 M21 12H9"/>
+      </svg>
+      {pending ? 'กำลังออก...' : 'ออกจากระบบ'}
+    </button>
+  )
 }
 
 export default function Navbar({ title, userFullName, userRole, schoolCode, onMenuClick }: Props) {
@@ -39,6 +52,7 @@ export default function Navbar({ title, userFullName, userRole, schoolCode, onMe
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className={`navbar-user-button ${menuOpen ? 'is-open' : ''}`}
+          aria-expanded={menuOpen}
         >
           <div className="navbar-avatar">
             {userFullName.charAt(0)}
@@ -80,15 +94,7 @@ export default function Navbar({ title, userFullName, userRole, schoolCode, onMe
                   ตั้งค่าข้อมูลตัวเอง
                 </Link>
                 <form action={logout}>
-                  <button
-                    type="submit"
-                    className="navbar-logout"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4 M16 17l5-5-5-5 M21 12H9"/>
-                    </svg>
-                    ออกจากระบบ
-                  </button>
+                  <LogoutButton />
                 </form>
               </div>
             </div>

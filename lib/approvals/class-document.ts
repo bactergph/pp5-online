@@ -7,6 +7,7 @@ export type ClassDocumentApproval = {
   classroom_id: string
   academic_year_id: string
   term: number
+  month?: number | null
   status: string
   rejection_note?: string | null
   submitted_at?: string | null
