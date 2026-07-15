@@ -4330,7 +4330,8 @@ div:has(> .thai-table) {
   border: 1px solid #eef0f6;
   border-radius: 24px;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.10);
-  overflow: hidden;
+  /* อย่า overflow:hidden — จะทำให้ StaffPicker dropdown / ช่องกรอกด้านล่างใช้บนมือถือไม่ได้ */
+  overflow: visible;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -4409,8 +4410,7 @@ div:has(> .thai-table) {
   padding: 18px clamp(14px, 3vw, 30px) 8px;
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
 }
 
 /* การ์ดฟอร์มภายใน wizard ไม่ต้องมีเงา/ขอบซ้ำ */
@@ -4593,7 +4593,7 @@ div:has(> .thai-table) {
   }
 
   .wizard-content {
-    padding: 12px 12px 4px;
+    padding: 12px 12px 88px; /* พื้นที่พอลากผ่านปุ่มล่าง โดยไม่ sticky ทับช่องกรอก */
   }
 
   .wizard-content .card-padded {
@@ -4608,14 +4608,15 @@ div:has(> .thai-table) {
     font-size: 13px;
   }
 
+  /* ไม่ใช้ sticky footer — กันทับช่องกรอกตอนคีย์บอร์ดเปิด / ตอนเลื่อนฟอร์มยาว */
   .wizard-footer {
     flex-direction: column-reverse;
     align-items: stretch;
     gap: 10px;
     padding: 12px 12px max(12px, env(safe-area-inset-bottom, 0px));
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
+    position: static;
+    z-index: auto;
+    border-radius: 0 0 18px 18px;
   }
 
   .wizard-footer-right {
@@ -4632,6 +4633,8 @@ div:has(> .thai-table) {
     width: 100%;
     justify-content: center;
     box-sizing: border-box;
+    min-height: 48px;
+    touch-action: manipulation;
   }
 
   .wizard-skip-hint {
@@ -4639,16 +4642,32 @@ div:has(> .thai-table) {
   }
 
   .wizard-content .onboarding-search-input,
-  .wizard-content .form-input {
+  .wizard-content .form-input,
+  .wizard-content .staff-picker__input {
     font-size: 16px; /* กัน iOS zoom */
+    min-height: 48px;
   }
 
   .wizard-content .onboarding-result {
-    padding: 12px 10px;
+    padding: 14px 12px;
+    min-height: 56px;
+    touch-action: manipulation;
   }
 
   .wizard-content .onboarding-result-name {
     font-size: 14px;
+  }
+
+  .wizard-content .school-upload-stack {
+    gap: 20px;
+  }
+
+  .wizard-import .classroom-setup-panel {
+    padding: 12px;
+  }
+
+  .wizard-level-grid {
+    grid-template-columns: 1fr !important;
   }
 }
 
@@ -4660,6 +4679,269 @@ div:has(> .thai-table) {
 
   .wizard-step-label {
     font-size: 10px;
+  }
+}
+
+/* ── Staff picker (mobile-safe dropdown) ── */
+.staff-picker {
+  position: relative;
+  z-index: 1;
+}
+
+.staff-picker:focus-within {
+  z-index: 30;
+}
+
+.staff-picker__row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.staff-picker__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.staff-picker__clear {
+  flex-shrink: 0;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+.staff-picker__menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(240px, 42vh);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--border, #e8edf4);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.staff-picker__empty {
+  padding: 12px 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+.staff-picker__option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 12px;
+  min-height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.12s ease, transform 0.1s ease;
+}
+
+.staff-picker__option.is-selected {
+  background: #EFF6FF;
+}
+
+.staff-picker__option:active {
+  background: #F5EDE3;
+  transform: scale(0.99);
+}
+
+.staff-picker__option-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.staff-picker__option-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* Touch press feedback — มือถือไม่มี hover */
+@media (hover: none) {
+  .wizard-step-btn:active:not(:disabled) {
+    background: #F5EDE3;
+  }
+
+  .wizard-skip-all:active {
+    background: #F5EDE3;
+    border-color: #E8D9C4;
+    color: #8B6B45;
+  }
+
+  .onboarding-result:active:not(:disabled) {
+    border-color: #E8D9C4;
+    background: #F5EDE3;
+    transform: scale(0.985);
+  }
+
+  .wizard-footer .btn:active:not(:disabled),
+  .wizard-footer-right .btn:active:not(:disabled),
+  .wizard-footer-right .onboarding-later:active {
+    filter: brightness(0.94);
+    transform: scale(0.98);
+  }
+
+  .btn:active:not(:disabled) {
+    filter: brightness(0.95);
+  }
+}
+
+.wizard-level-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px;
+}
+
+.classroom-level-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 52px;
+  touch-action: manipulation;
+}
+
+.classroom-level-chip.is-on {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.classroom-level-chip__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+}
+
+.classroom-level-chip__rooms {
+  width: 64px !important;
+  min-height: 40px !important;
+  text-align: center;
+  font-size: 16px !important;
+}
+
+.classroom-level-chip__rooms:disabled {
+  opacity: 0.4;
+}
+
+.classroom-level-chip__unit {
+  font-size: 12px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.wizard-upload__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.wizard-upload__preview {
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+  border: 2px dashed var(--border);
+  background: var(--bg-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 0;
+  touch-action: manipulation;
+  transition: border-color 0.15s, transform 0.1s;
+}
+
+.wizard-upload__preview:active {
+  border-color: var(--primary);
+  transform: scale(0.98);
+}
+
+.wizard-upload__actions .btn {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+.wizard-upload__hint {
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 6px 0 0;
+}
+
+.wizard-upload__error {
+  font-size: 12px;
+  color: var(--danger);
+  margin: 4px 0 0;
+}
+
+.wizard-inline-field {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.wizard-inline-field__grow {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.wizard-inline-field__action {
+  white-space: nowrap;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+@media (max-width: 640px) {
+  .wizard-level-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-upload__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wizard-upload__preview {
+    width: 100%;
+    height: 120px;
+  }
+
+  .wizard-upload__actions .btn {
+    width: 100%;
+  }
+
+  .wizard-inline-field {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wizard-inline-field__grow {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .wizard-inline-field__action {
+    width: 100%;
+    white-space: normal;
   }
 }
 

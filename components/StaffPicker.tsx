@@ -52,11 +52,11 @@ export default function StaffPicker({
   }, [staff, query])
 
   useEffect(() => {
-    function onDoc(e: MouseEvent) {
+    function onDoc(e: PointerEvent) {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
+    document.addEventListener('pointerdown', onDoc)
+    return () => document.removeEventListener('pointerdown', onDoc)
   }, [])
 
   function pick(user: StaffOption) {
@@ -73,63 +73,55 @@ export default function StaffPicker({
   }
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
+    <div ref={wrapRef} className="staff-picker">
       {label && <label className="form-label">{label}</label>}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div className="staff-picker__row">
         <input
-          className="form-input"
+          className="form-input staff-picker__input"
           value={open ? query : display}
           placeholder={placeholder}
+          autoComplete="off"
+          enterKeyHint="search"
           onChange={e => {
-            setQuery(e.target.value)
-            if (allowManual) onManualChange?.(e.target.value)
+            const next = e.target.value
+            setQuery(next)
+            if (allowManual) onManualChange?.(next)
+            // พิมพ์ทับชื่อที่เลือกไว้ → เคลียร์ userId เพื่อให้เป็นกรอกมือ
+            if (value) onChange(null, allowManual ? next : '')
             setOpen(true)
           }}
-          onFocus={() => setOpen(true)}
-          style={{ flex: 1 }}
+          onFocus={() => {
+            setQuery(display)
+            setOpen(true)
+          }}
         />
         {(value || display) && (
-          <button type="button" className="btn btn-secondary" onClick={clear}>ล้าง</button>
+          <button type="button" className="btn btn-secondary staff-picker__clear" onClick={clear}>
+            ล้าง
+          </button>
         )}
       </div>
       {open && (
-        <div
-          className="data-card"
-          style={{
-            position: 'absolute',
-            zIndex: 40,
-            top: 'calc(100% + 4px)',
-            left: 0,
-            right: 0,
-            maxHeight: 220,
-            overflow: 'auto',
-            padding: 6,
-            boxShadow: '0 12px 28px rgba(15,23,42,0.12)',
-          }}
-        >
+        <div className="staff-picker__menu" role="listbox">
           {filtered.length === 0 ? (
-            <div style={{ padding: '10px 8px', fontSize: 12, color: 'var(--text-3)' }}>ไม่พบรายชื่อ</div>
+            <div className="staff-picker__empty">
+              {allowManual ? 'ไม่พบในรายชื่อ — พิมพ์ชื่อแล้วใช้ค่านั้นได้เลย' : 'ไม่พบรายชื่อ'}
+            </div>
           ) : filtered.map(user => (
             <button
               key={user.id}
               type="button"
+              role="option"
+              aria-selected={user.id === value}
+              className={`staff-picker__option${user.id === value ? ' is-selected' : ''}`}
+              onPointerDown={e => e.preventDefault()}
               onClick={() => pick(user)}
-              style={{
-                display: 'block',
-                width: '100%',
-                textAlign: 'left',
-                padding: '8px 10px',
-                border: 'none',
-                borderRadius: 8,
-                background: user.id === value ? '#EFF6FF' : 'transparent',
-                cursor: 'pointer',
-              }}
             >
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+              <div className="staff-picker__option-name">
                 {formatStaffName(user.prefix, user.full_name)}
               </div>
               {user.position && (
-                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{user.position}</div>
+                <div className="staff-picker__option-meta">{user.position}</div>
               )}
             </button>
           ))}

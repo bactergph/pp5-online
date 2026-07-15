@@ -135,21 +135,14 @@ function ImageUploadBox({ label, value, type, schoolId, onUploaded }: {
   }
 
   return (
-    <div>
+    <div className="wizard-upload">
       <label className="form-label">{label}</label>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        {/* preview box */}
-        <div
+      <div className="wizard-upload__row">
+        <button
+          type="button"
+          className="wizard-upload__preview"
           onClick={() => inputRef.current?.click()}
-          style={{
-            width: '96px', height: '96px', borderRadius: '12px',
-            border: '2px dashed var(--border)', background: 'var(--bg-2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', overflow: 'hidden', flexShrink: 0,
-            transition: 'border-color 0.15s',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--primary)')}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+          aria-label={`${state.url ? 'เปลี่ยน' : 'เลือก'}${label}`}
         >
           {state.url ? (
             <Image src={state.url} alt={label} width={96} height={96} unoptimized style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -159,19 +152,18 @@ function ImageUploadBox({ label, value, type, schoolId, onUploaded }: {
               <path d="M21 15l-5-5L5 21"/>
             </svg>
           )}
-        </div>
-        <div>
+        </button>
+        <div className="wizard-upload__actions">
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={state.uploading}
             className="btn btn-secondary"
-            style={{ fontSize: '13px' }}
           >
             {state.uploading ? 'กำลังอัพโหลด...' : state.url ? 'เปลี่ยนรูป' : 'เลือกรูป'}
           </button>
-          <p style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '4px' }}>PNG, JPG, WEBP ≤ 2 MB</p>
-          {state.error && <p style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '4px' }}>{state.error}</p>}
+          <p className="wizard-upload__hint">PNG, JPG, WEBP ≤ 2 MB</p>
+          {state.error && <p className="wizard-upload__error">{state.error}</p>}
         </div>
       </div>
       <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={handleFile} />
@@ -679,11 +671,17 @@ export default function SchoolSettingsPage() {
                     </div>
                     <div>
                       <label className="form-label">รองผู้อำนวยการ</label>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                        <div style={{ flex: '1 1 220px' }}>
+                      <div className="wizard-inline-field">
+                        <div className="wizard-inline-field__grow">
                           <StaffPicker staff={staff} value={viceDirectorUserId} manualValue={viceDirectorName} allowManual onManualChange={setViceDirectorName} onChange={(userId, name) => { setViceDirectorUserId(userId); setViceDirectorName(name) }} />
                         </div>
-                        <button type="button" className={isViceDirectorActing ? 'btn btn-primary' : 'btn btn-secondary'} style={{ whiteSpace: 'nowrap', marginTop: 26 }} onClick={toggleViceDirectorAsActing} disabled={actingToggleBusy} aria-pressed={isViceDirectorActing}>
+                        <button
+                          type="button"
+                          className={`${isViceDirectorActing ? 'btn btn-primary' : 'btn btn-secondary'} wizard-inline-field__action`}
+                          onClick={toggleViceDirectorAsActing}
+                          disabled={actingToggleBusy}
+                          aria-pressed={isViceDirectorActing}
+                        >
                           {actingToggleBusy ? 'กำลังบันทึก...' : isViceDirectorActing ? 'ยกเลิกรักษาการ' : 'ตั้งเป็นรักษาการ ผอ.'}
                         </button>
                       </div>

@@ -250,21 +250,16 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.04em', marginBottom: 8, textTransform: 'uppercase' }}>
                   {group.title}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(168px, 1fr))', gap: 10 }}>
+                <div className="wizard-level-grid">
                   {group.levels.map(level => {
                     const rooms = levelRooms[level] || 0
                     const on = rooms > 0
                     return (
                       <div
                         key={level}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '10px 12px', borderRadius: 10,
-                          border: `1px solid ${on ? 'var(--primary)' : 'var(--border)'}`,
-                          background: on ? 'color-mix(in srgb, var(--primary) 8%, transparent)' : 'var(--surface)',
-                        }}
+                        className={`classroom-level-chip${on ? ' is-on' : ''}`}
                       >
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 1, margin: 0 }}>
+                        <label className="classroom-level-chip__label">
                           <input
                             type="checkbox"
                             checked={on}
@@ -278,17 +273,17 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
                         <input
                           type="number"
                           min={1}
+                          inputMode="numeric"
                           value={on ? rooms : ''}
                           disabled={!on}
                           onChange={e => setLevelRooms(prev => ({
                             ...prev,
                             [level]: Math.max(1, Number((e.target.value || '').replace(/\D/g, '')) || 1),
                           }))}
-                          className="form-input"
-                          style={{ width: 56, textAlign: 'center', opacity: on ? 1 : 0.4 }}
+                          className="form-input classroom-level-chip__rooms"
                           aria-label={`จำนวนห้อง ${level}`}
                         />
-                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>ห้อง</span>
+                        <span className="classroom-level-chip__unit">ห้อง</span>
                       </div>
                     )
                   })}
