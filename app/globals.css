@@ -5163,15 +5163,60 @@ div:has(> .thai-table) {
   font-size: 12.5px;
   font-weight: 800;
   min-height: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.classroom-admin-board-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.classroom-admin-board-desc {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.classroom-admin-date-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  flex: 0 0 auto;
+}
+
+.classroom-admin-date-field > span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  line-height: 1.2;
+}
+
+.classroom-admin-saving-input {
+  height: 34px !important;
+  min-height: 34px;
+  border-radius: 10px !important;
+  border: 1px solid #E2E8F0 !important;
+  background: #FFFFFF !important;
+  font-size: 15px !important;
+  font-weight: 700;
+  padding: 0 4px !important;
+  color: #0F172A;
+}
+
+.classroom-admin-saving-input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: inset 0 0 0 2px rgba(139, 107, 69, 0.28);
 }
 
 .classroom-admin-attendance-meta > span:not(.badge) {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #F8FAFC;
 }
 
 .classroom-admin-filter {
@@ -5383,6 +5428,10 @@ div:has(> .thai-table) {
   table-layout: fixed;
   font-size: 13px;
   background: #FFFFFF;
+}
+
+.classroom-admin-saving-table {
+  min-width: 1680px;
 }
 
 .classroom-admin-month-table th {

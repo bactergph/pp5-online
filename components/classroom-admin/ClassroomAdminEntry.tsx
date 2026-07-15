@@ -206,14 +206,6 @@ function usesAttendanceDefault(mode: Mode, activityType?: ActivityType) {
   return mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType))
 }
 
-function modeKicker(mode: Mode, activityType?: ActivityType) {
-  if (mode === 'attendance') return 'ATTENDANCE BOOK'
-  if (mode === 'weightHeight') return 'GROWTH RECORD'
-  if (mode === 'healthInspection') return 'HEALTH CHECK'
-  if (activityType === 'saving') return 'SAVING RECORD'
-  return 'DAILY ROUTINE'
-}
-
 export default function ClassroomAdminEntry({ mode, title, description, activityType, activityLabel }: Props) {
   const searchParams = useSearchParams()
   const printMode = searchParams.get('print') === '1'
@@ -275,8 +267,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const hasMonthlyBulkTools = mode === 'attendance'
     || (mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType)))
   const monthlyHeaderRowSpan = hasMonthlyBulkTools ? 4 : 3
-  const recordsRequestKey = [classroomId, yearId, mode, activityType || '', date, month, monthKey, term].join('|')
+  // ไม่ใส่ date ใน request key — date ใช้เฉพาะวันตรวจวัดตอนบันทึก ไม่ใช่โหลดตาราง
+  const recordsRequestKey = [classroomId, yearId, mode, activityType || '', month, monthKey, term].join('|')
   const recordsLoaded = Boolean(classroomId) && recordsLoadedKey === recordsRequestKey
+  const tableLoading = Boolean(classroomId) && !recordsLoaded
 
   const filteredClassrooms = useMemo(
     () => classrooms.filter(c => !yearId || c.academic_year_id === yearId),
@@ -367,7 +361,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     if (!classroomId) return
     loadRecords()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classroomId, date, month, monthKey, term, yearId, mode, activityType])
+  }, [classroomId, month, monthKey, term, yearId, mode, activityType])
 
   useEffect(() => {
     if (!hasMonthlyBulkTools) return
@@ -427,7 +421,6 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           setWeekendSchoolDays(result.weekendSchoolDays || [])
           setMonthlyAttendanceValues(Object.fromEntries(result.students.map(s => [s.id, result.records[s.id] || {}])))
         } else if (mode === 'activity' && activityType) {
-          setMonthlyActivityValues({})
           const result = await fetchMonthlyActivity(classroomId, yearId, monthKey, activityType)
           if (result.error) { notify('error', result.error); return }
           setStudents(result.students)
@@ -542,9 +535,12 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         ...Array.from({ length: printBlankRowCount }, (_, index) => ({ type: 'blank' as const, number: students.length + index + 1 })),
       ]
     : []
-  const interactiveBodyRows = mode === 'attendance'
-    ? printRows
-    : students.map((student, index) => ({ type: 'student' as const, student, number: student.student_number || index + 1 }))
+  // หน้าจอแสดงเฉพาะนักเรียนจริง — แถวว่างเป็นของงานพิมพ์เท่านั้น
+  const interactiveBodyRows = students.map((student, index) => ({
+    type: 'student' as const,
+    student,
+    number: student.student_number || index + 1,
+  }))
   const holidayRowSpan = students.length
 
   function renderMonthlyDayCells(bodyRowIndex: number, student: Student | null) {
@@ -645,6 +641,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const termLabel = `ภาคเรียนที่ ${attendanceTerm}`
   const isSavingMode = mode === 'activity' && activityType === 'saving'
   const isRoutineActivityMode = mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType))
+  const savingTableMinWidth = isSavingMode ? Math.max(1680, 320 + days.length * 72 + 360) : undefined
   const savingStats = isSavingMode
     ? (() => {
         const rows = students.map(student => {
@@ -1493,13 +1490,15 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     if (activityType === 'saving') {
       return (
         <input
-          className={`${cellClass} classroom-admin-month-input`}
+          className={`${cellClass} classroom-admin-month-input classroom-admin-saving-input`}
           type="number"
           min={0}
           step="1"
+          inputMode="decimal"
           disabled={disabled}
           value={schoolDay && value ? value : ''}
-          title={holiday || 'จำนวนเงินออม'}
+          title={holiday || 'จำนวนเงินออม (บาท)'}
+          aria-label={`เงินออมวันที่ ${day}`}
           onChange={e => setMonthlyActivity(student.id, day, Number(e.target.value || 0))}
           onBlur={e => autoSaveActivity(student.id, day, Number(e.target.value || 0))}
         />
@@ -1683,28 +1682,30 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 </button>
               ))
             )}
-            <span className="classroom-admin-segment is-muted" style={{ flex: '0 0 auto', minWidth: 76, width: 'auto' }}>
-              {isMonthlyMode ? 'รายเดือน' : 'รายครั้ง'}
-            </span>
           </div>
 
           <div className="classroom-admin-attendance-controls" style={{ flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
-            <select className="form-input classroom-admin-class-select" style={{ width: 150, minWidth: 150 }} value={classroomId} onChange={e => setClassroomId(e.target.value)}>
+            <select className="form-input classroom-admin-class-select" style={{ width: 170, minWidth: 170 }} value={classroomId} onChange={e => setClassroomId(e.target.value)}>
               <option value="">เลือกห้องเรียน</option>
               {filteredClassrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room} · {c.student_count} คน</option>)}
             </select>
             {(mode === 'weightHeight' || mode === 'healthInspection') && (
-              <input className="form-input classroom-admin-class-select" style={{ width: 150, minWidth: 150 }} type="date" value={date} onChange={e => setDate(e.target.value)} />
+              <label className="classroom-admin-date-field">
+                <span>{mode === 'weightHeight' ? 'วันวัด' : 'วันตรวจ'}</span>
+                <input className="form-input classroom-admin-class-select" type="date" value={date} onChange={e => setDate(e.target.value)} />
+              </label>
             )}
-            <LoadingButton
-              className="btn btn-primary classroom-admin-board-button"
-              style={{ width: 'auto', minWidth: 92, flex: '0 0 auto' }}
-              loading={isPending}
-              disabled={!canEdit || !classroomId}
-              onClick={handleSave}
-            >
-              บันทึก
-            </LoadingButton>
+            {!isMonthlyMode && (
+              <LoadingButton
+                className="btn btn-primary classroom-admin-board-button"
+                style={{ width: 'auto', minWidth: 92, flex: '0 0 auto' }}
+                loading={isPending}
+                disabled={!canEdit || !classroomId || tableLoading}
+                onClick={handleSave}
+              >
+                บันทึก
+              </LoadingButton>
+            )}
             {layoutTunerEnabled && (
             <button
               type="button"
@@ -1718,10 +1719,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
             </button>
             )}
-            <button type="button" className="btn btn-secondary classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={exportAttendancePdf} disabled={!classroomId || students.length === 0 || pdfExporting}>
+            <button type="button" className="btn btn-secondary classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={exportAttendancePdf} disabled={!classroomId || tableLoading || students.length === 0 || pdfExporting}>
               {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
             </button>
-            <button type="button" className="btn classroom-admin-print-green classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={printCurrentPage} disabled={!classroomId || students.length === 0}>
+            <button type="button" className="btn classroom-admin-print-green classroom-admin-board-button" style={{ width: 'auto', minWidth: 112, flex: '0 0 auto' }} onClick={printCurrentPage} disabled={!classroomId || tableLoading || students.length === 0}>
               พิมพ์หน้านี้
             </button>
           </div>
@@ -1741,15 +1742,14 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               {MONTH_SHORT_LABELS[monthValue]}
             </button>
           ))}
-          {isMonthlyMode && <button type="button" className="classroom-admin-month-tab is-summary">สรุป</button>}
         </div>
 
         <div className="classroom-admin-attendance-meta">
-          <span className="badge badge-gray">{modeKicker(mode, activityType)}</span>
-          <span className="badge badge-success">{title}</span>
-          <span className="badge badge-gray">{description}</span>
+          <strong className="classroom-admin-board-title">{title}</strong>
+          <span className="classroom-admin-board-desc">{description}</span>
           {!canEdit && <span className="badge badge-gray">ดูอย่างเดียว</span>}
-          {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากการมาเรียน แต่แก้รายช่องได้</span>}
+          {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากมาเรียน · แก้รายช่องได้</span>}
+          {tableLoading && <span className="badge badge-gray">กำลังโหลดตาราง...</span>}
         </div>
 
         {recordsLoaded && (
@@ -1763,7 +1763,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         )}
       </div>
 
-      {isSavingMode && savingStats && (
+      {isSavingMode && savingStats && !tableLoading && students.length > 0 && (
         <div className="control-card saving-summary-grid">
           <div>
             <label className="form-label">ครูออมช่วย</label>
@@ -1815,6 +1815,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       <div className="data-card class-subjects-table-card classroom-admin-table-card">
         {!classroomId ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>เลือกห้องเรียนเพื่อเริ่มบันทึก</div>
+        ) : tableLoading ? (
+          <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>กำลังโหลดตาราง...</div>
         ) : students.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>ยังไม่มีนักเรียนในห้องนี้</div>
         ) : mode === 'weightHeight' ? (
@@ -1934,11 +1936,14 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             </div>
           )}
           <div className="classroom-admin-month-table-wrap">
-          <table className="thai-table classroom-admin-month-table">
+          <table
+            className={`thai-table classroom-admin-month-table${isSavingMode ? ' classroom-admin-saving-table' : ''}`}
+            style={savingTableMinWidth ? { minWidth: savingTableMinWidth } : undefined}
+          >
             <colgroup>
               <col style={{ width: 58 }} />
               <col style={{ width: 248 }} />
-              {days.map(day => <col key={day} style={{ width: activityType === 'saving' ? 50 : 38 }} />)}
+              {days.map(day => <col key={day} style={{ width: activityType === 'saving' ? 72 : 38 }} />)}
               {isRoutineActivityMode && <col style={{ width: 64 }} />}
               {isSavingMode && (
                 <>
@@ -2083,16 +2088,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               )}
             </thead>
             <tbody>
-              {hasMonthlyBulkTools && isPending ? (
-                <tr>
-                  <td
-                    colSpan={2 + days.length + (mode === 'attendance' ? 4 : 0) + (isRoutineActivityMode ? 1 : 0) + (isSavingMode ? 4 : 0)}
-                    style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}
-                  >
-                    กำลังโหลดตาราง...
-                  </td>
-                </tr>
-              ) : interactiveBodyRows.map((row, bodyRowIndex) => {
+              {interactiveBodyRows.map((row, bodyRowIndex) => {
                 if (row.type === 'blank') {
                   return (
                     <tr key={`blank-print-${row.number}`} className="classroom-admin-print-row">
@@ -2197,7 +2193,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         </div>
       )}
 
-      {students.length > 0 && (
+      {students.length > 0 && !tableLoading && (
         <div className="classroom-admin-page-legend">
           {mode === 'attendance' && (
             <>
@@ -2239,7 +2235,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         </div>
       )}
 
-      {students.length > 0 && (
+      {students.length > 0 && !tableLoading && (
         <div className="teacher-assignment-actions classroom-admin-table-actions">
           <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
             {isMonthlyMode
@@ -2247,13 +2243,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               : canEdit ? `พร้อมบันทึก ${students.length} คนในตารางนี้` : 'บัญชีนี้ดูข้อมูลได้อย่างเดียว'}
           </div>
           {!isMonthlyMode && (
-            <LoadingButton loading={isPending} disabled={!canEdit} onClick={handleSave}>
+            <LoadingButton loading={isPending} disabled={!canEdit || tableLoading} onClick={handleSave}>
               บันทึก
             </LoadingButton>
           )}
-          <button type="button" className="btn btn-secondary" onClick={printCurrentPage}>
-            พิมพ์หน้านี้
-          </button>
         </div>
       )}
     </div>
