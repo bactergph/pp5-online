@@ -1836,6 +1836,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         ) : students.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>ยังไม่มีนักเรียนในห้องนี้</div>
         ) : mode === 'weightHeight' ? (
+          <div className="classroom-admin-month-table-wrap">
           <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-weight-table">
             <colgroup>
               <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.numberPx }} />
@@ -1874,7 +1875,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               })}
             </tbody>
           </table>
+          </div>
         ) : mode === 'healthInspection' ? (
+          <div className="classroom-admin-month-table-wrap">
           <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-health-table">
             <colgroup>
               <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.numberPx }} />
@@ -1912,6 +1915,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               })}
             </tbody>
           </table>
+          </div>
         ) : mode === 'attendance' || mode === 'activity' ? (
           <>
           {hasMonthlyBulkTools && (
@@ -1959,7 +1963,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <colgroup>
               <col style={{ width: 58 }} />
               <col style={{ width: 248 }} />
-              {days.map(day => <col key={day} style={{ width: activityType === 'saving' ? 72 : 38 }} />)}
+              {days.map(day => <col key={day} style={{ width: activityType === 'saving' ? 76 : 44 }} />)}
               {isRoutineActivityMode && <col style={{ width: 64 }} />}
               {isSavingMode && (
                 <>

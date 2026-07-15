@@ -1278,7 +1278,7 @@ ${fontFaces}
       .classroom-export-report-tabs button.is-selected {
         color: #FFFFFF;
         background: linear-gradient(135deg, #6B4F32, #8B6B45);
-        box-shadow: 0 10px 18px rgba(37, 99, 235, 0.24);
+        box-shadow: 0 8px 16px rgba(107, 79, 50, 0.22);
       }
       .classroom-export-control-title {
         display: flex;
@@ -2164,6 +2164,52 @@ ${fontFaces}
         .classroom-export-cover {
           align-items: flex-start;
           flex-direction: column;
+        }
+        .classroom-export-report-tabs {
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+        .classroom-export-report-tabs button {
+          min-height: 44px;
+          font-size: 12px;
+          border-radius: 12px;
+          white-space: normal;
+          line-height: 1.25;
+          padding: 8px 10px;
+        }
+        .classroom-export-month-tabs {
+          display: flex;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scroll-snap-type: x proximity;
+          gap: 6px;
+          padding-bottom: 4px;
+        }
+        .classroom-export-month-tabs button {
+          flex: 0 0 auto;
+          min-width: 3.25rem;
+          min-height: 40px;
+          scroll-snap-align: start;
+          font-size: 12px;
+        }
+        .classroom-export-actions-main {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+        .classroom-export-actions-main button,
+        .classroom-export-controls select {
+          min-height: 44px;
+        }
+        .classroom-export-presets {
+          grid-template-columns: 1fr;
+        }
+        .classroom-export-presets button {
+          min-height: 44px;
+        }
+        .classroom-export-load-btn {
+          background: #F5EDE3 !important;
+          box-shadow: inset 0 0 0 1px rgba(139, 107, 69, 0.22);
         }
       }
       .classroom-export-page--print {
