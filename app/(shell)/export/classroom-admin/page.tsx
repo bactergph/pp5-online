@@ -17,7 +17,12 @@ import {
 import { ClassroomAdminPrintLayoutsProvider } from '@/lib/classroom-admin-print-layout-context'
 import { reportFontFaceCss, waitForReportFonts } from '@/lib/report-font-faces'
 import { classroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
-import { classroomAdminStandardTableWidthStyle, CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS } from '@/lib/classroom-admin-standard-table-columns'
+import {
+  classroomAdminStandardTableWidthStyle,
+  classroomAdminWeightHeightTableWidthStyle,
+  CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS,
+  CLASSROOM_ADMIN_WEIGHT_HEIGHT_COL_WIDTHS,
+} from '@/lib/classroom-admin-standard-table-columns'
 import {
   classroomAdminPrintLayoutSeed,
   downloadClassroomAdminPdf,
@@ -163,7 +168,8 @@ export default function ClassroomAdminExportPage() {
   const searchParams = useSearchParams()
   const printMode = searchParams.get('print') === '1'
   const embedMode = searchParams.get('embed') === '1'
-  const deepLinkMode = printMode || embedMode
+  const autoPrintMode = searchParams.get('autoprint') === '1'
+  const deepLinkMode = printMode || embedMode || autoPrintMode
   const [years, setYears] = useState<Year[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [schoolName, setSchoolName] = useState('')
@@ -547,6 +553,22 @@ export default function ClassroomAdminExportPage() {
     void markReady()
     return () => { cancelled = true }
   }, [printMode, isLoading, hasData, logoResolved, activeMonths.length, selectedReports.length])
+
+  // มาจากหน้าบันทึกธุรการ (autoprint=1) — โหลดเอกสารรูปแบบเมนูพิมพ์แล้วสั่งพิมพ์ทันที
+  useEffect(() => {
+    if (!autoPrintMode || printMode) return
+    if (isLoading || !hasData || !logoResolved) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      if (!cancelled) void printExportDocument()
+    }, 400)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPrintMode, printMode, isLoading, hasData, logoResolved, activeMonths.length, selectedReports.length])
+
   const reportLabel = (type: ReportType) => classroomAdminDocumentTitle(type)
 
   function renderReportSheet(type: ReportType, data: ExportData, sheetMonthKey: string) {
@@ -789,23 +811,36 @@ export default function ClassroomAdminExportPage() {
           </table>
         ) : (
           <table
-            className={`attendance-print-table attendance-print-standard-table${type === 'health' || type === 'inspection' ? ' attendance-print-inspection-table' : ''}`}
-            style={type === 'health' || type === 'inspection'
-              ? classroomAdminStandardTableWidthStyle(type === 'health' ? 4 : INSPECTION_FIELDS.length)
-              : undefined}
+            className={`attendance-print-table attendance-print-standard-table${
+              type === 'health'
+                ? ' attendance-print-weight-table'
+                : type === 'inspection'
+                  ? ' attendance-print-inspection-table'
+                  : ''
+            }`}
+            style={
+              type === 'health'
+                ? classroomAdminWeightHeightTableWidthStyle()
+                : type === 'inspection'
+                  ? classroomAdminStandardTableWidthStyle(INSPECTION_FIELDS.length)
+                  : undefined
+            }
           >
-            {(type === 'health' || type === 'inspection') && (
+            {type === 'health' && (
+              <colgroup>
+                <col className="attendance-print-weight-number-col" />
+                <col className="attendance-print-weight-name-col" />
+                <col className="attendance-print-weight-field-col" />
+                <col className="attendance-print-weight-field-col" />
+                <col className="attendance-print-weight-field-col" />
+                <col className="attendance-print-weight-field-col" />
+              </colgroup>
+            )}
+            {type === 'inspection' && (
               <colgroup>
                 <col className="attendance-print-inspection-number-col" />
                 <col className="attendance-print-inspection-name-col" />
-                {type === 'health' ? (
-                  <>
-                    <col className="attendance-print-inspection-field-col" />
-                    <col className="attendance-print-inspection-field-col" />
-                    <col className="attendance-print-inspection-field-col" />
-                    <col className="attendance-print-inspection-field-col" />
-                  </>
-                ) : INSPECTION_FIELDS.map(field => (
+                {INSPECTION_FIELDS.map(field => (
                   <col key={field.key} className="attendance-print-inspection-field-col" />
                 ))}
               </colgroup>
@@ -895,7 +930,7 @@ export default function ClassroomAdminExportPage() {
 
   return (
     <ClassroomAdminPrintLayoutsProvider layouts={printLayouts}>
-    <div className={`page-stack classroom-export-page${embedMode ? ' classroom-export-page--embed' : ''}${printMode ? ' classroom-export-page--print' : ''}`}>
+    <div className={`page-stack classroom-export-page${embedMode || autoPrintMode ? ' classroom-export-page--embed' : ''}${printMode ? ' classroom-export-page--print' : ''}`}>
       <ExportPageStyles />
       <ClassroomAdminPrintLayoutTuner
         open={layoutTunerOpen}
@@ -912,7 +947,7 @@ export default function ClassroomAdminExportPage() {
         saved={layoutSaved}
       />
       <div className="classroom-export-workspace">
-      {!embedMode && !printMode && (
+      {!embedMode && !printMode && !autoPrintMode && (
       <div className="classroom-export-control-card no-print">
         <div className="classroom-export-panel-section">
           <span>1</span>
@@ -1012,7 +1047,7 @@ export default function ClassroomAdminExportPage() {
       {error && <div className="alert alert-error no-print">{error}</div>}
 
       <div className="classroom-export-preview-pane">
-      {!embedMode && !printMode && (
+      {!embedMode && !printMode && !autoPrintMode && (
         <div className="classroom-export-preview-toolbar no-print">
           <label>
             <span>ขนาด</span>
@@ -1733,9 +1768,17 @@ ${fontFaces}
         width: var(--ca-inspection-table-w, auto);
         max-width: 100%;
       }
+      .attendance-print-table.attendance-print-weight-table {
+        width: 100%;
+        max-width: 100%;
+      }
       .classroom-export-book.is-pdf-export .attendance-print-inspection-table {
         width: var(--ca-inspection-table-w) !important;
         max-width: var(--ca-inspection-table-w) !important;
+      }
+      .classroom-export-book.is-pdf-export .attendance-print-weight-table {
+        width: var(--ca-weight-table-w, 100%) !important;
+        max-width: var(--ca-weight-table-w, 100%) !important;
       }
       .attendance-print-number-col { width: var(--ca-number-col-w, 42px); }
       .attendance-print-name-col { width: var(--ca-name-col-w, 190px); }
@@ -1871,6 +1914,22 @@ ${fontFaces}
       }
       .attendance-print-inspection-table .attendance-print-inspection-field-col {
         width: ${CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx}px;
+      }
+      .attendance-print-weight-table .attendance-print-weight-number-col {
+        width: ${CLASSROOM_ADMIN_WEIGHT_HEIGHT_COL_WIDTHS.numberPx}px;
+      }
+      .attendance-print-weight-table .attendance-print-weight-name-col {
+        width: ${CLASSROOM_ADMIN_WEIGHT_HEIGHT_COL_WIDTHS.namePx}px;
+      }
+      .attendance-print-weight-table .attendance-print-weight-field-col {
+        width: auto;
+      }
+      .attendance-print-weight-table th,
+      .attendance-print-weight-table td {
+        font-size: var(--ca-font-standard-table, 11px);
+      }
+      .attendance-print-weight-table .attendance-print-student-name {
+        font-size: var(--ca-font-standard-name, 12px) !important;
       }
       .attendance-print-value-done {
         background: #CFF8D8 !important;

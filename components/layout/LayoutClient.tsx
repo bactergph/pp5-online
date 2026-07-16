@@ -63,6 +63,7 @@ function LayoutClientInner({
   const chromeless =
     searchParams.get('embed') === '1'
     || searchParams.get('print') === '1'
+    || searchParams.get('autoprint') === '1'
     || searchParams.get('onboarding') === '1'
     || (onSchoolSettings && userRole === 'admin' && !hasSchool)
   const [sidebarOpen, setSidebarOpen] = useState(false)

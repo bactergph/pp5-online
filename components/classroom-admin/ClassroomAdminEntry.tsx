@@ -38,11 +38,13 @@ import {
 } from '@/lib/school-director'
 import {
   classroomAdminStandardTableWidthStyle,
+  classroomAdminWeightHeightTableWidthStyle,
 } from '@/lib/classroom-admin-standard-table-columns'
 import {
   classroomAdminPrintLayoutSeed,
   downloadClassroomAdminPdf,
 } from '@/lib/classroom-admin-pdf-export'
+import { scopeDocumentPreviewPath } from '@/lib/document-preview-popup'
 import { resolveClassroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
 import { DAILY_STATUS_LABELS, nextDailyDisplay, toDailyDb, toDailyDisplay } from '@/lib/daily-attendance'
@@ -1009,15 +1011,24 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function printCurrentPage() {
-    pendingPrintWindowRef.current = window.open('', '_blank', 'width=1200,height=800')
-    setPrintRenderRequested(true)
+    if (!classroomId || students.length === 0) {
+      notify('error', 'ไม่พบข้อมูลสำหรับพิมพ์')
+      return
+    }
+    // เปิดเมนูพิมพ์เอกสารด้วยตัวกรองเดียวกับหน้าปัจจุบัน แล้วสั่งพิมพ์อัตโนมัติ
+    const params = buildExportMenuQuery({ autoprint: '1' })
+    const url = `${scopeDocumentPreviewPath('/export/classroom-admin')}?${params.toString()}`
+    const printWindow = window.open(url, '_blank', 'width=1200,height=800')
+    if (!printWindow) {
+      notify('error', 'เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — อนุญาตป๊อปอัปแล้วลองอีกครั้ง')
+    }
   }
 
   function renderPrintableAttendanceDocument({ preview = false }: { preview?: boolean } = {}) {
     const documentMetaBase = isMonthlyMode
       ? `${termLabel} · ห้อง ${currentClassLabel(classrooms, classroomId)} · เดือน${thaiMonthTitle(monthKey, years, yearId)}`
       : `ห้อง ${currentClassLabel(classrooms, classroomId)} · เดือน${MONTHS.find(m => m.value === month)?.label || ''}${years.find(y => y.id === yearId)?.year_be ? ` พ.ศ.${years.find(y => y.id === yearId)?.year_be}` : ''}`
-    const standardTableFieldCount = mode === 'weightHeight' ? 3 : INSPECTION_FIELDS.length
+    const standardTableFieldCount = INSPECTION_FIELDS.length
     const studentPages = chunkStudentsForPrintPages(students)
     const pageCount = studentPages.length
 
@@ -1231,21 +1242,40 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 </table>
               ) : (
                 <table
-                  className={`attendance-print-table attendance-print-standard-table${isStandardFixedColMode ? ' attendance-print-inspection-table' : ''}`}
-                  style={isStandardFixedColMode ? classroomAdminStandardTableWidthStyle(standardTableFieldCount) : undefined}
+                  className={`attendance-print-table attendance-print-standard-table${
+                    mode === 'weightHeight'
+                      ? ' attendance-print-weight-table'
+                      : mode === 'healthInspection'
+                        ? ' attendance-print-inspection-table'
+                        : ''
+                  }`}
+                  style={
+                    mode === 'weightHeight'
+                      ? classroomAdminWeightHeightTableWidthStyle()
+                      : mode === 'healthInspection'
+                        ? classroomAdminStandardTableWidthStyle(standardTableFieldCount)
+                        : undefined
+                  }
                 >
                   <colgroup>
-                    <col className={isStandardFixedColMode ? 'attendance-print-inspection-number-col' : 'attendance-print-number-col'} />
-                    <col className={isStandardFixedColMode ? 'attendance-print-inspection-name-col' : 'attendance-print-name-col'} />
                     {mode === 'weightHeight' ? (
                       <>
-                        <col className="attendance-print-inspection-field-col" />
-                        <col className="attendance-print-inspection-field-col" />
-                        <col className="attendance-print-inspection-field-col" />
+                        <col className="attendance-print-weight-number-col" />
+                        <col className="attendance-print-weight-name-col" />
+                        <col className="attendance-print-weight-field-col" />
+                        <col className="attendance-print-weight-field-col" />
+                        <col className="attendance-print-weight-field-col" />
+                        <col className="attendance-print-weight-field-col" />
                       </>
-                    ) : INSPECTION_FIELDS.map(field => (
-                      <col key={field.key} className="attendance-print-inspection-field-col" />
-                    ))}
+                    ) : (
+                      <>
+                        <col className={isStandardFixedColMode ? 'attendance-print-inspection-number-col' : 'attendance-print-number-col'} />
+                        <col className={isStandardFixedColMode ? 'attendance-print-inspection-name-col' : 'attendance-print-name-col'} />
+                        {INSPECTION_FIELDS.map(field => (
+                          <col key={field.key} className="attendance-print-inspection-field-col" />
+                        ))}
+                      </>
+                    )}
                   </colgroup>
                   <thead>
                     <tr>
@@ -1256,6 +1286,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                           <th>น้ำหนัก (กก.)</th>
                           <th>ส่วนสูง (ซม.)</th>
                           <th>BMI</th>
+                          <th>ผล</th>
                         </>
                       ) : INSPECTION_FIELDS.map(field => <th key={field.key}>{field.label}</th>)}
                     </tr>
@@ -1272,7 +1303,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                             <>
                               <td>{weightRow.weight || ''}</td>
                               <td>{weightRow.height || ''}</td>
-                              <td>{weightRow.bmi ? `${weightRow.bmi} · ${weightRow.bmi_result || '-'}` : ''}</td>
+                              <td>{weightRow.bmi ?? ''}</td>
+                              <td>{weightRow.bmi_result || ''}</td>
                             </>
                           ) : INSPECTION_FIELDS.map(field => {
                             const value = inspectionRow[field.key] || 'ผ่าน'
@@ -1419,6 +1451,34 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     XLSX.writeFile(workbook, fileName)
   }
 
+  /** รายงานในเมนูพิมพ์เอกสารที่ตรงกับหน้าบันทึกปัจจุบัน */
+  function exportMenuReportKey() {
+    if (mode === 'attendance') return 'attendance'
+    if (mode === 'activity' && activityType) return activityType
+    if (mode === 'weightHeight') return 'health'
+    if (mode === 'healthInspection') return 'inspection'
+    return 'attendance'
+  }
+
+  /** ใช้ path/query ของ /export/classroom-admin ให้ PDF·พิมพ์ ตรงกับเมนูพิมพ์เอกสาร */
+  function buildExportMenuQuery(extra?: Record<string, string>) {
+    const exportMonth = isMonthlyMode ? selectedMonth : month
+    const exportMonthKey = isMonthlyMode
+      ? monthKey
+      : setMonthInKey(monthKey || currentMonthKey(), month)
+    const params = new URLSearchParams()
+    params.set('classroom', classroomId)
+    if (yearId) params.set('year', yearId)
+    params.set('monthkey', exportMonthKey)
+    params.set('term', String(boardTerm))
+    params.set('months', String(exportMonth))
+    params.set('reports', exportMenuReportKey())
+    if (extra) {
+      for (const [key, value] of Object.entries(extra)) params.set(key, value)
+    }
+    return params
+  }
+
   async function exportAttendancePdf() {
     if (pdfExporting) return
     if (!classroomId || students.length === 0) {
@@ -1428,23 +1488,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
     setPdfExporting(true)
     try {
-      const params = new URLSearchParams()
-      params.set('print', '1')
-      params.set('classroom', classroomId)
-      if (yearId) params.set('year', yearId)
-      if (isMonthlyMode) {
-        params.set('monthkey', monthKey)
-        params.set('term', String(boardTerm))
-      } else {
-        params.set('term', String(term))
-        params.set('month', String(month))
-        if (date) params.set('date', date)
-      }
-
+      const params = buildExportMenuQuery({ print: '1' })
       const fileName = `${documentTitle}_${currentClassLabel(classrooms, classroomId)}_${isMonthlyMode ? thaiMonthTitle(monthKey, years, yearId) : MONTHS.find(m => m.value === month)?.label || ''}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
 
       await downloadClassroomAdminPdf({
-        path: window.location.pathname,
+        path: scopeDocumentPreviewPath('/export/classroom-admin'),
         query: params.toString(),
         fileName,
         localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),

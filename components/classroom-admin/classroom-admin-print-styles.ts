@@ -62,9 +62,17 @@ const CLASSROOM_ADMIN_PRINT_RULES = `
     width: var(--ca-inspection-table-w, auto);
     max-width: 100%;
   }
+  .attendance-print-table.attendance-print-weight-table {
+    width: 100%;
+    max-width: 100%;
+  }
   .attendance-print-sheet.is-pdf-export .attendance-print-inspection-table {
     width: var(--ca-inspection-table-w) !important;
     max-width: var(--ca-inspection-table-w) !important;
+  }
+  .attendance-print-sheet.is-pdf-export .attendance-print-weight-table {
+    width: var(--ca-weight-table-w, 100%) !important;
+    max-width: var(--ca-weight-table-w, 100%) !important;
   }
   .attendance-print-number-col { width: var(--ca-number-col-w, 42px); }
   .attendance-print-name-col { width: var(--ca-name-col-w, 190px); }
@@ -173,13 +181,26 @@ const CLASSROOM_ADMIN_PRINT_RULES = `
     font-size: var(--ca-font-standard-name, 12px) !important;
   }
   .attendance-print-inspection-table .attendance-print-inspection-number-col {
-    width: var(--ca-inspection-number-col-w, 20px);
+    width: var(--ca-inspection-number-col-w, 36px);
   }
   .attendance-print-inspection-table .attendance-print-inspection-name-col {
-    width: var(--ca-inspection-name-col-w, 320px);
+    width: var(--ca-inspection-name-col-w, 280px);
   }
   .attendance-print-inspection-table .attendance-print-inspection-field-col {
-    width: var(--ca-inspection-field-col-w, 90px);
+    width: var(--ca-inspection-field-col-w, 96px);
+  }
+  .attendance-print-weight-table .attendance-print-weight-number-col {
+    width: var(--ca-weight-number-col-w, 48px);
+  }
+  .attendance-print-weight-table .attendance-print-weight-name-col {
+    width: var(--ca-weight-name-col-w, 320px);
+  }
+  .attendance-print-weight-table .attendance-print-weight-field-col {
+    width: auto;
+  }
+  .attendance-print-weight-table th,
+  .attendance-print-weight-table td {
+    font-size: var(--ca-font-standard-table, 11px);
   }
   .attendance-print-value-done { background: #CFF8D8 !important; color: #14532D !important; font-weight: 900; }
   .attendance-print-value-alert { background: #FEE2E2 !important; color: #7F1D1D !important; font-weight: 900; }
