@@ -475,17 +475,60 @@ async function loadSubjectGroupHeads(db: ReturnType<typeof createServerClient>, 
   return out
 }
 
+const SCHOOL_SELECT_BASE = 'id, name, logo_url, stamp_url, department, area_office, district, province, director_name, vice_director_name, acting_director, academic_head_name, measurement_head_name'
+
+async function loadReportSchool(db: ReturnType<typeof createServerClient>, schoolId: string) {
+  const schoolR = await db.from('schools')
+    .select(`${SCHOOL_SELECT_BASE}, acting_director_position`)
+    .eq('id', schoolId)
+    .maybeSingle()
+  if (schoolR.error?.message?.includes('acting_director_position')) {
+    const fallback = await db.from('schools')
+      .select(SCHOOL_SELECT_BASE)
+      .eq('id', schoolId)
+      .maybeSingle()
+    return fallback.data ? { ...fallback.data, acting_director_position: null } as ReportPayload['school'] : null
+  }
+  return schoolR.data as ReportPayload['school']
+}
+
+/**
+ * ตรวจสิทธิ์ห้องเรียนด้วย query เดียว แทนการโหลด init ทั้งชุด
+ * ครูประจำชั้นเท่านั้นสำหรับ pp5-class/pp6 — ครูผู้สอนตรวจผ่าน filter teacher_id ที่ class_subjects
+ */
+async function requireReportClassroom(
+  db: ReturnType<typeof createServerClient>,
+  session: Awaited<ReturnType<typeof requireReportSession>>,
+  classroomId: string,
+  mode?: ReportMode,
+) {
+  const { data } = await db.from('classrooms')
+    .select('id, level, room, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id, school_id')
+    .eq('id', classroomId)
+    .maybeSingle()
+  if (!data || asText((data as DbRow).school_id) !== session.schoolId) {
+    throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
+  }
+  const classroom: ReportClassroom = {
+    id: asText((data as DbRow).id),
+    level: asText((data as DbRow).level),
+    room: asNumber((data as DbRow).room),
+    academic_year_id: asText((data as DbRow).academic_year_id),
+    homeroom_teacher_id: asNullableText((data as DbRow).homeroom_teacher_id),
+    homeroom_teacher2_id: asNullableText((data as DbRow).homeroom_teacher2_id),
+  }
+  if (session.role === 'teacher' && (mode === 'pp5-class' || mode === 'pp6') && !isHomeroomTeacher(classroom, session.userId)) {
+    throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
+  }
+  return classroom
+}
+
 export async function fetchReportInit(mode?: ReportMode) {
   const session = await requireReportSession()
   const schoolId = session.schoolId || ''
   const db = createServerClient()
-  const schoolSelectBase = 'id, name, logo_url, stamp_url, department, area_office, district, province, director_name, vice_director_name, acting_director, academic_head_name, measurement_head_name'
-  const schoolSelectWithActingPosition = `${schoolSelectBase}, acting_director_position`
-  const [schoolR, yearsR, classroomsR] = await Promise.all([
-    db.from('schools')
-      .select(schoolSelectWithActingPosition)
-      .eq('id', schoolId)
-      .maybeSingle(),
+  const [school, yearsR, classroomsR, tunerR] = await Promise.all([
+    loadReportSchool(db, schoolId),
     db.from('academic_years')
       .select('id, year_be, is_active, term1_start_date, term1_end_date, term2_start_date, term2_end_date')
       .eq('school_id', schoolId)
@@ -495,15 +538,10 @@ export async function fetchReportInit(mode?: ReportMode) {
       .eq('school_id', schoolId)
       .order('level')
       .order('room'),
+    // อ่านสวิตช์เมนู "ปรับ layout" แบบ defensive (ถ้าคอลัมน์ยังไม่มี ให้ถือว่าเปิด)
+    db.from('schools').select('layout_tuner_enabled').eq('id', schoolId).maybeSingle(),
   ])
-  let school = schoolR.data as ReportPayload['school']
-  if (schoolR.error?.message?.includes('acting_director_position')) {
-    const fallback = await db.from('schools')
-      .select(schoolSelectBase)
-      .eq('id', schoolId)
-      .maybeSingle()
-    school = fallback.data ? { ...fallback.data, acting_director_position: null } as ReportPayload['school'] : null
-  }
+  const layoutTunerEnabled = (tunerR.data as { layout_tuner_enabled?: boolean } | null)?.layout_tuner_enabled !== false
 
   const classrooms = await filterClassroomsForSession(
     (classroomsR.data || []) as ReportClassroom[],
@@ -520,10 +558,6 @@ export async function fetchReportInit(mode?: ReportMode) {
     const { data: teachers } = await db.from('users').select('id, prefix, full_name').in('id', teacherIds)
     teacherNameMap = Object.fromEntries(((teachers || []) as DbRow[]).map(teacher => [asText(teacher.id), userFullName(teacher)]))
   }
-
-  // อ่านสวิตช์เมนู "ปรับ layout" แบบ defensive (ถ้าคอลัมน์ยังไม่มี ให้ถือว่าเปิด)
-  const tunerR = await db.from('schools').select('layout_tuner_enabled').eq('id', schoolId).maybeSingle()
-  const layoutTunerEnabled = (tunerR.data as { layout_tuner_enabled?: boolean } | null)?.layout_tuner_enabled !== false
 
   return {
     role: session.role,
@@ -545,10 +579,7 @@ export async function fetchReportSubjects(params: {
 }) {
   const session = await requireReportSession()
   const db = createServerClient()
-  const init = await fetchReportInit(params.mode)
-  if (!init.classrooms.some(classroom => classroom.id === params.classroomId)) {
-    throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
-  }
+  await requireReportClassroom(db, session, params.classroomId, params.mode)
 
   let query = db.from('class_subjects')
     .select('id, order_number, subject_id, teacher_id, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)')
@@ -571,14 +602,8 @@ export async function fetchReportData(params: {
   mode?: ReportMode
 }) {
   const session = await requireReportSession()
+  const schoolId = session.schoolId || ''
   const db = createServerClient()
-  const init = await fetchReportInit(params.mode)
-  const academicYear = (init.years as ReportYear[]).find(year => year.id === params.academicYearId) || null
-  const classroom = (init.classrooms as ReportClassroom[]).find(item => item.id === params.classroomId) || null
-  if (!classroom) {
-    throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
-  }
-  const range = termRange(academicYear, params.term)
 
   let subjectQuery = db.from('class_subjects')
     .select('id, order_number, subject_id, teacher_id, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)')
@@ -590,14 +615,27 @@ export async function fetchReportData(params: {
     if (params.classSubjectId) subjectQuery = subjectQuery.eq('id', params.classSubjectId)
   }
 
-  const [students, classSubjectRows] = await Promise.all([
+  const [school, classroomBase, yearRow, students, classSubjectRows] = await Promise.all([
+    loadReportSchool(db, schoolId),
+    requireReportClassroom(db, session, params.classroomId, params.mode),
+    db.from('academic_years')
+      .select('id, year_be, is_active, term1_start_date, term1_end_date, term2_start_date, term2_end_date')
+      .eq('id', params.academicYearId)
+      .eq('school_id', schoolId)
+      .maybeSingle()
+      .then(result => result.data as ReportYear | null),
     safeRows<ReportStudent>(db.from('students')
       .select('id, student_number, student_code, national_id, prefix, first_name, last_name, status')
       .eq('classroom_id', params.classroomId)
       .order('student_number')),
     safeRows<DbRow>(subjectQuery),
   ])
+  const academicYear = yearRow || null
+  const range = termRange(academicYear, params.term)
 
+  if (session.role === 'teacher' && params.mode === 'pp5-subject' && classSubjectRows.length === 0) {
+    throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
+  }
   if (params.classSubjectId && params.mode === 'pp5-subject') {
     const allowed = classSubjectRows.some(row => asText(row.id) === params.classSubjectId)
     if (!allowed) throw new Error('ไม่มีสิทธิ์เข้าถึงรายวิชานี้')
@@ -606,25 +644,37 @@ export async function fetchReportData(params: {
   const subjects = classSubjectRows.map(normalizeSubject)
   const subjectIds = subjects.map(subject => subject.class_subject_id)
   const studentIds = students.map(student => student.id)
-  const subjectGroupHeads = await loadSubjectGroupHeads(db, session.schoolId || '')
-  const documentSignatures = await loadReportDocumentSignatures(db, {
-    mode: params.mode,
-    classSubjectId: params.classSubjectId,
-    classroomId: params.classroomId,
-    academicYearId: params.academicYearId,
-    term: params.term,
-  })
-  const [activitySettings, characterSettings, readingSettings] = await Promise.all([
-    loadActivitySettings(db, session.schoolId || ''),
-    loadCharacterSettings(db, session.schoolId || '', classroom.level),
-    loadReadingSettings(db, session.schoolId || '', classroom.level),
+
+  const homeroomIds = [classroomBase.homeroom_teacher_id, classroomBase.homeroom_teacher2_id]
+    .filter((id): id is string => Boolean(id))
+  const [subjectGroupHeads, documentSignatures, activitySettings, characterSettings, readingSettings, homeroomTeachers] = await Promise.all([
+    loadSubjectGroupHeads(db, schoolId),
+    loadReportDocumentSignatures(db, {
+      mode: params.mode,
+      classSubjectId: params.classSubjectId,
+      classroomId: params.classroomId,
+      academicYearId: params.academicYearId,
+      term: params.term,
+    }),
+    loadActivitySettings(db, schoolId),
+    loadCharacterSettings(db, schoolId, classroomBase.level),
+    loadReadingSettings(db, schoolId, classroomBase.level),
+    homeroomIds.length > 0
+      ? safeRows<DbRow>(db.from('users').select('id, prefix, full_name').in('id', homeroomIds))
+      : Promise.resolve([] as DbRow[]),
   ])
+  const homeroomNameMap = Object.fromEntries(homeroomTeachers.map(teacher => [asText(teacher.id), userFullName(teacher)]))
+  const classroom: ReportClassroom = {
+    ...classroomBase,
+    homeroom_teacher_name: classroomBase.homeroom_teacher_id ? homeroomNameMap[classroomBase.homeroom_teacher_id] || '' : '',
+    homeroom_teacher2_name: classroomBase.homeroom_teacher2_id ? homeroomNameMap[classroomBase.homeroom_teacher2_id] || '' : '',
+  }
 
   if (studentIds.length === 0) {
     return {
-      school: init.school,
-      years: init.years,
-      classrooms: init.classrooms,
+      school,
+      years: academicYear ? [academicYear] : [],
+      classrooms: [classroom],
       classroom,
       academicYear,
       students,
@@ -655,9 +705,12 @@ export async function fetchReportData(params: {
   if (range.start) dailyQuery.gte('date', range.start)
   if (range.end) dailyQuery.lte('date', range.end)
 
-  // ใช้ class_subject_id เหมือนหน้าเช็คเวลาเรียน
+  // ตารางเช็คเวลารายชั่วโมงใช้เฉพาะ ปพ.5 รายวิชา — รายห้อง/ปพ.6 ใช้เช็คชื่อรายวันแทน จึงไม่ต้องดึง
+  const needsHourly = params.mode === 'pp5-subject' || !params.mode
   const hourlyQuery = db.from('hourly_attendance').select('student_id, status, class_subject_id, term, week_number, hour_number')
-  if (params.classSubjectId) {
+  if (!needsHourly) {
+    hourlyQuery.eq('class_subject_id', '__none__')
+  } else if (params.classSubjectId) {
     hourlyQuery.eq('class_subject_id', params.classSubjectId)
   } else if (subjectIds.length) {
     hourlyQuery.in('class_subject_id', subjectIds)
@@ -670,7 +723,7 @@ export async function fetchReportData(params: {
     safeRows<DbRow>(limitedScoreQuery),
     safeRows<DbRow>(subjectIds.length ? db.from('score_configs').select('*').in('class_subject_id', subjectIds) : db.from('score_configs').select('*').eq('class_subject_id', '__none__')),
     safeRows<DbRow>(dailyQuery),
-    safeRows<DbRow>(hourlyQuery),
+    needsHourly ? safeRows<DbRow>(hourlyQuery) : Promise.resolve([] as DbRow[]),
     safeRows<DbRow>(db.from('holidays').select('date, name')
       .eq('academic_year_id', params.academicYearId)
       .gte('date', range.start || '1900-01-01')
@@ -700,9 +753,9 @@ export async function fetchReportData(params: {
   const hourlyRows = hourlyRowsRaw.filter(row => studentIdSet.has(asText(row.student_id)))
 
   return {
-    school: init.school,
-    years: init.years,
-    classrooms: init.classrooms,
+    school,
+    years: academicYear ? [academicYear] : [],
+    classrooms: [classroom],
     classroom,
     academicYear,
     students,
@@ -768,12 +821,22 @@ export type ReportPp6StudentOption = {
 }
 
 export async function fetchPp6Students(academicYearId: string) {
-  const init = await fetchReportInit('pp6')
-  const classrooms = init.classrooms.filter(classroom => classroom.academic_year_id === academicYearId)
+  const session = await requireReportSession()
+  const db = createServerClient()
+  const allClassrooms = await safeRows<ReportClassroom>(
+    db.from('classrooms')
+      .select('id, level, room, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id')
+      .eq('school_id', session.schoolId || '')
+      .eq('academic_year_id', academicYearId)
+      .order('level')
+      .order('room'),
+  )
+  const classrooms = session.role === 'teacher'
+    ? allClassrooms.filter(classroom => isHomeroomTeacher(classroom, session.userId))
+    : allClassrooms
   const classroomIds = classrooms.map(classroom => classroom.id)
   if (classroomIds.length === 0) return [] as ReportPp6StudentOption[]
 
-  const db = createServerClient()
   const rows = await safeRows<DbRow>(
     db.from('students')
       .select('id, student_number, student_code, prefix, first_name, last_name, classroom_id')
