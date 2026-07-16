@@ -1763,6 +1763,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                       reportTerm={boardTerm}
                       reportMonth={boardMonth}
                       disabled={!classroomId}
+                      enabled={recordsLoaded}
                       compact
                     />
                   </div>

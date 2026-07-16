@@ -44,6 +44,8 @@ type Props = {
   reportMonth?: number | null
   disabled?: boolean
   compact?: boolean
+  /** false = ยังไม่ fetch (แสดงปุ่มจางไว้) — ให้โหลดตารางก่อน */
+  enabled?: boolean
   onSignatureChange?: () => void | Promise<void>
 }
 
@@ -76,6 +78,7 @@ export default function DocumentSignaturePanel({
   reportMonth,
   disabled,
   compact,
+  enabled = true,
   onSignatureChange,
 }: Props) {
   const { notify, AlertModal } = useAppAlert('ดำเนินการสำเร็จ', 'ดำเนินการไม่สำเร็จ')
@@ -93,44 +96,58 @@ export default function DocumentSignaturePanel({
     : variant === 'classroom_admin'
       ? Boolean(classroomId && signMonth)
       : Boolean(classroomId)
+  const canLoad = enabled && ready
 
   const reload = useCallback(async () => {
-    if (!ready) {
+    if (!canLoad) {
       setState(null)
       setHistory([])
+      setLoading(false)
       return
     }
     setLoading(true)
     try {
       if (variant === 'pp5_subject' && classSubjectId) {
-        const [nextState, nextHistory] = await Promise.all([
-          fetchPp5SubjectApprovalStatus(classSubjectId, signTerm),
-          fetchDocumentApprovalSubmissionHistory({
-            variant: 'pp5_subject',
-            classSubjectId,
-            term: signTerm,
-          }),
-        ])
-        setState(nextState)
-        setHistory(nextHistory)
+        if (compact) {
+          setState(await fetchPp5SubjectApprovalStatus(classSubjectId, signTerm))
+          setHistory([])
+        } else {
+          const [nextState, nextHistory] = await Promise.all([
+            fetchPp5SubjectApprovalStatus(classSubjectId, signTerm),
+            fetchDocumentApprovalSubmissionHistory({
+              variant: 'pp5_subject',
+              classSubjectId,
+              term: signTerm,
+            }),
+          ])
+          setState(nextState)
+          setHistory(nextHistory)
+        }
       } else if (classroomId) {
-        const [nextState, nextHistory] = await Promise.all([
-          fetchClassDocApprovalStatus(variantToDocType(variant)!, classroomId, signTerm, signMonth),
-          fetchDocumentApprovalSubmissionHistory({
-            variant,
-            classroomId,
-            term: signTerm,
-          }),
-        ])
-        setState(nextState)
-        setHistory(nextHistory)
+        const docType = variantToDocType(variant)!
+        if (compact) {
+          // compact toolbar ไม่แสดงประวัติ — โหลดแค่สถานะเพื่อไม่แย่ง bandwidth กับตาราง
+          setState(await fetchClassDocApprovalStatus(docType, classroomId, signTerm, signMonth))
+          setHistory([])
+        } else {
+          const [nextState, nextHistory] = await Promise.all([
+            fetchClassDocApprovalStatus(docType, classroomId, signTerm, signMonth),
+            fetchDocumentApprovalSubmissionHistory({
+              variant,
+              classroomId,
+              term: signTerm,
+            }),
+          ])
+          setState(nextState)
+          setHistory(nextHistory)
+        }
       }
     } catch (err) {
       notify('error', err instanceof Error ? err.message : 'โหลดสถานะลายเซ็นไม่สำเร็จ')
     } finally {
       setLoading(false)
     }
-  }, [variant, classSubjectId, classroomId, signTerm, signMonth, ready, notify])
+  }, [variant, classSubjectId, classroomId, signTerm, signMonth, canLoad, compact, notify])
 
   useEffect(() => { void reload() }, [reload])
 
