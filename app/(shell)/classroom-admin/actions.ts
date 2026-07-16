@@ -3,6 +3,8 @@ import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
 import { isDailyPresent } from '@/lib/daily-attendance'
+import { getClassroomStudentsCached } from '@/lib/students-cache'
+import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
 
 type ClassroomAdminSession = {
   userId: string
@@ -56,12 +58,39 @@ async function getClassroomForAccess(classroomId: string, session: ClassroomAdmi
 }
 
 async function fetchStudentsForClassroom(classroomId: string) {
-  const db = createServerClient()
-  const { data } = await db.from('students')
-    .select('id, student_number, prefix, first_name, last_name, gender, birth_date, status')
-    .eq('classroom_id', classroomId)
-    .order('student_number')
-  return data || []
+  return getClassroomStudentsCached(classroomId, async () => {
+    const db = createServerClient()
+    const { data } = await db.from('students')
+      .select('id, student_number, prefix, first_name, last_name, gender, birth_date, status')
+      .eq('classroom_id', classroomId)
+      .order('student_number')
+    return data || []
+  })
+}
+
+async function fetchWeekendSchoolDaysForRange(academicYearId: string, start: string, end: string) {
+  return getWeekendSchoolDaysCached(academicYearId, start, end, async () => {
+    const db = createServerClient()
+    const { data, error } = await db.from('weekend_school_days')
+      .select('date, name')
+      .eq('academic_year_id', academicYearId)
+      .gte('date', start)
+      .lte('date', end)
+    if (error) return []
+    return data || []
+  })
+}
+
+async function fetchHolidaysForRange(academicYearId: string, start: string, end: string) {
+  return getHolidaysCached(academicYearId, start, end, async () => {
+    const db = createServerClient()
+    const { data } = await db.from('holidays')
+      .select('date, name')
+      .eq('academic_year_id', academicYearId)
+      .gte('date', start)
+      .lte('date', end)
+    return data || []
+  })
 }
 
 function calcBmi(weight: number | null, height: number | null) {
@@ -104,34 +133,18 @@ function isAttendanceSyncedActivity(activityType: ActivityType) {
   return ATTENDANCE_SYNC_ACTIVITY_TYPES.includes(activityType)
 }
 
-async function fetchWeekendSchoolDaysForRange(academicYearId: string, start: string, end: string) {
-  const db = createServerClient()
-  const { data, error } = await db.from('weekend_school_days')
-    .select('date, name')
-    .eq('academic_year_id', academicYearId)
-    .gte('date', start)
-    .lte('date', end)
-  if (error) return []
-  return data || []
-}
-
 async function filterRowsForTeachingDays<T extends { day: number }>(academicYearId: string, monthKey: string, rows: T[]) {
-  const db = createServerClient()
   const range = monthRange(monthKey)
-  const [holidaysRes, weekendSchoolDays] = await Promise.all([
-    db.from('holidays')
-      .select('date')
-      .eq('academic_year_id', academicYearId)
-      .gte('date', range.start)
-      .lte('date', range.end),
+  const [holidays, weekendSchoolDays] = await Promise.all([
+    fetchHolidaysForRange(academicYearId, range.start, range.end),
     fetchWeekendSchoolDaysForRange(academicYearId, range.start, range.end),
   ])
-  const holidays = new Set((holidaysRes.data || []).map(h => h.date))
+  const holidayDates = new Set(holidays.map(h => h.date))
   const openWeekendDays = new Set(weekendSchoolDays.map(d => d.date))
 
   return rows.filter(row => {
     const date = isoDateFromMonthDay(monthKey, row.day)
-    if (holidays.has(date)) return false
+    if (holidayDates.has(date)) return false
     if (isWeekendDate(date) && !openWeekendDays.has(date)) return false
     return true
   })
@@ -367,18 +380,14 @@ export async function fetchMonthlyAttendance(classroomId: string, academicYearId
 
   const db = createServerClient()
   const range = monthRange(monthKey)
-  const [students, recordsRes, holidaysRes, weekendSchoolDays] = await Promise.all([
+  const [students, recordsRes, holidays, weekendSchoolDays] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
     db.from('daily_attendance')
       .select('student_id, date, status')
       .eq('classroom_id', classroomId)
       .gte('date', range.start)
       .lte('date', range.end),
-    db.from('holidays')
-      .select('date, name')
-      .eq('academic_year_id', academicYearId)
-      .gte('date', range.start)
-      .lte('date', range.end),
+    fetchHolidaysForRange(academicYearId, range.start, range.end),
     fetchWeekendSchoolDaysForRange(academicYearId, range.start, range.end),
   ])
 
@@ -388,7 +397,7 @@ export async function fetchMonthlyAttendance(classroomId: string, academicYearId
     return acc
   }, {})
 
-  return { error: null, students, records, holidays: holidaysRes.data || [], weekendSchoolDays, days: range.days }
+  return { error: null, students, records, holidays, weekendSchoolDays, days: range.days }
 }
 
 export async function saveMonthlyAttendance(
@@ -984,14 +993,10 @@ export async function fetchMonthlyActivity(classroomId: string, academicYearId: 
   const db = createServerClient()
   const range = monthRange(monthKey)
   const attendanceSynced = isAttendanceSyncedActivity(activityType)
-  const [students, records, holidaysRes, attendanceRes, weekendSchoolDays] = await Promise.all([
+  const [students, records, holidays, attendanceRes, weekendSchoolDays] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
     fetchDailyActivityRows(classroomId, activityType, range.start, range.end, attendanceSynced),
-    db.from('holidays')
-      .select('date, name')
-      .eq('academic_year_id', academicYearId)
-      .gte('date', range.start)
-      .lte('date', range.end),
+    fetchHolidaysForRange(academicYearId, range.start, range.end),
     attendanceSynced
       ? db.from('daily_attendance')
         .select('student_id, date, status')
@@ -1025,7 +1030,7 @@ export async function fetchMonthlyActivity(classroomId: string, academicYearId: 
     return acc
   }, attendanceDefaults)
 
-  return { error: null, students, records: mergedRecords, holidays: holidaysRes.data || [], weekendSchoolDays, days: range.days }
+  return { error: null, students, records: mergedRecords, holidays, weekendSchoolDays, days: range.days }
 }
 
 export async function saveMonthlyActivity(

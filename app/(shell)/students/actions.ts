@@ -2,6 +2,7 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassroomSchoolId, resolveStudentSchoolId } from '@/lib/audit'
+import { invalidateClassroomStudents } from '@/lib/students-cache'
 
 async function requireSession() {
   const s = await getSession()
@@ -63,8 +64,16 @@ export async function saveStudent(id: string | null, payload: Record<string, unk
   if (!CAN_MANAGE.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
   if (id) {
+    const { data: before } = await db.from('students')
+      .select('classroom_id')
+      .eq('id', id)
+      .maybeSingle()
     const { error } = await db.from('students').update(payload).eq('id', id)
     if (!error) {
+      invalidateClassroomStudents(before?.classroom_id)
+      if (typeof payload.classroom_id === 'string' && payload.classroom_id !== before?.classroom_id) {
+        invalidateClassroomStudents(payload.classroom_id)
+      }
       await logActivity({
         actor: session,
         schoolId: await resolveStudentSchoolId(id),
@@ -81,6 +90,7 @@ export async function saveStudent(id: string | null, payload: Record<string, unk
   }
   const { data, error } = await db.from('students').insert(payload).select('id').single()
   if (!error) {
+    if (typeof payload.classroom_id === 'string') invalidateClassroomStudents(payload.classroom_id)
     await logActivity({
       actor: session,
       schoolId: typeof payload.classroom_id === 'string' ? await resolveClassroomSchoolId(payload.classroom_id) : session.schoolId,
@@ -101,11 +111,12 @@ export async function deleteStudent(id: string) {
   if (!CAN_MANAGE.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
   const { data: student } = await db.from('students')
-    .select('first_name, last_name, classrooms(school_id)')
+    .select('first_name, last_name, classroom_id, classrooms(school_id)')
     .eq('id', id)
     .maybeSingle()
   const { error } = await db.from('students').delete().eq('id', id)
   if (!error) {
+    invalidateClassroomStudents(student?.classroom_id)
     const classroom = Array.isArray(student?.classrooms) ? student?.classrooms[0] : student?.classrooms
     await logActivity({
       actor: session,

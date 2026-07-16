@@ -28,6 +28,8 @@ import {
 } from '@/lib/evaluation-settings'
 import { buildDefaultEvaluationRows, seedEvaluationSettingsForSchool } from '@/lib/evaluation-settings-seed'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
+import { invalidateClassroomStudents, invalidateClassroomStudentsMany } from '@/lib/students-cache'
+import { invalidateSchoolCalendar } from '@/lib/school-calendar-cache'
 
 async function requireSchoolSession() {
   const session = await getSession()
@@ -661,6 +663,7 @@ export async function syncHolidaysFromGlobal(yearId: string) {
   }
   const { error } = await db.from('holidays').insert(rows)
   if (!error) {
+    invalidateSchoolCalendar(yearId)
     await logActivity({
       actor: session,
       schoolId: year.school_id,
@@ -687,6 +690,7 @@ export async function addHoliday(yearId: string, date: string, name: string) {
   const { data: year } = await db.from('academic_years').select('school_id, year_be').eq('id', yearId).maybeSingle()
   const { error } = await db.from('holidays').insert({ academic_year_id: yearId, date, name })
   if (!error) {
+    invalidateSchoolCalendar(yearId)
     await logActivity({
       actor: session,
       schoolId: year?.school_id ?? session.schoolId,
@@ -731,6 +735,7 @@ export async function bulkAddHolidays(yearId: string, rows: { date: string; name
   }
 
   if (added > 0) {
+    invalidateSchoolCalendar(yearId)
     await logActivity({
       actor: session,
       schoolId: year.school_id ?? session.schoolId,
@@ -765,6 +770,7 @@ export async function addWeekendSchoolDay(yearId: string, date: string, name: st
   const { error } = await db.from('weekend_school_days')
     .upsert({ academic_year_id: yearId, date, name: label }, { onConflict: 'academic_year_id,date' })
   if (!error) {
+    invalidateSchoolCalendar(yearId)
     await logActivity({
       actor: session,
       schoolId: year.school_id,
@@ -784,11 +790,12 @@ export async function deleteWeekendSchoolDay(id: string) {
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
   const { data: row } = await db.from('weekend_school_days')
-    .select('date, name, academic_years(school_id, year_be)')
+    .select('date, name, academic_year_id, academic_years(school_id, year_be)')
     .eq('id', id)
     .maybeSingle()
   const { error } = await db.from('weekend_school_days').delete().eq('id', id)
   if (!error) {
+    invalidateSchoolCalendar(row?.academic_year_id)
     const year = Array.isArray(row?.academic_years) ? row?.academic_years[0] : row?.academic_years
     await logActivity({
       actor: session,
@@ -810,11 +817,12 @@ export async function deleteHoliday(id: string) {
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
   const { data: holiday } = await db.from('holidays')
-    .select('date, name, academic_years(school_id, year_be)')
+    .select('date, name, academic_year_id, academic_years(school_id, year_be)')
     .eq('id', id)
     .maybeSingle()
   const { error } = await db.from('holidays').delete().eq('id', id)
   if (!error) {
+    invalidateSchoolCalendar(holiday?.academic_year_id)
     const year = Array.isArray(holiday?.academic_years) ? holiday?.academic_years[0] : holiday?.academic_years
     await logActivity({
       actor: session,
@@ -1056,6 +1064,7 @@ export async function importStudents(classroomId: string, rows: {
     if (!error) { inserted++; maxNo++; if (row.national_id) existingNat.add(row.national_id) }
     else skipped++
   }
+  if (inserted > 0) invalidateClassroomStudents(classroomId)
   await logActivity({
     actor: session,
     schoolId: await resolveClassroomSchoolId(classroomId),
@@ -1162,6 +1171,7 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
   let inserted = 0
   let skipped = 0
   let missingClass = 0
+  const touchedClassroomIds = new Set<string>()
 
   for (const row of rows) {
     const classroom = classroomByKey.get(normalizeClassKey(row.level, row.room))
@@ -1187,9 +1197,12 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
       continue
     }
     inserted++
+    touchedClassroomIds.add(classroom.id)
     maxNoByClass.set(classroom.id, nextNo)
     if (row.national_id) existingNat.add(row.national_id)
   }
+
+  if (touchedClassroomIds.size > 0) invalidateClassroomStudentsMany(touchedClassroomIds)
 
   await logActivity({
     actor: session,

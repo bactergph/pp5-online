@@ -8,6 +8,8 @@ import {
   proposeClassDocument,
   putClassDocumentSignature,
 } from '@/app/sign/actions'
+import { getClassroomStudentsCached } from '@/lib/students-cache'
+import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
 
 type RoleSession = {
   userId: string
@@ -139,22 +141,31 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
     return { error: 'ดูได้เฉพาะห้องที่เป็นครูประจำชั้น' }
   }
 
-  const [studentsRes, yearRes, holidaysRes, weekendSchoolDaysRes, attendanceRes, activitiesRes, healthRes, inspectionRes] = await Promise.all([
-    db.from('students')
-      .select('id, student_number, prefix, first_name, last_name, gender, status')
-      .eq('classroom_id', classroomId)
-      .order('student_number'),
+  const [students, yearRes, holidays, openWeekends, attendanceRes, activitiesRes, healthRes, inspectionRes] = await Promise.all([
+    getClassroomStudentsCached(classroomId, async () => {
+      const { data } = await db.from('students')
+        .select('id, student_number, prefix, first_name, last_name, gender, status')
+        .eq('classroom_id', classroomId)
+        .order('student_number')
+      return data || []
+    }),
     db.from('academic_years').select('id, year_be').eq('id', academicYearId).maybeSingle(),
-    db.from('holidays')
-      .select('date, name')
-      .eq('academic_year_id', academicYearId)
-      .gte('date', range.start)
-      .lte('date', range.end),
-    db.from('weekend_school_days')
-      .select('date, name')
-      .eq('academic_year_id', academicYearId)
-      .gte('date', range.start)
-      .lte('date', range.end),
+    getHolidaysCached(academicYearId, range.start, range.end, async () => {
+      const { data } = await db.from('holidays')
+        .select('date, name')
+        .eq('academic_year_id', academicYearId)
+        .gte('date', range.start)
+        .lte('date', range.end)
+      return data || []
+    }),
+    getWeekendSchoolDaysCached(academicYearId, range.start, range.end, async () => {
+      const { data } = await db.from('weekend_school_days')
+        .select('date, name')
+        .eq('academic_year_id', academicYearId)
+        .gte('date', range.start)
+        .lte('date', range.end)
+      return data || []
+    }),
     db.from('daily_attendance')
       .select('student_id, date, status')
       .eq('classroom_id', classroomId)
@@ -176,9 +187,6 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
       .eq('month', range.month),
   ])
 
-  const students = studentsRes.data || []
-  const holidays = holidaysRes.data || []
-  const openWeekends = weekendSchoolDaysRes.data || []
   const holidayMap = new Map(holidays.map(h => [h.date, h.name]))
   const openWeekendMap = new Map(openWeekends.map(d => [d.date, d.name]))
   const schoolDays = Array.from({ length: range.days }, (_, i) => i + 1).filter(day => {
