@@ -629,7 +629,7 @@ export default function ClassroomAdminExportPage() {
               ? (activityValue ? String(activityValue) : '')
               : classroomAdminDoneMark(activityValue)
           const attendanceClass = type === 'attendance' && attendanceValue
-            ? (attendanceValue === '/' ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
+            ? (attendanceValue === 'ม' ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
             : type !== 'attendance' && type !== 'saving' && displayValue === CLASSROOM_ADMIN_CHECK_MARK
               ? 'attendance-print-status-present'
               : ''

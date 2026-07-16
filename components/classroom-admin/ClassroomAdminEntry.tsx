@@ -105,7 +105,7 @@ type AttendanceToolbarPendingAction = 'fill' | 'delete' | null
 type AttendanceConfirmPhase = 'idle' | 'countdown' | 'armed'
 
 const ATTENDANCE_OPTIONS = [
-  { value: 'ม', label: 'มา (/)' },
+  { value: 'ม', label: 'มา (ม)' },
   { value: 'ป', label: 'ลาป่วย' },
   { value: 'ล', label: 'ลากิจ' },
   { value: 'ข', label: 'ขาด' },
@@ -619,7 +619,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           ? (activityValue ? String(activityValue) : '')
           : classroomAdminDoneMark(activityValue)
       const attendanceClass = mode === 'attendance' && attendanceValue
-        ? (attendanceValue === CLASSROOM_ADMIN_CHECK_MARK ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
+        ? (attendanceValue === 'ม' ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
         : mode === 'activity' && displayValue === CLASSROOM_ADMIN_CHECK_MARK
           ? 'attendance-print-status-present'
           : ''
@@ -805,7 +805,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     if (!canEdit || !hasMonthlyBulkTools || attendanceBulkFilling || attendanceClearingAll || !attendanceToolbarConfirmIdle) return
     const ok = window.confirm(
       mode === 'attendance'
-        ? 'ยืนยันบันทึกมา (/) ให้ทุกช่องที่ยังว่างในเดือนนี้?'
+        ? 'ยืนยันบันทึกมา (ม) ให้ทุกช่องที่ยังว่างในเดือนนี้?'
         : `ยืนยันบันทึก ${CLASSROOM_ADMIN_CHECK_MARK} ให้ทุกช่องที่ยังว่างในเดือนนี้?`,
     )
     if (!ok) return
@@ -852,7 +852,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       return `บันทึกในอีก ${attendanceConfirmCountdown}...`
     }
     if (attendancePendingAction === 'fill' && attendanceConfirmPhase === 'armed') return 'กดอีกครั้งเพื่อบันทึก'
-    return 'เช็คมาทั้งหมด (ช่องที่ยังว่าง)'
+    return 'เช็คมาทั้งหมด'
   }
 
   function requestMonthlyDeleteAll() {
@@ -1445,7 +1445,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   function attendanceCellClass(studentId: string, day: number) {
     const saved = monthlyAttendanceValues[studentId]?.[day]
     const display = toDailyDisplay(saved)
-    if (display === '/') return 'is-present'
+    if (display === 'ม') return 'is-present'
     if (saved) return `attendance-${saved}`
     return 'is-empty'
   }
@@ -1744,10 +1744,16 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               )}
               <div className="classroom-admin-print-cluster">
                 <button type="button" className="btn btn-secondary classroom-admin-board-button" onClick={exportAttendancePdf} disabled={!classroomId || tableLoading || students.length === 0 || pdfExporting}>
-                  {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
+                  {pdfExporting ? 'กำลังสร้าง...' : (
+                    <>
+                      <span className="classroom-admin-btn-full">บันทึก PDF</span>
+                      <span className="classroom-admin-btn-short">PDF</span>
+                    </>
+                  )}
                 </button>
                 <button type="button" className="btn classroom-admin-print-green classroom-admin-board-button" onClick={printCurrentPage} disabled={!classroomId || tableLoading || students.length === 0}>
-                  พิมพ์หน้านี้
+                  <span className="classroom-admin-btn-full">พิมพ์หน้านี้</span>
+                  <span className="classroom-admin-btn-short">พิมพ์</span>
                 </button>
                 {classroomId && (
                   <div className="classroom-admin-board-sign classroom-admin-board-sign--docked">
@@ -1922,7 +1928,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <div className="classroom-admin-attendance-toolbar">
               <span className="classroom-admin-attendance-toolbar-note">
                 {mode === 'attendance'
-                  ? 'ช่องว่าง = ยังไม่บันทึก · คลิกเพื่อวน / → ข → ล → ป'
+                  ? 'ช่องว่าง = ยังไม่บันทึก · คลิกเพื่อวน ม → ข → ล → ป'
                   : `ช่องว่าง = ยังไม่ทำ · คลิกเพื่อสลับ ${CLASSROOM_ADMIN_CHECK_MARK}`}
               </span>
               {canEdit ? (
@@ -1961,9 +1967,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             style={savingTableMinWidth ? { minWidth: savingTableMinWidth } : undefined}
           >
             <colgroup>
-              <col style={{ width: 58 }} />
-              <col style={{ width: 248 }} />
-              {days.map(day => <col key={day} style={{ width: activityType === 'saving' ? 76 : 44 }} />)}
+              <col style={{ width: 40 }} />
+              <col style={{ width: 148 }} />
+              {days.map(day => <col key={day} style={{ width: activityType === 'saving' ? 72 : 32 }} />)}
               {isRoutineActivityMode && <col style={{ width: 64 }} />}
               {isSavingMode && (
                 <>

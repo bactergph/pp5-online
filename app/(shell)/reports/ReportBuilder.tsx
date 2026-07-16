@@ -2297,7 +2297,7 @@ function ClassAttendancePages({ data, term, pageStart = 1 }: { data: ReportPaylo
                         const rawValue = student && slot.date && slot.key
                           ? recordedValue || (isAttendanceSchoolDay(slot.date, slot.key, holidayMap, openWeekendMap) ? 'ม' : '')
                           : ''
-                        const display = !student ? '' : rawValue === 'ม' ? '/' : rawValue
+                        const display = !student ? '' : rawValue === 'ม' || rawValue === '/' ? 'ม' : rawValue
                         return (
                           <td
                             key={`${student?.id || 'empty'}-w${weekNumber}-${slot.weekday}`}

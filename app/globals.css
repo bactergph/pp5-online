@@ -5335,6 +5335,10 @@ div:has(> .thai-table) {
   min-width: 0;
 }
 
+.classroom-admin-btn-short {
+  display: none;
+}
+
 .classroom-admin-board-sign--docked {
   grid-column: 1 / -1;
   width: 100%;
@@ -5570,7 +5574,11 @@ div:has(> .thai-table) {
 
 @media (max-width: 760px) {
   .classroom-admin-page {
-    gap: 10px;
+    gap: 8px;
+  }
+
+  .classroom-admin-top-card {
+    border-radius: 18px;
   }
 
   .classroom-admin-board-main,
@@ -5581,12 +5589,12 @@ div:has(> .thai-table) {
   }
 
   .classroom-admin-board-main {
-    gap: 10px;
-    padding: 12px;
+    gap: 8px;
+    padding: 10px 10px 8px;
   }
 
   .classroom-admin-board-left {
-    gap: 8px;
+    gap: 6px;
     flex: 1 1 auto;
   }
 
@@ -5599,12 +5607,46 @@ div:has(> .thai-table) {
   .classroom-admin-attendance-controls {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .classroom-admin-segment-group {
+    width: 100%;
+    padding: 3px;
+    border-radius: 12px;
+  }
+
+  .classroom-admin-segment {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 32px;
+    padding: 6px 8px;
+    font-size: 13px;
+    border-radius: 9px;
+  }
+
+  .classroom-admin-month-tabs {
+    gap: 4px;
+    margin: 0 -2px;
+    padding: 0 2px 2px;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+
+  .classroom-admin-month-tab {
+    min-width: 2.75rem;
+    min-height: 32px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 9px;
+    scroll-snap-align: start;
   }
 
   .classroom-admin-print-cluster {
     width: 100%;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+    align-items: stretch;
   }
 
   .classroom-admin-print-cluster,
@@ -5613,127 +5655,142 @@ div:has(> .thai-table) {
     width: 100%;
   }
 
-  .classroom-admin-class-select,
+  .classroom-admin-class-select {
+    min-height: 38px;
+    padding: 7px 32px 7px 10px;
+    font-size: 13px;
+    border-radius: 10px;
+  }
+
   .classroom-admin-board-button {
-    min-height: 44px;
+    min-height: 34px;
+    min-width: 0;
+    padding: 6px 4px;
+    font-size: 11px;
+    border-radius: 9px;
   }
 
-  .classroom-admin-segment {
-    flex: 1 1 auto;
-    min-height: 40px;
+  .classroom-admin-btn-full {
+    display: none;
   }
 
-  .classroom-admin-month-tabs {
-    gap: 6px;
-    margin: 0 -4px;
-    padding: 2px 4px 6px;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
+  .classroom-admin-btn-short {
+    display: inline;
   }
 
-  .classroom-admin-month-tab {
-    min-width: 3.25rem;
-    min-height: 40px;
-    scroll-snap-align: start;
+  .classroom-admin-print-green {
+    box-shadow: 0 4px 10px rgba(22, 163, 74, 0.16);
+  }
+
+  /* Mobile: เซ็น | เสนอ ซ้าย · PDF | พิมพ์ ขวา */
+  .classroom-admin-board-sign--docked {
+    grid-column: span 2;
+    width: auto;
+    min-width: 0;
   }
 
   .classroom-admin-board-intro {
-    flex-direction: column;
-    padding: 10px 12px 12px;
+    flex-direction: row;
+    align-items: center;
+    padding: 8px 10px;
     gap: 8px;
   }
 
   .classroom-admin-board-title {
-    font-size: 16px;
+    font-size: 14px;
+    line-height: 1.2;
   }
 
   .classroom-admin-board-desc {
-    font-size: 12px;
+    display: none;
   }
 
-  .classroom-admin-board-sign--docked {
-    width: 100%;
+  .classroom-admin-board-flags {
+    gap: 4px;
   }
 
-  .classroom-admin-board-sign--docked .sign-panel__btn {
-    min-height: 44px;
-    font-size: 13px;
-    padding: 10px 12px;
+  .classroom-admin-board-flags .badge {
+    font-size: 10px;
+    padding: 2px 6px;
   }
 
   .classroom-admin-month-table-wrap {
-    max-height: calc(100dvh - 200px);
-    min-height: 260px;
+    max-height: calc(100dvh - 168px);
+    min-height: 300px;
   }
 
   .classroom-admin-attendance-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    padding: 10px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
   }
 
   .classroom-admin-attendance-toolbar-note {
-    font-size: 11px;
-    line-height: 1.35;
+    display: none;
   }
 
   .classroom-admin-attendance-toolbar-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
+    margin-left: 0;
   }
 
   .classroom-admin-fill-all-btn,
   .classroom-admin-delete-all-btn {
     width: 100%;
-    min-height: 44px;
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 12px;
+    border-radius: 9px;
   }
 
   .classroom-admin-month-cell {
-    height: 40px;
-    min-height: 40px;
-    border-radius: 10px;
-    font-size: 13px;
+    height: 32px;
+    min-height: 32px;
+    border-radius: 7px;
+    font-size: 12px;
   }
 
   .classroom-admin-month-input {
-    height: 40px;
-    min-height: 40px;
-    font-size: 14px;
-    border-radius: 10px;
+    height: 32px;
+    min-height: 32px;
+    font-size: 12px;
+    border-radius: 7px;
   }
 
   .classroom-admin-day-all-btn {
-    min-height: 44px;
-    font-size: 10px;
-    padding: 6px 2px;
-    border-radius: 8px;
+    min-height: 38px;
+    font-size: 8px;
+    padding: 4px 1px;
+    border-radius: 4px;
   }
 
   .classroom-admin-month-table td:nth-child(n + 3),
   .classroom-admin-month-table th:nth-child(n + 3) {
-    min-width: 44px;
+    min-width: 30px;
   }
 
   .classroom-admin-saving-table td:nth-child(n + 3),
   .classroom-admin-saving-table th:nth-child(n + 3) {
-    min-width: 72px;
+    min-width: 64px;
   }
 
   .classroom-admin-compact-input,
   .classroom-admin-toggle {
-    min-height: 44px;
+    min-height: 38px;
   }
 
   .classroom-admin-hub-card {
-    min-height: 88px;
-    padding: 14px 14px 14px 12px;
+    min-height: 80px;
+    padding: 12px;
   }
 
   .classroom-admin-hub-card-copy strong {
-    font-size: 15px;
+    font-size: 14px;
   }
 }
 
@@ -6007,18 +6064,23 @@ div:has(> .thai-table) {
   vertical-align: middle !important;
 }
 
-.classroom-admin-day-head {
-  background: #F8FAFC !important;
-  color: #334155 !important;
-  font-weight: 900 !important;
-}
-
 .classroom-admin-weekday-head {
   background: #FFFFFF !important;
   color: #94A3B8 !important;
   font-size: 10px !important;
   font-weight: 800 !important;
-  padding: 4px 3px !important;
+  padding: 2px 2px !important;
+  height: 18px;
+  line-height: 1;
+}
+
+.classroom-admin-day-head {
+  background: #F8FAFC !important;
+  color: #334155 !important;
+  font-weight: 900 !important;
+  padding: 3px 2px !important;
+  height: 22px;
+  line-height: 1.1;
 }
 
 .classroom-admin-attendance-toolbar-note {
@@ -6127,13 +6189,16 @@ div:has(> .thai-table) {
 .classroom-admin-month-title {
   background: linear-gradient(135deg, #F5EDE3, #F8FAFC) !important;
   color: #334155 !important;
-  font-size: 13px !important;
+  font-size: 12px !important;
   font-weight: 900 !important;
-  height: 34px;
+  height: 26px;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  line-height: 1.2;
 }
 
 .classroom-admin-month-title:not(.classroom-admin-summary-head) {
-  padding-left: 14px !important;
+  padding-left: 10px !important;
   text-align: left !important;
 }
 
@@ -6163,9 +6228,68 @@ div:has(> .thai-table) {
 .classroom-admin-month-table thead tr:first-child th:nth-child(2),
 .classroom-admin-month-table tbody td:nth-child(2) {
   position: sticky;
-  left: 58px;
+  left: 40px;
   z-index: 5;
   box-shadow: 1px 0 0 #E2E8F0, 10px 0 18px rgba(15,23,42,0.03);
+}
+
+@media (max-width: 760px) {
+  .classroom-admin-month-table {
+    min-width: 1080px;
+  }
+
+  .classroom-admin-saving-table {
+    min-width: 1280px;
+  }
+
+  .classroom-admin-month-table thead tr:first-child th:nth-child(2),
+  .classroom-admin-month-table tbody td:nth-child(2),
+  .classroom-admin-month-table thead tr:nth-child(2) th:nth-child(2),
+  .classroom-admin-month-table thead tr:nth-child(3) th:nth-child(2) {
+    left: 36px;
+    max-width: 88px;
+    width: 88px;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+
+  .classroom-admin-month-table thead tr:first-child th:first-child,
+  .classroom-admin-month-table tbody td:first-child,
+  .classroom-admin-month-table thead tr:nth-child(2) th:first-child,
+  .classroom-admin-month-table thead tr:nth-child(3) th:first-child {
+    left: 0;
+    max-width: 36px;
+    width: 36px;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+
+  /* ~8 day columns visible on phone — name sticky narrower */
+  .classroom-admin-month-table:not(.classroom-admin-saving-table) td:nth-child(n + 3),
+  .classroom-admin-month-table:not(.classroom-admin-saving-table) th:nth-child(n + 3) {
+    min-width: 30px;
+    padding-left: 1px !important;
+    padding-right: 1px !important;
+  }
+
+  .classroom-admin-month-cell {
+    height: 32px;
+    min-height: 32px;
+    border-radius: 7px;
+    font-size: 12px;
+  }
+
+  .classroom-admin-day-all-btn {
+    min-height: 38px;
+    font-size: 8px;
+    padding: 4px 1px;
+    gap: 1px;
+    border-radius: 4px;
+  }
+
+  .classroom-admin-student-cell {
+    font-size: 11px;
+  }
 }
 
 .classroom-admin-month-table thead tr:first-child th:first-child,
@@ -6182,12 +6306,12 @@ div:has(> .thai-table) {
 }
 
 .classroom-admin-month-table thead tr:nth-child(2) th {
-  top: 34px;
+  top: 26px;
   z-index: 4;
 }
 
 .classroom-admin-month-table thead tr:nth-child(3) th {
-  top: 58px;
+  top: 44px;
   z-index: 4;
 }
 
@@ -6208,7 +6332,7 @@ div:has(> .thai-table) {
 
 .classroom-admin-month-table thead tr:nth-child(2) th:nth-child(2),
 .classroom-admin-month-table thead tr:nth-child(3) th:nth-child(2) {
-  left: 58px;
+  left: 40px;
 }
 
 .classroom-admin-weight-table th:first-child,
@@ -6459,65 +6583,110 @@ div:has(> .thai-table) {
   box-shadow: inset 0 0 0 2px var(--primary);
 }
 
-/* Mobile classroom-admin — after base cell sizes so touch targets win cascade */
+/* Mobile classroom-admin — after base cell sizes so overrides win cascade */
 @media (max-width: 760px) {
   .classroom-admin-board-desc {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    display: none;
   }
 
   .classroom-admin-month-cell {
-    height: 40px;
-    min-height: 40px;
-    border-radius: 10px;
-    font-size: 13px;
+    height: 32px;
+    min-height: 32px;
+    border-radius: 7px;
+    font-size: 12px;
   }
 
   .classroom-admin-month-input {
-    height: 40px;
-    min-height: 40px;
-    font-size: 14px;
-    border-radius: 10px;
+    height: 32px;
+    min-height: 32px;
+    font-size: 12px;
+    border-radius: 7px;
   }
 
   .classroom-admin-saving-input {
-    height: 40px !important;
-    min-height: 40px;
-    font-size: 16px !important;
-    border-radius: 10px !important;
+    height: 32px !important;
+    min-height: 32px;
+    font-size: 14px !important;
+    border-radius: 7px !important;
   }
 
   .classroom-admin-compact-input,
   .classroom-admin-toggle {
-    min-height: 44px;
-    font-size: 14px;
+    min-height: 38px;
+    font-size: 13px;
   }
 
   .classroom-admin-day-all-btn {
-    min-height: 44px;
-    font-size: 10px;
-    padding: 6px 2px;
-    border-radius: 8px;
+    min-height: 38px;
+    font-size: 8px;
+    padding: 4px 1px;
+    border-radius: 4px;
   }
 
   .classroom-admin-month-table td {
-    height: 48px;
+    height: 38px;
   }
 
   .classroom-admin-month-table thead tr:nth-child(2) th {
-    top: 40px;
+    top: 24px;
   }
 
   .classroom-admin-month-table thead tr:nth-child(3) th {
-    top: 68px;
+    top: 40px;
+  }
+
+  .classroom-admin-month-title {
+    height: 24px !important;
+    font-size: 11px !important;
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
+  }
+
+  .classroom-admin-day-head {
+    height: 18px;
+    padding: 1px 1px !important;
+    font-size: 11px !important;
+  }
+
+  .classroom-admin-weekday-head {
+    height: 14px;
+    padding: 0 1px !important;
+    font-size: 9px !important;
+  }
+
+  .classroom-admin-day-all-head {
+    min-height: 44px;
+    padding: 3px 2px !important;
+  }
+
+  .classroom-admin-day-all-btn {
+    min-height: 38px;
+    padding: 4px 1px;
+    font-size: 8px;
+    line-height: 1.1;
+    gap: 1px;
+  }
+
+  .classroom-admin-month-table th {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
   }
 
   .classroom-admin-attendance-toolbar {
     position: sticky;
     top: 0;
     z-index: 16;
+  }
+
+  .classroom-admin-attendance-toolbar-note {
+    display: none;
+  }
+
+  .classroom-admin-fill-all-btn,
+  .classroom-admin-delete-all-btn {
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 12px;
   }
 }
 
@@ -6986,6 +7155,75 @@ div:has(> .thai-table) {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+/* Classroom-admin mobile: force 4-button toolbar after sign-panel base styles */
+@media (max-width: 760px) {
+  .classroom-admin-print-cluster {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    column-gap: 5px !important;
+  }
+
+  /* เซ็น | เสนอ | PDF | พิมพ์ */
+  .classroom-admin-board-sign--docked {
+    order: 1;
+    grid-column: span 2 !important;
+    width: auto !important;
+    min-width: 0;
+    margin-left: 0;
+    margin-right: 2px;
+    padding-left: 0;
+    padding-right: 7px;
+    border-left: 0;
+    border-right: 1px solid rgba(139, 107, 69, 0.28);
+  }
+
+  .classroom-admin-print-cluster > .classroom-admin-board-button:nth-child(1) {
+    order: 3;
+  }
+
+  .classroom-admin-print-cluster > .classroom-admin-board-button:nth-child(2) {
+    order: 4;
+  }
+
+  .classroom-admin-board-sign--docked .sign-panel--simple,
+  .classroom-admin-board-sign--docked .sign-panel--compact {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .classroom-admin-board-sign--docked .sign-panel__head {
+    display: none !important;
+  }
+
+  .classroom-admin-board-sign--docked .sign-panel__hint,
+  .classroom-admin-board-sign--docked .sign-panel--history {
+    display: none !important;
+  }
+
+  .classroom-admin-board-sign--docked .sign-panel__dual-actions {
+    display: contents;
+  }
+
+  .classroom-admin-board-sign--docked .sign-panel__btn,
+  .classroom-admin-board-sign--docked .sign-panel--simple .sign-panel__btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px !important;
+    padding: 4px 2px !important;
+    font-size: 10px !important;
+    font-weight: 800;
+    border-radius: 9px;
+    line-height: 1.15;
+    white-space: normal;
+  }
 }
 
 .sign-panel--history {

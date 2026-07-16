@@ -1,10 +1,10 @@
 export type DailyDbStatus = 'ม' | 'ป' | 'ล' | 'ข'
-export type DailyDisplayStatus = '/' | 'ข' | 'ล' | 'ป'
+export type DailyDisplayStatus = 'ม' | 'ข' | 'ล' | 'ป'
 
-export const DAILY_STATUS_CYCLE: DailyDisplayStatus[] = ['/', 'ข', 'ล', 'ป']
+export const DAILY_STATUS_CYCLE: DailyDisplayStatus[] = ['ม', 'ข', 'ล', 'ป']
 
 export const DAILY_STATUS_LABELS: Record<DailyDisplayStatus, string> = {
-  '/': 'มา',
+  'ม': 'มา',
   'ข': 'ขาด',
   'ล': 'ลา',
   'ป': 'ป่วย',
@@ -12,17 +12,19 @@ export const DAILY_STATUS_LABELS: Record<DailyDisplayStatus, string> = {
 
 export function toDailyDisplay(status?: DailyDbStatus | null): DailyDisplayStatus | null {
   if (!status) return null
-  if (status === 'ม') return '/'
-  return status
+  // รองรับค่าเก่าที่เคยแสดงเป็น /
+  if (status === 'ม' || (status as string) === '/') return 'ม'
+  if (status === 'ป' || status === 'ล' || status === 'ข') return status
+  return null
 }
 
-export function toDailyDb(status: DailyDisplayStatus): DailyDbStatus {
-  if (status === '/') return 'ม'
+export function toDailyDb(status: DailyDisplayStatus | '/'): DailyDbStatus {
+  if (status === '/' || status === 'ม') return 'ม'
   return status
 }
 
 export function nextDailyDisplay(status: DailyDisplayStatus | null): DailyDisplayStatus {
-  if (!status) return '/'
+  if (!status) return 'ม'
   const index = DAILY_STATUS_CYCLE.indexOf(status)
   return DAILY_STATUS_CYCLE[(index + 1) % DAILY_STATUS_CYCLE.length]
 }
