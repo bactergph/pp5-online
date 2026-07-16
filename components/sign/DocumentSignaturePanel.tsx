@@ -276,17 +276,19 @@ export default function DocumentSignaturePanel({
   return (
     <>
       <section className={`sign-panel sign-panel--simple${compact ? ' sign-panel--compact' : ''}`} aria-label="ลายเซ็น">
-        <div className="sign-panel__head">
-          <span>ลายเซ็น</span>
-          {state ? (
-            <span className={`sign-panel__badge sign-panel__badge--${state.status}`}>
-              {state.status_label}
-              {state.status === 'in_review' && state.next_step ? ` · ${state.next_step}` : ''}
-            </span>
-          ) : (
-            <span className="sign-panel__badge sign-panel__badge--draft">ยังไม่พร้อม</span>
-          )}
-        </div>
+        {!compact && (
+          <div className="sign-panel__head">
+            <span>ลายเซ็น</span>
+            {state ? (
+              <span className={`sign-panel__badge sign-panel__badge--${state.status}`}>
+                {state.status_label}
+                {state.status === 'in_review' && state.next_step ? ` · ${state.next_step}` : ''}
+              </span>
+            ) : (
+              <span className="sign-panel__badge sign-panel__badge--draft">ยังไม่พร้อม</span>
+            )}
+          </div>
+        )}
 
         {showInitiatorActions && (
           <>

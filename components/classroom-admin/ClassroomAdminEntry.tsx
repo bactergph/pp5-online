@@ -21,7 +21,6 @@ import {
   saveMonthlyAttendance,
   saveWeightHeight,
 } from '@/app/classroom-admin/actions'
-import LoadingButton from '@/components/LoadingButton'
 import ClassroomAdminPrintLayoutTuner, { useClassroomAdminPrintLayoutsState } from '@/components/classroom-admin/ClassroomAdminPrintLayoutTuner'
 import { CLASSROOM_ADMIN_PRINT_STYLES, classroomAdminPrintStyles } from '@/components/classroom-admin/classroom-admin-print-styles'
 import { waitForReportFonts } from '@/lib/report-font-faces'
@@ -38,7 +37,6 @@ import {
   directorSchoolLine,
 } from '@/lib/school-director'
 import {
-  CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS,
   classroomAdminStandardTableWidthStyle,
 } from '@/lib/classroom-admin-standard-table-columns'
 import {
@@ -262,6 +260,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [attendanceConfirmCountdown, setAttendanceConfirmCountdown] = useState(0)
   const [weightRows, setWeightRows] = useState<Record<string, { weight: string; height: string; bmi?: number | null; bmi_result?: string | null }>>({})
   const [inspectionRows, setInspectionRows] = useState<Record<string, Record<InspectionField, string>>>({})
+  const weightRowsRef = useRef(weightRows)
+  weightRowsRef.current = weightRows
   const { notify, clearAlert, AlertModal } = useAppAlert()
 
   const hasMonthlyBulkTools = mode === 'attendance'
@@ -456,52 +456,87 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     })
   }
 
-  async function handleSave() {
-    if (!canEdit) return
-    clearAlert()
-    startTransition(async () => {
-      if (mode === 'attendance') {
-        const rows = students.flatMap(student => activeDays.flatMap(day => {
-          const status = monthlyAttendanceValues[student.id]?.[day]
-          if (!status) return []
-          return [{ student_id: student.id, day, status }]
-        }))
-        const result = await saveMonthlyAttendance(classroomId, monthKey, rows)
-        if (result.error) notify('error', result.error)
-        else notify('success', `บันทึกแล้ว ${result.count} ช่อง`)
-      } else if (mode === 'activity' && activityType) {
-        const rows = students.flatMap(student => activeDays.map(day => ({
-          student_id: student.id,
-          day,
-          value: Number(monthlyActivityValues[student.id]?.[day] ?? 0),
-        })))
-        const result = await saveMonthlyActivity(classroomId, monthKey, term, activityType, rows)
-        if (result.error) notify('error', result.error)
-        else notify('success', `บันทึก${activityLabel || ''}แล้ว ${result.count} ช่อง`)
-      } else if (mode === 'weightHeight') {
-        const result = await saveWeightHeight(classroomId, yearId, month, date, students.map(s => ({
-          student_id: s.id,
-          weight: weightRows[s.id]?.weight ? Number(weightRows[s.id].weight) : null,
-          height: weightRows[s.id]?.height ? Number(weightRows[s.id].height) : null,
-        })))
-        if (result.error) notify('error', result.error)
-        else notify('success', `บันทึกน้ำหนัก/ส่วนสูงแล้ว ${result.count} คน`)
-        if (!result.error) loadRecords()
-      } else if (mode === 'healthInspection') {
-        const result = await saveHealthInspection(classroomId, yearId, term, month, date, students.map(s => ({
-          student_id: s.id,
-          nails: inspectionRows[s.id]?.nails || 'ผ่าน',
-          hair: inspectionRows[s.id]?.hair || 'ผ่าน',
-          ears: inspectionRows[s.id]?.ears || 'ผ่าน',
-          nose: inspectionRows[s.id]?.nose || 'ผ่าน',
-          teeth: inspectionRows[s.id]?.teeth || 'ผ่าน',
-          skin: inspectionRows[s.id]?.skin || 'ผ่าน',
-          clothes: inspectionRows[s.id]?.clothes || 'ผ่าน',
-        })))
-        if (result.error) notify('error', result.error)
-        else notify('success', `บันทึกตรวจสุขภาพแล้ว ${result.count} คน`)
-      }
-    })
+  function parseMeasure(value: string) {
+    const cleaned = value.replace(/[^\d.]/g, '')
+    if (!cleaned) return null
+    const num = Number(cleaned)
+    return Number.isFinite(num) ? num : null
+  }
+
+  function localBmi(weight: number | null, height: number | null) {
+    if (!weight || !height || height <= 0) return { bmi: null as number | null, bmi_result: null as string | null }
+    const bmi = Number((weight / ((height / 100) ** 2)).toFixed(2))
+    const bmi_result = bmi < 18.5 ? 'ผอม' : bmi < 23 ? 'สมส่วน' : bmi < 25 ? 'ท้วม' : 'อ้วน'
+    return { bmi, bmi_result }
+  }
+
+  async function autoSaveWeightStudent(
+    studentId: string,
+    row: { weight: string; height: string },
+    measuredDate = date,
+  ) {
+    if (!canEdit || !classroomId || !yearId) return
+    const weight = parseMeasure(row.weight)
+    const height = parseMeasure(row.height)
+    const { bmi, bmi_result } = localBmi(weight, height)
+    setWeightRows(prev => ({
+      ...prev,
+      [studentId]: {
+        weight: row.weight,
+        height: row.height,
+        bmi,
+        bmi_result,
+      },
+    }))
+    const cellKey = `wh-${studentId}`
+    markSaving(cellKey, true)
+    const result = await saveWeightHeight(classroomId, yearId, month, measuredDate, [{
+      student_id: studentId,
+      weight,
+      height,
+    }])
+    markSaving(cellKey, false)
+    if (result.error) notify('error', result.error)
+  }
+
+  async function autoSaveHealthStudent(
+    studentId: string,
+    row: Record<InspectionField, string>,
+    inspectedDate = date,
+  ) {
+    if (!canEdit || !classroomId || !yearId) return
+    const payload = {
+      student_id: studentId,
+      nails: row.nails || 'ผ่าน',
+      hair: row.hair || 'ผ่าน',
+      ears: row.ears || 'ผ่าน',
+      nose: row.nose || 'ผ่าน',
+      teeth: row.teeth || 'ผ่าน',
+      skin: row.skin || 'ผ่าน',
+      clothes: row.clothes || 'ผ่าน',
+    }
+    const cellKey = `hi-${studentId}`
+    markSaving(cellKey, true)
+    const result = await saveHealthInspection(classroomId, yearId, term, month, inspectedDate, [payload])
+    markSaving(cellKey, false)
+    if (result.error) notify('error', result.error)
+  }
+
+  async function autoSaveMeasuredDate(nextDate: string) {
+    if (!canEdit || !classroomId || !yearId || mode !== 'weightHeight') return
+    const rows = students
+      .map(student => {
+        const row = weightRows[student.id]
+        if (!row) return null
+        const weight = parseMeasure(row.weight)
+        const height = parseMeasure(row.height)
+        if (weight == null && height == null && row.bmi == null) return null
+        return { student_id: student.id, weight, height }
+      })
+      .filter((row): row is { student_id: string; weight: number | null; height: number | null } => Boolean(row))
+    if (rows.length === 0) return
+    const result = await saveWeightHeight(classroomId, yearId, month, nextDate, rows)
+    if (result.error) notify('error', result.error)
   }
 
   const days = useMemo(() => Array.from({ length: monthDays }, (_, i) => i + 1), [monthDays])
@@ -641,7 +676,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const termLabel = `ภาคเรียนที่ ${attendanceTerm}`
   const isSavingMode = mode === 'activity' && activityType === 'saving'
   const isRoutineActivityMode = mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType))
-  const savingTableMinWidth = isSavingMode ? Math.max(1680, 320 + days.length * 72 + 360) : undefined
+  const savingDayColWidth = isSavingMode ? 56 : 32
   const savingStats = isSavingMode
     ? (() => {
         const rows = students.map(student => {
@@ -1571,10 +1606,38 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       const row = weightRows[student.id] || { weight: '', height: '' }
       return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 110px', gap: 8, alignItems: 'center' }}>
-          <input className="form-input" type="number" step="0.01" placeholder="กก." disabled={!canEdit} value={row.weight}
-            onChange={e => setWeightRows(v => ({ ...v, [student.id]: { ...row, weight: e.target.value } }))} />
-          <input className="form-input" type="number" step="0.01" placeholder="ซม." disabled={!canEdit} value={row.height}
-            onChange={e => setWeightRows(v => ({ ...v, [student.id]: { ...row, height: e.target.value } }))} />
+          <input
+            className="form-input"
+            type="text"
+            inputMode="decimal"
+            placeholder="กก."
+            disabled={!canEdit}
+            value={row.weight}
+            onChange={e => {
+              const weight = e.target.value.replace(/[^\d.]/g, '')
+              setWeightRows(v => ({ ...v, [student.id]: { ...(v[student.id] || row), weight } }))
+            }}
+            onBlur={e => {
+              const weight = e.target.value.replace(/[^\d.]/g, '')
+              void autoSaveWeightStudent(student.id, { ...(weightRowsRef.current[student.id] || row), weight })
+            }}
+          />
+          <input
+            className="form-input"
+            type="text"
+            inputMode="decimal"
+            placeholder="ซม."
+            disabled={!canEdit}
+            value={row.height}
+            onChange={e => {
+              const height = e.target.value.replace(/[^\d.]/g, '')
+              setWeightRows(v => ({ ...v, [student.id]: { ...(v[student.id] || row), height } }))
+            }}
+            onBlur={e => {
+              const height = e.target.value.replace(/[^\d.]/g, '')
+              void autoSaveWeightStudent(student.id, { ...(weightRowsRef.current[student.id] || row), height })
+            }}
+          />
           <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{row.bmi ? `${row.bmi} · ${row.bmi_result || ''}` : '-'}</span>
         </div>
       )
@@ -1583,10 +1646,21 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(70px, 1fr))', gap: 6 }}>
         {INSPECTION_FIELDS.map(field => (
-          <select key={field.key} className="form-input" disabled={!canEdit}
+          <select
+            key={field.key}
+            className="form-input"
+            disabled={!canEdit}
             value={row[field.key] || 'ผ่าน'}
             title={field.label}
-            onChange={e => setInspectionRows(v => ({ ...v, [student.id]: { ...(v[student.id] || {}), [field.key]: e.target.value } as Record<InspectionField, string> }))}>
+            onChange={e => {
+              const next = {
+                ...(inspectionRows[student.id] || {}),
+                [field.key]: e.target.value,
+              } as Record<InspectionField, string>
+              setInspectionRows(v => ({ ...v, [student.id]: next }))
+              void autoSaveHealthStudent(student.id, next)
+            }}
+          >
             <option value="ผ่าน">{field.label}: ผ่าน</option>
             <option value="ไม่ผ่าน">{field.label}: ไม่ผ่าน</option>
           </select>
@@ -1690,26 +1764,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 ))
               )}
             </div>
-
-            <div className="classroom-admin-month-tabs" aria-label="เลือกเดือน">
-              {boardMonthTabs.map(monthValue => (
-                <button
-                  key={monthValue}
-                  type="button"
-                  className={`classroom-admin-month-tab ${boardMonth === monthValue ? 'is-active' : ''}`}
-                  onClick={() => {
-                    if (isMonthlyMode) setMonthKey(setMonthInKey(monthKey, monthValue))
-                    else setMonth(monthValue)
-                  }}
-                >
-                  {MONTH_SHORT_LABELS[monthValue]}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="classroom-admin-board-right">
-            <div className="classroom-admin-attendance-controls">
+            <div className={`classroom-admin-attendance-controls${(mode === 'weightHeight' || mode === 'healthInspection') ? ' classroom-admin-attendance-controls--standard' : ''}`}>
               <select className="form-input classroom-admin-class-select" value={classroomId} onChange={e => setClassroomId(e.target.value)}>
                 <option value="">เลือกห้องเรียน</option>
                 {filteredClassrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room} · {c.student_count} คน</option>)}
@@ -1717,30 +1775,17 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               {(mode === 'weightHeight' || mode === 'healthInspection') && (
                 <label className="classroom-admin-date-field">
                   <span>{mode === 'weightHeight' ? 'วันวัด' : 'วันตรวจ'}</span>
-                  <input className="form-input classroom-admin-class-select" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                  <input
+                    className="form-input classroom-admin-class-select"
+                    type="date"
+                    value={date}
+                    onChange={e => {
+                      const nextDate = e.target.value
+                      setDate(nextDate)
+                      void autoSaveMeasuredDate(nextDate)
+                    }}
+                  />
                 </label>
-              )}
-              {!isMonthlyMode && (
-                <LoadingButton
-                  className="btn btn-primary classroom-admin-board-button"
-                  loading={isPending}
-                  disabled={!canEdit || !classroomId || tableLoading}
-                  onClick={handleSave}
-                >
-                  บันทึก
-                </LoadingButton>
-              )}
-              {layoutTunerEnabled && (
-                <button
-                  type="button"
-                  className={`btn btn-secondary classroom-admin-board-button pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
-                  onClick={() => {
-                    setLayoutTunerSection(printLayoutSection)
-                    setLayoutTunerOpen(open => !open)
-                  }}
-                >
-                  {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
-                </button>
               )}
               <div className="classroom-admin-print-cluster">
                 <button type="button" className="btn btn-secondary classroom-admin-board-button" onClick={exportAttendancePdf} disabled={!classroomId || tableLoading || students.length === 0 || pdfExporting}>
@@ -1769,7 +1814,35 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                   </div>
                 )}
               </div>
+              {layoutTunerEnabled && (
+                <button
+                  type="button"
+                  className={`btn btn-secondary classroom-admin-board-button pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
+                  onClick={() => {
+                    setLayoutTunerSection(printLayoutSection)
+                    setLayoutTunerOpen(open => !open)
+                  }}
+                >
+                  {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}
+                </button>
+              )}
             </div>
+          </div>
+
+          <div className="classroom-admin-month-tabs" aria-label="เลือกเดือน">
+            {boardMonthTabs.map(monthValue => (
+              <button
+                key={monthValue}
+                type="button"
+                className={`classroom-admin-month-tab ${boardMonth === monthValue ? 'is-active' : ''}`}
+                onClick={() => {
+                  if (isMonthlyMode) setMonthKey(setMonthInKey(monthKey, monthValue))
+                  else setMonth(monthValue)
+                }}
+              >
+                {MONTH_SHORT_LABELS[monthValue]}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -1788,34 +1861,34 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
       {isSavingMode && savingStats && !tableLoading && students.length > 0 && (
         <div className="control-card saving-summary-grid">
-          <div>
+          <div className="saving-summary-teacher">
             <label className="form-label">ครูออมช่วย</label>
             <select
-              className="form-input"
+              className="form-input classroom-admin-compact-input"
               value={savingTeacherPercent}
               onChange={e => setSavingTeacherPercent(Number(e.target.value))}
               disabled={!classroomId || students.length === 0}
             >
               {[0, 5, 10, 15, 20, 25, 30, 50, 100].map(percent => (
-                <option key={percent} value={percent}>{percent}% ของยอดที่นักเรียนออม</option>
+                <option key={percent} value={percent}>{percent}%</option>
               ))}
             </select>
           </div>
           <div className="saving-summary-card">
-            <span>นักเรียนที่ออม</span>
-            <strong>{savingStats.saverCount}/{students.length} คน</strong>
+            <span>ออมแล้ว</span>
+            <strong>{savingStats.saverCount}/{students.length}</strong>
           </div>
           <div className="saving-summary-card">
-            <span>นักเรียนออมรวม</span>
-            <strong>{savingStats.roomTotal.toLocaleString('th-TH')} บาท</strong>
+            <span>นักเรียน</span>
+            <strong>{savingStats.roomTotal.toLocaleString('th-TH')}</strong>
           </div>
           <div className="saving-summary-card">
-            <span>ครูต้องออก</span>
-            <strong>{savingStats.teacherTotal.toLocaleString('th-TH')} บาท</strong>
+            <span>ครูช่วย</span>
+            <strong>{savingStats.teacherTotal.toLocaleString('th-TH')}</strong>
           </div>
           <div className="saving-summary-card is-strong">
-            <span>รวมสุทธิทั้งห้อง</span>
-            <strong>{savingStats.netTotal.toLocaleString('th-TH')} บาท</strong>
+            <span>สุทธิ</span>
+            <strong>{savingStats.netTotal.toLocaleString('th-TH')}</strong>
           </div>
         </div>
       )}
@@ -1846,37 +1919,72 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           <div className="classroom-admin-month-table-wrap">
           <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-weight-table">
             <colgroup>
-              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.numberPx }} />
-              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.namePx }} />
-              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx }} />
-              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx }} />
-              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx }} />
+              <col style={{ width: 40 }} />
+              <col style={{ width: 160 }} />
+              <col style={{ width: 88 }} />
+              <col style={{ width: 88 }} />
+              <col style={{ width: 110 }} />
             </colgroup>
             <thead>
               <tr>
                 <th style={{ textAlign: 'center' }}>#</th>
                 <th>นักเรียน</th>
-                <th>น้ำหนัก (กก.)</th>
-                <th>ส่วนสูง (ซม.)</th>
+                <th>น้ำหนัก</th>
+                <th>ส่วนสูง</th>
                 <th>BMI</th>
               </tr>
             </thead>
             <tbody>
               {students.map(student => {
                 const row = weightRows[student.id] || { weight: '', height: '' }
+                const w = Number(row.weight)
+                const h = Number(row.height)
+                const liveBmi = w > 0 && h > 0 ? Number((w / ((h / 100) ** 2)).toFixed(2)) : null
+                const liveResult = liveBmi == null ? null : liveBmi < 18.5 ? 'ผอม' : liveBmi < 23 ? 'สมส่วน' : liveBmi < 25 ? 'ท้วม' : 'อ้วน'
+                const bmiText = liveBmi != null
+                  ? `${liveBmi} · ${liveResult}`
+                  : (row.bmi ? `${row.bmi} · ${row.bmi_result || '-'}` : '-')
                 return (
                   <tr key={student.id}>
                     <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{student.student_number}</td>
                     <td className="classroom-admin-student-cell">{studentName(student)}</td>
                     <td>
-                      <input className="form-input classroom-admin-compact-input" type="number" step="0.01" placeholder="0.00" disabled={!canEdit} value={row.weight}
-                        onChange={e => setWeightRows(v => ({ ...v, [student.id]: { ...row, weight: e.target.value } }))} />
+                      <input
+                        className="form-input classroom-admin-compact-input classroom-admin-saving-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        disabled={!canEdit}
+                        value={row.weight}
+                        onChange={e => {
+                          const weight = e.target.value.replace(/[^\d.]/g, '')
+                          setWeightRows(v => ({ ...v, [student.id]: { ...(v[student.id] || row), weight } }))
+                        }}
+                        onBlur={e => {
+                          const weight = e.target.value.replace(/[^\d.]/g, '')
+                          void autoSaveWeightStudent(student.id, { ...(weightRowsRef.current[student.id] || row), weight })
+                        }}
+                      />
                     </td>
                     <td>
-                      <input className="form-input classroom-admin-compact-input" type="number" step="0.01" placeholder="0.00" disabled={!canEdit} value={row.height}
-                        onChange={e => setWeightRows(v => ({ ...v, [student.id]: { ...row, height: e.target.value } }))} />
+                      <input
+                        className="form-input classroom-admin-compact-input classroom-admin-saving-input"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        disabled={!canEdit}
+                        value={row.height}
+                        onChange={e => {
+                          const height = e.target.value.replace(/[^\d.]/g, '')
+                          setWeightRows(v => ({ ...v, [student.id]: { ...(v[student.id] || row), height } }))
+                        }}
+                        onBlur={e => {
+                          const height = e.target.value.replace(/[^\d.]/g, '')
+                          void autoSaveWeightStudent(student.id, { ...(weightRowsRef.current[student.id] || row), height })
+                        }}
+                      />
                     </td>
-                    <td style={{ color: 'var(--text-2)' }}>{row.bmi ? `${row.bmi} · ${row.bmi_result || '-'}` : '-'}</td>
+                    <td style={{ color: 'var(--text-2)' }}>{bmiText}</td>
                   </tr>
                 )
               })}
@@ -1887,10 +1995,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           <div className="classroom-admin-month-table-wrap">
           <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-health-table">
             <colgroup>
-              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.numberPx }} />
-              <col style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.namePx }} />
+              <col style={{ width: 40 }} />
+              <col style={{ width: 140 }} />
               {INSPECTION_FIELDS.map(field => (
-                <col key={field.key} style={{ width: CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS.fieldPx }} />
+                <col key={field.key} style={{ width: 72 }} />
               ))}
             </colgroup>
             <thead>
@@ -1907,16 +2015,29 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                   <tr key={student.id}>
                     <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{student.student_number}</td>
                     <td className="classroom-admin-student-cell">{studentName(student)}</td>
-                    {INSPECTION_FIELDS.map(field => (
-                      <td key={field.key}>
-                        <select className="form-input classroom-admin-compact-input" disabled={!canEdit}
-                          value={row[field.key] || 'ผ่าน'}
-                          onChange={e => setInspectionRows(v => ({ ...v, [student.id]: { ...(v[student.id] || {}), [field.key]: e.target.value } as Record<InspectionField, string> }))}>
-                          <option value="ผ่าน">ผ่าน</option>
-                          <option value="ไม่ผ่าน">ไม่ผ่าน</option>
-                        </select>
-                      </td>
-                    ))}
+                    {INSPECTION_FIELDS.map(field => {
+                      const value = row[field.key] || 'ผ่าน'
+                      const passed = value === 'ผ่าน'
+                      return (
+                        <td key={field.key}>
+                          <button
+                            type="button"
+                            className={`classroom-admin-health-toggle${passed ? ' is-pass' : ' is-fail'}`}
+                            disabled={!canEdit}
+                            onClick={() => {
+                              const next = {
+                                ...(inspectionRows[student.id] || {}),
+                                [field.key]: passed ? 'ไม่ผ่าน' : 'ผ่าน',
+                              } as Record<InspectionField, string>
+                              setInspectionRows(v => ({ ...v, [student.id]: next }))
+                              void autoSaveHealthStudent(student.id, next)
+                            }}
+                          >
+                            {passed ? 'ผ่าน' : 'ไม่ผ่าน'}
+                          </button>
+                        </td>
+                      )
+                    })}
                   </tr>
                 )
               })}
@@ -1965,19 +2086,18 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           <div className="classroom-admin-month-table-wrap">
           <table
             className={`thai-table classroom-admin-month-table${isSavingMode ? ' classroom-admin-saving-table' : ''}`}
-            style={savingTableMinWidth ? { minWidth: savingTableMinWidth } : undefined}
           >
             <colgroup>
               <col style={{ width: 40 }} />
               <col style={{ width: 148 }} />
-              {days.map(day => <col key={day} style={{ width: activityType === 'saving' ? 72 : 32 }} />)}
+              {days.map(day => <col key={day} style={{ width: savingDayColWidth }} />)}
               {isRoutineActivityMode && <col style={{ width: 64 }} />}
               {isSavingMode && (
                 <>
-                  <col style={{ width: 92 }} />
-                  <col style={{ width: 92 }} />
-                  <col style={{ width: 92 }} />
-                  <col style={{ width: 74 }} />
+                  <col style={{ width: 80 }} />
+                  <col style={{ width: 80 }} />
+                  <col style={{ width: 80 }} />
+                  <col style={{ width: 64 }} />
                 </>
               )}
               {mode === 'attendance' && (
@@ -2265,15 +2385,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       {students.length > 0 && !tableLoading && (
         <div className="teacher-assignment-actions classroom-admin-table-actions">
           <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-            {isMonthlyMode
-              ? canEdit ? 'กดในช่องแล้วระบบบันทึกให้อัตโนมัติ' : 'บัญชีนี้ดูข้อมูลได้อย่างเดียว'
-              : canEdit ? `พร้อมบันทึก ${students.length} คนในตารางนี้` : 'บัญชีนี้ดูข้อมูลได้อย่างเดียว'}
+            {canEdit ? 'แก้ไขในตารางแล้วระบบบันทึกให้อัตโนมัติ' : 'บัญชีนี้ดูข้อมูลได้อย่างเดียว'}
           </div>
-          {!isMonthlyMode && (
-            <LoadingButton loading={isPending} disabled={!canEdit || tableLoading} onClick={handleSave}>
-              บันทึก
-            </LoadingButton>
-          )}
         </div>
       )}
     </div>

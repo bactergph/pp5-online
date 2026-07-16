@@ -5,6 +5,14 @@ import { logActivity } from '@/lib/audit'
 import { isDailyPresent } from '@/lib/daily-attendance'
 import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
+import {
+  getHealthInspectionRecordsCached,
+  getMonthlyActivityRowsCached,
+  getWeightHeightRecordsCached,
+  invalidateHealthInspectionCache,
+  invalidateMonthlyActivityCache,
+  invalidateWeightHeightCache,
+} from '@/lib/classroom-admin-records-cache'
 
 type ClassroomAdminSession = {
   userId: string
@@ -995,7 +1003,9 @@ export async function fetchMonthlyActivity(classroomId: string, academicYearId: 
   const attendanceSynced = isAttendanceSyncedActivity(activityType)
   const [students, records, holidays, attendanceRes, weekendSchoolDays] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
-    fetchDailyActivityRows(classroomId, activityType, range.start, range.end, attendanceSynced),
+    getMonthlyActivityRowsCached(classroomId, monthKey, activityType, () =>
+      fetchDailyActivityRows(classroomId, activityType, range.start, range.end, attendanceSynced),
+    ),
     fetchHolidaysForRange(academicYearId, range.start, range.end),
     attendanceSynced
       ? db.from('daily_attendance')
@@ -1062,6 +1072,7 @@ export async function saveMonthlyActivity(
     is_manual_override: isAttendanceSyncedActivity(activityType),
   })))
   if (!error) {
+    invalidateMonthlyActivityCache(classroomId, monthKey, activityType)
     await logActivity({
       actor: session,
       schoolId: access.classroom.school_id,
@@ -1083,19 +1094,18 @@ export async function fetchWeightHeight(classroomId: string, academicYearId: str
   if (access.error || !access.classroom) return { error: access.error, students: [], records: {} }
 
   const db = createServerClient()
-  const [students, recordsRes] = await Promise.all([
+  const [students, records] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
-    db.from('student_health')
-      .select('student_id, measured_date, weight, height, bmi, bmi_result, height_result, students!inner(classroom_id)')
-      .eq('academic_year_id', academicYearId)
-      .eq('month', month)
-      .eq('students.classroom_id', classroomId),
+    getWeightHeightRecordsCached(classroomId, academicYearId, month, async () => {
+      const { data } = await db.from('student_health')
+        .select('student_id, measured_date, weight, height, bmi, bmi_result, height_result, students!inner(classroom_id)')
+        .eq('academic_year_id', academicYearId)
+        .eq('month', month)
+        .eq('students.classroom_id', classroomId)
+      return Object.fromEntries((data || []).map(r => [r.student_id, r]))
+    }),
   ])
-  return {
-    error: null,
-    students,
-    records: Object.fromEntries((recordsRes.data || []).map(r => [r.student_id, r])),
-  }
+  return { error: null, students, records }
 }
 
 export async function saveWeightHeight(
@@ -1127,6 +1137,7 @@ export async function saveWeightHeight(
   })
   const { error } = await db.from('student_health').upsert(payload, { onConflict: 'student_id,academic_year_id,month' })
   if (!error) {
+    invalidateWeightHeightCache(classroomId, academicYearId, month)
     await logActivity({
       actor: session,
       schoolId: access.classroom.school_id,
@@ -1148,20 +1159,19 @@ export async function fetchHealthInspection(classroomId: string, academicYearId:
   if (access.error || !access.classroom) return { error: access.error, students: [], records: {} }
 
   const db = createServerClient()
-  const [students, recordsRes] = await Promise.all([
+  const [students, records] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
-    db.from('health_inspection')
-      .select('student_id, nails, hair, ears, nose, teeth, skin, clothes, inspected_date, students!inner(classroom_id)')
-      .eq('academic_year_id', academicYearId)
-      .eq('term', term)
-      .eq('month', month)
-      .eq('students.classroom_id', classroomId),
+    getHealthInspectionRecordsCached(classroomId, academicYearId, term, month, async () => {
+      const { data } = await db.from('health_inspection')
+        .select('student_id, nails, hair, ears, nose, teeth, skin, clothes, inspected_date, students!inner(classroom_id)')
+        .eq('academic_year_id', academicYearId)
+        .eq('term', term)
+        .eq('month', month)
+        .eq('students.classroom_id', classroomId)
+      return Object.fromEntries((data || []).map(r => [r.student_id, r]))
+    }),
   ])
-  return {
-    error: null,
-    students,
-    records: Object.fromEntries((recordsRes.data || []).map(r => [r.student_id, r])),
-  }
+  return { error: null, students, records }
 }
 
 export async function saveHealthInspection(
@@ -1194,6 +1204,7 @@ export async function saveHealthInspection(
   }))
   const { error } = await db.from('health_inspection').upsert(payload, { onConflict: 'student_id,academic_year_id,term,month' })
   if (!error) {
+    invalidateHealthInspectionCache(classroomId, academicYearId, term, month)
     await logActivity({
       actor: session,
       schoolId: access.classroom.school_id,
