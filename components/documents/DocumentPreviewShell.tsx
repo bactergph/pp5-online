@@ -24,6 +24,7 @@ import {
 } from '@/lib/sign-document-preview'
 import { buildPreviewShellStatusUi } from '@/lib/document-preview-status-ui'
 import type { WorkflowStepUiState } from '@/lib/approvals/pp5-subject'
+import { enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
 
 type SignStatus = NonNullable<Awaited<ReturnType<typeof fetchPp5SubjectApprovalStatus>>>
 
@@ -61,7 +62,6 @@ export default function DocumentPreviewShell() {
 
   const [iframeReady, setIframeReady] = useState(false)
   const [signBusy, setSignBusy] = useState(false)
-  const [pdfBusy, setPdfBusy] = useState(false)
   const [status, setStatus] = useState<SignStatus | null>(null)
   const [statusLoading, setStatusLoading] = useState(!readonly && Boolean(target))
   const [showReject, setShowReject] = useState(false)
@@ -161,47 +161,24 @@ export default function DocumentPreviewShell() {
     }
   }
 
-  async function handleSavePdf() {
-    if (pdfBusy) return
-    setPdfBusy(true)
-    try {
-      let printReq: { path: string; query: string; landscape?: boolean }
-      if (target) {
-        printReq = buildSignDocumentPrintRequest(target)
-      } else if (srcOverride) {
-        const printPath = srcOverride.replace('embed=1', 'print=1')
-        const [path, query = ''] = printPath.split('?')
-        printReq = { path, query, landscape: printPath.includes('classroom-admin') }
-      } else {
-        return
-      }
-      const res = await fetch('/api/reports/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(printReq),
-      })
-      if (!res.ok) {
-        let message = 'สร้าง PDF ไม่สำเร็จ'
-        try {
-          const body = await res.json()
-          if (body?.error) message = body.error
-        } catch {}
-        throw new Error(message)
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${title.replace(/[\\/:*?"<>|]/g, '-')}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      notify('error', err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
-    } finally {
-      setPdfBusy(false)
+  function handleSavePdf() {
+    let printReq: { path: string; query: string; landscape?: boolean }
+    if (target) {
+      printReq = buildSignDocumentPrintRequest(target)
+    } else if (srcOverride) {
+      const printPath = srcOverride.replace('embed=1', 'print=1')
+      const [path, query = ''] = printPath.split('?')
+      printReq = { path, query, landscape: printPath.includes('classroom-admin') }
+    } else {
+      return
     }
+    const fileName = `${title.replace(/[\\/:*?"<>|]/g, '-')}.pdf`
+    enqueueReportPdf({
+      ...printReq,
+      fileName,
+      label: title,
+      flattenEffects: true,
+    })
   }
 
   function handlePrint() {
@@ -275,14 +252,14 @@ export default function DocumentPreviewShell() {
 
             <div className="doc-preview-chrome__tool-group" role="group" aria-label="เครื่องมือเอกสาร">
               {(target || srcOverride) && (
-                <LoadingButton
+                <button
+                  type="button"
                   className="doc-preview-chrome__btn doc-preview-chrome__btn--tool"
-                  loading={pdfBusy}
                   disabled={!iframeReady}
-                  onClick={() => void handleSavePdf()}
+                  onClick={handleSavePdf}
                 >
                   บันทึก PDF
-                </LoadingButton>
+                </button>
               )}
               <button
                 type="button"

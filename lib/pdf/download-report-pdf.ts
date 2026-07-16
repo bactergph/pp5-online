@@ -8,8 +8,8 @@ export type DownloadReportPdfInput = {
   flattenEffects?: boolean
 }
 
-/** ดาวน์โหลด PDF ผ่าน Puppeteer (/api/reports/pdf) — ใช้ร่วมกับ ปพ.5, ธุรการชั้นเรียน, ตารางเรียน */
-export async function downloadReportPdf(input: DownloadReportPdfInput) {
+/** ดึง PDF เป็น Blob ผ่าน Puppeteer — ใช้กับคิวดาวน์โหลดมุมขวาล่าง */
+export async function fetchReportPdfBlob(input: DownloadReportPdfInput) {
   const res = await fetch('/api/reports/pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -28,17 +28,26 @@ export async function downloadReportPdf(input: DownloadReportPdfInput) {
     try {
       const body = await res.json()
       if (body?.error) message = body.error
-    } catch {}
+    } catch { /* keep default */ }
     throw new Error(message)
   }
 
-  const blob = await res.blob()
+  return res.blob()
+}
+
+function triggerBlobDownload(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = input.fileName
+  link.download = fileName
   document.body.appendChild(link)
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+/** ดาวน์โหลดทันที (ไม่ผ่านคิว) — เหลือไว้กรณีพิเศษ */
+export async function downloadReportPdf(input: DownloadReportPdfInput) {
+  const blob = await fetchReportPdfBlob(input)
+  triggerBlobDownload(blob, input.fileName)
 }

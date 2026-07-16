@@ -192,7 +192,6 @@ export default function ClassroomAdminExportPage() {
   const [dataByMonth, setDataByMonth] = useState<Record<number, ExportData>>({})
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [pdfExporting, setPdfExporting] = useState(false)
   const [layoutTunerOpen, setLayoutTunerOpen] = useState(false)
   const [layoutTunerEnabled, setLayoutTunerEnabled] = useState(true)
   const [layoutTunerSection, setLayoutTunerSection] = useState<ClassroomAdminPrintSection>('monthly')
@@ -469,7 +468,6 @@ export default function ClassroomAdminExportPage() {
   }
 
   async function exportPdf() {
-    if (pdfExporting) return
     let sourceData = dataByMonth
     if (Object.keys(dataByMonth).length === 0) {
       const loaded = await loadSelectedMonths()
@@ -477,32 +475,27 @@ export default function ClassroomAdminExportPage() {
       sourceData = loaded
     }
 
-    setPdfExporting(true)
     setError('')
-    try {
-      const params = new URLSearchParams()
-      params.set('print', '1')
-      params.set('monthkey', monthKey)
-      params.set('term', String(term))
-      if (yearId) params.set('year', yearId)
-      if (classroomId) params.set('classroom', classroomId)
-      params.set('months', selectedMonths.join(','))
-      params.set('reports', selectedReports.join(','))
+    const params = new URLSearchParams()
+    params.set('print', '1')
+    params.set('monthkey', monthKey)
+    params.set('term', String(term))
+    if (yearId) params.set('year', yearId)
+    if (classroomId) params.set('classroom', classroomId)
+    params.set('months', selectedMonths.join(','))
+    params.set('reports', selectedReports.join(','))
 
-      const firstData = sourceData[selectedMonths.find(month => sourceData[month]) || selectedMonths[0]]
-      const fileName = `เล่มรายงานธุรการ_${firstData?.classroom?.level || ''}-${firstData?.classroom?.room || ''}_${selectedMonths.join('-')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+    const firstData = sourceData[selectedMonths.find(month => sourceData[month]) || selectedMonths[0]]
+    const classLabel = `${firstData?.classroom?.level || ''}-${firstData?.classroom?.room || ''}`
+    const fileName = `เล่มรายงานธุรการ_${classLabel}_${selectedMonths.join('-')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
 
-      await downloadClassroomAdminPdf({
-        path: window.location.pathname,
-        query: params.toString(),
-        fileName,
-        localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
-    } finally {
-      setPdfExporting(false)
-    }
+    downloadClassroomAdminPdf({
+      path: window.location.pathname,
+      query: params.toString(),
+      fileName,
+      label: `เล่มธุรการ · ${classLabel} · ${selectedMonths.length} เดือน`,
+      localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),
+    })
   }
 
   const activeMonths = selectedMonths.filter(month => dataByMonth[month])
@@ -1078,10 +1071,10 @@ export default function ClassroomAdminExportPage() {
             >
               {batchProposing ? 'กำลังเสนอ...' : `เสนอเป็นชุด${unsignedSelectedCount ? ` (${unsignedSelectedCount})` : ''}`}
             </button>
-            <button type="button" onClick={exportPdf} className={`classroom-export-pdf-btn${pdfExporting ? ' is-loading' : ''}`} disabled={!canGenerate || pdfExporting || isLoading}>
-              {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
+            <button type="button" onClick={() => void exportPdf()} className="classroom-export-pdf-btn" disabled={!canGenerate || isLoading}>
+              บันทึก PDF
             </button>
-            <button type="button" onClick={printExportDocument} className="classroom-export-primary-btn" disabled={!canGenerate || isLoading || pdfExporting}>พิมพ์</button>
+            <button type="button" onClick={printExportDocument} className="classroom-export-primary-btn" disabled={!canGenerate || isLoading}>พิมพ์</button>
           </div>
         </div>
       )}

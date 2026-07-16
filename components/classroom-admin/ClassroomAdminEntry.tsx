@@ -227,7 +227,6 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [actingDirectorPosition, setActingDirectorPosition] = useState('')
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false)
   const [printScale, setPrintScale] = useState(50)
-  const [pdfExporting, setPdfExporting] = useState(false)
   const [printRenderRequested, setPrintRenderRequested] = useState(false)
   const pendingPrintWindowRef = useRef<Window | null>(null)
   const [layoutTunerOpen, setLayoutTunerOpen] = useState(false)
@@ -1479,30 +1478,25 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     return params
   }
 
-  async function exportAttendancePdf() {
-    if (pdfExporting) return
+  function exportAttendancePdf() {
     if (!classroomId || students.length === 0) {
       notify('error', 'ไม่พบข้อมูลสำหรับสร้าง PDF')
       return
     }
 
-    setPdfExporting(true)
-    try {
-      const params = buildExportMenuQuery({ print: '1' })
-      const fileName = `${documentTitle}_${currentClassLabel(classrooms, classroomId)}_${isMonthlyMode ? thaiMonthTitle(monthKey, years, yearId) : MONTHS.find(m => m.value === month)?.label || ''}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+    const monthText = isMonthlyMode
+      ? thaiMonthTitle(monthKey, years, yearId)
+      : (MONTHS.find(m => m.value === month)?.label || '')
+    const fileName = `${documentTitle}_${currentClassLabel(classrooms, classroomId)}_${monthText}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+    const params = buildExportMenuQuery({ print: '1' })
 
-      await downloadClassroomAdminPdf({
-        path: scopeDocumentPreviewPath('/export/classroom-admin'),
-        query: params.toString(),
-        fileName,
-        localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),
-      })
-    } catch (error) {
-      console.error(error)
-      notify('error', error instanceof Error ? error.message : 'สร้าง PDF ไม่สำเร็จ')
-    } finally {
-      setPdfExporting(false)
-    }
+    downloadClassroomAdminPdf({
+      path: scopeDocumentPreviewPath('/export/classroom-admin'),
+      query: params.toString(),
+      fileName,
+      label: `${documentTitle} · ${currentClassLabel(classrooms, classroomId)} · ${monthText}`,
+      localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),
+    })
   }
 
   function attendanceSummary(student: Student) {
@@ -1764,8 +1758,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                   </select>
                 </label>
                 <button type="button" className="btn btn-secondary" onClick={exportAttendanceExcel}>Excel</button>
-                <button type="button" className="btn btn-secondary" onClick={exportAttendancePdf} disabled={pdfExporting}>
-                  {pdfExporting ? 'กำลังสร้าง...' : 'บันทึก PDF'}
+                <button type="button" className="btn btn-secondary" onClick={exportAttendancePdf}>
+                  บันทึก PDF
                 </button>
                 <button type="button" className="btn btn-primary" onClick={printCurrentPage}>พิมพ์</button>
                 <button type="button" className="btn btn-secondary" onClick={() => setPrintPreviewOpen(false)}>ปิด</button>
@@ -1836,13 +1830,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 </label>
               )}
               <div className="classroom-admin-print-cluster">
-                <button type="button" className="btn btn-secondary classroom-admin-board-button" onClick={exportAttendancePdf} disabled={!classroomId || tableLoading || students.length === 0 || pdfExporting}>
-                  {pdfExporting ? 'กำลังสร้าง...' : (
-                    <>
-                      <span className="classroom-admin-btn-full">บันทึก PDF</span>
-                      <span className="classroom-admin-btn-short">PDF</span>
-                    </>
-                  )}
+                <button type="button" className="btn btn-secondary classroom-admin-board-button" onClick={exportAttendancePdf} disabled={!classroomId || tableLoading || students.length === 0}>
+                  <span className="classroom-admin-btn-full">บันทึก PDF</span>
+                  <span className="classroom-admin-btn-short">PDF</span>
                 </button>
                 <button type="button" className="btn classroom-admin-print-green classroom-admin-board-button" onClick={printCurrentPage} disabled={!classroomId || tableLoading || students.length === 0}>
                   <span className="classroom-admin-btn-full">พิมพ์หน้านี้</span>

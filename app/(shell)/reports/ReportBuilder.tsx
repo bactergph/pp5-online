@@ -62,7 +62,7 @@ import {
   directorSchoolLine,
 } from '@/lib/school-director'
 import { expandEducationAreaOffice } from '@/lib/education-area-office'
-import { downloadReportPdf } from '@/lib/pdf/download-report-pdf'
+import { enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
 import {
   PRINT_STUDENTS_PER_PAGE,
@@ -3758,7 +3758,6 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const [pp6ShowGrade, setPp6ShowGrade] = useState(true)
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [pp6StudentOptions, setPp6StudentOptions] = useState<ReportPp6StudentOption[]>([])
-  const [pdfExporting, setPdfExporting] = useState(false)
   const [pp5TunerOpen, setPp5TunerOpen] = useState(false)
   const [layoutSaved, setLayoutSaved] = useState(false)
   const [pp5TunerSection, setPp5TunerSection] = useState<Pp5PrintSection>('coverClass')
@@ -4177,67 +4176,59 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
     setSections(prev => prev.includes(section) ? prev.filter(item => item !== section) : [...prev, section])
   }
 
-  async function savePdf() {
-    if (!data || pdfExporting) return
-    setPdfExporting(true)
+  function savePdf() {
+    if (!data) return
     setError('')
-    try {
-      const classText = data.classroom ? `${data.classroom.level}-${data.classroom.room}` : 'รายงาน'
-      const yearText = data.academicYear?.year_be || ''
-      const nameParts = [MODE_CONFIG[mode].title, classText]
-      if (mode === 'pp5-subject' && selectedSubject) {
-        const subjectCode = selectedSubject.subject.code?.trim()
-        const subjectName = selectedSubject.subject.name?.trim()
-        if (subjectCode) nameParts.push(subjectCode)
-        if (subjectName) nameParts.push(subjectName)
-      }
-      if (yearText) nameParts.push(yearText)
-      const fileName = `${nameParts.join('_')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
-
-      const params = new URLSearchParams()
-      params.set('print', '1')
-      if (yearId) params.set('year', yearId)
-      if (level) params.set('level', level)
-      const exportClassroomId = classroomId || (mode === 'pp6' ? data.classroom?.id : '')
-      if (exportClassroomId) params.set('classroom', exportClassroomId)
-      if (mode === 'pp5-subject') {
-        if (isSecondaryClassLevel(level)) params.set('term', String(reportTerm))
-      } else {
-        params.set('term', String(mode === 'pp6' ? pp6Term : term))
-      }
-      params.set('sections', sections.join(','))
-      if (classSubjectId) params.set('subject', classSubjectId)
-      if (mode === 'pp6') {
-        if (pp6Individual) {
-          params.set('individual', '1')
-        }
-        if (selectedStudentId) params.set('student', selectedStudentId)
-      }
-      if (mode === 'pp6') params.set('ranked', pp6Ranked ? '1' : '0')
-      if (mode === 'pp6') params.set('showGrade', pp6ShowGrade ? '1' : '0')
-
-      const localStorageSeed: Record<string, string> = {}
-      if (mode === 'pp5-subject' || mode === 'pp5-class') {
-        localStorageSeed[PP5_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp5PrintLayouts)
-      }
-      if (mode === 'pp6') {
-        localStorageSeed[PP6_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp6PrintLayouts)
-      }
-
-      await downloadReportPdf({
-        path: window.location.pathname,
-        query: params.toString(),
-        fileName,
-        localStorageSeed: Object.keys(localStorageSeed).length > 0 ? localStorageSeed : undefined,
-        // ตัดเอฟเฟกต์ตกแต่งเฉพาะตอนสร้าง PDF เพื่อให้ไฟล์เปิดลื่น ไม่อืด
-        // (ไม่กระทบ CSS/preview บนจอ และสีพื้นตารางยังอยู่ครบ)
-        flattenEffects: true,
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
-    } finally {
-      setPdfExporting(false)
+    const classText = data.classroom ? `${data.classroom.level}-${data.classroom.room}` : 'รายงาน'
+    const yearText = data.academicYear?.year_be || ''
+    const nameParts = [MODE_CONFIG[mode].title, classText]
+    if (mode === 'pp5-subject' && selectedSubject) {
+      const subjectCode = selectedSubject.subject.code?.trim()
+      const subjectName = selectedSubject.subject.name?.trim()
+      if (subjectCode) nameParts.push(subjectCode)
+      if (subjectName) nameParts.push(subjectName)
     }
+    if (yearText) nameParts.push(yearText)
+    const fileName = `${nameParts.join('_')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+
+    const params = new URLSearchParams()
+    params.set('print', '1')
+    if (yearId) params.set('year', yearId)
+    if (level) params.set('level', level)
+    const exportClassroomId = classroomId || (mode === 'pp6' ? data.classroom?.id : '')
+    if (exportClassroomId) params.set('classroom', exportClassroomId)
+    if (mode === 'pp5-subject') {
+      if (isSecondaryClassLevel(level)) params.set('term', String(reportTerm))
+    } else {
+      params.set('term', String(mode === 'pp6' ? pp6Term : term))
+    }
+    params.set('sections', sections.join(','))
+    if (classSubjectId) params.set('subject', classSubjectId)
+    if (mode === 'pp6') {
+      if (pp6Individual) {
+        params.set('individual', '1')
+      }
+      if (selectedStudentId) params.set('student', selectedStudentId)
+    }
+    if (mode === 'pp6') params.set('ranked', pp6Ranked ? '1' : '0')
+    if (mode === 'pp6') params.set('showGrade', pp6ShowGrade ? '1' : '0')
+
+    const localStorageSeed: Record<string, string> = {}
+    if (mode === 'pp5-subject' || mode === 'pp5-class') {
+      localStorageSeed[PP5_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp5PrintLayouts)
+    }
+    if (mode === 'pp6') {
+      localStorageSeed[PP6_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp6PrintLayouts)
+    }
+
+    enqueueReportPdf({
+      path: window.location.pathname,
+      query: params.toString(),
+      fileName,
+      label: nameParts.join(' · '),
+      localStorageSeed: Object.keys(localStorageSeed).length > 0 ? localStorageSeed : undefined,
+      flattenEffects: true,
+    })
   }
 
   return (
@@ -4458,8 +4449,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                 {pp5TunerOpen ? 'ปิดปรับ layout' : mode === 'pp6' ? 'ปรับ layout ปพ.6' : 'ปรับ layout ปพ.5'}
               </button>
               )}
-              <button type="button" onClick={savePdf} disabled={!data || pdfExporting} className="btn btn-secondary">
-                {pdfExporting ? <><span className="report-button-spinner" />กำลังสร้าง...</> : 'บันทึก PDF'}
+              <button type="button" onClick={savePdf} disabled={!data} className="btn btn-secondary">
+                บันทึก PDF
               </button>
               <button type="button" onClick={() => window.print()} disabled={!data} className="btn btn-primary">{MODE_CONFIG[mode].printLabel}</button>
             </div>

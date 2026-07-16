@@ -11,6 +11,7 @@ import {
 } from '@/app/schedules/actions'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; label: string }
@@ -82,7 +83,6 @@ export default function ScheduleExportPage() {
   const [teacherId, setTeacherId] = useState('')
   const [gridData, setGridData] = useState<Record<string, { line1: string; line2: string }>>({})
   const [title, setTitle] = useState('')
-  const [pdfExporting, setPdfExporting] = useState(false)
   const [error, setError] = useState('')
   const [previewReady, setPreviewReady] = useState(false)
   const printMode = useRef(false)
@@ -209,54 +209,27 @@ export default function ScheduleExportPage() {
     setPreviewReady(true)
   }
 
-  async function exportPdf() {
-    if (pdfExporting) return
-    setPdfExporting(true)
+  function exportPdf() {
     setError('')
-    try {
-      const params = new URLSearchParams()
-      params.set('print', '1')
-      params.set('type', exportType)
-      if (yearId) params.set('year', yearId)
-      if (exportType === 'class' && classroomId) params.set('classroom', classroomId)
-      if (exportType === 'teaching' && teacherId) params.set('teacher', teacherId)
+    const params = new URLSearchParams()
+    params.set('print', '1')
+    params.set('type', exportType)
+    if (yearId) params.set('year', yearId)
+    if (exportType === 'class' && classroomId) params.set('classroom', classroomId)
+    if (exportType === 'teaching' && teacherId) params.set('teacher', teacherId)
 
-      const label = exportType === 'class'
-        ? classrooms.find(c => c.id === classroomId)?.label || 'class'
-        : teachers.find(t => t.id === teacherId)?.full_name || 'teacher'
-      const fileName = `ตารางเรียน_${label}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+    const label = exportType === 'class'
+      ? classrooms.find(c => c.id === classroomId)?.label || 'class'
+      : teachers.find(t => t.id === teacherId)?.full_name || 'teacher'
+    const fileName = `ตารางเรียน_${label}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
 
-      const res = await fetch('/api/reports/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          path: window.location.pathname,
-          query: params.toString(),
-          landscape: true,
-        }),
-      })
-      if (!res.ok) {
-        let message = 'สร้าง PDF ไม่สำเร็จ'
-        try {
-          const body = await res.json()
-          if (body?.error) message = body.error
-        } catch {}
-        throw new Error(message)
-      }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ')
-    } finally {
-      setPdfExporting(false)
-    }
+    enqueueReportPdf({
+      path: window.location.pathname,
+      query: params.toString(),
+      fileName,
+      label: `ตารางเรียน · ${label}`,
+      landscape: true,
+    })
   }
 
   const periods = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -310,8 +283,8 @@ export default function ScheduleExportPage() {
         </div>
 
         <div className="sched-export-actions">
-          <button type="button" className="sched-export-btn" onClick={exportPdf} disabled={pdfExporting}>
-            {pdfExporting ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF'}
+          <button type="button" className="sched-export-btn" onClick={exportPdf}>
+            บันทึก PDF
           </button>
         </div>
 
