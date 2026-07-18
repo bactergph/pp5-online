@@ -69,7 +69,6 @@ export default function StaffPicker({
     return () => document.removeEventListener('pointerdown', onDoc)
   }, [])
 
-  // ถ้า parent ตั้ง userId จากภายนอก ให้สลับไปโหมดเลือก
   useEffect(() => {
     if (value) setMode('pick')
   }, [value])
@@ -79,7 +78,6 @@ export default function StaffPicker({
     setOpen(false)
     setQuery('')
     if (next === 'manual') {
-      // เคลียร์การผูก user — เก็บชื่อที่เห็นอยู่ให้พิมพ์ต่อได้
       const keep = pickedLabel || manualValue
       if (value) onChange(null, keep)
       if (keep && !manualValue) onManualChange?.(keep)
@@ -102,8 +100,10 @@ export default function StaffPicker({
     setOpen(false)
   }
 
+  const showClear = Boolean(mode === 'manual' ? manualValue : (value || pickedLabel))
+
   return (
-    <div ref={wrapRef} className={`staff-picker${open ? ' is-open' : ''}`}>
+    <div ref={wrapRef} className={`staff-picker${open ? ' is-open' : ''}${mode === 'manual' ? ' is-manual' : ' is-pick'}`}>
       {label && <label className="form-label">{label}</label>}
 
       {allowManual && (
@@ -128,7 +128,7 @@ export default function StaffPicker({
       )}
 
       {mode === 'manual' && allowManual ? (
-        <div className="staff-picker__row">
+        <div className={`staff-picker__field${showClear ? ' has-clear' : ''}`}>
           <input
             className="form-input staff-picker__input staff-picker__input--manual"
             value={manualValue}
@@ -141,15 +141,15 @@ export default function StaffPicker({
               if (value) onChange(null, next)
             }}
           />
-          {manualValue && (
-            <button type="button" className="btn btn-secondary staff-picker__clear" onClick={clear}>
-              ล้าง
+          {showClear && (
+            <button type="button" className="staff-picker__clear" onClick={clear} aria-label="ล้างชื่อ">
+              ×
             </button>
           )}
         </div>
       ) : (
         <div className="staff-picker__pick">
-          <div className="staff-picker__row">
+          <div className={`staff-picker__field${showClear ? ' has-clear' : ''}`}>
             <button
               type="button"
               className={`staff-picker__trigger${pickedLabel ? '' : ' is-placeholder'}`}
@@ -165,9 +165,9 @@ export default function StaffPicker({
               </span>
               <span className="staff-picker__chevron" aria-hidden>▾</span>
             </button>
-            {(value || pickedLabel) && (
-              <button type="button" className="btn btn-secondary staff-picker__clear" onClick={clear}>
-                ล้าง
+            {showClear && (
+              <button type="button" className="staff-picker__clear" onClick={clear} aria-label="ล้างชื่อ">
+                ×
               </button>
             )}
           </div>

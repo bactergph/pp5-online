@@ -2,7 +2,6 @@
 import Image from 'next/image'
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import type { CSSProperties } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import StaffPicker, { type StaffOption } from '@/components/StaffPicker'
 import { fetchMySchool, saveSchool, searchSchools, setMySchool, updateSchoolActingDirector, fetchSubjectGroupHeads, saveSubjectGroupHeads, fetchSchoolStaff, saveSchoolLeaders } from '../actions'
@@ -52,52 +51,6 @@ const ONBOARDING_STEPS: { key: string; label: string; title: string; desc: strin
   { key: 'import', label: 'นำเข้านักเรียน', title: 'นำเข้ารายชื่อนักเรียน', desc: 'นำเข้ารายชื่อนักเรียนจากไฟล์ DMC (ทำภายหลังได้)', icon: 'M17 8l-5-5-5 5 M12 3v12 M5 21h14' },
   { key: 'drive', label: 'เชื่อมต่อ Google Drive', title: 'เชื่อมต่อ Google Drive', desc: 'สำรองและจัดเก็บไฟล์รายงานอัตโนมัติ (ไม่บังคับ)', icon: 'M4 4h16v16H4z M8 8h8v8H8z' },
 ]
-
-const schoolTabCardStyle: CSSProperties = {
-  padding: 12,
-  border: '1px solid rgba(226, 232, 240, 0.92)',
-  borderRadius: 22,
-  background: 'rgba(255, 255, 255, 0.96)',
-  boxShadow: '0 14px 34px rgba(15, 23, 42, 0.06)',
-}
-
-const schoolTabsStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  overflowX: 'auto',
-  paddingBottom: 2,
-}
-
-const schoolTabStyle: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flex: '0 0 auto',
-  minHeight: 44,
-  gap: 8,
-  padding: '10px 13px',
-  border: '1px solid transparent',
-  borderRadius: 14,
-  background: 'transparent',
-  color: '#64748B',
-  fontSize: 14,
-  fontWeight: 700,
-  lineHeight: 1.35,
-  whiteSpace: 'nowrap',
-  cursor: 'pointer',
-}
-
-const activeSchoolTabStyle: CSSProperties = {
-  border: '1px solid #BFDBFE',
-  background: '#F5EDE3',
-  color: '#6B4F32',
-  boxShadow: '0 8px 20px rgba(37, 99, 235, 0.12)',
-}
-
-const schoolPanelStyle: CSSProperties = {
-  marginTop: 0,
-}
 
 function ImageUploadBox({ label, value, type, schoolId, onUploaded }: {
   label: string; value: string | null; type: 'logo' | 'stamp'
@@ -820,12 +773,21 @@ export default function SchoolSettingsPage() {
       <AlertModal />
 
       <form ref={formRef} onSubmit={save} className="school-settings-form">
-        <div className="school-settings-tab-card" style={schoolTabCardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-            <nav className="school-settings-tabs" aria-label="ตั้งค่าข้อมูลโรงเรียน" role="tablist" style={schoolTabsStyle}>
+        <div className="school-settings-tab-card">
+          <div className="school-settings-toolbar">
+            <div className="school-settings-header-actions">
+              {school.code && <span className="badge badge-success school-settings-code">/school/{school.code}</span>}
+              <button
+                type="button"
+                onClick={() => { setReselect(true); setCreateMode(false); setQ(''); setResults([]) }}
+                className="btn btn-secondary school-settings-reselect"
+              >
+                เปลี่ยนโรงเรียน
+              </button>
+            </div>
+            <nav className="school-settings-tabs" aria-label="ตั้งค่าข้อมูลโรงเรียน" role="tablist">
               {schoolSettingTabs.map(tab => {
                 const isActive = activeTab === tab.key
-                const tabStyle = isActive ? { ...schoolTabStyle, ...activeSchoolTabStyle } : schoolTabStyle
                 return (
                   <button
                     key={tab.key}
@@ -834,7 +796,7 @@ export default function SchoolSettingsPage() {
                     className={`school-settings-tab ${isActive ? 'is-active' : ''}`}
                     role="tab"
                     aria-selected={isActive}
-                    style={tabStyle}
+                    title={tab.label}
                   >
                     <SchoolTabIcon d={tab.icon} />
                     <span>{tab.label}</span>
@@ -842,14 +804,10 @@ export default function SchoolSettingsPage() {
                 )
               })}
             </nav>
-            <div className="school-settings-header-actions" style={{ flexShrink: 0 }}>
-              {school.code && <span className="badge badge-success">/school/{school.code}</span>}
-              <button type="button" onClick={() => { setReselect(true); setCreateMode(false); setQ(''); setResults([]) }} className="btn btn-secondary">เปลี่ยนโรงเรียน</button>
-            </div>
           </div>
         </div>
 
-        <div className="school-settings-panels" style={schoolPanelStyle}>
+        <div className="school-settings-panels">
           <section
             className="card-padded school-settings-card"
             style={{ display: activeTab === 'general' ? 'block' : 'none' }}
