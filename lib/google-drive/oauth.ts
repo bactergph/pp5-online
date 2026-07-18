@@ -1,5 +1,5 @@
 import 'server-only'
-import { appOrigin } from '@/lib/app-origin'
+import { appOrigin, isLocalhostOrigin } from '@/lib/app-origin'
 import { SignJWT, jwtVerify } from 'jose'
 import { google } from 'googleapis'
 
@@ -24,10 +24,30 @@ export function isGoogleOAuthConfigured() {
 }
 
 export function googleOAuthRedirectUri(origin?: string) {
-  if (process.env.GOOGLE_OAUTH_REDIRECT_URI) {
-    return process.env.GOOGLE_OAUTH_REDIRECT_URI
+  const fromEnv = process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim().replace(/\/$/, '')
+  if (fromEnv) {
+    // บน production ห้ามใช้ redirect ที่ชี้ localhost (มักคัดลอกมาจาก .env.local)
+    const envIsLocal = (() => {
+      try {
+        return isLocalhostOrigin(fromEnv.includes('://') ? fromEnv : `https://${fromEnv}`)
+      } catch {
+        return false
+      }
+    })()
+    if (!(process.env.NODE_ENV === 'production' && envIsLocal)) {
+      return fromEnv
+    }
   }
-  return `${origin ?? appOrigin()}/api/integrations/google-drive/callback`
+
+  const base = (() => {
+    const candidate = (origin || appOrigin()).replace(/\/$/, '')
+    if (process.env.NODE_ENV === 'production' && isLocalhostOrigin(candidate)) {
+      return appOrigin().replace(/\/$/, '')
+    }
+    return candidate
+  })()
+
+  return `${base}/api/integrations/google-drive/callback`
 }
 
 export function createGoogleOAuthClient(origin?: string) {

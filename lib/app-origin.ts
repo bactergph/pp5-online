@@ -3,7 +3,7 @@ function normalizeOrigin(raw?: string | null) {
   return raw.replace(/\/$/, '')
 }
 
-function isLocalhostOrigin(origin: string) {
+export function isLocalhostOrigin(origin: string) {
   try {
     const host = new URL(origin).hostname
     return host === 'localhost' || host === '127.0.0.1'
@@ -12,25 +12,31 @@ function isLocalhostOrigin(origin: string) {
   }
 }
 
-/** Base URL ของแอป — ใช้สร้าง PDF, OAuth callback, ฯลฯ */
-export function appOrigin() {
-  const candidates = [
-    normalizeOrigin(process.env.APP_URL),
-    normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL),
-    normalizeOrigin(
-      process.env.VERCEL_PROJECT_PRODUCTION_URL
-        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-        : null,
-    ),
-    normalizeOrigin(process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null),
-  ].filter((v): v is string => Boolean(v))
+function shouldSkipLocalOrigin(origin: string) {
+  // บน production ห้ามใช้ localhost เป็น base ของ OAuth/redirect
+  return process.env.NODE_ENV === 'production' && isLocalhostOrigin(origin)
+}
 
-  const inProd = process.env.NODE_ENV === 'production'
-  for (const origin of candidates) {
-    if (inProd && isLocalhostOrigin(origin)) continue
+function firstPublicOrigin(candidates: Array<string | null | undefined>) {
+  for (const raw of candidates) {
+    const origin = normalizeOrigin(raw)
+    if (!origin) continue
+    if (shouldSkipLocalOrigin(origin)) continue
     return origin
   }
-  return 'http://localhost:3000'
+  return null
+}
+
+/** Base URL ของแอป — ใช้สร้าง PDF, OAuth callback, ฯลฯ */
+export function appOrigin() {
+  return firstPublicOrigin([
+    process.env.APP_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : null,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+  ]) ?? 'http://localhost:3000'
 }
 
 /**
@@ -48,19 +54,22 @@ export function originFromHeaders(headers: Headers): string | null {
 
 /**
  * Base URL ที่ควรใช้จริงในการ handle request หนึ่ง ๆ
- * ลำดับความสำคัญ: env ที่ตั้งชัดเจน (APP_URL ฯลฯ) → host จาก request → fallback localhost
- * ป้องกันกรณี env ไม่ได้ตั้งบน server จริงแล้ว OAuth/redirect หลุดไป localhost
+ * ลำดับ: host จาก request → env สาธารณะ → fallback
+ * (ไม่เอา localhost จาก env บน production)
  */
 export function resolveRequestOrigin(headers: Headers): string {
-  const envOrigin = [
-    normalizeOrigin(process.env.APP_URL),
-    normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL),
-    normalizeOrigin(
-      process.env.VERCEL_PROJECT_PRODUCTION_URL
-        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-        : null,
-    ),
-  ].find((v): v is string => Boolean(v) && !isLocalhostOrigin(v))
-  if (envOrigin) return envOrigin
-  return originFromHeaders(headers) ?? appOrigin()
+  const fromRequest = originFromHeaders(headers)
+  if (fromRequest && !shouldSkipLocalOrigin(fromRequest)) {
+    return fromRequest
+  }
+
+  return firstPublicOrigin([
+    process.env.APP_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : null,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+    fromRequest,
+  ]) ?? appOrigin()
 }
