@@ -4767,14 +4767,52 @@ div:has(> .thai-table) {
   }
 }
 
-/* ── Staff picker (mobile-safe dropdown) ── */
+/* ── Staff picker (พิมพ์เอง / เลือกจากระบบ) ── */
 .staff-picker {
   position: relative;
   z-index: 1;
+  display: grid;
+  gap: 8px;
 }
 
+.staff-picker.is-open,
 .staff-picker:focus-within {
-  z-index: 30;
+  z-index: 40;
+}
+
+.staff-picker__modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #F1E8DC;
+  border: 1px solid rgba(184, 149, 106, 0.28);
+}
+
+.staff-picker__mode {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #6B5340;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.staff-picker__mode.is-active {
+  background: #fff;
+  color: #3F2E1F;
+  box-shadow: 0 2px 8px rgba(63, 46, 31, 0.1);
+}
+
+.staff-picker__mode:active {
+  transform: scale(0.98);
 }
 
 .staff-picker__row {
@@ -4786,11 +4824,62 @@ div:has(> .thai-table) {
 .staff-picker__input {
   flex: 1;
   min-width: 0;
+  color: #111827;
+  background: #fff;
+  -webkit-text-fill-color: #111827;
+  caret-color: #8B6B45;
+}
+
+.staff-picker__input--manual {
+  font-size: 16px;
+  min-height: 48px;
+}
+
+.staff-picker__pick {
+  position: relative;
+}
+
+.staff-picker__trigger {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #CBD5E1);
+  border-radius: 10px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.staff-picker__trigger.is-placeholder {
+  color: #94A3B8;
+  font-weight: 600;
+}
+
+.staff-picker__trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-picker__chevron {
+  flex: 0 0 auto;
+  color: #8A7358;
+  font-size: 14px;
 }
 
 .staff-picker__clear {
   flex-shrink: 0;
-  min-height: 44px;
+  min-height: 48px;
   touch-action: manipulation;
 }
 
@@ -4800,14 +4889,32 @@ div:has(> .thai-table) {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  max-height: min(240px, 42vh);
+  max-height: min(280px, 48vh);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 6px;
+  padding: 8px;
   border-radius: 12px;
   background: #fff;
   border: 1px solid var(--border, #e8edf4);
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.staff-picker__search-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: -2px 0 6px;
+  padding: 2px 0 6px;
+  background: #fff;
+}
+
+.staff-picker__search {
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+  color: #111827;
+  background: #F8FAFC;
+  -webkit-text-fill-color: #111827;
 }
 
 .staff-picker__empty {
@@ -4826,6 +4933,7 @@ div:has(> .thai-table) {
   border: none;
   border-radius: 10px;
   background: transparent;
+  color: #111827;
   cursor: pointer;
   touch-action: manipulation;
   transition: background 0.12s ease, transform 0.1s ease;
@@ -4842,8 +4950,8 @@ div:has(> .thai-table) {
 
 .staff-picker__option-name {
   font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
+  color: #111827;
+  font-weight: 800;
 }
 
 .staff-picker__option-meta {

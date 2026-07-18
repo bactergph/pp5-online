@@ -11,6 +11,8 @@ export type StaffOption = {
   role?: string
 }
 
+type Mode = 'manual' | 'pick'
+
 type Props = {
   label?: string
   staff: StaffOption[]
@@ -20,6 +22,13 @@ type Props = {
   allowManual?: boolean
   manualValue?: string
   onManualChange?: (name: string) => void
+}
+
+function initialMode(value: string | null, allowManual: boolean, manualValue: string): Mode {
+  if (value) return 'pick'
+  if (allowManual && manualValue.trim()) return 'manual'
+  if (allowManual) return 'manual'
+  return 'pick'
 }
 
 export default function StaffPicker({
@@ -32,14 +41,15 @@ export default function StaffPicker({
   manualValue = '',
   onManualChange,
 }: Props) {
+  const [mode, setMode] = useState<Mode>(() => initialMode(value, allowManual, manualValue))
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const wrapRef = useRef<HTMLDivElement>(null)
 
   const selected = staff.find(s => s.id === value) || null
-  const display = selected
+  const pickedLabel = selected
     ? formatStaffName(selected.prefix, selected.full_name)
-    : (allowManual ? manualValue : '')
+    : ''
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -59,72 +69,148 @@ export default function StaffPicker({
     return () => document.removeEventListener('pointerdown', onDoc)
   }, [])
 
+  // ถ้า parent ตั้ง userId จากภายนอก ให้สลับไปโหมดเลือก
+  useEffect(() => {
+    if (value) setMode('pick')
+  }, [value])
+
+  function switchMode(next: Mode) {
+    setMode(next)
+    setOpen(false)
+    setQuery('')
+    if (next === 'manual') {
+      // เคลียร์การผูก user — เก็บชื่อที่เห็นอยู่ให้พิมพ์ต่อได้
+      const keep = pickedLabel || manualValue
+      if (value) onChange(null, keep)
+      if (keep && !manualValue) onManualChange?.(keep)
+    }
+  }
+
   function pick(user: StaffOption) {
-    onChange(user.id, formatStaffName(user.prefix, user.full_name))
+    const name = formatStaffName(user.prefix, user.full_name)
+    onChange(user.id, name)
+    onManualChange?.(name)
     setQuery('')
     setOpen(false)
+    setMode('pick')
   }
 
   function clear() {
     onChange(null, '')
+    onManualChange?.('')
     setQuery('')
     setOpen(false)
-    onManualChange?.('')
   }
 
   return (
-    <div ref={wrapRef} className="staff-picker">
+    <div ref={wrapRef} className={`staff-picker${open ? ' is-open' : ''}`}>
       {label && <label className="form-label">{label}</label>}
-      <div className="staff-picker__row">
-        <input
-          className="form-input staff-picker__input"
-          value={open ? query : display}
-          placeholder={placeholder}
-          autoComplete="off"
-          enterKeyHint="search"
-          onChange={e => {
-            const next = e.target.value
-            setQuery(next)
-            if (allowManual) onManualChange?.(next)
-            // พิมพ์ทับชื่อที่เลือกไว้ → เคลียร์ userId เพื่อให้เป็นกรอกมือ
-            if (value) onChange(null, allowManual ? next : '')
-            setOpen(true)
-          }}
-          onFocus={() => {
-            setQuery(display)
-            setOpen(true)
-          }}
-        />
-        {(value || display) && (
-          <button type="button" className="btn btn-secondary staff-picker__clear" onClick={clear}>
-            ล้าง
+
+      {allowManual && (
+        <div className="staff-picker__modes" role="group" aria-label="วิธีระบุชื่อ">
+          <button
+            type="button"
+            className={`staff-picker__mode${mode === 'manual' ? ' is-active' : ''}`}
+            aria-pressed={mode === 'manual'}
+            onClick={() => switchMode('manual')}
+          >
+            พิมพ์ชื่อเอง
           </button>
-        )}
-      </div>
-      {open && (
-        <div className="staff-picker__menu" role="listbox">
-          {filtered.length === 0 ? (
-            <div className="staff-picker__empty">
-              {allowManual ? 'ไม่พบในรายชื่อ — พิมพ์ชื่อแล้วใช้ค่านั้นได้เลย' : 'ไม่พบรายชื่อ'}
-            </div>
-          ) : filtered.map(user => (
-            <button
-              key={user.id}
-              type="button"
-              role="option"
-              aria-selected={user.id === value}
-              className={`staff-picker__option${user.id === value ? ' is-selected' : ''}`}
-              onPointerDown={e => e.preventDefault()}
-              onClick={() => pick(user)}
-            >
-              <div className="staff-picker__option-name">
-                {formatStaffName(user.prefix, user.full_name)}
-              </div>
-              {user.position && (
-                <div className="staff-picker__option-meta">{user.position}</div>
-              )}
+          <button
+            type="button"
+            className={`staff-picker__mode${mode === 'pick' ? ' is-active' : ''}`}
+            aria-pressed={mode === 'pick'}
+            onClick={() => switchMode('pick')}
+          >
+            เลือกจากระบบ
+          </button>
+        </div>
+      )}
+
+      {mode === 'manual' && allowManual ? (
+        <div className="staff-picker__row">
+          <input
+            className="form-input staff-picker__input staff-picker__input--manual"
+            value={manualValue}
+            placeholder="พิมพ์ชื่อ-นามสกุลที่ใช้ลงนาม"
+            autoComplete="name"
+            enterKeyHint="done"
+            onChange={e => {
+              const next = e.target.value
+              onManualChange?.(next)
+              if (value) onChange(null, next)
+            }}
+          />
+          {manualValue && (
+            <button type="button" className="btn btn-secondary staff-picker__clear" onClick={clear}>
+              ล้าง
             </button>
-          ))}
+          )}
+        </div>
+      ) : (
+        <div className="staff-picker__pick">
+          <div className="staff-picker__row">
+            <button
+              type="button"
+              className={`staff-picker__trigger${pickedLabel ? '' : ' is-placeholder'}`}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              onClick={() => {
+                setOpen(v => !v)
+                setQuery('')
+              }}
+            >
+              <span className="staff-picker__trigger-text">
+                {pickedLabel || (allowManual ? 'เลือกบุคลากรจากระบบ' : placeholder)}
+              </span>
+              <span className="staff-picker__chevron" aria-hidden>▾</span>
+            </button>
+            {(value || pickedLabel) && (
+              <button type="button" className="btn btn-secondary staff-picker__clear" onClick={clear}>
+                ล้าง
+              </button>
+            )}
+          </div>
+
+          {open && (
+            <div className="staff-picker__menu" role="listbox">
+              <div className="staff-picker__search-wrap">
+                <input
+                  className="form-input staff-picker__search"
+                  value={query}
+                  placeholder="ค้นหาชื่อ..."
+                  autoComplete="off"
+                  enterKeyHint="search"
+                  autoFocus
+                  onChange={e => setQuery(e.target.value)}
+                />
+              </div>
+              {filtered.length === 0 ? (
+                <div className="staff-picker__empty">
+                  {allowManual
+                    ? 'ไม่พบในรายชื่อ — สลับไป “พิมพ์ชื่อเอง” ได้'
+                    : 'ไม่พบรายชื่อ'}
+                </div>
+              ) : filtered.map(user => (
+                <button
+                  key={user.id}
+                  type="button"
+                  role="option"
+                  aria-selected={user.id === value}
+                  className={`staff-picker__option${user.id === value ? ' is-selected' : ''}`}
+                  onPointerDown={e => e.preventDefault()}
+                  onClick={() => pick(user)}
+                >
+                  <div className="staff-picker__option-name">
+                    {formatStaffName(user.prefix, user.full_name)}
+                  </div>
+                  {user.position && (
+                    <div className="staff-picker__option-meta">{user.position}</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
