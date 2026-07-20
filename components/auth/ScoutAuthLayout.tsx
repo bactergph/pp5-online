@@ -59,7 +59,7 @@ export default function ScoutAuthLayout({
           )}
         </div>
         <h1 className="auth-scout-mobile-header__title">{brandTitle}</h1>
-        <p className="auth-scout-mobile-header__sub">{brandSubtitle}</p>
+        {brandSubtitle ? <p className="auth-scout-mobile-header__sub">{brandSubtitle}</p> : null}
         <p className="auth-scout-mobile-header__tag">{brandTagline}</p>
       </div>
 
@@ -78,7 +78,7 @@ export default function ScoutAuthLayout({
 
           {isSignin && (
             <div className="auth-signin-brand">
-              <p className="auth-signin-brand__name">{brandTitle} {brandSubtitle}</p>
+              <p className="auth-signin-brand__name">{[brandTitle, brandSubtitle].filter(Boolean).join(' ')}</p>
               <p className="auth-signin-brand__tag">{brandTagline}</p>
             </div>
           )}

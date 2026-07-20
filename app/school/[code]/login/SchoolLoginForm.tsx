@@ -67,8 +67,8 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
 
   return (
     <ScoutAuthLayout
-      brandTitle={programName || 'ระบบ ปพ.5'}
-      brandSubtitle="ออนไลน์"
+      brandTitle={programName?.trim() || 'ระบบ ปพ.5 ออนไลน์'}
+      brandSubtitle=""
       brandTagline={schoolName}
       logoUrl={logoUrl}
       cardTitle={mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}

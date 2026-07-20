@@ -1,2 +1,2 @@
-/** รหัสชั่วคราวหลังแอดมินรรรีเซ็ต — เข้าครั้งแรกต้องตั้งรหัสใหม่ */
-export const SCHOOL_TEMP_PASSWORD = '1234'
+/** รหัสชั่วคราวหลังแอดมินรรรีเซ็ต — ต้อง ≥ 6 ตัวตามกฎ Supabase Auth */
+export const SCHOOL_TEMP_PASSWORD = '123456'

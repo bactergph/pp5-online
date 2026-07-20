@@ -1,4 +1,4 @@
--- เมื่อแอดมินรรรีเซ็ตรหัสครู → รหัสชั่วคราว 1234 และบังคับเปลี่ยนตอนเข้าครั้งแรก
+-- เมื่อแอดมินรรรีเซ็ตรหัสครู → รหัสชั่วคราว 123456 และบังคับเปลี่ยนตอนเข้าครั้งแรก
 alter table users
   add column if not exists must_change_password boolean not null default false;
 

@@ -348,7 +348,15 @@ export default function SchoolSettingsPage() {
     if (error) notify('error', error)
     else if (leadersError) notify('error', leadersError)
     else if (headsError) notify('error', headsError)
-    else notify('success', 'บันทึกข้อมูลเรียบร้อยแล้ว')
+    else {
+      setSchool(s => ({
+        ...s,
+        ...Object.fromEntries(
+          Object.entries(updates).map(([k, v]) => [k, typeof v === 'string' ? v.trim() || null : v]),
+        ),
+      } as School))
+      notify('success', 'บันทึกข้อมูลเรียบร้อยแล้ว')
+    }
   }
 
   async function toggleViceDirectorAsActing() {
@@ -671,7 +679,12 @@ export default function SchoolSettingsPage() {
               )}
 
               {step === 3 && (
-                <form ref={loginFormRef} onSubmit={e => { e.preventDefault(); saveLoginStep() }} className="card-padded school-settings-card">
+                <form
+                  key={`wizard-login-${school.id}-${school.code || ''}-${school.program_name || ''}-${school.created_by || ''}`}
+                  ref={loginFormRef}
+                  onSubmit={e => { e.preventDefault(); saveLoginStep() }}
+                  className="card-padded school-settings-card"
+                >
                   <div className="school-form-grid school-form-grid-side">
                     <div>
                       <label className="form-label">URL โรงเรียน *</label>
@@ -681,6 +694,7 @@ export default function SchoolSettingsPage() {
                     <div>
                       <label className="form-label">ชื่อโปรแกรม</label>
                       <input name="program_name" defaultValue={school.program_name || ''} className="form-input" placeholder="ระบบ ปพ.5 ออนไลน์" />
+                      <p className="field-hint">แสดงเป็นชื่อใหญ่บนหน้า login ของโรงเรียน</p>
                     </div>
                     <div>
                       <label className="form-label">ชื่อผู้สร้าง/ผู้ดูแล</label>
@@ -896,7 +910,12 @@ export default function SchoolSettingsPage() {
     <div className="page-stack">
       <AlertModal />
 
-      <form ref={formRef} onSubmit={save} className="school-settings-form">
+      <form
+        key={school.id ? `school-form-${school.id}-${school.code || ''}-${school.program_name || ''}-${school.created_by || ''}` : 'school-form-new'}
+        ref={formRef}
+        onSubmit={save}
+        className="school-settings-form"
+      >
         <div className="school-settings-tab-card">
           <div className="school-settings-toolbar">
             <div className="school-settings-header-actions">
@@ -1138,6 +1157,7 @@ export default function SchoolSettingsPage() {
                 <div>
                   <label className="form-label">ชื่อโปรแกรม</label>
                   <input name="program_name" defaultValue={school.program_name || ''} className="form-input" placeholder="ระบบ ปพ.5 ออนไลน์" />
+                  <p className="field-hint">แสดงเป็นชื่อใหญ่บนหน้า login ของโรงเรียน</p>
                 </div>
                 <div>
                   <label className="form-label">ชื่อผู้สร้าง/ผู้ดูแล</label>

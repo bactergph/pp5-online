@@ -22,7 +22,7 @@ export async function completeForcedPasswordChange(
     return { error: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร' }
   }
   if (password === SCHOOL_TEMP_PASSWORD) {
-    return { error: 'ห้ามใช้รหัสชั่วคราว 1234 เป็นรหัสถาวร' }
+    return { error: 'ห้ามใช้รหัสชั่วคราว 123456 เป็นรหัสถาวร' }
   }
   if (password !== password2) {
     return { error: 'รหัสผ่านยืนยันไม่ตรงกัน' }

@@ -1,6 +1,8 @@
 import { createServerClient } from '@/lib/supabase'
 import SchoolLoginForm from './SchoolLoginForm'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SchoolLoginPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params
   const db = createServerClient()
