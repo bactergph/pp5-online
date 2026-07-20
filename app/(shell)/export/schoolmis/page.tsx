@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
+import { fetchSchoolMisCsvBlob } from '@/lib/schoolmis-client'
 import { schoolMisSubjectHeader } from '@/lib/schoolmis-csv'
-import { exportSchoolMisGradesCsv, fetchSchoolMisExportInit } from './actions'
+import { fetchSchoolMisExportInit } from './actions'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = {
@@ -96,22 +97,16 @@ export default function SchoolMisExportPage() {
       room: selectedClassroom.room,
     })
 
+    // ใช้ fetch API เหมือน PDF — Server Action ในคิวข้ามหน้าจะค้าง "กำลังสร้าง..." ได้
+    const year = yearId
+    const roomId = classroomId
     enqueueFileExport({
       fileName: placeholderName,
       label,
-      run: async () => {
-        const result = await exportSchoolMisGradesCsv({
-          academicYearId: yearId,
-          classroomId,
-        })
-        if (result.error || !result.csv || !result.fileName) {
-          throw new Error(result.error || 'ส่งออกไม่สำเร็จ')
-        }
-        return {
-          blob: new Blob([result.csv], { type: 'text/csv;charset=utf-8' }),
-          fileName: result.fileName,
-        }
-      },
+      run: () => fetchSchoolMisCsvBlob({
+        academicYearId: year,
+        classroomId: roomId,
+      }),
     })
 
     // ปลดปุ่มเร็ว ๆ ให้สลับหน้าได้ทันที — คิวทำงานที่กล่องมุมขวาล่าง
