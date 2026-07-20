@@ -17,6 +17,8 @@
     "googleapis": "^173.0.0",
     "html2pdf.js": "^0.14.0",
     "jose": "^4.15.9",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "next": "16.2.9",
     "puppeteer-core": "^25.2.0",
     "react": "19.2.4",
