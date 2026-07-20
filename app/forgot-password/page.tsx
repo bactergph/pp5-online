@@ -11,12 +11,10 @@ export default function ForgotPasswordPage() {
   return (
     <GlassLoginShell
       formTitle="ลืมรหัสผ่าน"
-      formSubtitle="สำหรับผู้ดูแลโรงเรียน — ส่งลิงก์รีเซ็ตไปที่อีเมล"
+      formSubtitle="ส่งลิงก์ตั้งรหัสใหม่ไปที่อีเมลผู้ดูแลโรงเรียน"
       footer={(
         <p>
           <Link href="/login">กลับไปเข้าสู่ระบบ</Link>
-          <span style={{ margin: '0 8px', opacity: 0.4 }}>·</span>
-          ครูลืมรหัส? ติดต่อแอดมินโรงเรียน
         </p>
       )}
     >

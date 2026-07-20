@@ -106,9 +106,8 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
             <label className="auth-scout-label" htmlFor="school-password">รหัสผ่าน</label>
             <PasswordInput id="school-password" name="password" placeholder="รหัสผ่าน" />
           </div>
-          <div className="auth-scout-links" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ color: '#B8A88A', fontSize: 12 }}>ครูลืมรหัส — ติดต่อแอดมินรร</span>
-            <a href="/forgot-password" style={{ color: '#8B6B45', fontSize: 13 }}>แอดมินรรลืมรหัส?</a>
+          <div className="auth-scout-links" style={{ justifyContent: 'flex-end' }}>
+            <a href="/forgot-password">ลืมรหัสผ่าน?</a>
           </div>
           <button type="submit" className="auth-scout-submit" disabled={loading}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>

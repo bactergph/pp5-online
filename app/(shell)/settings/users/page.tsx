@@ -180,10 +180,7 @@ export default function UsersPage() {
         <div className="modal-backdrop">
           <div className="modal-card" style={{ maxWidth: '420px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '6px' }}>รีเซ็ตรหัสผ่าน</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '8px' }}>{resetTarget.name}</p>
-            <p style={{ fontSize: '12px', color: 'var(--text-3)', marginBottom: '20px' }}>
-              ครู/บุคลากรไม่มีอีเมลรีเซ็ต — แอดมินรรตั้งรหัสใหม่ให้ที่นี่
-            </p>
+            <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '20px' }}>{resetTarget.name}</p>
 
             {resetMsg && (
               <div className={`alert-${resetMsg.ok ? 'success' : 'error'}`} style={{ marginBottom: '16px' }}>{resetMsg.text}</div>
