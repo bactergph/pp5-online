@@ -57,7 +57,7 @@ export default function LoginPage() {
             </span>
             <PasswordInput id="password" name="password" placeholder="กรอกรหัสผ่าน" />
           </div>
-          <a href="/register" className="jarnsek-login__forgot">ลืมรหัสผ่าน?</a>
+          <a href="/forgot-password" className="jarnsek-login__forgot">ลืมรหัสผ่าน?</a>
         </div>
 
         <button type="submit" className="jarnsek-login__submit" disabled={pending}>

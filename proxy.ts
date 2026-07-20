@@ -3,8 +3,8 @@
 // การ verify จริงๆ ทำที่ verifySession() ใน dal.ts แต่ละ page
 import { NextRequest, NextResponse } from 'next/server'
 
-// Routes สาธารณะ (ไม่ต้อง login)
-const publicRoutes = ['/login']
+// Routes สาธารณะ (ไม่ต้อง login) — ถ้ามี session แล้วจะเด้งไป dashboard
+const publicRoutes = ['/login', '/forgot-password', '/register']
 
 // Routes ที่ต้องการ login
 const protectedPrefixes = [
