@@ -71,7 +71,8 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
       brandSubtitle=""
       brandTagline={schoolName}
       logoUrl={logoUrl}
-      cardTitle={mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
+      cardEyebrow={schoolName}
+      cardTitle={mode === 'login' ? 'ยินดีต้อนรับ' : 'สมัครสมาชิก'}
       cardSubtitle={createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกชื่อผู้ใช้ หรืออีเมล และรหัสผ่าน'}
       footer={(
         <p className="auth-scout-footer">

@@ -7,7 +7,7 @@ export const getSchoolShell = cache(async (schoolId: string) => {
   const db = createServerClient()
   const { data } = await db
     .from('schools')
-    .select('code, acting_director_user_id')
+    .select('code, acting_director_user_id, name, logo_url, program_name')
     .eq('id', schoolId)
     .maybeSingle()
   return data

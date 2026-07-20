@@ -1,53 +1,40 @@
-'use client'
+import { redirect } from 'next/navigation'
+import { createServerClient } from '@/lib/supabase'
+import { getSession } from '@/lib/session'
+import ChangePasswordForm from './ChangePasswordForm'
 
-import { useActionState } from 'react'
-import { completeForcedPasswordChange } from '@/lib/actions/force-password'
-import GlassLoginShell from '@/components/auth/GlassLoginShell'
-import PasswordInput from '@/components/auth/PasswordInput'
+export const dynamic = 'force-dynamic'
 
-export default function ForceChangePasswordPage() {
-  const [state, formAction, pending] = useActionState(completeForcedPasswordChange, undefined)
+export default async function ForceChangePasswordPage() {
+  const session = await getSession()
+  if (!session?.userId) {
+    redirect('/login')
+  }
+
+  let schoolName = 'โรงเรียน'
+  let logoUrl: string | null = null
+  let programName = 'ระบบ ปพ.5 ออนไลน์'
+
+  if (session.schoolId) {
+    const db = createServerClient()
+    const { data: school } = await db
+      .from('schools')
+      .select('name, logo_url, program_name')
+      .eq('id', session.schoolId)
+      .maybeSingle()
+
+    if (school) {
+      schoolName = school.name || schoolName
+      logoUrl = school.logo_url
+      programName = school.program_name || programName
+    }
+  }
 
   return (
-    <GlassLoginShell
-      formTitle="ตั้งรหัสผ่านใหม่"
-      formSubtitle="รหัสถูกรีเซ็ตโดยผู้ดูแลโรงเรียน — กรุณาตั้งรหัสใหม่ก่อนใช้งาน"
-    >
-      {state?.error && (
-        <div className="auth-scout-error" role="alert">
-          {state.error}
-        </div>
-      )}
-
-      <form action={formAction} className="jarnsek-login__form">
-        <div className="jarnsek-login__field">
-          <label className="jarnsek-login__label" htmlFor="password">รหัสผ่านใหม่</label>
-          <div className="jarnsek-login__control jarnsek-login__control--password">
-            <PasswordInput
-              id="password"
-              name="password"
-              placeholder="อย่างน้อย 8 ตัวอักษร"
-              autoComplete="new-password"
-              minLength={8}
-            />
-          </div>
-        </div>
-        <div className="jarnsek-login__field">
-          <label className="jarnsek-login__label" htmlFor="password2">ยืนยันรหัสผ่าน</label>
-          <div className="jarnsek-login__control jarnsek-login__control--password">
-            <PasswordInput
-              id="password2"
-              name="password2"
-              placeholder="พิมพ์ซ้ำอีกครั้ง"
-              autoComplete="new-password"
-              minLength={8}
-            />
-          </div>
-        </div>
-        <button type="submit" className="jarnsek-login__submit" disabled={pending}>
-          {pending ? 'กำลังบันทึก...' : 'บันทึกและเข้าสู่ระบบ'}
-        </button>
-      </form>
-    </GlassLoginShell>
+    <ChangePasswordForm
+      schoolName={schoolName}
+      logoUrl={logoUrl}
+      programName={programName}
+    />
   )
 }

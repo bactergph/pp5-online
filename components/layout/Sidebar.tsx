@@ -514,6 +514,9 @@ type Props = {
   isHomeroom: boolean
   isActingDirector?: boolean
   schoolCode: string | null
+  schoolLogoUrl?: string | null
+  schoolProgramName?: string | null
+  schoolName?: string | null
 }
 
 export default function Sidebar({
@@ -525,6 +528,9 @@ export default function Sidebar({
   isHomeroom,
   isActingDirector = false,
   schoolCode,
+  schoolLogoUrl = null,
+  schoolProgramName = null,
+  schoolName = null,
 }: Props) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement | null>(null)
@@ -641,16 +647,29 @@ export default function Sidebar({
 
   return (
     <aside className={`sidebar ${isOpen ? 'sidebar-open' : ''}`}>
-      {/* Logo */}
+      {/* Logo — โรงเรียน: โลโก้ + ชื่อโปรแกรม / Super Admin: จารย์เสก */}
       <div className="sidebar-brand">
         <div className="sidebar-brand-main">
-          <div className="sidebar-brand-mark">
+          <div className={`sidebar-brand-mark${schoolLogoUrl && userRole !== 'district' ? ' sidebar-brand-mark--school' : ''}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/jarnsek-logo-sm.png" alt="" />
+            <img
+              src={userRole !== 'district' && schoolLogoUrl ? schoolLogoUrl : '/brand/jarnsek-logo-sm.png'}
+              alt=""
+            />
           </div>
-          <div>
-            <div className="sidebar-brand-title">จารย์เสก</div>
-            <div className="sidebar-brand-subtitle">Jarn-Sek</div>
+          <div className="sidebar-brand-copy">
+            <div className="sidebar-brand-title">
+              {userRole !== 'district'
+                ? (schoolProgramName || schoolName || 'ระบบ ปพ.5 ออนไลน์')
+                : 'จารย์เสก'}
+            </div>
+            {userRole !== 'district' ? (
+              schoolProgramName && schoolName ? (
+                <div className="sidebar-brand-subtitle">{schoolName}</div>
+              ) : null
+            ) : (
+              <div className="sidebar-brand-subtitle">Jarn-Sek</div>
+            )}
           </div>
         </div>
         <button onClick={onClose} className="sidebar-close lg:hidden">

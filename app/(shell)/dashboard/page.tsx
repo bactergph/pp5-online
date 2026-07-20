@@ -31,6 +31,13 @@ async function getSchoolCode(schoolId: string) {
   return data?.code ? String(data.code).trim().toLowerCase() : null
 }
 
+async function getSchoolName(schoolId: string) {
+  const { createServerClient } = await import('@/lib/supabase')
+  const db = createServerClient()
+  const { data } = await db.from('schools').select('name').eq('id', schoolId).maybeSingle()
+  return data?.name ? String(data.name).trim() : ''
+}
+
 // Super Admin: ภาพรวมสมาชิก/ลูกค้าโรงเรียน
 async function getDistrictStats() {
   const { createServerClient } = await import('@/lib/supabase')
@@ -75,6 +82,7 @@ export default async function DashboardPage() {
   const districtStats = isDistrict ? await getDistrictStats() : null
   const schoolStats = !isDistrict && s.schoolId ? await getSchoolStats(s.schoolId) : null
   const schoolCode = !isDistrict && s.schoolId ? await getSchoolCode(s.schoolId) : null
+  const schoolName = !isDistrict && s.schoolId ? await getSchoolName(s.schoolId) : ''
 
   let isActingDirector = false
   let signCounts: { pp5: number; pp6: number; classroomAdmin: number } | null = null
@@ -111,6 +119,11 @@ export default async function DashboardPage() {
         gap: '16px',
       }}>
         <div>
+          {!isDistrict && schoolName ? (
+            <p className="page-hero-kicker" style={{ color: 'rgba(255,248,231,0.9)', marginBottom: '4px', textTransform: 'none', letterSpacing: '0.02em' }}>
+              {schoolName}
+            </p>
+          ) : null}
           <p className="page-hero-kicker" style={{ color: 'rgba(255,248,231,0.9)', marginBottom: '6px' }}>
             {isDistrict ? 'ระบบจัดการสมาชิก' : 'ยินดีต้อนรับ'}
           </p>

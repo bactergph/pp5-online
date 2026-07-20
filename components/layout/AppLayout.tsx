@@ -14,10 +14,16 @@ export default async function AppLayout({ children, title, requireRole }: Props)
   const session = await verifySession()
 
   let schoolCode: string | null = null
+  let schoolLogoUrl: string | null = null
+  let schoolProgramName: string | null = null
+  let schoolName: string | null = null
   let isActingDirector = false
   if (session.schoolId && session.role !== 'district') {
     const data = await getSchoolShell(session.schoolId)
     schoolCode = data?.code ?? null
+    schoolLogoUrl = data?.logo_url ?? null
+    schoolProgramName = data?.program_name ? String(data.program_name).trim() || null : null
+    schoolName = data?.name ? String(data.name).trim() || null : null
     isActingDirector = data?.acting_director_user_id === session.userId
   }
 
@@ -37,6 +43,9 @@ export default async function AppLayout({ children, title, requireRole }: Props)
       userFullName={session.fullName}
       isHomeroom={session.isHomeroom}
       schoolCode={schoolCode}
+      schoolLogoUrl={schoolLogoUrl}
+      schoolProgramName={schoolProgramName}
+      schoolName={schoolName}
       hasSchool={Boolean(session.schoolId)}
       isActingDirector={isActingDirector}
     >

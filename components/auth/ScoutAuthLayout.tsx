@@ -6,6 +6,8 @@ type Props = {
   children: ReactNode
   cardTitle?: string
   cardSubtitle?: string
+  /** ข้อความเหนือหัวข้อการ์ด เช่น ชื่อโรงเรียน ก่อน «ยินดีต้อนรับ» */
+  cardEyebrow?: string
   brandTitle?: string
   brandSubtitle?: string
   brandTagline?: string
@@ -35,6 +37,7 @@ export default function ScoutAuthLayout({
   children,
   cardTitle = 'เข้าสู่ระบบ',
   cardSubtitle,
+  cardEyebrow,
   brandTitle = 'ระบบ ปพ.5',
   brandSubtitle = 'ออนไลน์',
   brandTagline = 'หลักสูตรแกนกลาง 2551',
@@ -44,6 +47,7 @@ export default function ScoutAuthLayout({
   footer,
 }: Props) {
   const isSignin = variant === 'signin'
+  const brandName = [brandTitle, brandSubtitle].filter(Boolean).join(' ')
 
   return (
     <div className={`auth-scout-page${isSignin ? ' auth-scout-page--signin' : ''}`}>
@@ -60,7 +64,7 @@ export default function ScoutAuthLayout({
         </div>
         <h1 className="auth-scout-mobile-header__title">{brandTitle}</h1>
         {brandSubtitle ? <p className="auth-scout-mobile-header__sub">{brandSubtitle}</p> : null}
-        <p className="auth-scout-mobile-header__tag">{brandTagline}</p>
+        {brandTagline ? <p className="auth-scout-mobile-header__tag">{brandTagline}</p> : null}
       </div>
 
       <div className="auth-scout-body">
@@ -76,14 +80,18 @@ export default function ScoutAuthLayout({
             </div>
           )}
 
-          {isSignin && (
-            <div className="auth-signin-brand">
-              <p className="auth-signin-brand__name">{[brandTitle, brandSubtitle].filter(Boolean).join(' ')}</p>
-              <p className="auth-signin-brand__tag">{brandTagline}</p>
+          {brandName ? (
+            <div className="auth-scout-brand auth-scout-brand--desktop">
+              <p className="auth-scout-brand__name">{brandName}</p>
+              {/* ถ้ามี cardEyebrow (ชื่อรร.) แล้ว ไม่ซ้ำ tagline ใต้ชื่อโปรแกรม */}
+              {!cardEyebrow && brandTagline ? (
+                <p className="auth-scout-brand__tag">{brandTagline}</p>
+              ) : null}
             </div>
-          )}
+          ) : null}
 
           <div className="auth-scout-card__head">
+            {cardEyebrow ? <p className="auth-scout-card__eyebrow">{cardEyebrow}</p> : null}
             <h2 className="auth-scout-card__title">{cardTitle}</h2>
             {cardSubtitle && <p className="auth-scout-card__subtitle">{cardSubtitle}</p>}
           </div>

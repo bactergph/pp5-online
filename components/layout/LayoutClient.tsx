@@ -40,6 +40,9 @@ type Props = {
   userFullName: string
   isHomeroom: boolean
   schoolCode: string | null
+  schoolLogoUrl?: string | null
+  schoolProgramName?: string | null
+  schoolName?: string | null
   hasSchool?: boolean
   isActingDirector?: boolean
 }
@@ -52,6 +55,9 @@ function LayoutClientInner({
   userFullName,
   isHomeroom,
   schoolCode,
+  schoolLogoUrl = null,
+  schoolProgramName = null,
+  schoolName = null,
   hasSchool = false,
   isActingDirector = false,
 }: Props) {
@@ -97,6 +103,9 @@ function LayoutClientInner({
         isHomeroom={isHomeroom}
         isActingDirector={isActingDirector}
         schoolCode={schoolCode}
+        schoolLogoUrl={schoolLogoUrl}
+        schoolProgramName={schoolProgramName}
+        schoolName={schoolName}
       />
 
       {sidebarOpen && (
