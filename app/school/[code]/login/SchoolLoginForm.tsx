@@ -107,7 +107,7 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
             <PasswordInput id="school-password" name="password" placeholder="รหัสผ่าน" />
           </div>
           <div className="auth-scout-links" style={{ justifyContent: 'flex-end' }}>
-            <a href="/forgot-password">ลืมรหัสผ่าน?</a>
+            <a href="/forgot-password">ผู้ดูแลโรงเรียนลืมรหัส?</a>
           </div>
           <button type="submit" className="auth-scout-submit" disabled={loading}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>

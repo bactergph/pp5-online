@@ -58,7 +58,8 @@ export default function proxy(req: NextRequest) {
     }
 
     if (schoolPath === 'login') {
-      if (hasSession) return NextResponse.redirect(new URL(`/school/${code}/dashboard`, req.nextUrl))
+      // ถ้ามี session อยู่แล้วให้เข้าแอป — หน้าที่ต้องเปลี่ยนรหัสจะถูกบังคับใน verifySession
+      if (hasSession) return NextResponse.redirect(new URL('/dashboard', req.nextUrl))
       return NextResponse.next()
     }
 

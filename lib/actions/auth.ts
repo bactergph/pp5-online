@@ -31,19 +31,32 @@ export async function login(
 
   // ดึงข้อมูล user profile จาก users table (ใช้ service role เพื่อข้าม RLS)
   const serverClient = createServerClient()
-  const { data: userProfile, error: profileError } = await serverClient
+  const profileRes = await serverClient
     .from('users')
-    .select('id, role, school_id, full_name, email, is_active, is_homeroom')
+    .select('id, role, school_id, full_name, email, is_active, is_homeroom, must_change_password')
     .eq('id', authData.user.id)
     .single()
 
-  if (profileError || !userProfile) {
+  let userProfile = profileRes.data
+  if (profileRes.error && String(profileRes.error.message || '').includes('must_change_password')) {
+    const fb = await serverClient
+      .from('users')
+      .select('id, role, school_id, full_name, email, is_active, is_homeroom')
+      .eq('id', authData.user.id)
+      .single()
+    if (fb.error || !fb.data) {
+      return { error: 'ไม่พบข้อมูลผู้ใช้ กรุณาติดต่อผู้ดูแลระบบ' }
+    }
+    userProfile = { ...fb.data, must_change_password: false }
+  } else if (profileRes.error || !userProfile) {
     return { error: 'ไม่พบข้อมูลผู้ใช้ กรุณาติดต่อผู้ดูแลระบบ' }
   }
 
   if (!userProfile.is_active) {
     return { error: 'บัญชีนี้รอผู้ดูแลระบบอนุมัติ หรือถูกระงับการใช้งาน' }
   }
+
+  const mustChangePassword = Boolean(userProfile.must_change_password)
 
   let effectiveSchoolId = userProfile.school_id
   let requestedSchoolCode = ''
@@ -76,7 +89,9 @@ export async function login(
   // (กด "ตั้งค่าภายหลัง" ใช้ได้ในรอบนี้ แต่รอบ login ถัดไปจะตรวจความครบอีก)
   ;(await cookies()).delete('onboarding_skipped')
 
-  if (userProfile.role === 'admin') {
+  if (mustChangePassword) {
+    redirectTo = '/auth/change-password'
+  } else if (userProfile.role === 'admin') {
     const { getAdminOnboardingGate, onboardingUrl } = await import('@/lib/onboarding-complete')
     const gate = await getAdminOnboardingGate(effectiveSchoolId)
     if (!gate.complete) {
@@ -110,6 +125,7 @@ export async function login(
     isHomeroom: userProfile.is_homeroom ?? false,
     // area_office เก็บใน Supabase app_metadata — ไม่ต้องเพิ่ม column
     areaOffice: (authData.user.app_metadata?.area_office as string) ?? null,
+    mustChangePassword,
     expiresAt: new Date(),
   })
 

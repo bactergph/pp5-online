@@ -61,7 +61,6 @@ export default function UsersPage() {
 
   // reset password state
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null)
-  const [newPassword, setNewPassword] = useState('')
   const [resetting, setResetting] = useState(false)
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -156,10 +155,15 @@ export default function UsersPage() {
     if (!resetTarget) return
     setResetting(true)
     setResetMsg(null)
-    const { error } = await resetTeacherPassword(resetTarget.id, newPassword)
+    const { error, tempPassword } = await resetTeacherPassword(resetTarget.id)
     setResetting(false)
     if (error) setResetMsg({ ok: false, text: error })
-    else setResetMsg({ ok: true, text: 'รีเซ็ตรหัสผ่านเรียบร้อยแล้ว' })
+    else {
+      setResetMsg({
+        ok: true,
+        text: `รีเซ็ตแล้ว รหัสชั่วคราวคือ ${tempPassword || '1234'} — แจ้งครูให้เข้าสู่ระบบแล้วตั้งรหัสใหม่`,
+      })
+    }
   }
 
   const filtered = users.filter(u =>
@@ -180,36 +184,27 @@ export default function UsersPage() {
         <div className="modal-backdrop">
           <div className="modal-card" style={{ maxWidth: '420px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '6px' }}>รีเซ็ตรหัสผ่าน</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '20px' }}>{resetTarget.name}</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '12px' }}>{resetTarget.name}</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-2)', marginBottom: '20px', lineHeight: 1.6 }}>
+              รหัสจะถูกตั้งเป็น <b>1234</b> ชั่วคราว เมื่อครูเข้าสู่ระบบครั้งแรก ระบบจะบังคับให้ตั้งรหัสใหม่
+            </p>
 
             {resetMsg && (
               <div className={`alert-${resetMsg.ok ? 'success' : 'error'}`} style={{ marginBottom: '16px' }}>{resetMsg.text}</div>
             )}
 
             {!resetMsg?.ok && (
-              <>
-                <label className="form-label">รหัสผ่านใหม่ *</label>
-                <input
-                  type="password"
-                  className="form-input"
-                  placeholder="อย่างน้อย 8 ตัวอักษร"
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  style={{ marginBottom: '20px' }}
-                  autoFocus
-                />
-                <div className="form-actions">
-                  <button onClick={() => { setResetTarget(null); setNewPassword(''); setResetMsg(null) }} className="btn btn-ghost">ยกเลิก</button>
-                  <LoadingButton loading={resetting} loadingText="กำลังรีเซ็ต..." onClick={handleResetPassword} disabled={newPassword.length < 8}>
-                    รีเซ็ตรหัสผ่าน
-                  </LoadingButton>
-                </div>
-              </>
+              <div className="form-actions">
+                <button onClick={() => { setResetTarget(null); setResetMsg(null) }} className="btn btn-ghost">ยกเลิก</button>
+                <LoadingButton loading={resetting} loadingText="กำลังรีเซ็ต..." onClick={handleResetPassword}>
+                  รีเซ็ตเป็น 1234
+                </LoadingButton>
+              </div>
             )}
 
             {resetMsg?.ok && (
               <div className="form-actions">
-                <button onClick={() => { setResetTarget(null); setNewPassword(''); setResetMsg(null) }} className="btn btn-primary">ปิด</button>
+                <button onClick={() => { setResetTarget(null); setResetMsg(null) }} className="btn btn-primary">ปิด</button>
               </div>
             )}
           </div>
@@ -403,7 +398,7 @@ export default function UsersPage() {
                   {canManage && <td>
                     <div style={{ display: 'flex', gap: '12px' }}>
                       <button onClick={() => openEdit(user)} style={{ fontSize: '13px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>แก้ไข</button>
-                      <button onClick={() => { setResetTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` }); setNewPassword(''); setResetMsg(null) }}
+                      <button onClick={() => { setResetTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` }); setResetMsg(null) }}
                         style={{ fontSize: '13px', color: '#C49212', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         รีเซ็ตรหัสผ่าน
                       </button>

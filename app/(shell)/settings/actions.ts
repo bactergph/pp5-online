@@ -147,6 +147,16 @@ export async function searchSchools(q: string) {
   if (!q || q.trim().length < 2) return []
   const db = createServerClient()
   const safe = q.trim().replace(/,/g, ' ')
+  // ค้นจากฐานอ้างอิงเท่านั้น — สมาชิกจะได้โรงเรียนใหม่คนละ ID
+  const withCatalog = await db.from('schools')
+    .select('id, name, area_office, district, province')
+    .eq('is_catalog', true)
+    .or(`name.ilike.%${safe}%,district.ilike.%${safe}%,province.ilike.%${safe}%`)
+    .limit(20)
+  if (!withCatalog.error) return withCatalog.data || []
+  if (!String(withCatalog.error.message || '').includes('is_catalog')) {
+    throw new Error(withCatalog.error.message)
+  }
   const { data } = await db.from('schools')
     .select('id, name, area_office, district, province')
     .or(`name.ilike.%${safe}%,district.ilike.%${safe}%,province.ilike.%${safe}%`)
@@ -154,46 +164,48 @@ export async function searchSchools(q: string) {
   return data || []
 }
 
-// เลือกโรงเรียนจากฐานข้อมูล → ผูก users.school_id ตรงกับแถวนั้น (ไม่ก๊อปสร้างโรงเรียนใหม่)
+// เลือกชื่อจากฐานอ้างอิง → สร้างโรงเรียนสมาชิกใหม่ (ID ใหม่) ไม่แชร์ข้อมูลกับแถว catalog
 export async function setMySchool(catalogId: string) {
   const session = await requireSchoolSession()
   if (session.role !== 'admin') return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้น' }
   const db = createServerClient()
-  const { data: school } = await db.from('schools')
-    .select('id, name')
-    .eq('id', catalogId)
-    .maybeSingle()
-  if (!school) return { error: 'ไม่พบโรงเรียนที่เลือก' }
 
-  // โรงเรียนนี้มีผู้ดูแลคนอื่นอยู่แล้วหรือไม่
-  const { data: otherAdmin } = await db.from('users')
-    .select('id, full_name')
-    .eq('school_id', catalogId)
-    .eq('role', 'admin')
-    .eq('is_active', true)
-    .neq('id', session.userId)
-    .maybeSingle()
-  if (otherAdmin) {
-    return { error: `โรงเรียนนี้มีผู้ดูแลอยู่แล้ว (${otherAdmin.full_name})` }
+  // ถ้ามีโรงเรียนสมาชิกอยู่แล้ว ห้ามสร้างซ้ำตอนเลือกใหม่ (ต้องใช้ Super Admin ล้างก่อน)
+  if (session.schoolId) {
+    const { data: current } = await db.from('schools')
+      .select('id, is_catalog, member_code')
+      .eq('id', session.schoolId)
+      .maybeSingle()
+    if (current && current.is_catalog === false) {
+      return { error: 'บัญชีนี้มีโรงเรียนสมาชิกอยู่แล้ว — ติดต่อ Super Admin หากต้องการล้างการตั้งค่า' }
+    }
+  }
+
+  const { resolveMemberSchoolId } = await import('@/lib/school-member')
+  let member: { id: string; name: string; member_code: string | null }
+  try {
+    member = await resolveMemberSchoolId(catalogId)
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'สร้างโรงเรียนสมาชิกไม่สำเร็จ' }
   }
 
   const { error } = await db.from('users')
-    .update({ school_id: catalogId })
+    .update({ school_id: member.id })
     .eq('id', session.userId)
   if (error) return { error: error.message }
 
-  await createSession({ ...session, schoolId: catalogId })
-  await seedEvaluationSettingsForSchool(catalogId)
+  await createSession({ ...session, schoolId: member.id })
+  await seedEvaluationSettingsForSchool(member.id)
   await logActivity({
-    actor: { ...session, schoolId: catalogId },
-    schoolId: catalogId,
-    action: 'update',
+    actor: { ...session, schoolId: member.id },
+    schoolId: member.id,
+    action: 'create',
     module: 'school',
     targetType: 'school',
-    targetId: catalogId,
-    targetLabel: school.name,
-    description: `เลือกโรงเรียนจากฐานข้อมูล: ${school.name}`,
-    metadata: { catalogId },
+    targetId: member.id,
+    targetLabel: member.name,
+    description: `สร้างโรงเรียนสมาชิกใหม่: ${member.name}${member.member_code ? ` (${member.member_code})` : ''}`,
+    metadata: { catalogId, memberCode: member.member_code },
   })
   return { error: null }
 }
@@ -1219,35 +1231,43 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
 }
 
 // ============================================================
-// Password Reset — admin รร รีเซ็ตรหัสผ่านครูในโรงเรียนตัวเอง
+// Password Reset — admin รร รีเซ็ตรหัสครูเป็น 1234 แล้วบังคับเปลี่ยนตอนเข้าครั้งแรก
 // ============================================================
-export async function resetTeacherPassword(userId: string, newPassword: string) {
+export async function resetTeacherPassword(userId: string) {
   const session = await requireSchoolSession()
   if (!['admin', 'district'].includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
-  if (newPassword.length < 8) return { error: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร' }
   const db = createServerClient()
+  const { SCHOOL_TEMP_PASSWORD } = await import('@/lib/school-temp-password')
   // ตรวจว่า user นั้นอยู่ในโรงเรียนเดียวกัน (ป้องกัน admin ข้ามโรงเรียน)
   if (session.role === 'admin' && session.schoolId) {
     const { data: target } = await db.from('users').select('school_id, role').eq('id', userId).single()
     if (!target || target.school_id !== session.schoolId) return { error: 'ไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้คนนี้' }
-    if (!['teacher', 'academic_head', 'deputy_principal', 'principal'].includes(target.role)) return { error: 'รีเซ็ตได้เฉพาะครูและผู้บริหารโรงเรียน' }
+    if (!['teacher', 'academic_head', 'deputy_principal', 'principal'].includes(target.role)) {
+      return { error: 'รีเซ็ตได้เฉพาะครูและผู้บริหารโรงเรียน' }
+    }
   }
-  const { error } = await db.auth.admin.updateUserById(userId, { password: newPassword })
-  if (!error) {
-    const { data: target } = await db.from('users').select('full_name, role, school_id').eq('id', userId).maybeSingle()
-    await logActivity({
-      actor: session,
-      schoolId: target?.school_id ?? session.schoolId,
-      action: 'reset_password',
-      module: 'users',
-      targetType: 'user',
-      targetId: userId,
-      targetLabel: target?.full_name ?? 'ผู้ใช้',
-      description: `รีเซ็ตรหัสผ่านผู้ใช้ ${target?.full_name || ''}`.trim(),
-      metadata: { targetRole: target?.role ?? null },
-    })
+
+  const { error } = await db.auth.admin.updateUserById(userId, { password: SCHOOL_TEMP_PASSWORD })
+  if (error) return { error: error.message }
+
+  const flagRes = await db.from('users').update({ must_change_password: true }).eq('id', userId)
+  if (flagRes.error && !String(flagRes.error.message || '').includes('must_change_password')) {
+    return { error: flagRes.error.message }
   }
-  return { error: error?.message }
+
+  const { data: target } = await db.from('users').select('full_name, role, school_id').eq('id', userId).maybeSingle()
+  await logActivity({
+    actor: session,
+    schoolId: target?.school_id ?? session.schoolId,
+    action: 'reset_password',
+    module: 'users',
+    targetType: 'user',
+    targetId: userId,
+    targetLabel: target?.full_name ?? 'ผู้ใช้',
+    description: `รีเซ็ตรหัสผ่านผู้ใช้ ${target?.full_name || ''} เป็นรหัสชั่วคราว`.trim(),
+    metadata: { targetRole: target?.role ?? null, tempPassword: true },
+  })
+  return { error: undefined, tempPassword: SCHOOL_TEMP_PASSWORD }
 }
 
 // ============================================================

@@ -96,6 +96,8 @@ export async function changeOwnPassword(newPassword: string, confirmPassword: st
   const { error } = await db.auth.admin.updateUserById(session.userId, { password: newPassword })
   if (error) return { error: error.message }
 
+  await db.from('users').update({ must_change_password: false }).eq('id', session.userId)
+
   await logActivity({
     actor: session,
     schoolId: session.schoolId,

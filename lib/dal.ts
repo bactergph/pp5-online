@@ -12,6 +12,10 @@ export const verifySession = cache(async () => {
     redirect('/login')
   }
 
+  if (session.mustChangePassword) {
+    redirect('/auth/change-password')
+  }
+
   return {
     isAuth: true,
     userId: session.userId,
@@ -21,6 +25,7 @@ export const verifySession = cache(async () => {
     fullName: session.fullName,
     isHomeroom: session.isHomeroom ?? false,
     areaOffice: session.areaOffice ?? null,
+    mustChangePassword: false as const,
   }
 })
 

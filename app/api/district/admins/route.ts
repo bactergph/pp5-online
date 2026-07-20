@@ -19,17 +19,17 @@ export async function POST(req: NextRequest) {
 
   const adminClient = createServerClient()
 
-  // ตรวจว่าโรงเรียนนี้มีผู้ดูแลอยู่แล้วหรือยัง
-  const { data: existing } = await adminClient
-    .from('users')
-    .select('id, full_name')
-    .eq('school_id', school_id)
-    .eq('role', 'admin')
-    .eq('is_active', true)
-    .maybeSingle()
-  if (existing) {
-    return NextResponse.json({ error: `โรงเรียนนี้มีผู้ดูแลอยู่แล้ว (${existing.full_name}) — 1 โรงเรียน ต่อ 1 ผู้ดูแลเท่านั้น` }, { status: 400 })
+  // เลือกจาก catalog → สร้างโรงเรียนสมาชิกใหม่ (ID / รหัสสมาชิกใหม่) ไม่แชร์ข้อมูลกับฐานอ้างอิง
+  let memberSchool: { id: string; name: string; member_code: string | null }
+  try {
+    const { resolveMemberSchoolId } = await import('@/lib/school-member')
+    memberSchool = await resolveMemberSchoolId(String(school_id))
+  } catch (err) {
+    return NextResponse.json({
+      error: err instanceof Error ? err.message : 'สร้างโรงเรียนสมาชิกไม่สำเร็จ',
+    }, { status: 400 })
   }
+  const memberSchoolId = memberSchool.id
 
   const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
     email,
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     position: position || '',
     role: 'admin',
     is_homeroom: false,
-    school_id,
+    school_id: memberSchoolId,
     is_active: true,
   })
 
@@ -62,17 +62,27 @@ export async function POST(req: NextRequest) {
 
   await logActivity({
     actor: session,
-    schoolId: school_id,
+    schoolId: memberSchoolId,
     action: 'create',
     module: 'district_admins',
     targetType: 'user',
     targetId: authData.user.id,
     targetLabel: full_name,
     description: `เพิ่มผู้ดูแลโรงเรียน ${full_name}`,
-    metadata: { email },
+    metadata: {
+      email,
+      catalogSchoolId: school_id,
+      memberSchoolId,
+      memberCode: memberSchool.member_code,
+    },
   })
 
-  await seedEvaluationSettingsForSchool(school_id)
+  await seedEvaluationSettingsForSchool(memberSchoolId)
 
-  return NextResponse.json({ success: true, userId: authData.user.id })
+  return NextResponse.json({
+    success: true,
+    userId: authData.user.id,
+    schoolId: memberSchoolId,
+    memberCode: memberSchool.member_code,
+  })
 }

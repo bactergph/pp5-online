@@ -1,10 +1,17 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import LoadingButton from '@/components/LoadingButton'
-import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, searchSchoolsForAdminAssign } from './actions'
+import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, searchSchoolsForAdminAssign, resetSchoolMemberSettings } from './actions'
 import { useAppAlert } from '@/lib/use-app-alert'
+import { schoolMemberIdHint } from '@/lib/school-identity'
 
-type School = { id: string; name: string; district?: string | null; province?: string | null }
+type School = {
+  id: string
+  name: string
+  district?: string | null
+  province?: string | null
+  member_code?: string | null
+}
 type Stat = { students: number; principal: number; academic_head: number; homeroom: number; teacher_only: number; totalUsers: number }
 type Admin = {
   id: string; email: string; prefix: string; full_name: string
@@ -48,6 +55,10 @@ export default function DistrictAdminsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // clear school member settings
+  const [resetSettingsTarget, setResetSettingsTarget] = useState<{ schoolId: string; schoolName: string } | null>(null)
+  const [resettingSettings, setResettingSettings] = useState(false)
 
   // action dropdown per row
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -209,14 +220,18 @@ export default function DistrictAdminsPage() {
                 <div style={{ gridColumn: '1 / -1', position: 'relative' }}>
                   <label className="form-label">โรงเรียน *</label>
                   <input type="hidden" name="school_id" value={selectedSchoolId} />
-                  <input type="text" className="form-input" placeholder="พิมพ์ชื่อโรงเรียน / อำเภอ / จังหวัด เพื่อค้นหา..."
+                  <input type="text" className="form-input" placeholder="ค้นหาชื่อจากฐานอ้างอิง — ระบบจะสร้างรหัสสมาชิกใหม่ให้"
                     value={schoolSearch} autoComplete="off"
                     onChange={e => onSchoolSearchChange(e.target.value)}
                     onFocus={() => setShowSchoolDrop(true)}
                     onBlur={() => setTimeout(() => setShowSchoolDrop(false), 180)}
                     style={{ borderColor: selectedSchoolId ? '#059669' : undefined }}
                   />
-                  {selectedSchoolId && <div style={{ fontSize: '11px', color: '#059669', marginTop: '4px' }}>✓ เลือกแล้ว</div>}
+                  {selectedSchoolId && (
+                    <div style={{ fontSize: '11px', color: '#059669', marginTop: '4px' }}>
+                      ✓ เลือกแล้ว — จะสร้างโรงเรียนสมาชิกใหม่แยกข้อมูลจากฐานอ้างอิง
+                    </div>
+                  )}
                   {showSchoolDrop && schoolSearch.trim().length >= 1 && (
                     <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200, background: 'white', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', maxHeight: '240px', overflowY: 'auto', marginTop: '4px' }}>
                       {schoolSearching && (
@@ -236,7 +251,7 @@ export default function DistrictAdminsPage() {
                         </div>
                       ))}
                       {!schoolSearching && schoolResults.length === 0 && (
-                        <div style={{ padding: '12px 14px', fontSize: '13px', color: 'var(--text-3)' }}>ไม่พบโรงเรียนในฐานข้อมูล</div>
+                        <div style={{ padding: '12px 14px', fontSize: '13px', color: 'var(--text-3)' }}>ไม่พบโรงเรียนในฐานอ้างอิง</div>
                       )}
                     </div>
                   )}
@@ -329,6 +344,49 @@ export default function DistrictAdminsPage() {
         </div>
       )}
 
+      {/* Reset school member settings */}
+      {resetSettingsTarget && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '440px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#9A3412' }}>ล้างการตั้งค่าโรงเรียน</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-2)', marginBottom: '12px', lineHeight: 1.7 }}>
+              โรงเรียน <b>{resetSettingsTarget.schoolName}</b>
+            </p>
+            <p style={{ fontSize: '13px', color: 'var(--text-2)', marginBottom: '16px', lineHeight: 1.7 }}>
+              จะล้างข้อมูลที่ผู้ดูแลตั้งไว้ เช่น หน้า login, ผู้บริหาร, โลโก้/ตรา, Google Drive
+              และหัวหน้ากลุ่มสาระ — ผู้ดูแลต้องตั้งค่าใหม่ผ่าน wizard
+            </p>
+            <p style={{ fontSize: '12px', color: 'var(--text-3)', marginBottom: '20px', lineHeight: 1.6 }}>
+              ไม่ลบชื่อโรงเรียนจากฐานข้อมูล · ไม่ลบผู้ใช้ ห้องเรียน และนักเรียน
+            </p>
+            <div className="form-actions">
+              <button type="button" onClick={() => setResetSettingsTarget(null)} className="btn btn-ghost" disabled={resettingSettings}>
+                ยกเลิก
+              </button>
+              <LoadingButton
+                loading={resettingSettings}
+                loadingText="กำลังล้าง..."
+                onClick={async () => {
+                  setResettingSettings(true)
+                  const { error } = await resetSchoolMemberSettings(resetSettingsTarget.schoolId)
+                  setResettingSettings(false)
+                  if (error) {
+                    notify('error', error)
+                    return
+                  }
+                  notify('success', `ล้างการตั้งค่าโรงเรียน ${resetSettingsTarget.schoolName} แล้ว`)
+                  setResetSettingsTarget(null)
+                  loadData()
+                }}
+                style={{ background: '#C2410C', borderColor: '#C2410C', color: '#fff' }}
+              >
+                ยืนยันล้างการตั้งค่า
+              </LoadingButton>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="page-hero">
         <div>
@@ -375,14 +433,23 @@ export default function DistrictAdminsPage() {
 
       {/* Dropdown menu — fixed position ไม่ถูก clip โดย overflow:hidden */}
       {openMenuId && (
-        <div ref={menuRef} style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 200, background: 'white', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.14)', minWidth: '160px', overflow: 'hidden' }}>
+        <div ref={menuRef} style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 200, background: 'white', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.14)', minWidth: '190px', overflow: 'hidden' }}>
           {(() => {
             const admin = admins.find(a => a.id === openMenuId)
             if (!admin) return null
+            const schoolName = admin.school?.name || (admin.school_id ? schoolMap[admin.school_id]?.name : '') || 'โรงเรียนนี้'
             return [
               { label: 'แก้ไขข้อมูล', color: 'var(--text)', action: () => { openEdit(admin); setOpenMenuId(null) } },
               { label: 'รีเซ็ตรหัสผ่าน', color: '#C49212', action: () => { setResetTarget({ id: admin.id, name: `${admin.prefix} ${admin.full_name}` }); setNewPassword(''); setResetMsg(null); setOpenMenuId(null) } },
               { label: 'ตั้งโควต้าผู้ใช้', color: '#0891B2', action: () => { setQuotaTarget({ id: admin.id, name: `${admin.prefix} ${admin.full_name}` }); setQuotaVal(String(admin.quota ?? 15)); setOpenMenuId(null) } },
+              ...(admin.school_id ? [{
+                label: 'ล้างการตั้งค่าโรงเรียน',
+                color: '#C2410C',
+                action: () => {
+                  setResetSettingsTarget({ schoolId: admin.school_id!, schoolName })
+                  setOpenMenuId(null)
+                },
+              }] : []),
               { label: admin.is_active ? 'ระงับการใช้งาน' : 'เปิดใช้งาน', color: admin.is_active ? '#D97706' : '#059669', action: async () => { await toggleAdminActive(admin.id, !admin.is_active); setOpenMenuId(null); loadData() } },
               { label: 'ลบผู้ดูแล', color: '#DC2626', action: () => { setSelected(new Set([admin.id])); setShowDeleteConfirm(true); setOpenMenuId(null) } },
             ].map(item => (
@@ -457,9 +524,16 @@ export default function DistrictAdminsPage() {
                     </td>
                     <td style={{ fontSize: '13px', color: 'var(--text-2)' }}>{admin.email}</td>
                     <td>
-                      {school
-                        ? <span style={{ fontSize: '13px', color: 'var(--text)' }}>{school.name}</span>
-                        : <span style={{ fontSize: '12px', color: '#D97706', background: '#FEF3C7', padding: '2px 8px', borderRadius: '100px', fontWeight: 600 }}>ยังไม่ได้กำหนด</span>}
+                      {school ? (
+                        <div>
+                          <div style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 600 }}>{school.name}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: 2 }}>
+                            {schoolMemberIdHint(school)}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '12px', color: '#D97706', background: '#FEF3C7', padding: '2px 8px', borderRadius: '100px', fontWeight: 600 }}>ยังไม่ได้กำหนด</span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'center', fontSize: '13px', color: 'var(--text-2)' }}>{admin.stat ? admin.stat.students : '-'}</td>
                     <td style={{ fontSize: '12px', color: 'var(--text-2)' }}>

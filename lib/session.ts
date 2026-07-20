@@ -15,6 +15,8 @@ export type SessionPayload = {
   isHomeroom: boolean
   expiresAt: Date
   areaOffice?: string | null  // สำหรับ district role เท่านั้น
+  /** รีเซ็ตโดยแอดมินรรแล้ว — ต้องตั้งรหัสใหม่ก่อนใช้ระบบ */
+  mustChangePassword?: boolean
 }
 
 const secretKey = process.env.SESSION_SECRET

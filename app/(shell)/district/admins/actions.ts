@@ -13,14 +13,33 @@ type AdminRow = {
   is_active: boolean
   school_id: string | null
 }
-type SchoolRow = { id: string; name: string; created_by?: string | null; district?: string | null; province?: string | null }
+type SchoolRow = {
+  id: string
+  name: string
+  created_by?: string | null
+  district?: string | null
+  province?: string | null
+  member_code?: string | null
+  moe_school_id?: string | null
+}
 
-/** ค้นหาโรงเรียนจากฐานข้อมูลทั้งระบบ (เลือกตอนเพิ่ม/แก้ผู้ดูแล) */
+/** ค้นหาจากฐานอ้างอิง (catalog) — ตอนบันทึกจะสร้างโรงเรียนสมาชิกใหม่ให้ */
 export async function searchSchoolsForAdminAssign(q: string) {
   await requireDistrict()
   const term = q.trim().replace(/,/g, ' ')
   if (term.length < 1) return [] as SchoolRow[]
   const db = createServerClient()
+  const primary = await db
+    .from('schools')
+    .select('id, name, district, province')
+    .eq('is_catalog', true)
+    .or(`name.ilike.%${term}%,district.ilike.%${term}%,province.ilike.%${term}%`)
+    .order('name')
+    .limit(40)
+  if (!primary.error) return (primary.data || []) as SchoolRow[]
+  if (!String(primary.error.message || '').includes('is_catalog')) {
+    throw new Error(primary.error.message)
+  }
   const { data, error } = await db
     .from('schools')
     .select('id, name, district, province')
@@ -50,9 +69,12 @@ export async function fetchAdminsAndSchools() {
   const linkedSchoolIds = [...new Set(admins.map(a => a.school_id).filter(Boolean))] as string[]
   for (let i = 0; i < linkedSchoolIds.length; i += 200) {
     const chunk = linkedSchoolIds.slice(i, i + 200)
-    const { data: linkedSchools } = await db.from('schools')
-      .select('id, name, district, province')
+    const linked = await db.from('schools')
+      .select('id, name, district, province, member_code')
       .in('id', chunk)
+    const linkedSchools = linked.error && String(linked.error.message || '').includes('member_code')
+      ? (await db.from('schools').select('id, name, district, province').in('id', chunk)).data
+      : linked.data
     for (const school of (linkedSchools || []) as SchoolRow[]) {
       schoolMap[school.id] = school
       schools.push(school)
@@ -143,25 +165,37 @@ export async function updateAdmin(id: string, payload: {
   const session = await requireDistrict()
   const db = createServerClient()
 
-  // หมายเหตุ: 1 โรงเรียนมีหลาย admin ได้ (เอากฎ 1-รร-1-admin ออก)
-  const { error } = await db.from('users').update(payload).eq('id', id)
+  const nextPayload = { ...payload }
+  let memberMeta: { memberCode?: string | null; catalogId?: string } = {}
+  if (payload.school_id) {
+    try {
+      const { resolveMemberSchoolId } = await import('@/lib/school-member')
+      const member = await resolveMemberSchoolId(payload.school_id)
+      nextPayload.school_id = member.id
+      memberMeta = { memberCode: member.member_code, catalogId: payload.school_id }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'สร้างโรงเรียนสมาชิกไม่สำเร็จ' }
+    }
+  }
+
+  const { error } = await db.from('users').update(nextPayload).eq('id', id)
   if (!error) {
-    if (payload.school_id) {
+    if (nextPayload.school_id) {
       const { data: admin } = await db.from('users').select('is_active, role').eq('id', id).maybeSingle()
       if (admin?.is_active && admin.role === 'admin') {
-        await seedEvaluationSettingsForSchool(payload.school_id)
+        await seedEvaluationSettingsForSchool(nextPayload.school_id)
       }
     }
     await logActivity({
       actor: session,
-      schoolId: payload.school_id ?? null,
+      schoolId: nextPayload.school_id ?? null,
       action: 'update',
       module: 'district_admins',
       targetType: 'user',
       targetId: id,
       targetLabel: payload.full_name ?? 'ผู้ดูแลโรงเรียน',
       description: `แก้ไขผู้ดูแลโรงเรียน ${payload.full_name || ''}`.trim(),
-      metadata: { fields: Object.keys(payload) },
+      metadata: { fields: Object.keys(payload), ...memberMeta },
     })
   }
   return { error: error?.message }
@@ -232,4 +266,68 @@ export async function resetAdminPassword(userId: string, newPassword: string) {
     })
   }
   return { error: error?.message }
+}
+
+/**
+ * ล้างการตั้งค่าที่ผู้ดูแลโรงเรียนตั้งไว้ (onboarding / settings)
+ * คงชื่อโรงเรียนและข้อมูลบัญชีรายชื่อจากเขต — ไม่ลบผู้ใช้ / ห้องเรียน / นักเรียน
+ */
+export async function resetSchoolMemberSettings(schoolId: string) {
+  const session = await requireDistrict()
+  const id = String(schoolId || '').trim()
+  if (!id) return { error: 'ไม่ได้ระบุโรงเรียน' }
+
+  const db = createServerClient()
+  const { data: school, error: schoolErr } = await db
+    .from('schools')
+    .select('id, name, code')
+    .eq('id', id)
+    .maybeSingle()
+  if (schoolErr) return { error: schoolErr.message }
+  if (!school) return { error: 'ไม่พบโรงเรียน' }
+
+  const { error: updateErr } = await db.from('schools').update({
+    director_name: null,
+    vice_director_name: null,
+    acting_director: null,
+    acting_director_position: null,
+    academic_head_name: null,
+    measurement_head_name: null,
+    director_user_id: null,
+    vice_director_user_id: null,
+    acting_director_user_id: null,
+    academic_head_user_id: null,
+    measurement_head_user_id: null,
+    code: null,
+    program_name: null,
+    created_by: null,
+    logo_url: null,
+    stamp_url: null,
+    google_drive_refresh_token: null,
+    google_drive_access_token: null,
+    google_drive_token_expiry: null,
+    google_drive_connected_email: null,
+    google_drive_folder_id: null,
+  }).eq('id', id)
+
+  if (updateErr) return { error: updateErr.message }
+
+  const { error: headsErr } = await db.from('subject_group_heads').delete().eq('school_id', id)
+  if (headsErr && !headsErr.message.includes('subject_group_heads')) {
+    return { error: headsErr.message }
+  }
+
+  await logActivity({
+    actor: session,
+    schoolId: id,
+    action: 'reset_settings',
+    module: 'district_admins',
+    targetType: 'school',
+    targetId: id,
+    targetLabel: school.name,
+    description: `ล้างการตั้งค่าโรงเรียน ${school.name}${school.code ? ` (เดิม /school/${school.code})` : ''}`.trim(),
+    metadata: { previousCode: school.code || null },
+  })
+
+  return { error: undefined, schoolName: school.name as string }
 }
