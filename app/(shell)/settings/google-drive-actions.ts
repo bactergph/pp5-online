@@ -1,8 +1,11 @@
 'use server'
 
 import 'server-only'
+import { headers } from 'next/headers'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
+import { resolveRequestOrigin } from '@/lib/app-origin'
+import { googleOAuthRedirectUri } from '@/lib/google-drive/oauth'
 
 async function requireSession() {
   const session = await getSession()
@@ -15,6 +18,8 @@ export type GoogleDriveConnectionStatus = {
   email: string | null
   folderId: string | null
   oauthConfigured: boolean
+  /** URI ที่แอปส่งให้ Google — ต้องมีใน Google Cloud Console ตรงตัว */
+  oauthRedirectUri: string | null
 }
 
 export async function fetchGoogleDriveConnection(): Promise<GoogleDriveConnectionStatus> {
@@ -22,8 +27,13 @@ export async function fetchGoogleDriveConnection(): Promise<GoogleDriveConnectio
   const oauthConfigured = Boolean(
     process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET,
   )
+  const h = await headers()
+  const oauthRedirectUri = oauthConfigured
+    ? googleOAuthRedirectUri(resolveRequestOrigin(h))
+    : null
+
   if (!session.schoolId) {
-    return { connected: false, email: null, folderId: null, oauthConfigured }
+    return { connected: false, email: null, folderId: null, oauthConfigured, oauthRedirectUri }
   }
 
   const db = createServerClient()
@@ -46,6 +56,7 @@ export async function fetchGoogleDriveConnection(): Promise<GoogleDriveConnectio
     email: data?.google_drive_connected_email || null,
     folderId: data?.google_drive_folder_id || null,
     oauthConfigured,
+    oauthRedirectUri,
   }
 }
 
