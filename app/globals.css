@@ -3374,6 +3374,132 @@ div:has(> .thai-table) {
   font-size: 12px;
 }
 
+.wizard-summary {
+  display: grid;
+  gap: 18px;
+}
+
+.wizard-summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.wizard-summary-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.wizard-summary-item.is-ok {
+  border-color: #D9E8D4;
+  background: #F7FBF5;
+}
+
+.wizard-summary-item.is-pending {
+  border-color: #EDE4D6;
+  background: #FFFCF7;
+}
+
+.wizard-summary-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 800;
+  background: #F0E6D6;
+  color: #8B6B45;
+}
+
+.wizard-summary-item.is-ok .wizard-summary-mark {
+  background: #DCEFCF;
+  color: #3F7A2E;
+}
+
+.wizard-summary-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wizard-summary-body strong {
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.wizard-summary-body strong em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.wizard-summary-body span {
+  font-size: 13px;
+  color: var(--text-3);
+  word-break: break-word;
+}
+
+.wizard-summary-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #E8D9C4;
+  background: var(--primary-bg, #F7F0E6);
+}
+
+.wizard-summary-link--warn {
+  border-color: #F0D9A8;
+  background: #FFF8EC;
+}
+
+.wizard-summary-link__text {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.wizard-summary-link__text > span {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--primary-dk, #8B6B45);
+}
+
+.wizard-summary-link__text code {
+  display: block;
+  word-break: break-all;
+  font-size: 13px;
+  color: #3F2E1F;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.wizard-summary-link__text p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.wizard-summary-link .btn {
+  flex-shrink: 0;
+}
+
 .school-upload-stack {
   display: grid;
   gap: 18px;

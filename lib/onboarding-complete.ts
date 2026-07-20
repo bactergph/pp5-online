@@ -6,7 +6,7 @@ import { createServerClient } from '@/lib/supabase'
  */
 export type OnboardingGate = {
   complete: boolean
-  /** ขั้นแรกที่ยังไม่ครบ (0–7 ตาม ONBOARDING_STEPS) */
+  /** ขั้นแรกที่ยังไม่ครบ (0–8 ตาม ONBOARDING_STEPS) */
   step: number
 }
 
@@ -66,6 +66,6 @@ export async function getAdminOnboardingGate(schoolId: string | null | undefined
 }
 
 export function onboardingUrl(step = 0) {
-  const s = Math.max(0, Math.min(7, Math.floor(step)))
+  const s = Math.max(0, Math.min(8, Math.floor(step)))
   return `/settings/school?onboarding=1&step=${s}`
 }

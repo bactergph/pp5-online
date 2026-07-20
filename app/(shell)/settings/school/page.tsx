@@ -50,6 +50,7 @@ const ONBOARDING_STEPS: { key: string; label: string; title: string; desc: strin
   { key: 'classrooms', label: 'ชั้นเรียน', title: 'ชั้นเรียน', desc: 'ตั้งปีการศึกษาและชั้นที่เปิดสอนในจอเดียว (ทำภายหลังได้)', icon: 'M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z' },
   { key: 'import', label: 'นำเข้านักเรียน', title: 'นำเข้ารายชื่อนักเรียน', desc: 'นำเข้ารายชื่อนักเรียนจากไฟล์ DMC (ทำภายหลังได้)', icon: 'M17 8l-5-5-5 5 M12 3v12 M5 21h14' },
   { key: 'drive', label: 'เชื่อมต่อ Google Drive', title: 'เชื่อมต่อ Google Drive', desc: 'สำรองและจัดเก็บไฟล์รายงานอัตโนมัติ (ไม่บังคับ)', icon: 'M4 4h16v16H4z M8 8h8v8H8z' },
+  { key: 'summary', label: 'สรุป', title: 'พร้อมใช้งานแล้ว', desc: 'ตรวจสรุปการตั้งค่า และส่งลิงก์เข้าสู่ระบบให้ครูในโรงเรียน', icon: 'M9 11l3 3L22 4 M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11' },
 ]
 
 function ImageUploadBox({ label, value, type, schoolId, onUploaded }: {
@@ -171,6 +172,7 @@ export default function SchoolSettingsPage() {
   })
   const [stepSaving, setStepSaving] = useState(false)
   const [dmcImportAction, setDmcImportAction] = useState<DmcImportAction | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
   const generalFormRef = useRef<HTMLFormElement>(null)
   const loginFormRef = useRef<HTMLFormElement>(null)
 
@@ -496,7 +498,7 @@ export default function SchoolSettingsPage() {
     if (step === 1) primaryBtn = <LoadingButton type="button" loading={stepSaving} onClick={saveGeneralStep} className="btn btn-primary btn-lg">บันทึกและไปต่อ</LoadingButton>
     else if (step === 2) primaryBtn = <LoadingButton type="button" loading={stepSaving} onClick={saveLeadersStep} className="btn btn-primary btn-lg">บันทึกและไปต่อ</LoadingButton>
     else if (step === 3) primaryBtn = <LoadingButton type="button" loading={stepSaving} onClick={saveLoginStep} className="btn btn-primary btn-lg">บันทึกและไปต่อ</LoadingButton>
-    else if (step === 4 || step === 5) primaryBtn = <button type="button" onClick={() => goStep(step + 1)} className="btn btn-primary btn-lg">ไปต่อ</button>
+    else if (step === 4 || step === 5 || step === 7) primaryBtn = <button type="button" onClick={() => goStep(step + 1)} className="btn btn-primary btn-lg">ไปต่อ</button>
     else if (step === 6) {
       if (dmcImportAction?.canImport) {
         primaryBtn = (
@@ -521,10 +523,11 @@ export default function SchoolSettingsPage() {
         )
       }
     }
-    else if (isLast) primaryBtn = <button type="button" onClick={finishOnboarding} className="btn btn-primary btn-lg">เสร็จสิ้น · เข้าสู่ระบบ</button>
+    else if (isLast) primaryBtn = <button type="button" onClick={finishOnboarding} className="btn btn-primary btn-lg">เสร็จสิ้น · เริ่มใช้งาน</button>
 
     return (
       <div className="onboarding-wrap onboarding-wrap--full onboarding-wrap--wizard">
+        <AlertModal />
         <div className="onboarding-orbs" aria-hidden />
         <div className="onboarding-wizard">
           <aside className="wizard-rail">
@@ -728,6 +731,127 @@ export default function SchoolSettingsPage() {
                   <GoogleDriveIntegrationPanel active={step === 7} />
                 </div>
               )}
+
+              {step === 8 && (() => {
+                const origin = typeof window !== 'undefined' ? window.location.origin : ''
+                const schoolLoginUrl = school.code
+                  ? `${origin}/school/${String(school.code).trim().toLowerCase()}/login`
+                  : null
+                const hasText = (v: unknown) => Boolean(String(v || '').trim())
+                const generalOk = hasText(school.name) && (
+                  hasText(school.area_office) || hasText(school.district) || hasText(school.province)
+                  || hasText(school.address) || hasText(school.phone)
+                )
+                const leadersOk = hasText(directorName) || Boolean(directorUserId)
+                  || hasText(academicHeadName) || Boolean(academicHeadUserId)
+                  || hasText(viceDirectorName) || Boolean(viceDirectorUserId)
+                const driveOk = Boolean(school.google_drive_folder_id)
+                const rows: { label: string; ok: boolean; detail: string; optional?: boolean }[] = [
+                  { label: 'โรงเรียน', ok: hasText(school.name), detail: school.name || 'ยังไม่ได้เลือก' },
+                  {
+                    label: 'ข้อมูลทั่วไป',
+                    ok: generalOk,
+                    detail: [school.area_office, school.district, school.province].filter(hasText).join(' · ') || 'ยังไม่ครบ',
+                  },
+                  {
+                    label: 'ผู้บริหาร / ผู้รับผิดชอบ',
+                    ok: leadersOk,
+                    detail: [directorName && `ผอ. ${directorName}`, academicHeadName && `วิชาการ ${academicHeadName}`]
+                      .filter(Boolean).join(' · ') || 'ยังไม่ระบุ',
+                  },
+                  {
+                    label: 'หน้า login โรงเรียน',
+                    ok: hasText(school.code),
+                    detail: school.code ? `/school/${school.code}/login` : 'ยังไม่ได้ตั้ง URL',
+                  },
+                  {
+                    label: 'โลโก้และตรา',
+                    ok: Boolean(school.logo_url || school.stamp_url),
+                    detail: [
+                      school.logo_url ? 'มีโลโก้' : null,
+                      school.stamp_url ? 'มีตรา' : null,
+                    ].filter(Boolean).join(' · ') || 'ยังไม่อัปโหลด',
+                    optional: true,
+                  },
+                  {
+                    label: 'ชั้นเรียน / นำเข้านักเรียน',
+                    ok: true,
+                    detail: 'ตั้งค่าในขั้นตอนก่อนหน้า หรือทำภายหลังได้',
+                    optional: true,
+                  },
+                  {
+                    label: 'Google Drive',
+                    ok: driveOk,
+                    detail: driveOk ? 'เชื่อมต่อแล้ว' : 'ยังไม่เชื่อมต่อ',
+                    optional: true,
+                  },
+                ]
+
+                async function copySchoolLink() {
+                  if (!schoolLoginUrl) return
+                  try {
+                    await navigator.clipboard.writeText(schoolLoginUrl)
+                  } catch {
+                    const ta = document.createElement('textarea')
+                    ta.value = schoolLoginUrl
+                    document.body.appendChild(ta)
+                    ta.select()
+                    document.execCommand('copy')
+                    document.body.removeChild(ta)
+                  }
+                  setLinkCopied(true)
+                  notify('success', 'คัดลอกลิงก์แล้ว — ส่งให้ครูในโรงเรียนได้เลย')
+                  window.setTimeout(() => setLinkCopied(false), 2500)
+                }
+
+                return (
+                  <div className="card-padded school-settings-card wizard-summary">
+                    <ul className="wizard-summary-list">
+                      {rows.map(row => (
+                        <li key={row.label} className={`wizard-summary-item${row.ok ? ' is-ok' : ' is-pending'}`}>
+                          <span className="wizard-summary-mark" aria-hidden>
+                            {row.ok ? '✓' : '·'}
+                          </span>
+                          <span className="wizard-summary-body">
+                            <strong>
+                              {row.label}
+                              {row.optional && !row.ok ? <em> · ไม่บังคับ</em> : null}
+                            </strong>
+                            <span>{row.detail}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {schoolLoginUrl ? (
+                      <div className="wizard-summary-link">
+                        <div className="wizard-summary-link__text">
+                          <span>ลิงก์เข้าสู่ระบบของโรงเรียน</span>
+                          <code>{schoolLoginUrl}</code>
+                          <p>คัดลอกแล้วส่งให้ครูในโรงเรียน เพื่อให้เข้าใช้งานได้ทันที</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => { void copySchoolLink() }}
+                        >
+                          {linkCopied ? 'คัดลอกแล้ว' : 'คัดลอกลิงก์'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="wizard-summary-link wizard-summary-link--warn">
+                        <div className="wizard-summary-link__text">
+                          <span>ยังไม่มีลิงก์โรงเรียน</span>
+                          <p>ย้อนกลับไปขั้น「สร้างหน้า login」เพื่อตั้ง URL โรงเรียนก่อน</p>
+                        </div>
+                        <button type="button" className="btn btn-secondary" onClick={() => goStep(3)}>
+                          ไปตั้งค่า login
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             <div className="wizard-footer">
