@@ -9,7 +9,36 @@
 @font-face {
   font-family: 'TH Sarabun New';
   font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/regular.woff') format('woff');
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/bold.woff') format('woff');
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: normal;
   font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/bold.woff') format('woff');
+}
+/* เอกสารใช้ 800/900 — map ไป bold เพื่อไม่ให้หลุดไป Google Sarabun */
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/bold.woff') format('woff');
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: normal;
+  font-weight: 900;
   font-display: swap;
   src: url('/fonts/th-sarabun-new/bold.woff') format('woff');
 }
@@ -24,6 +53,20 @@
   font-family: 'TH Sarabun New';
   font-style: italic;
   font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/bold-italic.woff') format('woff');
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: italic;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/th-sarabun-new/bold-italic.woff') format('woff');
+}
+@font-face {
+  font-family: 'TH Sarabun New';
+  font-style: italic;
+  font-weight: 900;
   font-display: swap;
   src: url('/fonts/th-sarabun-new/bold-italic.woff') format('woff');
 }

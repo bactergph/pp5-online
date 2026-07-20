@@ -938,6 +938,24 @@ export default function ClassroomAdminExportPage() {
           window.setTimeout(() => setLayoutSaved(false), 2000)
         }}
         saved={layoutSaved}
+        previewHint="เลื่อนค่าทางขวาแล้วดูผลบนหน้ากระดาษทันที"
+        preview={
+          hasData
+            ? (
+              <div className="classroom-export-book">
+                {activeMonths.flatMap(month => {
+                  const sheetData = dataByMonth[month]
+                  const sheetMonthKey = setMonthInKey(monthKey, month)
+                  return selectedReports.flatMap(report => renderReportSheet(report, sheetData, sheetMonthKey))
+                })}
+              </div>
+            )
+            : (
+              <div className="ca-layout-live-preview__empty">
+                เลือกเดือนและหมวดรายงานก่อน เพื่อดูพรีวิว
+              </div>
+            )
+        }
       />
       <div className="classroom-export-workspace">
       {!embedMode && !printMode && !autoPrintMode && (
@@ -1696,9 +1714,13 @@ ${fontFaces}
         background: #FFFFFF;
         color: #111827;
         box-shadow: 0 18px 45px rgba(15,23,42,0.16);
-        font-family: ${REPORT_FONT_FAMILY};
+        font-family: ${REPORT_FONT_FAMILY} !important;
         break-after: page;
         page-break-after: always;
+      }
+      .attendance-print-sheet,
+      .attendance-print-sheet * {
+        font-family: ${REPORT_FONT_FAMILY} !important;
       }
       .attendance-print-sheet:last-child {
         break-after: auto;

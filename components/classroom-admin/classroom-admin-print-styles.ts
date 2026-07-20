@@ -36,7 +36,11 @@ const CLASSROOM_ADMIN_PRINT_RULES = `
     padding: var(--ca-pad-top, 16px) var(--ca-pad-x, 18px) var(--ca-pad-bottom, 12px);
     background: #FFFFFF;
     color: #111827; box-shadow: 0 18px 45px rgba(15,23,42,0.16);
-    font-family: ${REPORT_FONT_FAMILY};
+    font-family: ${REPORT_FONT_FAMILY} !important;
+  }
+  .attendance-print-sheet,
+  .attendance-print-sheet * {
+    font-family: ${REPORT_FONT_FAMILY} !important;
   }
   .attendance-print-head {
     display: grid; justify-items: center; gap: 3px;

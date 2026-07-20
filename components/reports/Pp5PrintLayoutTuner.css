@@ -513,6 +513,95 @@
   background: linear-gradient(135deg, #22c55e, #16a34a);
 }
 
+/* พรีวิวสดคู่กับเมนูปรับ layout ธุรการชั้นเรียน */
+.ca-layout-live-preview {
+  position: fixed;
+  inset: 12px 480px 12px 12px;
+  z-index: 1190;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #e8eef5;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+}
+
+.ca-layout-live-preview__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ca-layout-live-preview__toolbar strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.ca-layout-live-preview__toolbar span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.ca-layout-live-preview__scale-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.ca-layout-live-preview__scale-label select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.ca-layout-live-preview__stage {
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  justify-items: start;
+  align-content: start;
+}
+
+.ca-layout-live-preview__zoom {
+  transform-origin: top left;
+}
+
+.ca-layout-live-preview .attendance-print-sheet {
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+}
+
+.ca-layout-live-preview .attendance-print-sheet + .attendance-print-sheet {
+  margin-top: 16px;
+}
+
+.ca-layout-live-preview__empty {
+  padding: 28px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+@media (max-width: 1100px) {
+  .ca-layout-live-preview {
+    inset: 12px 12px calc(48vh + 8px) 12px;
+  }
+}
+
 @media (max-width: 420px) {
   .lt-workspace {
     grid-template-columns: 1fr;

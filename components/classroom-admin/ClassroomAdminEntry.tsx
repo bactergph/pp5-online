@@ -44,6 +44,13 @@ import {
   classroomAdminPrintLayoutSeed,
   downloadClassroomAdminPdf,
 } from '@/lib/classroom-admin-pdf-export'
+import {
+  fetchClassroomAdminExportContext,
+  fetchClassroomAdminExportData,
+  fetchClassroomAdminExportSignatures,
+} from '@/app/(shell)/export/classroom-admin/actions'
+import { buildDailyAttendancePdfBlob, type MonthlyJsPdfReportType } from '@/lib/jspdf-daily-attendance'
+import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scopeDocumentPreviewPath } from '@/lib/document-preview-popup'
 import { resolveClassroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
@@ -1484,6 +1491,84 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       return
     }
 
+    // เวลาเรียน + กิจวัตรรายวัน → jsPDF ฝั่งเครื่อง + คิวดาวน์โหลด
+    const jsPdfReportType: MonthlyJsPdfReportType | null =
+      mode === 'attendance'
+        ? 'attendance'
+        : mode === 'activity' && activityType && ['brushing', 'milk', 'lunch', 'cleaning'].includes(activityType)
+          ? (activityType as MonthlyJsPdfReportType)
+          : null
+
+    if (jsPdfReportType) {
+      const exportMonth = isMonthlyMode ? selectedMonth : month
+      const exportMonthKey = isMonthlyMode
+        ? monthKey
+        : setMonthInKey(monthKey || currentMonthKey(), month)
+      const monthText = isMonthlyMode
+        ? thaiMonthTitle(monthKey, years, yearId)
+        : (MONTHS.find(m => m.value === month)?.label || '')
+      const classLabel = currentClassLabel(classrooms, classroomId)
+      const fileName = `${documentTitle}_${classLabel}_${monthText}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+      const academicYearId = yearId
+      const roomId = classroomId
+      const exportTerm = boardTerm
+      const monthlyLayout = printLayouts.monthly
+      const reportType = jsPdfReportType
+
+      enqueueFileExport({
+        fileName,
+        label: `${documentTitle} · ${classLabel} · ${monthText}`,
+        run: async () => {
+          const [ctx, dataResult, sigResult] = await Promise.all([
+            fetchClassroomAdminExportContext(),
+            fetchClassroomAdminExportData(roomId, academicYearId, exportMonthKey, exportTerm),
+            fetchClassroomAdminExportSignatures(roomId, academicYearId, exportTerm, [exportMonth]),
+          ])
+          if (dataResult.error) throw new Error(dataResult.error)
+          if (!dataResult.classroom || !dataResult.academicYear) {
+            throw new Error('โหลดข้อมูลสำหรับสร้าง PDF ไม่สำเร็จ')
+          }
+
+          const classroom = dataResult.classroom as {
+            level: string
+            room: number
+            homeroom_teacher_id?: string | null
+            homeroom_teacher2_id?: string | null
+          }
+          const homeroomTeacherName =
+            (classroom.homeroom_teacher_id && ctx.teacherNameById?.[classroom.homeroom_teacher_id])
+            || (classroom.homeroom_teacher2_id && ctx.teacherNameById?.[classroom.homeroom_teacher2_id])
+            || 'ยังไม่กำหนด'
+
+          return buildDailyAttendancePdfBlob({
+            reportType,
+            schoolName: ctx.school?.name || 'ชื่อโรงเรียน',
+            schoolLogoUrl: ctx.school?.logo_url || null,
+            yearBe: dataResult.academicYear.year_be,
+            classroomLabel: `${classroom.level}/${classroom.room}`,
+            term: exportTerm,
+            monthKey: exportMonthKey,
+            days: dataResult.days || 0,
+            schoolDays: dataResult.schoolDays || [],
+            holidays: dataResult.holidays || [],
+            weekendSchoolDays: dataResult.weekendSchoolDays || [],
+            students: dataResult.students || [],
+            attendance: reportType === 'attendance' ? (dataResult.attendance || {}) : undefined,
+            activities: reportType !== 'attendance'
+              ? (dataResult.activities?.[reportType] || {})
+              : undefined,
+            homeroomTeacherName,
+            directorName: ctx.directorName || 'ยังไม่กำหนด',
+            actingDirectorPosition: ctx.actingDirectorPosition || null,
+            signatures: sigResult.signaturesByMonth?.[exportMonth] || {},
+            layout: monthlyLayout,
+            fileName,
+          })
+        },
+      })
+      return
+    }
+
     const monthText = isMonthlyMode
       ? thaiMonthTitle(monthKey, years, yearId)
       : (MONTHS.find(m => m.value === month)?.label || '')
@@ -1732,6 +1817,16 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           window.setTimeout(() => setLayoutSaved(false), 2000)
         }}
         saved={layoutSaved}
+        previewHint="เลื่อนค่าทางขวาแล้วดูผลบนหน้ากระดาษทันที · ฟอนต์ TH Sarabun New"
+        preview={
+          students.length > 0
+            ? renderPrintableAttendanceDocument({ preview: true })
+            : (
+              <div className="ca-layout-live-preview__empty">
+                เลือกห้องที่มีนักเรียนก่อน เพื่อดูพรีวิวเอกสาร
+              </div>
+            )
+        }
       />
       )}
       {(printMode || printRenderRequested) && (
@@ -1858,7 +1953,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                   className={`btn btn-secondary classroom-admin-board-button pp5-tuner-toggle${layoutTunerOpen ? ' active' : ''}`}
                   onClick={() => {
                     setLayoutTunerSection(printLayoutSection)
-                    setLayoutTunerOpen(open => !open)
+                    setLayoutTunerOpen(open => {
+                      const next = !open
+                      if (next) void waitForReportFonts()
+                      return next
+                    })
                   }}
                 >
                   {layoutTunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout'}

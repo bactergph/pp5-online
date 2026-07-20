@@ -3,6 +3,7 @@ import { kanit, sarabun } from '@/lib/fonts'
 import PdfExportDockBoot from '@/components/pdf/PdfExportDockBoot'
 import './globals.css'
 import './glass-login.css'
+import './report-fonts.css'
 
 export const metadata: Metadata = {
   title: 'จารย์เสก (Jarn-Sek) - ระบบจัดการงานวิชาการครู',

@@ -23,9 +23,15 @@ async function waitForReportFonts(page: import('puppeteer-core').Page, origin: s
   await page.evaluate(async (baseOrigin) => {
     const specs = [
       { file: 'regular.woff', weight: '400', style: 'normal' },
+      { file: 'regular.woff', weight: '500', style: 'normal' },
+      { file: 'bold.woff', weight: '600', style: 'normal' },
       { file: 'bold.woff', weight: '700', style: 'normal' },
+      { file: 'bold.woff', weight: '800', style: 'normal' },
+      { file: 'bold.woff', weight: '900', style: 'normal' },
       { file: 'italic.woff', weight: '400', style: 'italic' },
       { file: 'bold-italic.woff', weight: '700', style: 'italic' },
+      { file: 'bold-italic.woff', weight: '800', style: 'italic' },
+      { file: 'bold-italic.woff', weight: '900', style: 'italic' },
     ] as const
     const loads = specs.map(async ({ file, weight, style }) => {
       const url = `${baseOrigin}/fonts/th-sarabun-new/${file}`
@@ -42,6 +48,7 @@ async function waitForReportFonts(page: import('puppeteer-core').Page, origin: s
     for (let i = 0; i < 100; i++) {
       const ok = document.fonts.check('16px "TH Sarabun New"')
         || document.fonts.check('700 16px "TH Sarabun New"')
+        || document.fonts.check('900 16px "TH Sarabun New"')
       if (ok) return
       await new Promise(resolve => setTimeout(resolve, 100))
     }

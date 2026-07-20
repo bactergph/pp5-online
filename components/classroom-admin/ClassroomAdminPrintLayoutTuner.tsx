@@ -1,7 +1,7 @@
 'use client'
 
 import '@/components/reports/Pp5PrintLayoutTuner.css'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   CategoryPicker,
   FieldSlider,
@@ -87,6 +87,9 @@ type Props = {
   onChange: (layouts: ClassroomAdminPrintLayouts) => void
   onSave: () => void
   saved: boolean
+  /** พรีวิวเอกสารจริง — อัปเดตตามค่า layout ทันที */
+  preview?: React.ReactNode
+  previewHint?: string
 }
 
 export function useClassroomAdminPrintLayoutsState() {
@@ -108,8 +111,11 @@ export default function ClassroomAdminPrintLayoutTuner({
   onChange,
   onSave,
   saved,
+  preview,
+  previewHint,
 }: Props) {
   const [copied, setCopied] = useState(false)
+  const [previewScale, setPreviewScale] = useState(42)
   const isMonthly = activeSection === 'monthly'
   const layout = layouts[activeSection]
 
@@ -155,75 +161,109 @@ export default function ClassroomAdminPrintLayoutTuner({
 
   const activeGroup = fieldGroups.find(group => group.title === activeCategory) || fieldGroups[0]
 
-  return (
-    <TunerShell
-      badge="CA"
-      title="ปรับ Layout"
-      subtitle="เลือกส่วน → เลือกหมวด → ปรับค่า · ดูพรีวิวทันที"
-      open={open}
-      onClose={onClose}
-      onReset={resetSection}
-      onCopy={copyCss}
-      copied={copied}
-      onSave={onSave}
-      saved={saved}
-    >
-      <div className="lt-step-card">
-        <label className="lt-step-label" htmlFor="ca-section-select">1. เลือกส่วนที่ต้องการปรับ</label>
-        <select
-          id="ca-section-select"
-          className="lt-section-select"
-          value={activeSection}
-          onChange={event => onActiveSectionChange(event.target.value as ClassroomAdminPrintSection)}
-        >
-          {CLASSROOM_ADMIN_PRINT_SECTIONS.map(section => (
-            <option key={section} value={section}>{CLASSROOM_ADMIN_SECTION_LABELS[section]}</option>
-          ))}
-        </select>
-      </div>
+  if (!open) return null
 
-      {activeGroup && (
-        <div className="lt-step-card">
-          <span className="lt-step-label">2. เลือกหมวด · 3. ปรับค่า</span>
-          <div className="lt-workspace">
-            <CategoryPicker
-              categories={categories}
-              active={activeCategory}
-              onChange={setActiveCategory}
-            />
-            <div className="lt-panel">
-              <div className="lt-panel-head">
-                <span className="lt-panel-breadcrumb">{CLASSROOM_ADMIN_SECTION_LABELS[activeSection]}</span>
-                <strong className="lt-panel-title">{activeGroup.title}</strong>
-              </div>
-              <div className="lt-panel-body">
-                {activeGroup.keys.map(key => (
-                  isMonthly ? (
-                    <FieldSlider
-                      key={key}
-                      fieldKey={key as keyof ClassroomAdminMonthlyLayout}
-                      label={CLASSROOM_ADMIN_MONTHLY_FIELD_LABELS[key as keyof ClassroomAdminMonthlyLayout]}
-                      value={(layout as ClassroomAdminMonthlyLayout)[key as keyof ClassroomAdminMonthlyLayout]}
-                      meta={MONTHLY_FIELD_META[key as keyof ClassroomAdminMonthlyLayout]}
-                      onChange={setMonthlyField}
-                    />
-                  ) : (
-                    <FieldSlider
-                      key={key}
-                      fieldKey={key as keyof ClassroomAdminStandardLayout}
-                      label={CLASSROOM_ADMIN_STANDARD_FIELD_LABELS[key as keyof ClassroomAdminStandardLayout]}
-                      value={(layout as ClassroomAdminStandardLayout)[key as keyof ClassroomAdminStandardLayout]}
-                      meta={STANDARD_FIELD_META[key as keyof ClassroomAdminStandardLayout]}
-                      onChange={setStandardField}
-                    />
-                  )
+  return (
+    <>
+      {preview != null && (
+        <div className="ca-layout-live-preview" aria-label="พรีวิว layout">
+          <div className="ca-layout-live-preview__toolbar">
+            <div>
+              <strong>พรีวิวสด</strong>
+              <span>{previewHint || 'เลื่อนค่าทางขวาแล้วดูผลทันที · A4 แนวนอน'}</span>
+            </div>
+            <label className="ca-layout-live-preview__scale-label">
+              ขนาด
+              <select
+                value={previewScale}
+                onChange={e => setPreviewScale(Number(e.target.value))}
+              >
+                {[28, 34, 42, 50, 60, 75].map(value => (
+                  <option key={value} value={value}>{value}%</option>
                 ))}
-              </div>
+              </select>
+            </label>
+          </div>
+          <div className="ca-layout-live-preview__stage">
+            <div
+              className="ca-layout-live-preview__zoom"
+              style={{ transform: `scale(${previewScale / 100})` }}
+            >
+              {preview}
             </div>
           </div>
         </div>
       )}
-    </TunerShell>
+
+      <TunerShell
+        badge="CA"
+        title="ปรับ Layout"
+        subtitle="เลือกส่วน → เลือกหมวด → ปรับค่า · ดูพรีวิวสดด้านซ้าย"
+        open={open}
+        onClose={onClose}
+        onReset={resetSection}
+        onCopy={copyCss}
+        copied={copied}
+        onSave={onSave}
+        saved={saved}
+      >
+        <div className="lt-step-card">
+          <label className="lt-step-label" htmlFor="ca-section-select">1. เลือกส่วนที่ต้องการปรับ</label>
+          <select
+            id="ca-section-select"
+            className="lt-section-select"
+            value={activeSection}
+            onChange={event => onActiveSectionChange(event.target.value as ClassroomAdminPrintSection)}
+          >
+            {CLASSROOM_ADMIN_PRINT_SECTIONS.map(section => (
+              <option key={section} value={section}>{CLASSROOM_ADMIN_SECTION_LABELS[section]}</option>
+            ))}
+          </select>
+        </div>
+
+        {activeGroup && (
+          <div className="lt-step-card">
+            <span className="lt-step-label">2. เลือกหมวด · 3. ปรับค่า</span>
+            <div className="lt-workspace">
+              <CategoryPicker
+                categories={categories}
+                active={activeCategory}
+                onChange={setActiveCategory}
+              />
+              <div className="lt-panel">
+                <div className="lt-panel-head">
+                  <span className="lt-panel-breadcrumb">{CLASSROOM_ADMIN_SECTION_LABELS[activeSection]}</span>
+                  <strong className="lt-panel-title">{activeGroup.title}</strong>
+                </div>
+                <div className="lt-panel-body">
+                  {activeGroup.keys.map(key => (
+                    isMonthly ? (
+                      <FieldSlider
+                        key={key}
+                        fieldKey={key as keyof ClassroomAdminMonthlyLayout}
+                        label={CLASSROOM_ADMIN_MONTHLY_FIELD_LABELS[key as keyof ClassroomAdminMonthlyLayout]}
+                        value={(layout as ClassroomAdminMonthlyLayout)[key as keyof ClassroomAdminMonthlyLayout]}
+                        meta={MONTHLY_FIELD_META[key as keyof ClassroomAdminMonthlyLayout]}
+                        onChange={setMonthlyField}
+                      />
+                    ) : (
+                      <FieldSlider
+                        key={key}
+                        fieldKey={key as keyof ClassroomAdminStandardLayout}
+                        label={CLASSROOM_ADMIN_STANDARD_FIELD_LABELS[key as keyof ClassroomAdminStandardLayout]}
+                        value={(layout as ClassroomAdminStandardLayout)[key as keyof ClassroomAdminStandardLayout]}
+                        meta={STANDARD_FIELD_META[key as keyof ClassroomAdminStandardLayout]}
+                        onChange={setStandardField}
+                      />
+                    )
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </TunerShell>
+    </>
   )
 }
 
