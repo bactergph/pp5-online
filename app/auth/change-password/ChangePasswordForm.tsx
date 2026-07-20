@@ -6,13 +6,11 @@ import ScoutAuthLayout from '@/components/auth/ScoutAuthLayout'
 import PasswordInput from '@/components/auth/PasswordInput'
 
 type Props = {
-  schoolName: string
   logoUrl: string | null
   programName: string
 }
 
 export default function ChangePasswordForm({
-  schoolName,
   logoUrl,
   programName,
 }: Props) {
@@ -20,13 +18,12 @@ export default function ChangePasswordForm({
 
   return (
     <ScoutAuthLayout
+      variant="school"
       brandTitle={programName?.trim() || 'ระบบ ปพ.5 ออนไลน์'}
       brandSubtitle=""
-      brandTagline={schoolName}
       logoUrl={logoUrl}
-      cardEyebrow={schoolName}
-      cardTitle="ยินดีต้อนรับ"
-      cardSubtitle="รหัสถูกรีเซ็ตโดยผู้ดูแลโรงเรียน — กรุณาตั้งรหัสใหม่ก่อนใช้งาน"
+      cardTitle=""
+      cardSubtitle="รหัสถูกรีเซ็ตโดยผู้ดูแล — กรุณาตั้งรหัสใหม่ก่อนใช้งาน"
     >
       {state?.error && (
         <div className="auth-scout-error" role="alert">
@@ -34,7 +31,7 @@ export default function ChangePasswordForm({
         </div>
       )}
 
-      <form action={formAction}>
+      <form action={formAction} className="auth-school-form">
         <div className="auth-scout-field">
           <label className="auth-scout-label" htmlFor="password">รหัสผ่านใหม่</label>
           <PasswordInput

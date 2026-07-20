@@ -11,7 +11,6 @@ export default async function ForceChangePasswordPage() {
     redirect('/login')
   }
 
-  let schoolName = 'โรงเรียน'
   let logoUrl: string | null = null
   let programName = 'ระบบ ปพ.5 ออนไลน์'
 
@@ -19,12 +18,11 @@ export default async function ForceChangePasswordPage() {
     const db = createServerClient()
     const { data: school } = await db
       .from('schools')
-      .select('name, logo_url, program_name')
+      .select('logo_url, program_name')
       .eq('id', session.schoolId)
       .maybeSingle()
 
     if (school) {
-      schoolName = school.name || schoolName
       logoUrl = school.logo_url
       programName = school.program_name || programName
     }
@@ -32,7 +30,6 @@ export default async function ForceChangePasswordPage() {
 
   return (
     <ChangePasswordForm
-      schoolName={schoolName}
       logoUrl={logoUrl}
       programName={programName}
     />

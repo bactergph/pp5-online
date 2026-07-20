@@ -13,7 +13,7 @@ type Props = {
   brandTagline?: string
   logoUrl?: string | null
   showBrandLogos?: boolean
-  variant?: 'default' | 'signin'
+  variant?: 'default' | 'signin' | 'school'
   footer?: ReactNode
 }
 
@@ -47,7 +47,48 @@ export default function ScoutAuthLayout({
   footer,
 }: Props) {
   const isSignin = variant === 'signin'
+  const isSchool = variant === 'school'
   const brandName = [brandTitle, brandSubtitle].filter(Boolean).join(' ')
+
+  // หน้าโรงเรียน: การ์ดเดียวทุขนาด (โลโก้ + ชื่อโปรแกรม + ยินดีต้อนรับ)
+  if (isSchool) {
+    return (
+      <div className="auth-scout-page auth-scout-page--school">
+        <div className="auth-scout-body auth-scout-body--school">
+          <div className="auth-scout-card auth-scout-card--school">
+            {showBrandLogos && (
+              <div className="auth-scout-card__logos auth-scout-card__logos--school">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="" className="auth-scout-card__school-logo" />
+                ) : (
+                  <BrandMark />
+                )}
+              </div>
+            )}
+
+            {brandName ? (
+              <div className="auth-scout-brand auth-scout-brand--school">
+                <h1 className="auth-scout-brand__name">{brandName}</h1>
+              </div>
+            ) : null}
+
+            {(cardEyebrow || cardTitle || cardSubtitle) ? (
+              <div className="auth-scout-card__head">
+                {cardEyebrow ? <p className="auth-scout-card__eyebrow">{cardEyebrow}</p> : null}
+                {cardTitle ? <h2 className="auth-scout-card__title">{cardTitle}</h2> : null}
+                {cardSubtitle ? <p className="auth-scout-card__subtitle">{cardSubtitle}</p> : null}
+              </div>
+            ) : null}
+
+            {children}
+          </div>
+
+          {footer}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`auth-scout-page${isSignin ? ' auth-scout-page--signin' : ''}`}>
@@ -83,7 +124,6 @@ export default function ScoutAuthLayout({
           {brandName ? (
             <div className="auth-scout-brand auth-scout-brand--desktop">
               <p className="auth-scout-brand__name">{brandName}</p>
-              {/* ถ้ามี cardEyebrow (ชื่อรร.) แล้ว ไม่ซ้ำ tagline ใต้ชื่อโปรแกรม */}
               {!cardEyebrow && brandTagline ? (
                 <p className="auth-scout-brand__tag">{brandTagline}</p>
               ) : null}

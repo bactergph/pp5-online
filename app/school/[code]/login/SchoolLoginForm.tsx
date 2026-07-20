@@ -9,13 +9,12 @@ const PREFIXES = ['เด็กชาย', 'เด็กหญิง', 'นา�
 
 type Props = {
   schoolId: string
-  schoolName: string
   logoUrl: string | null
   programName: string
   createdBy: string | null
 }
 
-export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, programName, createdBy }: Props) {
+export default function SchoolLoginForm({ schoolId, logoUrl, programName, createdBy }: Props) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,19 +66,22 @@ export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, program
 
   return (
     <ScoutAuthLayout
+      variant="school"
       brandTitle={programName?.trim() || 'ระบบ ปพ.5 ออนไลน์'}
       brandSubtitle=""
-      brandTagline={schoolName}
       logoUrl={logoUrl}
-      cardEyebrow={schoolName}
-      cardTitle={mode === 'login' ? 'ยินดีต้อนรับ' : 'สมัครสมาชิก'}
-      cardSubtitle={createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกชื่อผู้ใช้ หรืออีเมล และรหัสผ่าน'}
+      cardTitle={mode === 'login' ? '' : 'สมัครสมาชิก'}
+      cardSubtitle={
+        mode === 'login'
+          ? (createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกชื่อผู้ใช้ หรืออีเมล และรหัสผ่าน')
+          : (createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกข้อมูลเพื่อสมัครใช้งาน')
+      }
       footer={(
-        <p className="auth-scout-footer">
+        <p className="auth-scout-footer auth-scout-footer--school">
           {mode === 'login' ? (
-            <>ยังไม่มีบัญชี? <button type="button" onClick={() => { setMode('register'); setError(null) }} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit', padding: 0 }}>สมัครใช้งาน</button></>
+            <>ยังไม่มีบัญชี? <button type="button" onClick={() => { setMode('register'); setError(null) }} className="auth-scout-footer__btn">สมัครใช้งาน</button></>
           ) : (
-            <>มีบัญชีแล้ว? <button type="button" onClick={() => { setMode('login'); setError(null) }} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit', padding: 0 }}>เข้าสู่ระบบ</button></>
+            <>มีบัญชีแล้ว? <button type="button" onClick={() => { setMode('login'); setError(null) }} className="auth-scout-footer__btn">เข้าสู่ระบบ</button></>
           )}
         </p>
       )}

@@ -23,7 +23,6 @@ export default async function SchoolLoginPage({ params }: { params: Promise<{ co
   return (
     <SchoolLoginForm
       schoolId={school.id}
-      schoolName={school.name}
       logoUrl={school.logo_url}
       programName={school.program_name || 'ระบบ ปพ.5 ออนไลน์'}
       createdBy={school.created_by}

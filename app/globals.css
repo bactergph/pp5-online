@@ -1544,6 +1544,148 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
   }
 }
 
+/* ── School auth (login / change-password): single centered card ── */
+.auth-scout-page--school {
+  justify-content: center;
+  align-items: center;
+  padding: clamp(20px, 4vw, 40px) 16px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(125, 168, 232, 0.22), transparent 42%),
+    radial-gradient(circle at 88% 88%, rgba(184, 149, 106, 0.16), transparent 40%),
+    linear-gradient(165deg, #F4F7FC 0%, #E8EEF8 52%, #F2EBE3 100%);
+}
+
+.auth-scout-body--school {
+  margin-top: 0;
+  width: 100%;
+  max-width: 440px;
+  justify-content: center;
+  padding: 0;
+}
+
+.auth-scout-card--school {
+  width: 100%;
+  border-radius: 28px;
+  padding: clamp(28px, 5vw, 36px) clamp(22px, 4vw, 32px) clamp(28px, 5vw, 34px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow:
+    0 20px 50px rgba(49, 65, 110, 0.10),
+    0 2px 8px rgba(15, 23, 42, 0.04);
+  animation: auth-signin-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.auth-scout-card__logos--school {
+  display: flex;
+  margin-bottom: 14px;
+}
+
+.auth-scout-card--school .auth-scout-card__school-logo,
+.auth-scout-card--school .auth-scout-emblem {
+  width: 88px;
+  height: 88px;
+}
+
+.auth-scout-card--school .auth-scout-card__school-logo {
+  border-radius: 18px;
+  background: transparent;
+}
+
+.auth-scout-brand--school {
+  display: block;
+  margin-bottom: 20px;
+}
+
+.auth-scout-brand--school .auth-scout-brand__name {
+  font-size: clamp(1.2rem, 3.6vw, 1.45rem);
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.auth-scout-card--school .auth-scout-card__head {
+  margin-bottom: 22px;
+}
+
+.auth-scout-card--school .auth-scout-card__eyebrow {
+  font-size: clamp(1.15rem, 3.2vw, 1.35rem);
+  font-weight: 800;
+  color: #8B6B45;
+  margin-bottom: 8px;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.auth-scout-card--school .auth-scout-card__title {
+  font-size: clamp(1.55rem, 4.5vw, 1.85rem);
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+
+.auth-scout-card--school .auth-scout-card__subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+}
+
+.auth-scout-card--school .auth-scout-input,
+.auth-scout-card--school .auth-scout-select {
+  background: #F5F8FC;
+  border-color: #D7DEEA;
+  border-radius: 12px;
+  padding: 13px 14px;
+}
+
+.auth-scout-card--school .auth-scout-input:focus,
+.auth-scout-card--school .auth-scout-select:focus {
+  background: #fff;
+  border-color: #B8956A;
+  box-shadow: 0 0 0 3px rgba(184, 149, 106, 0.22);
+}
+
+.auth-scout-card--school .auth-scout-submit {
+  margin-top: 4px;
+  border-radius: 14px;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #8B6B45 0%, #C4A46E 100%);
+  box-shadow: 0 10px 22px rgba(139, 107, 69, 0.28);
+}
+
+.auth-scout-card--school .auth-scout-submit:hover:not(:disabled) {
+  filter: brightness(1.03);
+}
+
+.auth-scout-card--school .auth-scout-links {
+  margin: -2px 0 18px;
+}
+
+.auth-scout-footer--school {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.auth-scout-footer__btn {
+  background: none;
+  border: none;
+  color: #6B4F32;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+}
+
+.auth-scout-footer__btn:hover {
+  color: #8B6B45;
+}
+
+.auth-school-form .auth-scout-field:last-of-type {
+  margin-bottom: 20px;
+}
+
 
 .auth-scout-field {
   margin-bottom: 18px;
