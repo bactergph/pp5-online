@@ -177,16 +177,21 @@ export async function downloadAllReadyPdfExportJobs() {
   return true
 }
 
-/** ใส่คิวสร้าง PDF — กล่องมุมขวาล่างติดตามข้ามหน้าจนกว่าจะปิด */
-export function enqueueReportPdf(
-  input: DownloadReportPdfInput & { label?: string },
-) {
+/**
+ * ใส่คิวสร้างไฟล์ใดก็ได้ (CSV / Blob) — กล่องมุมขวาล่างติดตามข้ามหน้าได้เหมือน PDF
+ * `run` ควรคืน Blob พร้อมชื่อไฟล์สุดท้าย (เปลี่ยนชื่อตอนรันได้)
+ */
+export function enqueueFileExport(params: {
+  fileName: string
+  label?: string
+  run: () => Promise<Blob | { blob: Blob; fileName?: string }>
+}) {
   const store = getStore()
   const id = newJobId()
-  const label = input.label || input.fileName.replace(/\.pdf$/i, '')
+  const label = params.label || params.fileName.replace(/\.[^.]+$/i, '')
   const job: PdfExportJob = {
     id,
-    fileName: input.fileName,
+    fileName: params.fileName,
     label,
     status: 'pending',
     createdAt: Date.now(),
@@ -198,21 +203,25 @@ export function enqueueReportPdf(
 
   void (async () => {
     try {
-      const blob = await fetchReportPdfBlob(input)
+      const result = await params.run()
+      const blob = result instanceof Blob ? result : result.blob
+      const fileName = result instanceof Blob
+        ? params.fileName
+        : (result.fileName || params.fileName)
       const live = getStore()
       if (!live.jobs.some(item => item.id === id)) return
       const blobUrl = URL.createObjectURL(blob)
       live.blobs.set(id, blob)
       live.jobs = live.jobs.map(item => (
         item.id === id
-          ? { ...item, status: 'ready' as const, blobUrl, error: undefined }
+          ? { ...item, fileName, status: 'ready' as const, blobUrl, error: undefined }
           : item
       ))
       emit()
     } catch (error) {
       const live = getStore()
       if (!live.jobs.some(item => item.id === id)) return
-      const message = error instanceof Error ? error.message : 'สร้าง PDF ไม่สำเร็จ'
+      const message = error instanceof Error ? error.message : 'ส่งออกไม่สำเร็จ'
       live.jobs = live.jobs.map(item => (
         item.id === id
           ? { ...item, status: 'error' as const, error: message }
@@ -223,4 +232,15 @@ export function enqueueReportPdf(
   })()
 
   return id
+}
+
+/** ใส่คิวสร้าง PDF — กล่องมุมขวาล่างติดตามข้ามหน้าจนกว่าจะปิด */
+export function enqueueReportPdf(
+  input: DownloadReportPdfInput & { label?: string },
+) {
+  return enqueueFileExport({
+    fileName: input.fileName,
+    label: input.label || input.fileName.replace(/\.pdf$/i, ''),
+    run: async () => fetchReportPdfBlob(input),
+  })
 }

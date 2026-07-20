@@ -69,12 +69,12 @@ function renderDock() {
   const readyCount = jobs.filter(j => j.status === 'ready').length
   const errorCount = jobs.filter(j => j.status === 'error').length
   const title = pendingCount > 0
-    ? `กำลังสร้าง PDF · ${pendingCount} ไฟล์`
+    ? `กำลังส่งออก · ${pendingCount} ไฟล์`
     : readyCount > 0
-      ? `PDF พร้อมแล้ว · ${readyCount} ไฟล์`
+      ? `พร้อมดาวน์โหลด · ${readyCount} ไฟล์`
       : errorCount > 0
-        ? 'สร้าง PDF ไม่สำเร็จ'
-        : 'คิว PDF'
+        ? 'ส่งออกไม่สำเร็จ'
+        : 'คิวส่งออก'
 
   const items = jobs.map(job => {
     const tone = job.status === 'pending' ? 'is-pending' : job.status === 'error' ? 'is-error' : 'is-ready'
@@ -110,7 +110,7 @@ function renderDock() {
     : ''
 
   host.innerHTML = `
-    <aside class="pdf-export-dock" aria-live="polite" aria-label="สถานะสร้าง PDF">
+    <aside class="pdf-export-dock" aria-live="polite" aria-label="สถานะส่งออกไฟล์">
       <header class="pdf-export-dock__head">
         <div class="pdf-export-dock__title-wrap">
           ${pendingCount > 0
@@ -121,7 +121,7 @@ function renderDock() {
             <p class="pdf-export-dock__hint">ติดตามได้แม้เปลี่ยนหน้า · กดปิดเมื่อเสร็จ</p>
           </div>
         </div>
-        <button type="button" class="pdf-export-dock__close" data-pdf-action="dismiss" aria-label="ปิดกล่อง PDF">×</button>
+        <button type="button" class="pdf-export-dock__close" data-pdf-action="dismiss" aria-label="ปิดกล่องส่งออก">×</button>
       </header>
       <ul class="pdf-export-dock__list">${items}</ul>
       ${foot}
