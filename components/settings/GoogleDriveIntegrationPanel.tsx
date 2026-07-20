@@ -20,7 +20,6 @@ const EMPTY_STATUS: GoogleDriveConnectionStatus = {
   email: null,
   folderId: null,
   oauthConfigured: false,
-  oauthRedirectUri: null,
 }
 
 const BENEFITS = [
@@ -244,31 +243,6 @@ export default function GoogleDriveIntegrationPanel({ active = true }: Props) {
             />
             <p className="drive-panel-cta-hint">กดครั้งเดียว · อนุญาตสิทธิ์ · ใช้งานได้ทันที</p>
           </div>
-
-          {status.oauthRedirectUri && (
-            <div className="drive-panel-alert" style={{ marginTop: 16 }}>
-              <strong>ถ้าขึ้น redirect_uri_mismatch</strong>
-              <span>
-                คัดลอก URI นี้ไปใส่ใน Google Cloud Console → Credentials → OAuth client →
-                Authorized redirect URIs (ต้องตรงทุกตัวอักษร):
-              </span>
-              <code style={{ display: 'block', marginTop: 8, wordBreak: 'break-all', fontSize: 13 }}>
-                {status.oauthRedirectUri}
-              </code>
-              <span style={{ display: 'block', marginTop: 8 }}>
-                และใส่ Authorized JavaScript origins เป็นโดเมนเว็บจริง เช่น{' '}
-                <code>
-                  {(() => {
-                    try {
-                      return new URL(status.oauthRedirectUri).origin
-                    } catch {
-                      return 'https://your-domain.com'
-                    }
-                  })()}
-                </code>
-              </span>
-            </div>
-          )}
         </div>
       ) : null}
     </div>

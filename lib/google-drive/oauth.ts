@@ -24,29 +24,19 @@ export function isGoogleOAuthConfigured() {
 }
 
 export function googleOAuthRedirectUri(origin?: string) {
-  const fromEnv = process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim().replace(/\/$/, '')
-  if (fromEnv) {
-    // บน production ห้ามใช้ redirect ที่ชี้ localhost (มักคัดลอกมาจาก .env.local)
-    const envIsLocal = (() => {
-      try {
-        return isLocalhostOrigin(fromEnv.includes('://') ? fromEnv : `https://${fromEnv}`)
-      } catch {
-        return false
-      }
-    })()
-    if (!(process.env.NODE_ENV === 'production' && envIsLocal)) {
+  // Production ล็อก redirect ให้ตรงกับ Google Cloud Console ที่ลงทะเบียนไว้
+  if (process.env.NODE_ENV === 'production') {
+    const fromEnv = process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim().replace(/\/$/, '')
+    if (fromEnv && !isLocalhostOrigin(fromEnv.includes('://') ? fromEnv : `https://${fromEnv}`)) {
       return fromEnv
     }
+    return 'https://pp5-online.vercel.app/api/integrations/google-drive/callback'
   }
 
-  const base = (() => {
-    const candidate = (origin || appOrigin()).replace(/\/$/, '')
-    if (process.env.NODE_ENV === 'production' && isLocalhostOrigin(candidate)) {
-      return appOrigin().replace(/\/$/, '')
-    }
-    return candidate
-  })()
+  const fromEnv = process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim().replace(/\/$/, '')
+  if (fromEnv) return fromEnv
 
+  const base = (origin || appOrigin()).replace(/\/$/, '')
   return `${base}/api/integrations/google-drive/callback`
 }
 

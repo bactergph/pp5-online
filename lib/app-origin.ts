@@ -27,6 +27,9 @@ function firstPublicOrigin(candidates: Array<string | null | undefined>) {
   return null
 }
 
+/** Production origin ที่รู้แน่นอน — ใช้เป็น fallback เมื่อ env ชี้ localhost */
+export const KNOWN_PRODUCTION_ORIGIN = 'https://pp5-online.vercel.app'
+
 /** Base URL ของแอป — ใช้สร้าง PDF, OAuth callback, ฯลฯ */
 export function appOrigin() {
   return firstPublicOrigin([
@@ -36,6 +39,7 @@ export function appOrigin() {
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : null,
     process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+    process.env.NODE_ENV === 'production' ? KNOWN_PRODUCTION_ORIGIN : null,
   ]) ?? 'http://localhost:3000'
 }
 
@@ -70,6 +74,7 @@ export function resolveRequestOrigin(headers: Headers): string {
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : null,
     process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+    process.env.NODE_ENV === 'production' ? KNOWN_PRODUCTION_ORIGIN : null,
     fromRequest,
   ]) ?? appOrigin()
 }
