@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReportPayload } from '@/app/(shell)/reports/actions'
 import { buildPp6PdfBlob } from '@/lib/jspdf-pp6'
 import type { Pp6SectionLayout } from '@/lib/pp6-print-layout'
+import './Pp5PrintLayoutTuner.css'
 
 type Props = {
+  open: boolean
   data: ReportPayload
   term: 0 | 1 | 2
   individual: boolean
@@ -13,11 +15,11 @@ type Props = {
   ranked: boolean
   showGrade: boolean
   layout: Pp6SectionLayout
-  scale?: number
 }
 
-/** พรีวิว PDF จริงจาก jsPDF — อัปเดตเมื่อ layout/ข้อมูลเปลี่ยน (debounce) */
+/** พรีวิว PDF จริง (jsPDF) — เปิดเป็นแผงแยกเมื่อกดปรับ layout */
 export default function Pp6JsPdfLivePreview({
+  open,
   data,
   term,
   individual,
@@ -25,15 +27,16 @@ export default function Pp6JsPdfLivePreview({
   ranked,
   showGrade,
   layout,
-  scale = 88,
 }: Props) {
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [building, setBuilding] = useState(false)
+  const [previewScale, setPreviewScale] = useState(42)
   const urlRef = useRef<string | null>(null)
   const genRef = useRef(0)
 
   useEffect(() => {
+    if (!open) return
     const gen = ++genRef.current
     setBuilding(true)
     setError('')
@@ -63,37 +66,55 @@ export default function Pp6JsPdfLivePreview({
           if (gen === genRef.current) setBuilding(false)
         }
       })()
-    }, 280)
+    }, 220)
 
     return () => window.clearTimeout(timer)
-  }, [data, term, individual, selectedStudentId, ranked, showGrade, layout])
+  }, [open, data, term, individual, selectedStudentId, ranked, showGrade, layout])
 
   useEffect(() => () => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current)
   }, [])
 
+  if (!open) return null
+
   return (
-    <div className="pp6-jspdf-live">
-      <div className="pp6-jspdf-live__bar">
-        <span className="pp6-jspdf-live__badge">พรีวิว PDF (jsPDF) · A4</span>
+    <div className="ca-layout-live-preview pp6-jspdf-overlay" aria-label="พรีวิว PDF ปพ.6">
+      <div className="ca-layout-live-preview__toolbar">
+        <div>
+          <strong>พรีวิว PDF (jsPDF)</strong>
+          <span>เลื่อนค่าในแผงขวาแล้วดูผลทันที · A4 แนวตั้ง</span>
+        </div>
+        <label className="ca-layout-live-preview__scale-label">
+          ขนาด
+          <select
+            value={previewScale}
+            onChange={e => setPreviewScale(Number(e.target.value))}
+          >
+            {[28, 34, 42, 50, 60, 75, 88, 100].map(value => (
+              <option key={value} value={value}>{value}%</option>
+            ))}
+          </select>
+        </label>
         {building && <span className="pp6-jspdf-live__status">กำลังเรนเดอร์…</span>}
         {error && <span className="pp6-jspdf-live__error">{error}</span>}
       </div>
-      <div
-        className="pp6-jspdf-live__frame-wrap"
-        style={{ transform: `scale(${scale / 100})`, transformOrigin: 'top center' }}
-      >
-        {url ? (
-          <iframe
-            title="พรีวิว ปพ.6 PDF"
-            src={url}
-            className="pp6-jspdf-live__frame"
-          />
-        ) : (
-          <div className="pp6-jspdf-live__empty">
-            {building ? 'กำลังสร้างพรีวิว…' : (error || 'ยังไม่มีพรีวิว')}
-          </div>
-        )}
+      <div className="ca-layout-live-preview__stage">
+        <div
+          className="ca-layout-live-preview__zoom"
+          style={{ transform: `scale(${previewScale / 100})` }}
+        >
+          {url ? (
+            <iframe
+              title="พรีวิว ปพ.6 PDF"
+              src={url}
+              className="pp6-jspdf-overlay__frame"
+            />
+          ) : (
+            <div className="ca-layout-live-preview__empty">
+              {building ? 'กำลังสร้างพรีวิว…' : (error || 'ยังไม่มีพรีวิว')}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

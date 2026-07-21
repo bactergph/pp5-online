@@ -303,6 +303,7 @@ function drawCell(
     /** ไม่ตัดข้อความด้วย … — ใช้เมื่อต้องการแสดงเต็มหรือครอบเอง */
     noFit?: boolean
     textNudgeMm?: number
+    borderWidthMm?: number
   },
 ) {
   const align = opts?.align || 'center'
@@ -314,7 +315,7 @@ function drawCell(
     setFill(doc, MUTED_BG)
     doc.rect(x, y, w, h, 'F')
   }
-  setStroke(doc, BORDER, 0.3)
+  setStroke(doc, BORDER, opts?.borderWidthMm ?? 0.3)
   doc.rect(x, y, w, h, 'S')
   setText(doc)
   doc.setFont('THSarabunNew', opts?.bold ? 'bold' : 'normal')
@@ -339,13 +340,26 @@ function drawLabelValueRow(
   h: number,
   label: string,
   value: string,
-  opts: { fontSize: number; muted?: boolean; header?: boolean; textNudgeMm?: number },
+  opts: {
+    fontSize: number
+    muted?: boolean
+    header?: boolean
+    textNudgeMm?: number
+    borderWidthMm?: number
+    valueColWidthMm?: number
+  },
 ) {
   if (opts.header) {
-    drawCell(doc, x, y, totalW, h, label, { bold: true, fontSize: opts.fontSize, noFit: true, textNudgeMm: opts.textNudgeMm })
+    drawCell(doc, x, y, totalW, h, label, {
+      bold: true,
+      fontSize: opts.fontSize,
+      noFit: true,
+      textNudgeMm: opts.textNudgeMm,
+      borderWidthMm: opts.borderWidthMm,
+    })
     return
   }
-  const valueW = 20
+  const valueW = opts.valueColWidthMm ?? 20
   const labelW = Math.max(24, totalW - valueW)
   doc.setFont('THSarabunNew', 'normal')
   doc.setFontSize(opts.fontSize)
@@ -360,6 +374,7 @@ function drawLabelValueRow(
     fontSize,
     noFit: true,
     textNudgeMm: opts.textNudgeMm,
+    borderWidthMm: opts.borderWidthMm,
   })
   drawCell(doc, x + labelW, y, valueW, h, value, {
     fontSize: opts.fontSize,
@@ -367,6 +382,7 @@ function drawLabelValueRow(
     muted: opts.muted,
     noFit: true,
     textNudgeMm: opts.textNudgeMm,
+    borderWidthMm: opts.borderWidthMm,
   })
 }
 
@@ -388,9 +404,10 @@ function drawScoreTableHeader(doc: jsPDF, layout: Pp6SectionLayout, y: number, t
   const row1 = layout.theadHeightMm
   const row2 = layout.theadHeightMm * 0.85
   const fontSize = ptFromCssPx(layout.fontTablePx)
+  const borderWidthMm = layout.borderWidthMm ?? 0.3
 
   const drawHeaderCell = (cx: number, cy: number, cw: number, ch: number, text: string) => {
-    drawCell(doc, cx, cy, cw, ch, text, { bold: true, fontSize, textNudgeMm })
+    drawCell(doc, cx, cy, cw, ch, text, { bold: true, fontSize, textNudgeMm, borderWidthMm })
   }
 
   let x = x0
@@ -437,6 +454,7 @@ async function drawStudentPage(
   const padX = layout.padSideMm
   const contentTop = layout.padTopMm
   const cellNudge = layout.cellTextNudgeMm ?? -0.85
+  const borderW = layout.borderWidthMm ?? 0.3
   let y = contentTop
 
   const cell = (
@@ -446,7 +464,7 @@ async function drawStudentPage(
     h: number,
     text: string,
     opts?: Parameters<typeof drawCell>[6],
-  ) => drawCell(doc, x, cy, w, h, text, { textNudgeMm: cellNudge, ...opts })
+  ) => drawCell(doc, x, cy, w, h, text, { textNudgeMm: cellNudge, borderWidthMm: borderW, ...opts })
 
   // doc mark
   doc.setFont('THSarabunNew', 'bold')
@@ -457,13 +475,14 @@ async function drawStudentPage(
   // header
   const headTop = y + layout.headTopMm
   const logoSize = layout.logoSizeMm
+  const logoTop = headTop + (layout.logoTopOffsetMm ?? 2)
   if (logoData) {
-    doc.addImage(logoData, 'JPEG', layout.logoLeftMm, headTop + 2, logoSize, logoSize)
+    doc.addImage(logoData, 'JPEG', layout.logoLeftMm, logoTop, logoSize, logoSize)
   } else {
     setStroke(doc, [203, 213, 225], 0.4)
-    doc.rect(layout.logoLeftMm, headTop + 2, logoSize, logoSize)
+    doc.rect(layout.logoLeftMm, logoTop, logoSize, logoSize)
     doc.setFontSize(8)
-    doc.text((data.school?.name || 'รร').slice(0, 2), layout.logoLeftMm + logoSize / 2, headTop + 2 + logoSize / 2, {
+    doc.text((data.school?.name || 'รร').slice(0, 2), layout.logoLeftMm + logoSize / 2, logoTop + logoSize / 2, {
       align: 'center',
       baseline: 'middle',
     })
@@ -474,7 +493,7 @@ async function drawStudentPage(
     : 'แบบรายงานผลการพัฒนาคุณภาพผู้เรียนรายบุคคล'
   doc.setFont('THSarabunNew', 'bold')
   doc.setFontSize(ptFromCssPx(layout.fontH1Px))
-  doc.text(`${title} ปีการศึกษา ${data.academicYear?.year_be || '-'}`, PAGE_W / 2, headTop + 8, {
+  doc.text(`${title} ปีการศึกษา ${data.academicYear?.year_be || '-'}`, PAGE_W / 2, headTop + (layout.titleOffsetYMm ?? 8), {
     align: 'center',
     baseline: 'middle',
   })
@@ -482,11 +501,12 @@ async function drawStudentPage(
   doc.text(
     `โรงเรียน${data.school?.name || '-'} อำเภอ ${data.school?.district || '-'} ${schoolOfficeLine(data)}`,
     PAGE_W / 2,
-    headTop + 14,
+    headTop + (layout.schoolLineOffsetYMm ?? 14),
     { align: 'center', baseline: 'middle' },
   )
 
-  y = Math.max(headTop + logoSize + 2, headTop + 18) + layout.sectionGapMm
+  y = Math.max(logoTop + logoSize, headTop + (layout.schoolLineOffsetYMm ?? 14) + 4)
+    + (layout.afterHeaderGapMm ?? layout.sectionGapMm)
 
   // student line — แยกป้ายกับค่า แบบพรีวิว
   const studentFont = ptFromCssPx(layout.fontStudentLinePx)
@@ -526,7 +546,7 @@ async function drawStudentPage(
     bx += vw + bitGap
     void i
   })
-  y += 8 + layout.sectionGapMm
+  y += (layout.studentLineHeightMm ?? 8) + (layout.afterStudentGapMm ?? layout.sectionGapMm)
 
   // score table
   const header = drawScoreTableHeader(doc, layout, y, cellNudge)
@@ -584,7 +604,7 @@ async function drawStudentPage(
     y += rowH
   })
 
-  y += layout.sectionGapMm
+  y += layout.afterScoreGapMm ?? layout.sectionGapMm
 
   if (ranked && term === 1) {
     doc.setFont('THSarabunNew', 'normal')
@@ -606,16 +626,19 @@ async function drawStudentPage(
     const note = 'หมายเหตุ.- ภาคเรียนที่ 1 จะเป็นการรายงานความก้าวหน้าทางการเรียนของผู้เรียน ส่วนผลการพัฒนาคุณภาพผู้เรียน นั้น โรงเรียนจะรายงานให้ผู้ปกครองทราบเมื่อสิ้นปีการศึกษา เกรดที่แสดงนี้ เป็นเพียงการเทียบเคียงเกณฑ์การวัดผล ไม่ใช่เกรดจริง'
     const noteLines = doc.splitTextToSize(note, tableWidth(layout))
     y += layout.noteGapTopMm ?? 2
-    const lineH = noteFontPt * 0.352777778 * 1.35
-    doc.text(noteLines, tableLeft(layout), y, { baseline: 'top', lineHeightFactor: 1.35 })
+    const lineFactor = layout.noteLineHeight ?? 1.35
+    const lineH = noteFontPt * 0.352777778 * lineFactor
+    doc.text(noteLines, tableLeft(layout), y, { baseline: 'top', lineHeightFactor: lineFactor })
     setText(doc)
     y += noteLines.length * lineH + (layout.noteGapBottomMm ?? 2)
   }
 
+  y += layout.activityGapTopMm ?? 0
+
   // activity table — หัวตารางแบบพรีวิว (colspan 2 + ชั่วโมง + ผล)
   const actW = tableWidth(layout)
   const actX = tableLeft(layout)
-  const actH = 6.4
+  const actH = layout.activityRowHeightMm ?? 6.4
   const actFont = ptFromCssPx(15)
   const codeW = 19
   const hoursW = actW * 0.15
@@ -638,7 +661,8 @@ async function drawStudentPage(
     y += actH
   })
 
-  y += layout.sectionGapMm
+  y += layout.afterActivityGapMm ?? layout.sectionGapMm
+  y += layout.summaryGapTopMm ?? 0
 
   if (term !== 1) {
     const gpa = studentGpa(data, student.id, subjects)
@@ -658,9 +682,9 @@ async function drawStudentPage(
 
   const bottomTop = y
   // ตรง CSS: grid 89mm + signatures
-  const summaryW = 89
+  const summaryW = layout.summaryWidthMm ?? 89
   const summaryX = actX
-  const sumH = 6.2
+  const sumH = layout.summaryRowHeightMm ?? 6.2
   const sumFont = ptFromCssPx(15)
   const summaryRows: Array<{ label: string; value: string; header?: boolean }> = [
     { label: 'สรุปผลการประเมิน', value: '', header: true },
@@ -680,6 +704,8 @@ async function drawStudentPage(
       muted: term === 1 && !row.header,
       header: row.header,
       textNudgeMm: cellNudge,
+      borderWidthMm: borderW,
+      valueColWidthMm: layout.valueColWidthMm ?? 20,
     })
     sy += sumH
   })

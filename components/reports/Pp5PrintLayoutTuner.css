@@ -621,3 +621,23 @@
     justify-items: center;
   }
 }
+
+.pp6-jspdf-overlay__frame {
+  display: block;
+  width: 210mm;
+  height: 297mm;
+  border: 0;
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+}
+
+.pp6-jspdf-live__status {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.pp6-jspdf-live__error {
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 700;
+}

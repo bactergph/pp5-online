@@ -26,14 +26,29 @@ export type Pp6SectionLayout = {
   tableWidthPct: number
   sectionGapMm: number
   minSubjectRows: number
-  /** jsPDF — ขยับตัวอักษรในช่องตารางขึ้น/ลง (ลบ = ขึ้น) */
+
+  /** jsPDF ละเอียด */
   cellTextNudgeMm: number
-  /** jsPDF — ระยะก่อน/หลังบรรทัดอันดับ */
+  borderWidthMm: number
+  logoTopOffsetMm: number
+  titleOffsetYMm: number
+  schoolLineOffsetYMm: number
+  afterHeaderGapMm: number
+  studentLineHeightMm: number
+  afterStudentGapMm: number
+  afterScoreGapMm: number
   rankGapTopMm: number
   rankGapBottomMm: number
-  /** jsPDF — ระยะก่อน/หลังหมายเหตุแดง */
   noteGapTopMm: number
   noteGapBottomMm: number
+  noteLineHeight: number
+  activityGapTopMm: number
+  activityRowHeightMm: number
+  afterActivityGapMm: number
+  summaryWidthMm: number
+  summaryRowHeightMm: number
+  summaryGapTopMm: number
+  valueColWidthMm: number
 }
 
 export type Pp6PrintLayouts = Record<Pp6PrintSection, Pp6SectionLayout>
@@ -60,18 +75,35 @@ export const DEFAULT_PP6_SECTION_LAYOUT: Pp6SectionLayout = {
   tableWidthPct: 85,
   sectionGapMm: 1.2,
   minSubjectRows: 15,
+
   cellTextNudgeMm: -0.85,
+  borderWidthMm: 0.3,
+  logoTopOffsetMm: 2,
+  titleOffsetYMm: 8,
+  schoolLineOffsetYMm: 14,
+  afterHeaderGapMm: 1.2,
+  studentLineHeightMm: 8,
+  afterStudentGapMm: 1.2,
+  afterScoreGapMm: 1.2,
   rankGapTopMm: 2,
   rankGapBottomMm: 3,
   noteGapTopMm: 2,
   noteGapBottomMm: 2,
+  noteLineHeight: 1.35,
+  activityGapTopMm: 0,
+  activityRowHeightMm: 6.4,
+  afterActivityGapMm: 1.2,
+  summaryWidthMm: 89,
+  summaryRowHeightMm: 6.2,
+  summaryGapTopMm: 0,
+  valueColWidthMm: 20,
 }
 
 export const DEFAULT_PP6_PRINT_LAYOUTS: Pp6PrintLayouts = {
   page: { ...DEFAULT_PP6_SECTION_LAYOUT },
 }
 
-const STORAGE_KEY = 'pp6-print-layouts-v1'
+const STORAGE_KEY = 'pp6-print-layouts-v2'
 export const PP6_PRINT_LAYOUTS_STORAGE_KEY = STORAGE_KEY
 
 export function mmToPx96(mm: number): number {
@@ -111,6 +143,7 @@ export function loadPp6PrintLayouts(): Pp6PrintLayouts {
   if (typeof window === 'undefined') return { ...DEFAULT_PP6_PRINT_LAYOUTS }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
+      || window.localStorage.getItem('pp6-print-layouts-v1')
     if (!raw) return { ...DEFAULT_PP6_PRINT_LAYOUTS }
     const parsed = JSON.parse(raw) as Partial<Pp6PrintLayouts>
     return {
@@ -130,11 +163,17 @@ export const PP6_SECTION_FIELD_KEYS: (keyof Pp6SectionLayout)[] = [
   'padTopMm', 'padSideMm', 'padBottomMm',
   'fontH1Px', 'fontSubPx', 'fontStudentLinePx', 'fontBasePx',
   'fontTablePx', 'fontNamePx', 'fontNotePx',
-  'rowHeightPx', 'theadHeightMm', 'minSubjectRows',
-  'logoSizeMm', 'logoLeftMm',
+  'rowHeightPx', 'theadHeightMm', 'minSubjectRows', 'tableWidthPct',
+  'logoSizeMm', 'logoLeftMm', 'logoTopOffsetMm',
   'docMarkTopMm', 'docMarkRightMm', 'docMarkFontPx',
-  'headTopMm', 'tableWidthPct', 'sectionGapMm',
-  'cellTextNudgeMm', 'rankGapTopMm', 'rankGapBottomMm', 'noteGapTopMm', 'noteGapBottomMm',
+  'headTopMm', 'titleOffsetYMm', 'schoolLineOffsetYMm', 'afterHeaderGapMm',
+  'studentLineHeightMm', 'afterStudentGapMm',
+  'sectionGapMm', 'afterScoreGapMm',
+  'cellTextNudgeMm', 'borderWidthMm',
+  'rankGapTopMm', 'rankGapBottomMm',
+  'noteGapTopMm', 'noteGapBottomMm', 'noteLineHeight',
+  'activityGapTopMm', 'activityRowHeightMm', 'afterActivityGapMm',
+  'summaryGapTopMm', 'summaryWidthMm', 'summaryRowHeightMm', 'valueColWidthMm',
 ]
 
 export const PP6_SECTION_FIELD_LABELS: Record<keyof Pp6SectionLayout, string> = {
@@ -148,22 +187,38 @@ export const PP6_SECTION_FIELD_LABELS: Record<keyof Pp6SectionLayout, string> = 
   fontTablePx: 'ตารางคะแนน',
   fontNamePx: 'ชื่อวิชาในตาราง',
   fontNotePx: 'หมายเหตุ',
-  rowHeightPx: 'ความสูงแถวตาราง',
+  rowHeightPx: 'ความสูงแถวคะแนน',
   theadHeightMm: 'ความสูงหัวตาราง',
   logoSizeMm: 'ขนาดโลโก้',
-  logoLeftMm: 'ตำแหน่งโลโก้ซ้าย',
+  logoLeftMm: 'โลโก้ซ้าย',
+  logoTopOffsetMm: 'โลโก้บน (offset)',
   docMarkTopMm: 'ปพ.6 บน',
   docMarkRightMm: 'ปพ.6 ขวา',
   docMarkFontPx: 'ฟอนต์ปพ.6',
   headTopMm: 'ระยะหัวกระดาษ',
+  titleOffsetYMm: 'ตำแหน่งหัวข้อ (Y)',
+  schoolLineOffsetYMm: 'ตำแหน่งบรรทัดรร (Y)',
+  afterHeaderGapMm: 'หลังหัวกระดาษ',
+  studentLineHeightMm: 'ความสูงบรรทัดนักเรียน',
+  afterStudentGapMm: 'หลังบรรทัดนักเรียน',
   tableWidthPct: 'ความกว้างตาราง (%)',
-  sectionGapMm: 'ระยะห่างส่วน',
+  sectionGapMm: 'ระยะห่างส่วนทั่วไป',
   minSubjectRows: 'จำนวนแถววิชา',
   cellTextNudgeMm: 'ตัวอักษรในช่อง (ขึ้น=ลบ)',
-  rankGapTopMm: 'ระยะก่อนอันดับ',
-  rankGapBottomMm: 'ระยะหลังอันดับ',
-  noteGapTopMm: 'ระยะก่อนหมายเหตุ',
-  noteGapBottomMm: 'ระยะหลังหมายเหตุ',
+  borderWidthMm: 'ความหนาเส้นตาราง',
+  afterScoreGapMm: 'หลังตารางคะแนน',
+  rankGapTopMm: 'ก่อนอันดับ',
+  rankGapBottomMm: 'หลังอันดับ',
+  noteGapTopMm: 'ก่อนหมายเหตุ',
+  noteGapBottomMm: 'หลังหมายเหตุ',
+  noteLineHeight: 'ระยะบรรทัดหมายเหตุ',
+  activityGapTopMm: 'ก่อนตารางกิจกรรม',
+  activityRowHeightMm: 'ความสูงแถวกิจกรรม',
+  afterActivityGapMm: 'หลังตารางกิจกรรม',
+  summaryGapTopMm: 'ก่อนตารางสรุป',
+  summaryWidthMm: 'ความกว้างตารางสรุป',
+  summaryRowHeightMm: 'ความสูงแถวสรุป',
+  valueColWidthMm: 'ความกว้างช่องค่าสรุป',
 }
 
 export function pp6SectionLayoutCssSnippet(layout: Pp6SectionLayout): string {

@@ -3763,8 +3763,6 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const [pp5TunerOpen, setPp5TunerOpen] = useState(false)
   const [layoutSaved, setLayoutSaved] = useState(false)
   const [pp5TunerSection, setPp5TunerSection] = useState<Pp5PrintSection>('coverClass')
-  /** ปพ.6: พรีวิว HTML หรือ PDF จริงจาก jsPDF */
-  const [pp6PreviewMode, setPp6PreviewMode] = useState<'html' | 'pdf'>('pdf')
   const { layouts: pp5PrintLayouts, setLayouts: setPp5PrintLayouts } = usePp5PrintLayoutsState()
   const { layouts: pp6PrintLayouts, setLayouts: setPp6PrintLayouts } = usePp6PrintLayoutsState()
 
@@ -4450,37 +4448,11 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                 <option value={100}>เต็ม (100%)</option>
               </select>
             </label>
-            {mode === 'pp6' && (
-              <div className="report-preview-mode" role="group" aria-label="โหมดพรีวิว">
-                <button
-                  type="button"
-                  className={`btn btn-secondary${pp6PreviewMode === 'pdf' ? ' active' : ''}`}
-                  disabled={!data}
-                  onClick={() => setPp6PreviewMode('pdf')}
-                >
-                  PDF (jsPDF)
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-secondary${pp6PreviewMode === 'html' ? ' active' : ''}`}
-                  disabled={!data}
-                  onClick={() => setPp6PreviewMode('html')}
-                >
-                  HTML
-                </button>
-              </div>
-            )}
             <div className="report-preview-actions">
               {layoutTunerEnabled && (
               <button
                 type="button"
-                onClick={() => {
-                  setPp5TunerOpen(open => {
-                    const next = !open
-                    if (next && mode === 'pp6') setPp6PreviewMode('pdf')
-                    return next
-                  })
-                }}
+                onClick={() => setPp5TunerOpen(open => !open)}
                 className={`btn btn-secondary pp5-tuner-toggle${pp5TunerOpen ? ' active' : ''}`}
                 disabled={!data}
               >
@@ -4493,6 +4465,18 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               <button type="button" onClick={() => window.print()} disabled={!data} className="btn btn-primary">{MODE_CONFIG[mode].printLabel}</button>
             </div>
           </div>
+          )}
+          {!embedMode && !printMode && mode === 'pp6' && data && (
+            <Pp6JsPdfLivePreview
+              open={pp5TunerOpen}
+              data={data}
+              term={pp6Term}
+              individual={pp6Individual}
+              selectedStudentId={selectedStudentId}
+              ranked={pp6Ranked}
+              showGrade={pp6ShowGrade}
+              layout={pp6PrintLayouts.page}
+            />
           )}
           {!embedMode && !printMode && (mode === 'pp6' ? (
             <Pp5PrintLayoutTuner
@@ -4530,18 +4514,6 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                   : mode === 'pp6' ? 'เลือกระดับชั้นเพื่อดูพรีวิว ปพ.6' : 'เลือกข้อมูลด้านซ้ายเพื่อดูพรีวิว'}</span>
               </div>
             ) : mode === 'pp6' ? (
-              pp6PreviewMode === 'pdf' && !printMode && !embedMode ? (
-                <Pp6JsPdfLivePreview
-                  data={data}
-                  term={pp6Term}
-                  individual={pp6Individual}
-                  selectedStudentId={selectedStudentId}
-                  ranked={pp6Ranked}
-                  showGrade={pp6ShowGrade}
-                  layout={pp6PrintLayouts.page}
-                  scale={scale}
-                />
-              ) : (
               <Pp6PrintLayoutsProvider layouts={pp6PrintLayouts}>
               <div
                 className={printMode ? 'report-print-zone is-pdf-export' : 'report-print-zone'}
@@ -4550,7 +4522,6 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                 <Pp6Page data={data} term={pp6Term} individual={pp6Individual} selectedStudentId={selectedStudentId} ranked={pp6Ranked} showGrade={pp6ShowGrade} />
               </div>
               </Pp6PrintLayoutsProvider>
-              )
             ) : (
               <Pp5PrintLayoutsProvider layouts={pp5PrintLayouts}>
               <div
