@@ -50,6 +50,7 @@ import {
   displaySlotsPerWeek,
   holidayNameMap,
   primaryHourlyPages,
+  secondaryHourlyPages,
   subjectHourlyHpw,
   subjectHourlyTermWeeks,
   type SubjectCalendarWeek,
@@ -63,6 +64,8 @@ const BORDER: [number, number, number] = [17, 24, 39]
 const MUTED_BG: [number, number, number] = [217, 217, 217]
 const TEXT: [number, number, number] = [17, 24, 39]
 const PP5_SUBJECT_PAGE_MARK = '(รายวิชา)'
+const THAI_MONTH_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+const THAI_WEEKDAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
 
 const CHARACTER_KEYS = Array.from({ length: 8 }, (_, i) => `trait${i + 1}_score`)
 const READING_KEYS = [...READING_SCORE_KEYS]
@@ -352,6 +355,19 @@ function studentSecondaryHourlySummary(
     }
   }
   return summarizeHourlyStatuses(statuses)
+}
+
+function subjectWeekMonthLabel(week: SubjectCalendarWeek) {
+  const months = [...new Set(week.days.map(day => day.date.getMonth()))]
+  return months.length === 1
+    ? THAI_MONTH_SHORT[months[0]]
+    : months.map(month => THAI_MONTH_SHORT[month]).join('-')
+}
+
+function hourlyStatusCellContent(status: HourlyStatus | undefined) {
+  if (status === undefined) return ''
+  if (status === '/') return '/'
+  return status
 }
 
 function setStroke(doc: jsPDF, rgb: [number, number, number] = BORDER, width = 0.3) {
@@ -842,32 +858,216 @@ function drawPrimaryWeeklyPage(
   drawTableGrid(doc, box.left, y, colWidths, body, { rowH, fontSize: ptFromCssPx(layout.fontNumberPx), headerRows: 2, nameCol: 2 })
 }
 
+function drawSecondaryWeeklyPage(
+  ctx: DrawCtx,
+  activeTerm: 1 | 2,
+  students: ReportStudent[],
+  pageWeeks: SubjectCalendarWeek[],
+  allWeeks: SubjectCalendarWeek[],
+  showSummary: boolean,
+  totalHours: number,
+  pageNumber: number,
+) {
+  const { doc, data, layouts } = ctx
+  const layout = layouts.attendance
+  const box = contentBox(layout)
+  drawPageMark(doc, pageNumber)
+
+  type HourlyRecord = Parameters<typeof buildHourlyStatusMap>[0] extends (infer U)[] | undefined ? U : never
+  const hourlyRecords = data.hourlyAttendanceRecords as HourlyRecord[]
+  const recordMap = buildHourlyStatusMap(hourlyRecords, ctx.subject.class_subject_id, activeTerm)
+  const columns = pageWeeks.flatMap(week => week.days)
+
+  let y = box.top
+  doc.setFont('THSarabunNew', 'bold')
+  doc.setFontSize(ptFromCssPx(layout.fontH1Px))
+  setText(doc)
+  doc.text(`บันทึกเวลาเรียน ภาคเรียนที่ ${activeTerm}`, box.left + box.width / 2, y, { align: 'center' })
+  y += 5
+  doc.setFont('THSarabunNew', 'normal')
+  doc.setFontSize(ptFromCssPx(layout.fontSubPx))
+  doc.text(
+    `ชั้น ${classroomLevelLabel(data.classroom?.level || '')} ห้อง ${data.classroom?.room || '-'} ภาคเรียนที่ ${activeTerm} ปีการศึกษา ${data.academicYear?.year_be || '-'}`,
+    box.left + box.width / 2,
+    y,
+    { align: 'center' },
+  )
+  y += 5
+
+  const rowCount = pp5AttendanceBodyRows(students.length, layout, 5)
+  const headH = 3.6
+  const rowH = Math.min(rowHeightMm(layout), 4.8)
+  const fixedCols = [6.5, 12, 26, 7]
+  const summaryCols = showSummary ? [10, 8, 8] : []
+  const summaryW = summaryCols.reduce((a, b) => a + b, 0)
+  const fixedW = fixedCols.reduce((a, b) => a + b, 0)
+  const dayW = Math.max(2.6, (box.width - fixedW - summaryW) / Math.max(1, columns.length))
+  const font = Math.max(5.5, ptFromCssPx(layout.fontNumberPx) - 2)
+  const headFont = Math.max(5.5, font)
+
+  // Draw 5 header rows with shared left fixed cells spanning all 5
+  const headerTop = y
+  const headerTotalH = headH * 5
+  drawCell(doc, box.left, headerTop, fixedCols[0], headerTotalH, 'เลขที่', { bold: true, fontSize: headFont })
+  drawCell(doc, box.left + fixedCols[0], headerTop, fixedCols[1], headerTotalH, 'เลขประจำตัว', { bold: true, fontSize: headFont - 0.5 })
+  drawCell(doc, box.left + fixedCols[0] + fixedCols[1], headerTop, fixedCols[2], headerTotalH, 'ชื่อ - นามสกุล', { bold: true, fontSize: headFont })
+
+  const labelX = box.left + fixedCols[0] + fixedCols[1] + fixedCols[2]
+  const dayStartX = labelX + fixedCols[3]
+
+  const headerLabels = ['สัปดาห์', 'เดือน', 'วัน', 'วันที่', 'ชั่วโมงที่']
+  headerLabels.forEach((label, ri) => {
+    drawCell(doc, labelX, headerTop + ri * headH, fixedCols[3], headH, label, { bold: true, fontSize: headFont - 0.5 })
+  })
+
+  // week numbers + months
+  let cx = dayStartX
+  for (const week of pageWeeks) {
+    const w = dayW * week.days.length
+    drawCell(doc, cx, headerTop, w, headH, String(week.weekNumber), { bold: true, fontSize: headFont })
+    drawCell(doc, cx, headerTop + headH, w, headH, subjectWeekMonthLabel(week), { bold: true, fontSize: headFont - 0.5 })
+    cx += w
+  }
+
+  // day / date / hour rows
+  columns.forEach((day, index) => {
+    const x = dayStartX + index * dayW
+    const muted = day.isWeekend || (day.isHoliday && !day.slotInWeek)
+    drawCell(doc, x, headerTop + headH * 2, dayW, headH, THAI_WEEKDAYS[day.dayOfWeek] || '', {
+      bold: true, fontSize: headFont - 0.5, muted,
+    })
+    drawCell(doc, x, headerTop + headH * 3, dayW, headH, String(day.dayNumber), {
+      bold: true, fontSize: headFont - 0.5, muted,
+    })
+    drawCell(doc, x, headerTop + headH * 4, dayW, headH, day.hourNumber ? String(day.hourNumber) : '', {
+      bold: true, fontSize: headFont - 0.5, muted,
+    })
+  })
+
+  if (showSummary) {
+    const sx = dayStartX + columns.length * dayW
+    drawCell(doc, sx, headerTop, summaryCols[0], headerTotalH, `รวม ${totalHours} ชม.`, {
+      bold: true, fontSize: headFont - 1,
+    })
+    drawCell(doc, sx + summaryCols[0], headerTop, summaryCols[1], headerTotalH, 'มาเรียน', { bold: true, fontSize: headFont })
+    drawCell(doc, sx + summaryCols[0] + summaryCols[1], headerTop, summaryCols[2], headerTotalH, 'ร้อยละ', { bold: true, fontSize: headFont })
+  }
+
+  y = headerTop + headerTotalH
+
+  for (let i = 0; i < rowCount; i += 1) {
+    const student = students[i]
+    const cy = y + i * rowH
+    drawCell(doc, box.left, cy, fixedCols[0], rowH, student ? String(student.student_number || i + 1) : '', { fontSize: font })
+    drawCell(doc, box.left + fixedCols[0], cy, fixedCols[1], rowH, student?.student_code || '', { fontSize: font - 0.5 })
+    drawCell(doc, box.left + fixedCols[0] + fixedCols[1], cy, fixedCols[2], rowH, student ? studentName(student) : '', {
+      fontSize: font, align: 'left',
+    })
+    drawCell(doc, labelX, cy, fixedCols[3], rowH, '', { fontSize: font })
+
+    columns.forEach((day, di) => {
+      const x = dayStartX + di * dayW
+      if (day.isWeekend) {
+        drawCell(doc, x, cy, dayW, rowH, i === 0 ? 'ส-อา' : '', { fontSize: Math.max(4.5, font - 1), muted: true })
+        return
+      }
+      if (day.isHoliday && !day.slotInWeek) {
+        const label = i === 0 ? fitText(doc, day.holidayLabel || 'หยุด', dayW - 0.4) : ''
+        drawCell(doc, x, cy, dayW, rowH, label, { fontSize: Math.max(4.5, font - 1.5), muted: true })
+        return
+      }
+      if (!day.slotInWeek || !student) {
+        drawCell(doc, x, cy, dayW, rowH, '', { fontSize: font, muted: day.isHoliday })
+        return
+      }
+      const status = recordMap.get(hourlyCellKey(student.id, day.weekNumber, day.slotInWeek))
+      drawCell(doc, x, cy, dayW, rowH, hourlyStatusCellContent(status), { fontSize: font })
+    })
+
+    if (showSummary) {
+      const sx = dayStartX + columns.length * dayW
+      const summary = student
+        ? studentSecondaryHourlySummary(allWeeks, recordMap, student.id)
+        : null
+      drawCell(doc, sx, cy, summaryCols[0], rowH, '', { fontSize: font })
+      drawCell(doc, sx + summaryCols[0], cy, summaryCols[1], rowH, summary ? String(summary.present) : '', { fontSize: font })
+      drawCell(doc, sx + summaryCols[0] + summaryCols[1], cy, summaryCols[2], rowH, summary ? String(Math.round(summary.percent)) : '', { fontSize: font })
+    }
+  }
+}
+
 function drawAttendanceSection(ctx: DrawCtx, pageNumberStart: number) {
-  const { data, term } = ctx
+  const { data, subject, term } = ctx
   const studentChunks = chunkStudentsForPrintPages(data.students)
   const activeTerms: Array<1 | 2> = term === 0 ? [1, 2] : [term]
+  const isSecondary = isSecondaryClassLevel(data.classroom?.level)
   let pageNum = pageNumberStart
 
   for (const activeTerm of activeTerms) {
     const range = termDateRange(data.academicYear, activeTerm)
     const calendar = reportSchoolCalendar(data)
-    const weeks = subjectHourlyTermWeeks(range.start, range.end, calendar)
-    const pages = weeks.length > 0 ? primaryHourlyPages(weeks) : [{ key: 'empty', weeks: [], showSummary: false }]
+    type HourlyRecord = Parameters<typeof buildHourlyStatusMap>[0] extends (infer U)[] | undefined ? U : never
+    const hourlyRecords = data.hourlyAttendanceRecords as HourlyRecord[]
+    void hourlyRecords
 
-    for (const page of pages) {
-      for (const chunk of studentChunks) {
-        if (pageNum > pageNumberStart) ctx.doc.addPage()
-        if (page.weeks.length === 0) {
-          drawPageMark(ctx.doc, pageNum)
-          const layout = ctx.layouts.attendance
-          const box = contentBox(layout)
-          let y = box.top
-          ctx.doc.setFont('THSarabunNew', 'normal')
-          ctx.doc.text('ยังไม่มีข้อมูลเวลาเรียนหรือยังไม่ได้กำหนดปฏิทินภาคเรียน', box.left, y + 20)
-        } else {
-          drawPrimaryWeeklyPage(ctx, activeTerm, chunk, page.weeks, page.showSummary, pageNum)
+    if (isSecondary) {
+      const teachingWeeks = subjectHourlyTermWeeks(range.start, range.end, calendar)
+      const hpw = subjectHourlyHpw(subject.subject.hours_per_year || 0, teachingWeeks)
+      const { weeks, totalHours } = buildSubjectCalendarWeeks(
+        range.start,
+        range.end,
+        calendar,
+        hpw,
+        holidayNameMap(data.holidays),
+      )
+      const pages = weeks.length > 0
+        ? secondaryHourlyPages(weeks)
+        : [{ key: 'empty', weeks: [] as SubjectCalendarWeek[], showSummary: false }]
+
+      for (const page of pages) {
+        for (const chunk of studentChunks) {
+          if (pageNum > pageNumberStart) ctx.doc.addPage()
+          if (page.weeks.length === 0) {
+            drawPageMark(ctx.doc, pageNum)
+            const layout = ctx.layouts.attendance
+            const box = contentBox(layout)
+            ctx.doc.setFont('THSarabunNew', 'normal')
+            ctx.doc.text('ยังไม่มีข้อมูลเวลาเรียนหรือยังไม่ได้กำหนดปฏิทินภาคเรียน', box.left, box.top + 20)
+          } else {
+            drawSecondaryWeeklyPage(
+              ctx,
+              activeTerm,
+              chunk,
+              page.weeks,
+              weeks,
+              page.showSummary,
+              totalHours,
+              pageNum,
+            )
+          }
+          pageNum += 1
         }
-        pageNum += 1
+      }
+    } else {
+      const weeks = subjectHourlyTermWeeks(range.start, range.end, calendar)
+      const pages = weeks.length > 0
+        ? primaryHourlyPages(weeks)
+        : [{ key: 'empty', weeks: [] as ReturnType<typeof subjectHourlyTermWeeks>, showSummary: false }]
+
+      for (const page of pages) {
+        for (const chunk of studentChunks) {
+          if (pageNum > pageNumberStart) ctx.doc.addPage()
+          if (page.weeks.length === 0) {
+            drawPageMark(ctx.doc, pageNum)
+            const layout = ctx.layouts.attendance
+            const box = contentBox(layout)
+            ctx.doc.setFont('THSarabunNew', 'normal')
+            ctx.doc.text('ยังไม่มีข้อมูลเวลาเรียนหรือยังไม่ได้กำหนดปฏิทินภาคเรียน', box.left, box.top + 20)
+          } else {
+            drawPrimaryWeeklyPage(ctx, activeTerm, chunk, page.weeks, page.showSummary, pageNum)
+          }
+          pageNum += 1
+        }
       }
     }
 
