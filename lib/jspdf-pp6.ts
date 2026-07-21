@@ -239,8 +239,12 @@ function schoolOfficeLine(data: ReportPayload) {
   return expandEducationAreaOffice(raw)
 }
 
+function homeroomTeacherNames(classroom: ReportClassroom | null | undefined) {
+  return [classroom?.homeroom_teacher_name, classroom?.homeroom_teacher2_name].filter(Boolean) as string[]
+}
+
 function homeroomTeacherLine(classroom: ReportClassroom | null | undefined) {
-  return [classroom?.homeroom_teacher_name, classroom?.homeroom_teacher2_name].filter(Boolean).join(' / ') || '-'
+  return homeroomTeacherNames(classroom).join(' / ') || '-'
 }
 
 function pp6LevelDigit(classroom: ReportClassroom | null | undefined) {
@@ -722,30 +726,43 @@ async function drawStudentPage(
     sigUrl: string | null,
     name: string,
     lines: string[],
+    boxX = sigX,
+    boxW = sigW,
   ) => {
     const imgH = 10
-    const imgW = 28
+    const imgW = Math.min(28, Math.max(16, boxW - 8))
     if (sigUrl) {
       try {
-        doc.addImage(sigUrl, 'JPEG', sigX + (sigW - imgW) / 2, blockY, imgW, imgH)
+        doc.addImage(sigUrl, 'JPEG', boxX + (boxW - imgW) / 2, blockY, imgW, imgH)
       } catch {
         setStroke(doc, BORDER, 0.3)
-        doc.line(sigX + 4, blockY + imgH, sigX + sigW - 4, blockY + imgH)
+        doc.line(boxX + 2, blockY + imgH, boxX + boxW - 2, blockY + imgH)
       }
     } else {
       setStroke(doc, BORDER, 0.3)
-      doc.line(sigX + 4, blockY + imgH, sigX + sigW - 4, blockY + imgH)
+      doc.line(boxX + 2, blockY + imgH, boxX + boxW - 2, blockY + imgH)
     }
     doc.setFont('THSarabunNew', 'normal')
+    const nameFont = Math.min(10, Math.max(7.5, boxW * 0.22))
+    doc.setFontSize(nameFont)
+    const nameText = fitText(doc, `(${name})`, boxW - 2)
+    doc.text(nameText, boxX + boxW / 2, blockY + imgH + 4, { align: 'center' })
     doc.setFontSize(10)
-    doc.text(`(${name})`, sigX + sigW / 2, blockY + imgH + 4, { align: 'center' })
     lines.forEach((line, i) => {
-      doc.text(line, sigX + sigW / 2, blockY + imgH + 8 + i * 3.5, { align: 'center' })
+      doc.text(line, boxX + boxW / 2, blockY + imgH + 8 + i * 3.5, { align: 'center' })
     })
   }
 
+  const teachers = homeroomTeacherNames(data.classroom)
   const directorPos = directorActingPositionLine(data.school)
-  await drawSign(bottomTop, homeroomSig, homeroomTeacherLine(data.classroom), ['ครูประจำชั้น'])
+  if (teachers.length >= 2) {
+    const gap = 3
+    const colW = (sigW - gap) / 2
+    await drawSign(bottomTop, homeroomSig, teachers[0], ['ครูประจำชั้น'], sigX, colW)
+    await drawSign(bottomTop, null, teachers[1], ['ครูประจำชั้น'], sigX + colW + gap, colW)
+  } else {
+    await drawSign(bottomTop, homeroomSig, teachers[0] || '-', ['ครูประจำชั้น'])
+  }
   await drawSign(
     bottomTop + sigBlockH,
     directorSig,

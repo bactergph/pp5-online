@@ -982,8 +982,12 @@ function schoolDistrictLine(data: ReportPayload | null) {
   return data?.school?.district ? `อำเภอ ${data.school.district}` : ''
 }
 
+function homeroomTeacherNames(classroom: ReportClassroom | null | undefined) {
+  return [classroom?.homeroom_teacher_name, classroom?.homeroom_teacher2_name].filter(Boolean) as string[]
+}
+
 function homeroomTeacherLine(classroom: ReportClassroom | null | undefined) {
-  return [classroom?.homeroom_teacher_name, classroom?.homeroom_teacher2_name].filter(Boolean).join(' / ') || '-'
+  return homeroomTeacherNames(classroom).join(' / ') || '-'
 }
 
 function SignatureBlock({ data, subject }: { data: ReportPayload | null; subject?: ReportSubject | null }) {
@@ -3716,11 +3720,32 @@ function Pp6Page({
               </table>
 
               <div className="pp6-signatures">
-                <div>
-                  <PrintSignatureSlot url={data?.documentSignatures?.homeroom} asLine />
-                  <p>({homeroomTeacherLine(data?.classroom)})</p>
-                  <span>ครูประจำชั้น</span>
-                </div>
+                {(() => {
+                  const teachers = homeroomTeacherNames(data?.classroom)
+                  if (teachers.length >= 2) {
+                    return (
+                      <div className="pp6-homeroom-pair">
+                        {teachers.map((name, index) => (
+                          <div key={`${name}-${index}`}>
+                            <PrintSignatureSlot
+                              url={index === 0 ? data?.documentSignatures?.homeroom : null}
+                              asLine
+                            />
+                            <p>({name})</p>
+                            <span>ครูประจำชั้น</span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  }
+                  return (
+                    <div>
+                      <PrintSignatureSlot url={data?.documentSignatures?.homeroom} asLine />
+                      <p>({teachers[0] || '-'})</p>
+                      <span>ครูประจำชั้น</span>
+                    </div>
+                  )
+                })()}
                 <div>
                   <PrintSignatureSlot url={data?.documentSignatures?.director} asLine />
                   <p>({directorDisplayName(data?.school)})</p>
@@ -6970,6 +6995,15 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           text-align: center;
           font-size: 17px;
           font-weight: 700;
+        }
+        .pp6-homeroom-pair {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 3mm;
+          align-items: start;
+        }
+        .pp6-homeroom-pair p {
+          font-size: 14px;
         }
         .pp6-sign-line {
           height: 7mm;
