@@ -84,8 +84,11 @@ const SCORE_ENTRY_STYLES = `
     padding: 8px 8px; font-size: 12px; color: #334155; background: #FFFFFF;
   }
   .score-entry-table th { text-align: center; font-weight: 900; background: #F8FAFC; }
-  .score-entry-table .score-sticky-no { position: sticky; left: 0; z-index: 3; width: 46px; text-align: center; }
-  .score-entry-table .score-sticky-name { position: sticky; left: 46px; z-index: 3; min-width: 190px; }
+  .score-entry-table .score-sticky-no { position: sticky; left: 0; z-index: 3; width: 46px; min-width: 46px; text-align: center; background: #FFFFFF; box-shadow: 1px 0 0 #E2E8F0; }
+  .score-entry-table .score-sticky-name {
+    position: sticky; left: 46px; z-index: 3; min-width: 148px; max-width: 190px;
+    text-align: left; background: #FFFFFF; box-shadow: 1px 0 0 #E2E8F0, 10px 0 18px rgba(15,23,42,0.03);
+  }
   .score-entry-table thead .score-sticky-no,
   .score-entry-table thead .score-sticky-name { z-index: 5; background: #F8FAFC; }
   .score-max-label { color: #C49212 !important; font-weight: 900; }
@@ -113,6 +116,32 @@ const SCORE_ENTRY_STYLES = `
   @media (max-width: 900px) {
     .score-entry-filter-card { grid-template-columns: 1fr; }
     .score-entry-head { align-items: flex-start; flex-direction: column; }
+  }
+  /* มือถือ: คอลัมน์เลขที่/ชื่อ ให้เท่ากับเวลาเรียนธุรการชั้น (36px / 88px) */
+  @media (max-width: 760px) {
+    .score-entry-table { min-width: 720px; }
+    .score-entry-table th, .score-entry-table td { padding: 6px 4px; font-size: 11px; }
+    .score-entry-table .score-sticky-no {
+      left: 0;
+      width: 36px;
+      min-width: 36px;
+      max-width: 36px;
+      padding-left: 4px !important;
+      padding-right: 4px !important;
+    }
+    .score-entry-table .score-sticky-name {
+      left: 36px;
+      width: 88px;
+      min-width: 88px;
+      max-width: 88px;
+      padding-left: 6px !important;
+      padding-right: 6px !important;
+      font-size: 11px;
+      white-space: normal;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .score-input { width: 42px; min-height: 34px; font-size: 12px; padding: 4px 2px; }
   }
 `
 

@@ -156,6 +156,47 @@ const STYLES = `
   .eval-empty { padding:42px; border:1px dashed #cbd5e1; border-radius:16px; color:#94a3b8; text-align:center; font-weight:800; }
   @media (max-width: 1000px) { .eval-filter { grid-template-columns:1fr 1fr; } }
   @media (max-width: 640px) { .eval-filter { grid-template-columns:1fr; } .eval-head { align-items:flex-start; } }
+  /* มือถือ: คอลัมน์เลขที่/ชื่อ ให้เท่ากับเวลาเรียนธุรการชั้น (36px / 88px) */
+  @media (max-width: 760px) {
+    .eval-table { min-width: 720px; }
+    .eval-table th, .eval-table td { padding: 6px 4px; font-size: 11px; }
+    .eval-table .sticky-no {
+      left: 0;
+      width: 36px;
+      min-width: 36px;
+      max-width: 36px;
+      padding-left: 4px !important;
+      padding-right: 4px !important;
+      background: #fff;
+      box-shadow: 1px 0 0 #E2E8F0;
+    }
+    .eval-table .sticky-name {
+      left: 36px;
+      width: 88px;
+      min-width: 88px;
+      max-width: 88px;
+      padding-left: 6px !important;
+      padding-right: 6px !important;
+      font-size: 11px;
+      line-height: 1.25;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      background: #fff;
+      box-shadow: 1px 0 0 #E2E8F0, 10px 0 18px rgba(15,23,42,0.03);
+    }
+    .eval-reading-table .sticky-code,
+    .eval-character-table .sticky-code {
+      display: none;
+    }
+    .eval-reading-table .sticky-name,
+    .eval-character-table .sticky-name {
+      left: 36px;
+    }
+    .eval-table thead .sticky-no,
+    .eval-table thead .sticky-name {
+      background: #f8fafc;
+    }
+  }
 `
 
 function resultFromScore(total: number, max: number) {
