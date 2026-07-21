@@ -3662,7 +3662,7 @@ function Pp6Page({
 
             {ranked && term === 1 && (
               <div className="pp6-gpa-line">
-                ได้อันดับที่ <b>{rankMap.get(student.id) || '-'}</b> ของห้อง
+                <b>ได้อันดับที่ {rankMap.get(student.id) || '-'} ของห้อง</b>
               </div>
             )}
 
