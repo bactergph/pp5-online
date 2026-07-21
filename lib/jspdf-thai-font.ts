@@ -4,8 +4,9 @@ import { jsPDF } from 'jspdf'
 
 const FONT_CACHE = new Map<string, string>()
 
-/** ฟอนต์ย่อสำหรับ PDF (ไทย+ASCII) — เล็กกว่า regular.ttf และไม่ฝัง bold ซ้ำ */
-const PDF_FONT_PATH = '/fonts/th-sarabun-new/regular-pdf.ttf'
+/** ฟอนต์ย่อสำหรับ PDF (ไทย+ASCII) */
+const PDF_FONT_REGULAR = '/fonts/th-sarabun-new/regular-pdf.ttf'
+const PDF_FONT_BOLD = '/fonts/th-sarabun-new/bold.ttf'
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {
   let binary = ''
@@ -27,13 +28,16 @@ async function loadFontBase64(path: string) {
   return base64
 }
 
-/** ติดตั้งฟอนต์ไทยให้ jsPDF — ฝังไฟล์เดียว (normal+bold ใช้ตัวเดียวกัน) เพื่อลดขนาด PDF */
+/** ติดตั้งฟอนต์ไทยให้ jsPDF — ฝังทั้ง regular และ bold */
 export async function applyThaiFonts(doc: jsPDF) {
-  const regular = await loadFontBase64(PDF_FONT_PATH)
+  const [regular, bold] = await Promise.all([
+    loadFontBase64(PDF_FONT_REGULAR),
+    loadFontBase64(PDF_FONT_BOLD),
+  ])
   doc.addFileToVFS('THSarabunNew.ttf', regular)
+  doc.addFileToVFS('THSarabunNew-Bold.ttf', bold)
   doc.addFont('THSarabunNew.ttf', 'THSarabunNew', 'normal')
-  // ใช้ไฟล์เดียวกันเป็น bold — ไม่ฝังซ้ำใน VFS
-  doc.addFont('THSarabunNew.ttf', 'THSarabunNew', 'bold')
+  doc.addFont('THSarabunNew-Bold.ttf', 'THSarabunNew', 'bold')
   doc.setFont('THSarabunNew', 'normal')
 }
 

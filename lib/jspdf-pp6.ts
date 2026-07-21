@@ -278,19 +278,6 @@ function setText(doc: jsPDF, rgb: [number, number, number] = TEXT) {
   doc.setTextColor(...rgb)
 }
 
-/** จำลองตัวหนา — ฟอนต์ PDF ฝังเฉพาะ regular */
-function drawHeavyText(
-  doc: jsPDF,
-  text: string,
-  x: number,
-  y: number,
-  options?: Parameters<jsPDF['text']>[2],
-) {
-  doc.setFont('THSarabunNew', 'bold')
-  doc.text(text, x, y, options)
-  doc.text(text, x + 0.2, y, options)
-}
-
 function fitText(doc: jsPDF, text: string, maxW: number) {
   const raw = text || ''
   if (!raw) return ''
@@ -620,10 +607,11 @@ async function drawStudentPage(
   y += layout.afterScoreGapMm ?? layout.sectionGapMm
 
   if (ranked && term === 1) {
+    doc.setFont('THSarabunNew', 'bold')
     doc.setFontSize(ptFromCssPx(layout.fontBasePx))
     setText(doc)
     y += layout.rankGapTopMm ?? 2
-    drawHeavyText(doc, `ได้อันดับที่ ${rankMap.get(student.id) || '-'} ของห้อง`, tableLeft(layout), y + 2.2, {
+    doc.text(`ได้อันดับที่ ${rankMap.get(student.id) || '-'} ของห้อง`, tableLeft(layout), y + 2.2, {
       align: 'left',
       baseline: 'middle',
     })
@@ -678,11 +666,12 @@ async function drawStudentPage(
 
   if (term !== 1) {
     const gpa = studentGpa(data, student.id, subjects)
+    doc.setFont('THSarabunNew', 'bold')
     doc.setFontSize(ptFromCssPx(layout.fontBasePx))
     setText(doc)
     let gpaText = `ผลการเรียนเฉลี่ย (GPA) ${gpa === null ? '-' : gpa.toFixed(2)}`
     if (ranked) gpaText += `  ได้อันดับที่ ${rankMap.get(student.id) || '-'} ของห้อง`
-    drawHeavyText(doc, gpaText, PAGE_W / 2, y + 3, { align: 'center', baseline: 'middle' })
+    doc.text(gpaText, PAGE_W / 2, y + 3, { align: 'center', baseline: 'middle' })
     y += 7
   }
 
