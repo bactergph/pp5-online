@@ -43,10 +43,10 @@ const COLORS = {
 
 const WEEKDAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'] as const
 
-/** รายงานรายเดือนที่ใช้ตารางวันเหมือนกัน — เวลาเรียน + กิจวัตร */
+/** รายงานรายเดือนที่ใช้ตารางวันเหมือนกัน — เวลาเรียน + กิจวัตร + ออมเงิน */
 export type MonthlyJsPdfReportType = Extract<
   ClassroomAdminReportKey,
-  'attendance' | 'brushing' | 'milk' | 'lunch' | 'cleaning'
+  'attendance' | 'brushing' | 'milk' | 'lunch' | 'cleaning' | 'saving'
 >
 
 export const JSPDF_MONTHLY_REPORT_TYPES: MonthlyJsPdfReportType[] = [
@@ -55,7 +55,12 @@ export const JSPDF_MONTHLY_REPORT_TYPES: MonthlyJsPdfReportType[] = [
   'milk',
   'lunch',
   'cleaning',
+  'saving',
 ]
+
+export function isMonthlyJsPdfReportType(value: string): value is MonthlyJsPdfReportType {
+  return (JSPDF_MONTHLY_REPORT_TYPES as string[]).includes(value)
+}
 
 export type DailyAttendancePdfStudent = {
   id: string
@@ -143,6 +148,14 @@ function activityDoneCount(
   }, 0)
 }
 
+function activityAmountSum(
+  studentId: string,
+  schoolDays: number[],
+  activities: Record<string, Record<number, number | undefined>>,
+) {
+  return schoolDays.reduce((sum, day) => sum + Number(activities[studentId]?.[day] || 0), 0)
+}
+
 function attendanceDisplay(
   studentId: string,
   day: number,
@@ -155,9 +168,11 @@ function activityDisplay(
   studentId: string,
   day: number,
   activities: Record<string, Record<number, number | undefined>>,
+  asAmount = false,
 ) {
   const value = Number(activities[studentId]?.[day] || 0)
-  return value > 0 ? CLASSROOM_ADMIN_CHECK_MARK : ''
+  if (!(value > 0)) return ''
+  return asAmount ? String(value) : CLASSROOM_ADMIN_CHECK_MARK
 }
 
 function statusStyle(value: string): { bg: [number, number, number]; fg: [number, number, number] } | null {
@@ -295,23 +310,37 @@ function detectImageFormat(dataUrl: string): 'PNG' | 'JPEG' | 'WEBP' {
   return 'JPEG'
 }
 
-/** สร้าง PDF แบบบันทึกรายเดือน (เวลาเรียน / กิจวัตร) ด้วย jsPDF */
-export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput) {
+export type DailyAttendancePdfTarget = {
+  doc: jsPDF
+  /** ขึ้นหน้าใหม่ก่อนแผ่นแรกของรายงานนี้ (ใช้ตอนต่อเล่ม) */
+  startWithNewPage?: boolean
+  /** โลโก้ที่โหลดไว้แล้ว (แชร์ทั้งเล่ม) */
+  logoData?: string | null
+}
+
+/** สร้าง PDF แบบบันทึกรายเดือน (เวลาเรียน / กิจวัตร / ออมเงิน) ด้วย jsPDF */
+export async function buildDailyAttendancePdfBlob(
+  input: DailyAttendancePdfInput,
+  target?: DailyAttendancePdfTarget,
+) {
   const reportType: MonthlyJsPdfReportType = input.reportType || 'attendance'
   const isAttendance = reportType === 'attendance'
+  const isSaving = reportType === 'saving'
   const attendanceMap = input.attendance || {}
   const activityMap = input.activities || {}
   const layout = { ...DEFAULT_CLASSROOM_ADMIN_MONTHLY_LAYOUT, ...input.layout }
-  const doc = new jsPDF({
+  const doc = target?.doc ?? new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
     format: 'a4',
     compress: true,
   })
-  await applyThaiFonts(doc)
+  if (!target) await applyThaiFonts(doc)
 
   const [logoData, homeroomSign, directorSign] = await Promise.all([
-    loadImageDataUrl(input.schoolLogoUrl, 160, 0.7),
+    target && 'logoData' in target
+      ? Promise.resolve(target.logoData ?? null)
+      : loadImageDataUrl(input.schoolLogoUrl, 160, 0.7),
     loadImageDataUrl(input.signatures?.homeroom, 220, 0.75),
     loadImageDataUrl(input.signatures?.director, 220, 0.75),
   ])
@@ -379,7 +408,9 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
   const pages = chunkStudentsForPrintPages(students)
 
   pages.forEach((pageStudents, pageIndex) => {
-    if (pageIndex > 0) doc.addPage('a4', 'landscape')
+    if (pageIndex > 0 || (pageIndex === 0 && target?.startWithNewPage)) {
+      doc.addPage('a4', 'landscape')
+    }
 
     const pageOffset = pageIndex * PRINT_STUDENTS_PER_PAGE
     const targetRows = printPageRowCount(pageStudents.length, {
@@ -488,9 +519,9 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
         bold: true,
       })
     } else {
-      // กิจวัตร: สรุปผล rowspan 3 คอลัมน์เดียว
+      // กิจวัตร/ออมเงิน: สรุปคอลัมน์เดียว rowspan 3
       drawRect(doc, summaryX, tableTop, summaryBlockW, theadH, COLORS.purple)
-      drawCenteredText(doc, 'สรุปผล', summaryX, tableTop, summaryBlockW, theadH, {
+      drawCenteredText(doc, isSaving ? 'รวม' : 'สรุปผล', summaryX, tableTop, summaryBlockW, theadH, {
         fontSize: summaryTitlePt,
         bold: true,
       })
@@ -594,7 +625,7 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
               fg = style.fg
             }
           } else {
-            value = activityDisplay(row.student.id, day, activityMap)
+            value = activityDisplay(row.student.id, day, activityMap, isSaving)
             if (value) {
               fill = COLORS.presentBg
               fg = COLORS.presentFg
@@ -633,12 +664,22 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
       } else {
         drawRect(doc, summaryX, rowY, summaryW, rowH, COLORS.summaryGood)
         if (isStudentRow) {
-          const count = activityDoneCount(row.student.id, input.schoolDays, activityMap)
-          if (count) {
-            drawCenteredText(doc, String(count), summaryX, rowY, summaryW, rowH, {
-              fontSize: tablePt,
-              bold: true,
-            })
+          const summaryValue = isSaving
+            ? activityAmountSum(row.student.id, input.schoolDays, activityMap)
+            : activityDoneCount(row.student.id, input.schoolDays, activityMap)
+          if (summaryValue) {
+            drawCenteredText(
+              doc,
+              isSaving ? summaryValue.toLocaleString('th-TH') : String(summaryValue),
+              summaryX,
+              rowY,
+              summaryW,
+              rowH,
+              {
+                fontSize: tablePt,
+                bold: true,
+              },
+            )
           }
         }
       }
@@ -717,5 +758,6 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
   const safeClass = input.classroomLabel.replace(/[\\/:*?"<>|]+/g, '-')
   const fileName = input.fileName
     || `${classroomAdminDocumentTitle(reportType)}_${safeClass}_${monthLabel}.pdf`
+  if (target) return { fileName, appended: true as const }
   return { blob: doc.output('blob'), fileName }
 }

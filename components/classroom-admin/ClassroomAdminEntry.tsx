@@ -50,6 +50,10 @@ import {
   fetchClassroomAdminExportSignatures,
 } from '@/app/(shell)/export/classroom-admin/actions'
 import { buildDailyAttendancePdfBlob, type MonthlyJsPdfReportType } from '@/lib/jspdf-daily-attendance'
+import {
+  buildStandardClassroomAdminPdfBlob,
+  type StandardJsPdfReportType,
+} from '@/lib/jspdf-classroom-admin-standard'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scopeDocumentPreviewPath } from '@/lib/document-preview-popup'
 import { resolveClassroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
@@ -1492,15 +1496,17 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       return
     }
 
-    // เวลาเรียน + กิจวัตรรายวัน → jsPDF ฝั่งเครื่อง + คิวดาวน์โหลด
+    // เวลาเรียน + กิจวัตรรายวัน / สุขภาพ-พัฒนาการ → jsPDF ฝั่งเครื่อง + คิวดาวน์โหลด
     const jsPdfReportType: MonthlyJsPdfReportType | null =
       mode === 'attendance'
         ? 'attendance'
-        : mode === 'activity' && activityType && ['brushing', 'milk', 'lunch', 'cleaning'].includes(activityType)
+        : mode === 'activity' && activityType && ['brushing', 'milk', 'lunch', 'cleaning', 'saving'].includes(activityType)
           ? (activityType as MonthlyJsPdfReportType)
           : null
+    const standardJsPdfReportType: StandardJsPdfReportType | null =
+      mode === 'weightHeight' ? 'health' : mode === 'healthInspection' ? 'inspection' : null
 
-    if (jsPdfReportType) {
+    if (jsPdfReportType || standardJsPdfReportType) {
       const exportMonth = isMonthlyMode ? selectedMonth : month
       const exportMonthKey = isMonthlyMode
         ? monthKey
@@ -1514,7 +1520,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       const roomId = classroomId
       const exportTerm = boardTerm
       const monthlyLayout = printLayouts.monthly
+      const standardLayout = printLayouts.standard
       const reportType = jsPdfReportType
+      const standardReportType = standardJsPdfReportType
 
       enqueueFileExport({
         fileName,
@@ -1536,17 +1544,40 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             homeroom_teacher_id?: string | null
             homeroom_teacher2_id?: string | null
           }
-          const homeroomTeacherName =
+          const resolvedHomeroomName =
             (classroom.homeroom_teacher_id && ctx.teacherNameById?.[classroom.homeroom_teacher_id])
             || (classroom.homeroom_teacher2_id && ctx.teacherNameById?.[classroom.homeroom_teacher2_id])
             || 'ยังไม่กำหนด'
-
-          return buildDailyAttendancePdfBlob({
-            reportType,
+          const shared = {
             schoolName: ctx.school?.name || 'ชื่อโรงเรียน',
             schoolLogoUrl: ctx.school?.logo_url || null,
             yearBe: dataResult.academicYear.year_be,
             classroomLabel: `${classroom.level}/${classroom.room}`,
+            homeroomTeacherName: resolvedHomeroomName,
+            directorName: ctx.directorName || 'ยังไม่กำหนด',
+            actingDirectorPosition: ctx.actingDirectorPosition || null,
+            fileName,
+          }
+
+          if (standardReportType) {
+            return buildStandardClassroomAdminPdfBlob({
+              ...shared,
+              layout: standardLayout,
+              sheets: [{
+                reportType: standardReportType,
+                monthKey: exportMonthKey,
+                term: exportTerm,
+                students: dataResult.students || [],
+                health: standardReportType === 'health' ? (dataResult.health || {}) : undefined,
+                inspection: standardReportType === 'inspection' ? (dataResult.inspection || {}) : undefined,
+                signatures: sigResult.signaturesByMonth?.[exportMonth] || {},
+              }],
+            })
+          }
+
+          return buildDailyAttendancePdfBlob({
+            ...shared,
+            reportType: reportType!,
             term: exportTerm,
             monthKey: exportMonthKey,
             days: dataResult.days || 0,
@@ -1556,11 +1587,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             students: dataResult.students || [],
             attendance: reportType === 'attendance' ? (dataResult.attendance || {}) : undefined,
             activities: reportType !== 'attendance'
-              ? (dataResult.activities?.[reportType] || {})
+              ? (dataResult.activities?.[reportType!] || {})
               : undefined,
-            homeroomTeacherName,
-            directorName: ctx.directorName || 'ยังไม่กำหนด',
-            actingDirectorPosition: ctx.actingDirectorPosition || null,
             signatures: sigResult.signaturesByMonth?.[exportMonth] || {},
             layout: monthlyLayout,
             fileName,

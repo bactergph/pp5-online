@@ -23,10 +23,8 @@ import {
   CLASSROOM_ADMIN_STANDARD_TABLE_COL_WIDTHS,
   CLASSROOM_ADMIN_WEIGHT_HEIGHT_COL_WIDTHS,
 } from '@/lib/classroom-admin-standard-table-columns'
-import {
-  classroomAdminPrintLayoutSeed,
-  downloadClassroomAdminPdf,
-} from '@/lib/classroom-admin-pdf-export'
+import { buildClassroomAdminBookPdfBlob, isJsPdfBookReportType } from '@/lib/jspdf-classroom-admin-book'
+import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
 import { REPORT_FONT_FAMILY } from '@/lib/report-font'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
@@ -476,28 +474,65 @@ export default function ClassroomAdminExportPage() {
     }
 
     setError('')
-    const params = new URLSearchParams()
-    params.set('print', '1')
-    params.set('monthkey', monthKey)
-    params.set('term', String(term))
-    if (yearId) params.set('year', yearId)
-    if (classroomId) params.set('classroom', classroomId)
-    params.set('months', selectedMonths.join(','))
-    params.set('reports', selectedReports.join(','))
-
     const firstData = sourceData[selectedMonths.find(month => sourceData[month]) || selectedMonths[0]]
     const classLabel = `${firstData?.classroom?.level || ''}-${firstData?.classroom?.room || ''}`
     const fileName = `เล่มรายงานธุรการ_${classLabel}_${selectedMonths.join('-')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+    const label = `เล่มธุรการ · ${classLabel} · ${selectedMonths.length} เดือน`
 
-    downloadClassroomAdminPdf({
-      path: window.location.pathname,
-      query: params.toString(),
+    const unsupported = selectedReports.filter(report => !isJsPdfBookReportType(report))
+    if (unsupported.length > 0) {
+      setError(`ยังไม่รองรับ jsPDF: ${unsupported.join(', ')}`)
+      return
+    }
+    if (selectedReports.length === 0) {
+      setError('กรุณาเลือกหมวดรายงาน')
+      return
+    }
+
+    const exportMonths = selectedMonths.filter(month => sourceData[month])
+    if (exportMonths.length === 0) {
+      setError('ไม่พบข้อมูลสำหรับสร้าง PDF')
+      return
+    }
+
+    const exportReports = [...selectedReports]
+    const exportSource = sourceData
+    const exportMonthKeyBase = monthKey
+    const exportTerm = term
+    const exportMonthlyLayout = printLayouts.monthly
+    const exportStandardLayout = printLayouts.standard
+
+    enqueueFileExport({
       fileName,
-      label: `เล่มธุรการ · ${classLabel} · ${selectedMonths.length} เดือน`,
-      localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),
+      label,
+      run: async () => {
+        const sigResult = await fetchClassroomAdminExportSignatures(
+          classroomId,
+          yearId,
+          exportTerm,
+          exportMonths,
+        )
+        return buildClassroomAdminBookPdfBlob({
+          schoolName: schoolName || 'ชื่อโรงเรียน',
+          schoolLogoUrl: schoolLogoUrl || null,
+          yearBe: firstData?.academicYear?.year_be || years.find(y => y.id === yearId)?.year_be || 0,
+          classroomLabel: `${firstData?.classroom?.level || ''}/${firstData?.classroom?.room || ''}`,
+          term: exportTerm,
+          monthKeyBase: exportMonthKeyBase,
+          months: exportMonths,
+          reports: exportReports,
+          dataByMonth: exportSource,
+          signaturesByMonth: sigResult.signaturesByMonth || {},
+          monthlyLayout: exportMonthlyLayout,
+          standardLayout: exportStandardLayout,
+          homeroomTeacherName,
+          directorName,
+          actingDirectorPosition,
+          fileName,
+        })
+      },
     })
   }
-
   const activeMonths = selectedMonths.filter(month => dataByMonth[month])
   const hasData = activeMonths.length > 0
   const canGenerate = Boolean(yearId && classroomId && selectedMonths.length > 0 && selectedReports.length > 0)
