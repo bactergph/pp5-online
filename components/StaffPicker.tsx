@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { formatStaffName } from '@/lib/roles'
 
 export type StaffOption = {
@@ -44,7 +45,11 @@ export default function StaffPicker({
   const [mode, setMode] = useState<Mode>(() => initialMode(value, allowManual, manualValue))
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({})
+  const [mounted, setMounted] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const selected = staff.find(s => s.id === value) || null
   const pickedLabel = selected
@@ -62,12 +67,66 @@ export default function StaffPicker({
   }, [staff, query])
 
   useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) return
+
+    function placeMenu() {
+      const trigger = triggerRef.current
+      if (!trigger) return
+      const rect = trigger.getBoundingClientRect()
+      const gap = 6
+      const maxH = Math.min(320, Math.floor(window.innerHeight * 0.5))
+      const spaceBelow = window.innerHeight - rect.bottom - gap - 8
+      const spaceAbove = rect.top - gap - 8
+      const openUp = spaceBelow < 200 && spaceAbove > spaceBelow
+      const height = Math.max(160, Math.min(maxH, openUp ? spaceAbove : spaceBelow))
+      const width = Math.max(rect.width, Math.min(360, window.innerWidth - 24))
+      const left = Math.min(Math.max(12, rect.left), window.innerWidth - width - 12)
+
+      setMenuStyle({
+        position: 'fixed',
+        left,
+        width,
+        zIndex: 12000,
+        maxHeight: height,
+        ...(openUp
+          ? { bottom: window.innerHeight - rect.top + gap, top: 'auto' }
+          : { top: rect.bottom + gap, bottom: 'auto' }),
+      })
+    }
+
+    placeMenu()
+    document.body.classList.add('staff-picker-menu-open')
+    window.addEventListener('resize', placeMenu)
+    window.addEventListener('scroll', placeMenu, true)
+    return () => {
+      document.body.classList.remove('staff-picker-menu-open')
+      window.removeEventListener('resize', placeMenu)
+      window.removeEventListener('scroll', placeMenu, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
     function onDoc(e: PointerEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (wrapRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
     }
     document.addEventListener('pointerdown', onDoc)
-    return () => document.removeEventListener('pointerdown', onDoc)
-  }, [])
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
 
   useEffect(() => {
     if (value) setMode('pick')
@@ -101,6 +160,58 @@ export default function StaffPicker({
   }
 
   const showClear = Boolean(mode === 'manual' ? manualValue : (value || pickedLabel))
+
+  const menu = open && mounted
+    ? createPortal(
+      <div
+        ref={menuRef}
+        className="staff-picker__menu staff-picker__menu--portal"
+        role="listbox"
+        style={menuStyle}
+      >
+        <div className="staff-picker__search-wrap">
+          <input
+            className="form-input staff-picker__search"
+            value={query}
+            placeholder="ค้นหาชื่อ..."
+            autoComplete="off"
+            enterKeyHint="search"
+            autoFocus
+            onChange={e => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="staff-picker__menu-list">
+          {filtered.length === 0 ? (
+            <div className="staff-picker__empty">
+              {allowManual
+                ? 'ไม่พบในรายชื่อ — สลับไป “พิมพ์ชื่อเอง” ได้'
+                : 'ไม่พบรายชื่อ'}
+            </div>
+          ) : filtered.map(user => (
+            <button
+              key={user.id}
+              type="button"
+              role="option"
+              aria-selected={user.id === value}
+              className={`staff-picker__option${user.id === value ? ' is-selected' : ''}`}
+              onPointerDown={e => e.preventDefault()}
+              onClick={() => pick(user)}
+            >
+              <div className="staff-picker__option-name">
+                {formatStaffName(user.prefix, user.full_name)}
+              </div>
+              {(user.position || user.role) && (
+                <div className="staff-picker__option-meta">
+                  {[user.position, user.role === 'teacher' ? 'ครู' : user.role].filter(Boolean).join(' · ')}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>,
+      document.body,
+    )
+    : null
 
   return (
     <div ref={wrapRef} className={`staff-picker${open ? ' is-open' : ''}${mode === 'manual' ? ' is-manual' : ' is-pick'}`}>
@@ -151,6 +262,7 @@ export default function StaffPicker({
         <div className="staff-picker__pick">
           <div className={`staff-picker__field${showClear ? ' has-clear' : ''}`}>
             <button
+              ref={triggerRef}
               type="button"
               className={`staff-picker__trigger${pickedLabel ? '' : ' is-placeholder'}`}
               aria-haspopup="listbox"
@@ -171,46 +283,7 @@ export default function StaffPicker({
               </button>
             )}
           </div>
-
-          {open && (
-            <div className="staff-picker__menu" role="listbox">
-              <div className="staff-picker__search-wrap">
-                <input
-                  className="form-input staff-picker__search"
-                  value={query}
-                  placeholder="ค้นหาชื่อ..."
-                  autoComplete="off"
-                  enterKeyHint="search"
-                  autoFocus
-                  onChange={e => setQuery(e.target.value)}
-                />
-              </div>
-              {filtered.length === 0 ? (
-                <div className="staff-picker__empty">
-                  {allowManual
-                    ? 'ไม่พบในรายชื่อ — สลับไป “พิมพ์ชื่อเอง” ได้'
-                    : 'ไม่พบรายชื่อ'}
-                </div>
-              ) : filtered.map(user => (
-                <button
-                  key={user.id}
-                  type="button"
-                  role="option"
-                  aria-selected={user.id === value}
-                  className={`staff-picker__option${user.id === value ? ' is-selected' : ''}`}
-                  onPointerDown={e => e.preventDefault()}
-                  onClick={() => pick(user)}
-                >
-                  <div className="staff-picker__option-name">
-                    {formatStaffName(user.prefix, user.full_name)}
-                  </div>
-                  {user.position && (
-                    <div className="staff-picker__option-meta">{user.position}</div>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+          {menu}
         </div>
       )}
     </div>

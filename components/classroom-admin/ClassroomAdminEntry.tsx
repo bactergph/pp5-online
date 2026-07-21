@@ -567,6 +567,12 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const boardMonthTabs = mode === 'weightHeight'
     ? MONTHS.map(item => item.value)
     : ATTENDANCE_TERMS.find(item => item.value === boardTerm)?.months || ATTENDANCE_TERMS[0].months
+
+  useEffect(() => {
+    const active = document.querySelector<HTMLElement>(`.classroom-admin-month-tab[data-month-tab="${boardMonth}"]`)
+    active?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+  }, [boardMonth, boardTerm])
+
   const isStandardFixedColMode = mode === 'weightHeight' || mode === 'healthInspection'
   const selectedClassroom = classrooms.find(c => c.id === classroomId)
   const homeroomTeacherName = [
@@ -1996,10 +2002,12 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           </div>
 
           <div className="classroom-admin-month-tabs" aria-label="เลือกเดือน">
+            <span className="classroom-admin-month-tabs-label">เดือน</span>
             {boardMonthTabs.map(monthValue => (
               <button
                 key={monthValue}
                 type="button"
+                data-month-tab={monthValue}
                 className={`classroom-admin-month-tab ${boardMonth === monthValue ? 'is-active' : ''}`}
                 onClick={() => {
                   if (isMonthlyMode) setMonthKey(setMonthInKey(monthKey, monthValue))
