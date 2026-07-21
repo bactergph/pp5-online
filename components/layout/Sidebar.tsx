@@ -73,10 +73,10 @@ function leafIcon(child: Child) {
 
 // ── building blocks ──
 const DASHBOARD: NavItem = { href: '/dashboard', label: 'หน้าหลัก', icon: ic(I.home) }
-const CLASSROOMS: NavItem = { href: '/classrooms', label: 'ชั้นเรียน', icon: ic(I.class) }
+const CLASSROOMS: NavItem = { href: '/classrooms', label: 'ชั้นที่เปิดสอน', icon: ic(I.class) }
 const STUDENTS: NavItem = { href: '/students', label: 'นักเรียน', icon: ic(I.users) }
 const SCORES: NavItem = { href: '/scores', label: 'บันทึกคะแนน', icon: ic(I.pen) }
-const SCORE_CONFIG: NavItem = { href: '/score-config', label: 'สัดส่วนคะแนน', icon: ic(I.sliders) }
+const SCORE_CONFIG: NavItem = { href: '/score-config', label: 'กำหนดสัดส่วนคะแนน', icon: ic(I.sliders) }
 const ATTENDANCE: NavItem = { href: '/attendance/hourly', label: 'เช็คเวลาเรียนรายวิชา', icon: ic(I.clock) }
 const ADMINS_MANAGE: NavItem = { href: '/district/admins', label: 'สมาชิกโรงเรียน', icon: ic(I.users) }
 const SCHOOLS_MANAGE: NavItem = { href: '/district/schools', label: 'ฐานข้อมูลโรงเรียน', icon: ic(I.building) }
@@ -305,10 +305,10 @@ const ASSIGN: NavItem = {
   href: '/settings', label: 'มอบหมายและตั้งค่าวิชาการ', icon: ic(I.users),
   children: [
     { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
-    { href: '/settings/evaluation-criteria', label: 'เกณฑ์ประเมิน', icon: ic(I.doc) },
-    { href: '/settings/class-subjects', label: 'กำหนดครูผู้สอน', icon: ic(I.users) },
-    { href: '/classrooms/homeroom', label: 'ครูประจำชั้น', icon: ic(I.class) },
-    { href: '/score-config',   label: 'สัดส่วนคะแนน', icon: ic(I.sliders) },
+    { href: '/score-config',   label: 'กำหนดสัดส่วนคะแนน', icon: ic(I.sliders) },
+    { href: '/settings/evaluation-criteria', label: 'เกณฑ์การประเมิน', icon: ic(I.doc) },
+    { href: '/settings/class-subjects', label: 'กำหนดครูประจำวิชา', icon: ic(I.users) },
+    { href: '/classrooms/homeroom', label: 'กำหนดครูประจำชั้น', icon: ic(I.class) },
   ],
 }
 const ADMIN_SETTINGS: NavItem = {
@@ -340,13 +340,13 @@ const ADMIN_SETTINGS: NavItem = {
       icon: ic(I.book),
       tone: 'indigo',
       children: [
-        { href: '/classrooms', label: 'ชั้นเรียน', icon: ic(I.class) },
-        { href: '/students', label: 'นักเรียน', icon: ic(I.class) },
+        { href: '/classrooms', label: 'ชั้นที่เปิดสอน', icon: ic(I.class) },
+        { href: '/students', label: 'นักเรียน', icon: ic(I.users) },
         { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
-        { href: '/settings/evaluation-criteria', label: 'เกณฑ์ประเมิน', icon: ic(I.doc) },
-        { href: '/settings/class-subjects', label: 'จัดครูเข้าสอน', icon: ic(I.pen) },
-        { href: '/score-config', label: 'สัดส่วนคะแนน', icon: ic(I.sliders) },
-        { href: '/classrooms/homeroom', label: 'ครูประจำชั้น', icon: ic(I.users) },
+        { href: '/score-config', label: 'กำหนดสัดส่วนคะแนน', icon: ic(I.sliders) },
+        { href: '/settings/evaluation-criteria', label: 'เกณฑ์การประเมิน', icon: ic(I.doc) },
+        { href: '/settings/class-subjects', label: 'กำหนดครูประจำวิชา', icon: ic(I.pen) },
+        { href: '/classrooms/homeroom', label: 'กำหนดครูประจำชั้น', icon: ic(I.users) },
       ],
     },
   ],

@@ -61,7 +61,7 @@ const ALL_MENU: MenuItem[] = [
   },
   {
     href: '/settings/class-subjects',
-    label: 'กำหนดครูผู้สอน',
+    label: 'กำหนดครูประจำวิชา',
     desc: 'จัดวิชาในห้องและเลือกครูผู้สอน',
     color: '#0284C7',
     bg: '#F0F9FF',
@@ -70,8 +70,8 @@ const ALL_MENU: MenuItem[] = [
   },
   {
     href: '/settings/evaluation-criteria',
-    label: 'คุณลักษณะ / อ่านคิด / สมรรถนะ',
-    desc: 'ตั้งค่าเกณฑ์ประเมิน',
+    label: 'เกณฑ์การประเมิน',
+    desc: 'ตั้งค่าเกณฑ์ประเมิน คุณลักษณะ อ่านคิด สมรรถนะ',
     color: '#C49212',
     bg: '#F5F3FF',
     icon: <BookIcon />,
@@ -88,7 +88,7 @@ const ALL_MENU: MenuItem[] = [
   },
   {
     href: '/score-config',
-    label: 'สัดส่วนคะแนน',
+    label: 'กำหนดสัดส่วนคะแนน',
     desc: 'กำหนดสัดส่วนคะแนนแต่ละรายวิชา',
     color: '#16A34A',
     bg: '#F0FDF4',

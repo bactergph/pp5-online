@@ -134,42 +134,79 @@ export default function AcademicYearPage() {
                 ปิด
               </button>
             </div>
-            <form onSubmit={handleSave} className="responsive-grid-sm">
-              <div>
-                <label className="form-label">ปีการศึกษา (พ.ศ.) *</label>
-                <input
-                  name="year_be"
-                  type="number"
-                  defaultValue={editItem?.year_be || toBuddhistYear(new Date().getFullYear())}
-                  className="form-input"
-                  min="2560"
-                  max="2580"
-                  required
-                />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'end' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <form onSubmit={handleSave} className="term-calendar-form">
+              <div className="term-calendar-form__meta">
+                <div className="term-calendar-form__year">
+                  <label className="form-label">ปีการศึกษา (พ.ศ.) *</label>
+                  <input
+                    name="year_be"
+                    type="number"
+                    defaultValue={editItem?.year_be || toBuddhistYear(new Date().getFullYear())}
+                    className="form-input"
+                    min="2560"
+                    max="2580"
+                    required
+                  />
+                </div>
+                <label className="term-calendar-form__active">
                   <input type="checkbox" name="is_active" value="true" defaultChecked={editItem?.is_active} />
-                  <span style={{ fontSize: 14, fontWeight: 700 }}>ใช้งานอยู่ (active)</span>
+                  <span>ใช้งานอยู่ (active)</span>
                 </label>
               </div>
-              <div>
-                <label className="form-label">เปิดเรียนเทอม 1</label>
-                <ThaiDatePicker name="term1_start_date" defaultValue={editItem?.term1_start_date || ''} />
+
+              <div className="term-calendar-form__block">
+                <div className="term-calendar-form__block-title">เทอม 1</div>
+                <div className="term-calendar-form__dates">
+                  <div>
+                    <label className="form-label">เปิดเรียนเทอม 1</label>
+                    <ThaiDatePicker
+                      key={`t1s-${editItem?.id || 'new'}`}
+                      name="term1_start_date"
+                      defaultValue={editItem?.term1_start_date || ''}
+                      yearsBack={2}
+                      yearsForward={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">ปิดเรียนเทอม 1</label>
+                    <ThaiDatePicker
+                      key={`t1e-${editItem?.id || 'new'}`}
+                      name="term1_end_date"
+                      defaultValue={editItem?.term1_end_date || ''}
+                      yearsBack={2}
+                      yearsForward={3}
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="form-label">ปิดเรียนเทอม 1</label>
-                <ThaiDatePicker name="term1_end_date" defaultValue={editItem?.term1_end_date || ''} />
+
+              <div className="term-calendar-form__block">
+                <div className="term-calendar-form__block-title">เทอม 2</div>
+                <div className="term-calendar-form__dates">
+                  <div>
+                    <label className="form-label">เปิดเรียนเทอม 2</label>
+                    <ThaiDatePicker
+                      key={`t2s-${editItem?.id || 'new'}`}
+                      name="term2_start_date"
+                      defaultValue={editItem?.term2_start_date || ''}
+                      yearsBack={2}
+                      yearsForward={3}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">ปิดเรียนเทอม 2</label>
+                    <ThaiDatePicker
+                      key={`t2e-${editItem?.id || 'new'}`}
+                      name="term2_end_date"
+                      defaultValue={editItem?.term2_end_date || ''}
+                      yearsBack={2}
+                      yearsForward={3}
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="form-label">เปิดเรียนเทอม 2</label>
-                <ThaiDatePicker name="term2_start_date" defaultValue={editItem?.term2_start_date || ''} />
-              </div>
-              <div>
-                <label className="form-label">ปิดเรียนเทอม 2</label>
-                <ThaiDatePicker name="term2_end_date" defaultValue={editItem?.term2_end_date || ''} />
-              </div>
-              <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+
+              <div className="term-calendar-form__actions">
                 <button type="button" onClick={() => setShowForm(false)} disabled={saving} className="btn btn-secondary">ยกเลิก</button>
                 <LoadingButton type="submit" loading={saving}>บันทึก</LoadingButton>
               </div>

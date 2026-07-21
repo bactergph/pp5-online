@@ -2947,6 +2947,74 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
   gap: 14px;
 }
 
+.term-calendar-form {
+  display: grid;
+  gap: 18px;
+}
+
+.term-calendar-form__year {
+  max-width: 200px;
+}
+
+.term-calendar-form__block {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fafbfc;
+}
+
+.term-calendar-form__block-title {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.term-calendar-form__dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.term-calendar-form__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  align-items: end;
+}
+
+.term-calendar-form__active {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.term-calendar-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .term-calendar-form__year {
+    max-width: none;
+  }
+
+  .term-calendar-form__dates {
+    grid-template-columns: 1fr;
+  }
+
+  .term-calendar-form__actions .btn {
+    width: 100%;
+  }
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;

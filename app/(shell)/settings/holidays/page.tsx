@@ -13,6 +13,7 @@ import {
   syncHolidaysFromGlobal,
 } from '../actions'
 import { formatThaiDate, parseHolidayPasteText } from '@/lib/thaiDate'
+import ThaiDatePicker from '@/components/ThaiDatePicker'
 import {
   HOLIDAY_GRID_COLS,
   applyHolidayGridPaste,
@@ -44,6 +45,7 @@ export default function HolidaysPage() {
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [grid, setGrid] = useState<HolidayGridRow[]>(() => [blankHolidayRow()])
+  const [weekendFormKey, setWeekendFormKey] = useState(0)
   const { notify, AlertModal } = useAppAlert()
 
   useEffect(() => { loadAcademicYears() }, [])
@@ -139,7 +141,7 @@ export default function HolidaysPage() {
       notify('error', 'เพิ่มวันเปิดสอนไม่สำเร็จ: ' + error)
     } else {
       notify('success', 'เพิ่มวันเปิดสอนเสาร์-อาทิตย์เรียบร้อย')
-      ;(e.target as HTMLFormElement).reset()
+      setWeekendFormKey(k => k + 1)
       loadHolidaysForYear(selectedYear)
     }
   }
@@ -275,10 +277,10 @@ export default function HolidaysPage() {
           <span className="badge badge-success">{weekendSchoolDays.length} วัน</span>
         </div>
 
-        <form onSubmit={handleAddWeekendSchoolDay} className="filter-bar" style={{ alignItems: 'end', marginBottom: 16 }}>
-          <div style={{ flex: '0 0 200px' }}>
+        <form key={weekendFormKey} onSubmit={handleAddWeekendSchoolDay} className="filter-bar" style={{ alignItems: 'end', marginBottom: 16 }}>
+          <div style={{ flex: '1 1 280px', minWidth: 220 }}>
             <label className="form-label">วันที่เปิดสอน</label>
-            <input type="date" name="weekendDate" className="form-input" required />
+            <ThaiDatePicker name="weekendDate" required yearsBack={2} yearsForward={3} />
           </div>
           <div style={{ flex: '1 1 280px' }}>
             <label className="form-label">หมายเหตุ</label>

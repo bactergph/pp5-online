@@ -7,6 +7,7 @@ import {
   type GlobalTermCalendar,
 } from './actions'
 import LoadingButton from '@/components/LoadingButton'
+import ThaiDatePicker from '@/components/ThaiDatePicker'
 import { formatThaiDate } from '@/lib/thaiDate'
 import { useAppAlert } from '@/lib/use-app-alert'
 
@@ -15,6 +16,7 @@ export default function DistrictTermCalendarsPage() {
   const [items, setItems] = useState<GlobalTermCalendar[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [formKey, setFormKey] = useState(0)
   const { notify, AlertModal } = useAppAlert()
 
   useEffect(() => { load() }, [])
@@ -42,7 +44,7 @@ export default function DistrictTermCalendarsPage() {
       notify('error', error)
       return
     }
-    ;(e.currentTarget as HTMLFormElement).reset()
+    setFormKey(k => k + 1)
     notify('success', 'บันทึกปฏิทินกลางเรียบร้อยแล้ว')
     load()
   }
@@ -72,31 +74,44 @@ export default function DistrictTermCalendarsPage() {
 
       <AlertModal />
 
-      <section className="card-padded">
+      <section className="card-padded term-calendar-card">
         <h3 style={{ fontSize: 17, fontWeight: 900, marginBottom: 14 }}>เพิ่ม/อัปเดตปฏิทินกลาง</h3>
-        <form onSubmit={handleSave} className="responsive-grid-sm">
-          <div>
-            <label className="form-label">ปี พ.ศ.</label>
-            <input name="year_be" type="number" defaultValue={currentYearBe} className="form-input" required />
+        <form key={formKey} onSubmit={handleSave} className="term-calendar-form">
+          <div className="term-calendar-form__year">
+            <label className="form-label">ปีการศึกษา (พ.ศ.)</label>
+            <input name="year_be" type="number" defaultValue={currentYearBe} className="form-input" required min={2560} max={2580} />
           </div>
-          <div>
-            <label className="form-label">เปิดเทอม 1</label>
-            <input name="term1_start_date" type="date" className="form-input" />
+
+          <div className="term-calendar-form__block">
+            <div className="term-calendar-form__block-title">เทอม 1</div>
+            <div className="term-calendar-form__dates">
+              <div>
+                <label className="form-label">เปิดเทอม 1</label>
+                <ThaiDatePicker name="term1_start_date" yearsBack={2} yearsForward={3} />
+              </div>
+              <div>
+                <label className="form-label">ปิดเทอม 1</label>
+                <ThaiDatePicker name="term1_end_date" yearsBack={2} yearsForward={3} />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="form-label">ปิดเทอม 1</label>
-            <input name="term1_end_date" type="date" className="form-input" />
+
+          <div className="term-calendar-form__block">
+            <div className="term-calendar-form__block-title">เทอม 2</div>
+            <div className="term-calendar-form__dates">
+              <div>
+                <label className="form-label">เปิดเทอม 2</label>
+                <ThaiDatePicker name="term2_start_date" yearsBack={2} yearsForward={3} />
+              </div>
+              <div>
+                <label className="form-label">ปิดเทอม 2</label>
+                <ThaiDatePicker name="term2_end_date" yearsBack={2} yearsForward={3} />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="form-label">เปิดเทอม 2</label>
-            <input name="term2_start_date" type="date" className="form-input" />
-          </div>
-          <div>
-            <label className="form-label">ปิดเทอม 2</label>
-            <input name="term2_end_date" type="date" className="form-input" />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'end' }}>
-            <LoadingButton type="submit" loading={saving} style={{ width: '100%' }}>
+
+          <div className="term-calendar-form__actions">
+            <LoadingButton type="submit" loading={saving} className="btn btn-primary btn-lg">
               บันทึกปฏิทินกลาง
             </LoadingButton>
           </div>
