@@ -92,6 +92,9 @@ const SUBJECT_COVER_GRADE_COLUMNS = [
 const SUBJECT_COVER_GRADE_LEVEL_COLUMNS = SUBJECT_COVER_GRADE_COLUMNS.filter(
   column => column.key !== 'ร' && column.key !== 'มส',
 )
+const SUBJECT_COVER_GRADE_RESULT_COLUMNS = SUBJECT_COVER_GRADE_COLUMNS.filter(
+  column => column.key === 'ร' || column.key === 'มส',
+)
 
 export type Pp5SubjectPdfSection =
   | 'cover'
@@ -511,36 +514,80 @@ async function drawCoverPage(ctx: DrawCtx) {
   const box = contentBox(layout)
   let y = box.top
 
-  doc.setFont('THSarabunNew', 'normal')
+  // ปพ.5 (รายวิชา) มุมขวาบน — แบบพรีวิว HTML
+  doc.setFont('THSarabunNew', 'bold')
   doc.setFontSize(ptFromCssPx(layout.docMarkFontPx))
   setText(doc)
-  doc.text('ปพ.5', PAGE_W - px(layout.docMarkRightPx), y + px(layout.docMarkTopPx), { align: 'right' })
-  doc.text(PP5_SUBJECT_PAGE_MARK, PAGE_W - px(layout.docMarkRightPx), y + px(layout.docMarkTopPx) + 5, { align: 'right' })
+  const markX = PAGE_W - layout.padSideMm
+  const markY = layout.padTopMm + px(layout.docMarkTopPx) * 0.15
+  doc.text('ปพ.5', markX, markY, { align: 'right' })
+  doc.setFont('THSarabunNew', 'normal')
+  doc.setFontSize(ptFromCssPx(layout.docMarkFontPx) - 2)
+  doc.text(PP5_SUBJECT_PAGE_MARK, markX, markY + 5, { align: 'right' })
 
+  // โลโก้กึ่งกลาง
   const logoSize = px(layout.logoSizePx)
   const logoX = box.left + (box.width - logoSize) / 2
+  const logoY = box.top
   if (logoData) {
     try {
-      doc.addImage(logoData, 'JPEG', logoX, y, logoSize, logoSize)
+      doc.addImage(logoData, 'JPEG', logoX, logoY, logoSize, logoSize)
     } catch {
-      drawCell(doc, logoX, y, logoSize, logoSize, data.school?.name?.slice(0, 2) || 'รร', { fontSize: 14, bold: true })
+      drawCell(doc, logoX, logoY, logoSize, logoSize, data.school?.name?.slice(0, 2) || 'รร', { fontSize: 14, bold: true })
     }
   } else {
-    drawCell(doc, logoX, y, logoSize, logoSize, data.school?.name?.slice(0, 2) || 'รร', { fontSize: 14, bold: true })
+    drawCell(doc, logoX, logoY, logoSize, logoSize, data.school?.name?.slice(0, 2) || 'รร', { fontSize: 14, bold: true })
   }
-  y += logoSize + px(layout.headerGapPx) * 0.4
+  y = logoY + logoSize + 3
 
   doc.setFont('THSarabunNew', 'bold')
   doc.setFontSize(ptFromCssPx(layout.fontH1Px))
   doc.text('แบบบันทึกผลการพัฒนาคุณภาพผู้เรียน', box.left + box.width / 2, y, { align: 'center' })
-  y += pxToMm96(layout.fontH1Px) * 0.55 + 2
+  y += 6
 
   const infoFont = ptFromCssPx(layout.fontInfoPx)
-  doc.setFont('THSarabunNew', 'normal')
-  doc.setFontSize(infoFont)
-  const schoolLine = `โรงเรียน ${data.school?.name || '-'}   อำเภอ ${data.school?.district || '-'}   ${schoolOfficeLine(data)}`
-  doc.text(fitText(doc, schoolLine, box.width), box.left, y)
-  y += 5
+  const labelFont = infoFont
+  const lineGap = 4.6
+
+  const drawLabeled = (parts: Array<{ label?: string; value: string; boldValue?: boolean }>, startX: number, maxW: number) => {
+    let x = startX
+    doc.setFontSize(labelFont)
+    for (const part of parts) {
+      if (part.label) {
+        doc.setFont('THSarabunNew', 'bold')
+        const lw = doc.getTextWidth(part.label)
+        doc.text(part.label, x, y)
+        x += lw + 1.2
+      }
+      doc.setFont('THSarabunNew', part.boldValue === false ? 'normal' : 'bold')
+      const text = fitText(doc, part.value, Math.max(8, maxW - (x - startX)))
+      doc.text(text, x, y)
+      x += doc.getTextWidth(text) + 4
+    }
+  }
+
+  const drawCheck = (x: number, checked: boolean, label: string) => {
+    const size = 3.2
+    setStroke(doc, BORDER, 0.35)
+    doc.rect(x, y - size + 0.6, size, size, 'S')
+    if (checked) {
+      doc.setFont('THSarabunNew', 'bold')
+      doc.setFontSize(labelFont)
+      doc.text('✓', x + 0.35, y)
+    }
+    doc.setFont('THSarabunNew', 'normal')
+    doc.setFontSize(labelFont)
+    doc.text(label, x + size + 1.2, y)
+    return size + 1.2 + doc.getTextWidth(label) + 4
+  }
+
+  // โรงเรียน / อำเภอ / สพท.
+  drawLabeled([
+    { label: 'โรงเรียน', value: data.school?.name || '-' },
+    { label: 'อำเภอ', value: data.school?.district || '-' },
+    { value: schoolOfficeLine(data), boldValue: true },
+  ], box.left, box.width)
+  y += lineGap
 
   const activeTerm = (term === 0 ? 1 : term) as 1 | 2
   const range = termDateRange(data.academicYear, activeTerm)
@@ -550,94 +597,229 @@ async function drawCoverPage(ctx: DrawCtx) {
   const isSecondary = isSecondaryClassLevel(data.classroom?.level)
   const isElective = subjectIsElective(subject)
 
-  const metaRows = [
-    `ชั้น ${data.classroom ? classroomLevelLabel(data.classroom.level) : '-'}   ห้อง ${data.classroom?.room || '-'}   ${term === 0 ? 'สรุปทั้งปี' : `ภาคเรียนที่ ${term}`}   ปีการศึกษา ${data.academicYear?.year_be || '-'}   เวลาเรียน ${hoursWeek || '-'} ชม./สัปดาห์`,
-    isPrimary
-      ? `กลุ่มสาระการเรียนรู้ ${subject.subject.subject_group || '-'}   สาระการเรียนรู้ ${isElective ? '☑ เพิ่มเติม' : '☑ พื้นฐาน'}   ระดับชั้น ${isPrimary ? '☑ ประถมศึกษา' : ''}${isSecondary ? ' ☑ มัธยมศึกษา' : ''}`
-      : '',
-    `รายวิชา ${subject.subject.name} (${subject.subject.code})   หน่วยกิต ${subject.subject.credits ?? '-'} หน่วย`,
-    `ครูผู้สอน ${subject.teacher_name || '-'}   ครูที่ปรึกษา ${homeroomTeacherLine(data.classroom)}`,
-  ].filter(Boolean)
-  metaRows.forEach(line => {
-    doc.text(fitText(doc, line, box.width), box.left, y)
-    y += 4.5
-  })
-  y += layout.tableTopMm
+  // ชั้น / ห้อง / ภาค / ปี / เวลาเรียน
+  drawLabeled([
+    { label: 'ชั้น', value: data.classroom ? classroomLevelLabel(data.classroom.level) : '-' },
+    { label: 'ห้อง', value: String(data.classroom?.room || '-') },
+    term === 0
+      ? { label: 'สรุปทั้งปี', value: '' }
+      : { label: 'ภาคเรียนที่', value: String(term) },
+    { label: 'ปีการศึกษา', value: String(data.academicYear?.year_be || '-') },
+    { label: 'เวลาเรียน', value: `${hoursWeek || '-'} ชม./สัปดาห์` },
+  ], box.left, box.width)
+  y += lineGap
 
+  if (isPrimary) {
+    doc.setFont('THSarabunNew', 'bold')
+    doc.setFontSize(labelFont)
+    doc.text('กลุ่มสาระการเรียนรู้', box.left, y)
+    let x = box.left + doc.getTextWidth('กลุ่มสาระการเรียนรู้') + 1.5
+    doc.setFont('THSarabunNew', 'bold')
+    doc.text(subject.subject.subject_group || '-', x, y)
+    x = box.left + box.width * 0.52
+    doc.setFont('THSarabunNew', 'bold')
+    doc.text('สาระการเรียนรู้', x, y)
+    x += doc.getTextWidth('สาระการเรียนรู้') + 2
+    x += drawCheck(x, !isElective, 'พื้นฐาน')
+    drawCheck(x, isElective, 'เพิ่มเติม')
+    y += lineGap
+
+    doc.setFont('THSarabunNew', 'bold')
+    doc.text('ระดับชั้น', box.left, y)
+    x = box.left + doc.getTextWidth('ระดับชั้น') + 2
+    x += drawCheck(x, isPrimary, 'ประถมศึกษา')
+    drawCheck(x, isSecondary, 'มัธยมศึกษา')
+    y += lineGap
+  }
+
+  drawLabeled([
+    { label: 'รายวิชา', value: `${subject.subject.name || '-'} (${subject.subject.code || '-'})` },
+    { label: 'หน่วยกิต', value: `${subject.subject.credits ?? '-'} หน่วย` },
+  ], box.left, box.width)
+  y += lineGap
+
+  drawLabeled([
+    { label: 'ครูผู้สอน', value: subject.teacher_name || '-' },
+    { label: 'ครูที่ปรึกษา', value: homeroomTeacherLine(data.classroom) },
+  ], box.left, box.width)
+  y += 3 + layout.tableTopMm * 0.35
+
+  // ตารางสรุปผลการเรียน — โครง 3 แถวหัวแบบพรีวิว
   const studentsTotal = data.students.length
   const gradeCounts = subjectGradeSummaryForTerm(data, subject, term)
-  const tableFont = ptFromCssPx(layout.fontTablePx)
-  const rowH = pxToMm96(layout.tableRowHeightPx)
-  const gradeCols = SUBJECT_COVER_GRADE_COLUMNS.map(() => 9)
-  const colWidths = [16, ...gradeCols, 12, 14]
-  const header1 = ['จำนวน\nนักเรียน\nทั้งหมด', ...SUBJECT_COVER_GRADE_COLUMNS.map(c => c.label), 'หมายเหตุ']
-  const countRow = [String(studentsTotal), ...SUBJECT_COVER_GRADE_COLUMNS.map(c => String(gradeCounts[c.key] || '-')), '']
-  const pctRow = ['คิดเป็นร้อยละ', ...SUBJECT_COVER_GRADE_COLUMNS.map(c => coverPercent(gradeCounts[c.key] || 0, studentsTotal)), '']
-  drawTableGrid(doc, box.left, y, colWidths, [header1, countRow, pctRow], { rowH, fontSize: tableFont - 1, headerRows: 1 })
-  y += rowH * 3 + layout.summaryGapPx * 0.35
+  const tableFont = ptFromCssPx(layout.fontTablePx) - 1
+  const rowH = Math.max(4.2, pxToMm96(layout.tableRowHeightPx))
+  const noteW = 14
+  const totalLabelW = 18
+  const gradeCount = SUBJECT_COVER_GRADE_COLUMNS.length
+  const gradeW = (box.width - totalLabelW - noteW) / gradeCount
+  const colWidths = [totalLabelW, ...SUBJECT_COVER_GRADE_COLUMNS.map(() => gradeW), noteW]
 
+  // banner
+  drawCell(doc, box.left, y, box.width, rowH, 'สรุปผลการเรียน', { bold: true, fontSize: tableFont })
+  y += rowH
+
+  // header row 2: จำนวน | ระดับผลการเรียน | ผลการเรียน | หมายเหตุ
+  const levelW = gradeW * SUBJECT_COVER_GRADE_LEVEL_COLUMNS.length
+  const resultW = gradeW * SUBJECT_COVER_GRADE_RESULT_COLUMNS.length
+  drawCell(doc, box.left, y, totalLabelW, rowH * 2, 'จำนวนนักเรียนทั้งหมด', { bold: true, fontSize: tableFont - 1 })
+  drawCell(doc, box.left + totalLabelW, y, levelW, rowH, 'ระดับผลการเรียน', { bold: true, fontSize: tableFont - 1 })
+  drawCell(doc, box.left + totalLabelW + levelW, y, resultW, rowH, 'ผลการเรียน', { bold: true, fontSize: tableFont - 1 })
+  drawCell(doc, box.left + totalLabelW + levelW + resultW, y, noteW, rowH * 2, 'หมายเหตุ', { bold: true, fontSize: tableFont - 1 })
+  y += rowH
+
+  // header row 3: grade labels
+  let gx = box.left + totalLabelW
+  for (const column of SUBJECT_COVER_GRADE_COLUMNS) {
+    drawCell(doc, gx, y, gradeW, rowH, column.label, { bold: true, fontSize: tableFont - 1 })
+    gx += gradeW
+  }
+  y += rowH
+
+  // count + percent
+  const countCells = [String(studentsTotal), ...SUBJECT_COVER_GRADE_COLUMNS.map(c => String(gradeCounts[c.key] || '-')), '']
+  const pctCells = ['คิดเป็นร้อยละ', ...SUBJECT_COVER_GRADE_COLUMNS.map(c => coverPercent(gradeCounts[c.key] || 0, studentsTotal)), '']
+  ;[countCells, pctCells].forEach(row => {
+    let cx = box.left
+    row.forEach((cell, i) => {
+      drawCell(doc, cx, y, colWidths[i], rowH, cell, { fontSize: tableFont - 1 })
+      cx += colWidths[i]
+    })
+    y += rowH
+  })
+  y += layout.summaryGapPx * 0.4
+
+  // กล่องสรุปคุณลักษณะ / อ่าน คู่กัน
   const character = evaluationSummary(data, data.evaluations.character, CHARACTER_KEYS)
   const reading = evaluationSummary(data, data.evaluations.reading, READING_KEYS)
-  const evalW = (box.width - 3) / 2
-  const evalHeaders = ['จำนวนนักเรียนทั้งหมด', 'ดีเยี่ยม', 'ดี', 'ผ่าน', 'ปรับปรุง']
+  const gap = 3
+  const evalW = (box.width - gap) / 2
+  const evalRowH = rowH * 0.95
+  const evalFont = tableFont - 1.5
   const drawEvalBox = (bx: number, title: string, summary: typeof character) => {
-    const evalCols = [evalW * 0.34, ...Array.from({ length: 4 }, () => evalW * 0.165)]
-    drawTableGrid(doc, bx, y, evalCols, [
-      [title, '', '', '', ''],
-      evalHeaders,
-      [String(summary.total), String(summary.excellent || '-'), String(summary.good || '-'), String(summary.pass || '-'), String(summary.fail || '-')],
-      ['คิดเป็นร้อยละ', coverPercent(summary.excellent, summary.total), coverPercent(summary.good, summary.total), coverPercent(summary.pass, summary.total), coverPercent(summary.fail, summary.total)],
-    ], { rowH: rowH * 0.95, fontSize: tableFont - 2, headerRows: 2 })
+    const cols = [evalW * 0.36, ...Array.from({ length: 4 }, () => evalW * 0.16)]
+    let ey = y
+    drawCell(doc, bx, ey, evalW, evalRowH, title, { bold: true, fontSize: evalFont - 0.5 })
+    ey += evalRowH
+    const headers = ['จำนวนนักเรียนทั้งหมด', 'ดีเยี่ยม', 'ดี', 'ผ่าน', 'ปรับปรุง']
+    headers.forEach((h, i) => {
+      drawCell(doc, bx + cols.slice(0, i).reduce((a, b) => a + b, 0), ey, cols[i], evalRowH, h, {
+        bold: true, fontSize: evalFont - 1,
+      })
+    })
+    ey += evalRowH
+    const values = [
+      String(summary.total),
+      String(summary.excellent || '-'),
+      String(summary.good || '-'),
+      String(summary.pass || '-'),
+      String(summary.fail || '-'),
+    ]
+    values.forEach((v, i) => {
+      drawCell(doc, bx + cols.slice(0, i).reduce((a, b) => a + b, 0), ey, cols[i], evalRowH, v, { fontSize: evalFont })
+    })
+    ey += evalRowH
+    const pcts = [
+      'คิดเป็นร้อยละ',
+      coverPercent(summary.excellent, summary.total),
+      coverPercent(summary.good, summary.total),
+      coverPercent(summary.pass, summary.total),
+      coverPercent(summary.fail, summary.total),
+    ]
+    pcts.forEach((v, i) => {
+      drawCell(doc, bx + cols.slice(0, i).reduce((a, b) => a + b, 0), ey, cols[i], evalRowH, v, { fontSize: evalFont })
+    })
   }
   drawEvalBox(box.left, 'สรุปผลการประเมินคุณลักษณะอันพึงประสงค์', character)
-  drawEvalBox(box.left + evalW + 3, 'สรุปผลการประเมินอ่าน คิด วิเคราะห์เขียน', reading)
-  y += rowH * 4 + layout.approvalGapPx
+  drawEvalBox(box.left + evalW + gap, 'สรุปผลการประเมินอ่าน คิด วิเคราะห์เขียน', reading)
+  y += evalRowH * 4 + layout.approvalGapPx
 
+  // ลายเซ็น — แบบพรีวิว
   doc.setFont('THSarabunNew', 'bold')
   doc.setFontSize(ptFromCssPx(layout.fontSignaturePx))
   doc.text('การตรวจสอบและอนุมัติผลการเรียน', box.left + box.width / 2, y, { align: 'center' })
   y += 5
 
-  const sigW = box.width / 4 - 1
+  const sigFont = ptFromCssPx(layout.fontSignaturePx) - 1
+  const sigW = (box.width - 4.5) / 4
   const sigBlocks = [
     { url: signatures.teacher, name: subject.teacher_name || '—', line: 'ครูผู้สอน' },
-    { url: signatures.subject_head, name: subjectGroupHeadName(data, subject.subject.subject_group), line: subjectGroupHeadPositionLine(subject.subject.subject_group) },
+    {
+      url: signatures.subject_head,
+      name: subjectGroupHeadName(data, subject.subject.subject_group),
+      line: subjectGroupHeadPositionLine(subject.subject.subject_group),
+    },
     { url: signatures.measurement_head, name: data.school?.measurement_head_name || '—', line: 'หัวหน้างานวัดและประเมินผล' },
     { url: signatures.academic_head, name: data.school?.academic_head_name || '—', line: 'หัวหน้าฝ่ายวิชาการ' },
   ]
   for (let i = 0; i < sigBlocks.length; i += 1) {
     const block = sigBlocks[i]
-    const sx = box.left + i * (sigW + 1.3)
-    const imgY = y
+    const sx = box.left + i * (sigW + 1.5)
+    doc.setFont('THSarabunNew', 'normal')
+    doc.setFontSize(sigFont)
+    doc.text('ลงชื่อ', sx + 1, y + 2)
     if (block.url) {
-      try { doc.addImage(block.url, 'JPEG', sx + sigW * 0.2, imgY, sigW * 0.6, 8) } catch { /* skip */ }
+      try {
+        doc.addImage(block.url, 'JPEG', sx + 10, y - 2, sigW - 14, 8)
+      } catch {
+        setStroke(doc)
+        doc.line(sx + 10, y + 4, sx + sigW - 2, y + 4)
+      }
     } else {
       setStroke(doc)
-      doc.line(sx + 2, imgY + 8, sx + sigW - 2, imgY + 8)
+      doc.line(sx + 10, y + 4, sx + sigW - 2, y + 4)
     }
+    doc.setFont('THSarabunNew', 'bold')
+    doc.text(`( ${block.name} )`, sx + sigW / 2, y + 10, { align: 'center' })
     doc.setFont('THSarabunNew', 'normal')
-    doc.setFontSize(ptFromCssPx(layout.fontSignaturePx) - 1)
-    doc.text(`(${block.name})`, sx + sigW / 2, imgY + 12, { align: 'center' })
-    doc.text(fitText(doc, block.line, sigW), sx + sigW / 2, imgY + 16, { align: 'center' })
+    doc.text(fitText(doc, block.line, sigW - 2), sx + sigW / 2, y + 14, { align: 'center' })
   }
-  y += 22
+  y += 20
 
   const viceDirectorName = data.school?.vice_director_name?.trim()
   const directorPos = directorActingPositionLine(data.school)
+  const halfW = (box.width - 3) / 2
   if (viceDirectorName) {
-    const halfW = box.width / 2 - 2
+    doc.setFont('THSarabunNew', 'normal')
+    doc.setFontSize(sigFont)
     doc.text('เสนอเพื่อพิจารณา', box.left + halfW / 2, y, { align: 'center' })
-    doc.text(`(${viceDirectorName})`, box.left + halfW / 2, y + 10, { align: 'center' })
-    doc.text(`รองผู้อำนวยการโรงเรียน${data.school?.name || '-'}`, box.left + halfW / 2, y + 14, { align: 'center' })
-    doc.text('☐ ไม่อนุมัติ   ☐ อนุมัติ เมื่อวันที่...........', box.left + halfW + 4 + halfW / 2, y + 4, { align: 'center' })
-    doc.text(`(${directorDisplayName(data.school)})`, box.left + halfW + 4 + halfW / 2, y + 12, { align: 'center' })
-    if (directorPos) doc.text(directorPos, box.left + halfW + 4 + halfW / 2, y + 16, { align: 'center' })
-    doc.text(directorSchoolLine(data.school), box.left + halfW + 4 + halfW / 2, y + 20, { align: 'center' })
+    if (signatures.vice_director) {
+      try { doc.addImage(signatures.vice_director, 'JPEG', box.left + halfW * 0.25, y + 1, halfW * 0.5, 8) } catch { /* */ }
+    } else {
+      doc.text('ลงชื่อ ........................................', box.left + halfW / 2, y + 6, { align: 'center' })
+    }
+    doc.setFont('THSarabunNew', 'bold')
+    doc.text(`( ${viceDirectorName} )`, box.left + halfW / 2, y + 12, { align: 'center' })
+    doc.setFont('THSarabunNew', 'normal')
+    doc.text(`รองผู้อำนวยการโรงเรียน${data.school?.name || '-'}`, box.left + halfW / 2, y + 16, { align: 'center' })
+
+    const dx = box.left + halfW + 3
+    doc.text('☐ ไม่อนุมัติ     ☐ อนุมัติ เมื่อวันที่ ........................', dx + halfW / 2, y + 2, { align: 'center' })
+    if (signatures.director) {
+      try { doc.addImage(signatures.director, 'JPEG', dx + halfW * 0.25, y + 4, halfW * 0.5, 8) } catch { /* */ }
+    } else {
+      doc.text('ลงชื่อ ........................................', dx + halfW / 2, y + 8, { align: 'center' })
+    }
+    doc.setFont('THSarabunNew', 'bold')
+    doc.text(`( ${directorDisplayName(data.school)} )`, dx + halfW / 2, y + 14, { align: 'center' })
+    doc.setFont('THSarabunNew', 'normal')
+    if (directorPos) doc.text(directorPos, dx + halfW / 2, y + 18, { align: 'center' })
+    doc.text(directorSchoolLine(data.school), dx + halfW / 2, y + 22, { align: 'center' })
   } else {
-    doc.text('☐ อนุมัติ   ☐ ไม่อนุมัติ', box.left + box.width / 2, y, { align: 'center' })
-    doc.text(`(${directorDisplayName(data.school)})`, box.left + box.width / 2, y + 10, { align: 'center' })
-    if (directorPos) doc.text(directorPos, box.left + box.width / 2, y + 14, { align: 'center' })
-    doc.text(directorSchoolLine(data.school), box.left + box.width / 2, y + 18, { align: 'center' })
+    doc.setFont('THSarabunNew', 'normal')
+    doc.setFontSize(sigFont)
+    doc.text('☐ อนุมัติ          ☐ ไม่อนุมัติ', box.left + box.width * 0.35, y)
+    if (signatures.director) {
+      try { doc.addImage(signatures.director, 'JPEG', box.left + box.width * 0.35, y + 2, 28, 8) } catch { /* */ }
+    } else {
+      doc.text('ลงชื่อ ........................................', box.left + box.width * 0.38, y + 8)
+    }
+    doc.setFont('THSarabunNew', 'bold')
+    doc.text(`( ${directorDisplayName(data.school)} )`, box.left + box.width * 0.42, y + 14)
+    doc.setFont('THSarabunNew', 'normal')
+    if (directorPos) doc.text(directorPos, box.left + box.width * 0.42, y + 18)
+    doc.text(directorSchoolLine(data.school), box.left + box.width * 0.42, y + 22)
+    doc.text('............ / ............ / ............', box.left + box.width * 0.42, y + 26)
   }
 }
 
