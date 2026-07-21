@@ -64,6 +64,7 @@ import {
 import { expandEducationAreaOffice } from '@/lib/education-area-office'
 import { enqueueFileExport, enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
 import { buildPp6PdfBlob } from '@/lib/jspdf-pp6'
+import { buildPp5SubjectPdfBlob, type Pp5SubjectPdfSection } from '@/lib/jspdf-pp5-subject'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
 import {
   PRINT_STUDENTS_PER_PAGE,
@@ -87,6 +88,7 @@ import { pp6SectionLayoutStyle, savePp6PrintLayouts, PP6_PRINT_LAYOUTS_STORAGE_K
 import { usePp6SectionLayout, Pp6PrintLayoutsProvider } from '@/lib/pp6-print-layout-context'
 import Pp5PrintLayoutTuner, { usePp5PrintLayoutsState, usePp6PrintLayoutsState } from '@/components/reports/Pp5PrintLayoutTuner'
 import Pp6JsPdfLivePreview from '@/components/reports/Pp6JsPdfLivePreview'
+import Pp5SubjectJsPdfLivePreview, { pp5TunerSectionToPreview } from '@/components/reports/Pp5SubjectJsPdfLivePreview'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 
 function usePp5PageStyle(section: Pp5PrintSection) {
@@ -4237,6 +4239,23 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
       return
     }
 
+    // ปพ.5 รายวิชา → jsPDF ไม่ผ่าน Puppeteer
+    if (mode === 'pp5-subject' && selectedSubject) {
+      enqueueFileExport({
+        fileName,
+        label: nameParts.join(' · '),
+        run: async () => buildPp5SubjectPdfBlob({
+          data,
+          subject: selectedSubject,
+          term: reportTerm,
+          sections: sections as Pp5SubjectPdfSection[],
+          layouts: pp5PrintLayouts,
+          fileName,
+        }),
+      })
+      return
+    }
+
     const params = new URLSearchParams()
     params.set('print', '1')
     if (yearId) params.set('year', yearId)
@@ -4501,6 +4520,17 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               ranked={pp6Ranked}
               showGrade={pp6ShowGrade}
               layout={pp6PrintLayouts.page}
+            />
+          )}
+          {!embedMode && !printMode && mode === 'pp5-subject' && data && selectedSubject && (
+            <Pp5SubjectJsPdfLivePreview
+              open={pp5TunerOpen}
+              data={data}
+              subject={selectedSubject}
+              term={reportTerm}
+              sections={sections as Pp5SubjectPdfSection[]}
+              layouts={pp5PrintLayouts}
+              previewSection={pp5TunerSectionToPreview(pp5TunerSection)}
             />
           )}
           {!embedMode && !printMode && (mode === 'pp6' ? (
