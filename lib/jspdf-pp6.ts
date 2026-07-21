@@ -574,22 +574,29 @@ async function drawStudentPage(
   if (ranked && term === 1) {
     doc.setFont('THSarabunNew', 'normal')
     doc.setFontSize(ptFromCssPx(layout.fontBasePx))
-    doc.text(`ได้อันดับที่ ${rankMap.get(student.id) || '-'} ของห้อง`, PAGE_W / 2, y + 3, {
+    setText(doc)
+    // ตรง .pp6-gpa-line: margin 2mm 0 3mm
+    y += 2
+    doc.text(`ได้อันดับที่ ${rankMap.get(student.id) || '-'} ของห้อง`, PAGE_W / 2, y + 2.2, {
       align: 'center',
       baseline: 'middle',
     })
-    y += 6
+    y += 5 + 3
   }
 
   if (term === 1) {
     doc.setFont('THSarabunNew', 'bold')
-    doc.setFontSize(ptFromCssPx(layout.fontNotePx))
+    const noteFontPt = ptFromCssPx(layout.fontNotePx)
+    doc.setFontSize(noteFontPt)
     doc.setTextColor(255, 0, 0)
     const note = 'หมายเหตุ.- ภาคเรียนที่ 1 จะเป็นการรายงานความก้าวหน้าทางการเรียนของผู้เรียน ส่วนผลการพัฒนาคุณภาพผู้เรียน นั้น โรงเรียนจะรายงานให้ผู้ปกครองทราบเมื่อสิ้นปีการศึกษา เกรดที่แสดงนี้ เป็นเพียงการเทียบเคียงเกณฑ์การวัดผล ไม่ใช่เกรดจริง'
     const noteLines = doc.splitTextToSize(note, tableWidth(layout))
-    doc.text(noteLines, tableLeft(layout), y + 2, { baseline: 'top' })
+    // margin บนหมายเหตุ + ความสูงจริงของบรรทัด (pt→mm × lineHeight)
+    y += Math.max(layout.sectionGapMm, 2)
+    const lineH = noteFontPt * 0.352777778 * 1.35
+    doc.text(noteLines, tableLeft(layout), y, { baseline: 'top', lineHeightFactor: 1.35 })
     setText(doc)
-    y += noteLines.length * 4.2 + 1.5
+    y += noteLines.length * lineH + Math.max(layout.sectionGapMm, 2)
   }
 
   // activity table — หัวตารางแบบพรีวิว (colspan 2 + ชั่วโมง + ผล)
