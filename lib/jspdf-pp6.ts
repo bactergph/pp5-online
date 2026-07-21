@@ -611,8 +611,8 @@ async function drawStudentPage(
     doc.setFontSize(ptFromCssPx(layout.fontBasePx))
     setText(doc)
     y += layout.rankGapTopMm ?? 2
-    doc.text(`ได้อันดับที่ ${rankMap.get(student.id) || '-'} ของห้อง`, PAGE_W / 2, y + 2.2, {
-      align: 'center',
+    doc.text(`ได้อันดับที่ ${rankMap.get(student.id) || '-'} ของห้อง`, tableLeft(layout), y + 2.2, {
+      align: 'left',
       baseline: 'middle',
     })
     y += 5 + (layout.rankGapBottomMm ?? 3)
@@ -626,7 +626,7 @@ async function drawStudentPage(
     const note = 'หมายเหตุ.- ภาคเรียนที่ 1 จะเป็นการรายงานความก้าวหน้าทางการเรียนของผู้เรียน ส่วนผลการพัฒนาคุณภาพผู้เรียน นั้น โรงเรียนจะรายงานให้ผู้ปกครองทราบเมื่อสิ้นปีการศึกษา เกรดที่แสดงนี้ เป็นเพียงการเทียบเคียงเกณฑ์การวัดผล ไม่ใช่เกรดจริง'
     const noteLines = doc.splitTextToSize(note, tableWidth(layout))
     y += layout.noteGapTopMm ?? 2
-    const lineFactor = layout.noteLineHeight ?? 1.35
+    const lineFactor = layout.noteLineHeight ?? 1.1
     const lineH = noteFontPt * 0.352777778 * lineFactor
     doc.text(noteLines, tableLeft(layout), y, { baseline: 'top', lineHeightFactor: lineFactor })
     setText(doc)

@@ -6929,10 +6929,13 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           font-weight: 800;
         }
         .pp6-gpa-line {
-          margin: 2mm 0 3mm;
-          padding-left: 20mm;
+          width: var(--pp6-table-width, 85%);
+          margin: 2mm auto 3mm;
+          padding-left: 0;
+          text-align: left;
           font-size: 16px;
           font-weight: 900;
+          box-sizing: border-box;
         }
         .pp6-gpa-line b {
           font-weight: 900;
@@ -6985,10 +6988,10 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         .pp6-term-one-note {
           width: var(--pp6-table-width, 85%);
           margin: var(--pp6-section-gap, 2mm) auto;
-          padding: 1mm 3mm !important;
+          padding: 1mm 0 !important;
           color: #FF0000 !important;
           font-size: var(--pp6-font-note, 17px);
-          line-height: 1.35;
+          line-height: var(--pp6-note-line-height, 1.1);
           text-align: left !important;
           font-weight: 700;
           box-sizing: border-box;
