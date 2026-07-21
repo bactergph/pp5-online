@@ -572,7 +572,14 @@
    ============================================================ */
 *, *::before, *::after { box-sizing: border-box; }
 
+html {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 body {
+  max-width: 100%;
+  overflow-x: clip;
   font-family: var(--font-sarabun), 'Sarabun', 'Noto Sans Thai', system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.65;
@@ -588,6 +595,8 @@ a { text-decoration: none; }
 
 .app-shell {
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: clip;
   background:
     linear-gradient(180deg, rgba(248, 250, 252, 0.88), rgba(241, 245, 249, 0.74)),
     var(--bg);
@@ -996,6 +1005,7 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-width: 0;
   padding: 18px 22px;
   border: 1px solid rgba(184, 149, 106, 0.28);
   border-radius: 22px;
@@ -1003,6 +1013,11 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
     radial-gradient(circle at top left, rgba(232, 185, 35, 0.14), transparent 32%),
     linear-gradient(135deg, #FFFDF9, #F7F1E8 52%, #F5EDE3);
   box-shadow: 0 14px 34px rgba(139, 107, 69, 0.1);
+}
+
+.page-hero > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .page-hero-kicker {
@@ -2726,14 +2741,22 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
   top: 0;
   right: 0;
   left: 0;
-  height: var(--navbar-h);
+  width: 100%;
+  max-width: 100%;
+  height: calc(var(--navbar-h) + env(safe-area-inset-top, 0px));
   z-index: 40;
   background: rgba(255, 255, 255, 0.86);
   border-bottom: 1px solid rgba(226, 232, 240, 0.84);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  gap: 8px;
+  padding:
+    env(safe-area-inset-top, 0px)
+    max(12px, env(safe-area-inset-right, 0px))
+    0
+    max(12px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(14px);
 }
@@ -2741,15 +2764,18 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
 .navbar-title-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .navbar-menu-button {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 12px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .navbar-title {
@@ -2764,6 +2790,7 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
 
 .navbar-user {
   position: relative;
+  flex: 0 0 auto;
 }
 
 .navbar-user-button {
@@ -2917,14 +2944,16 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
 
 .main-content {
   min-height: 100vh;
-  padding-top: var(--navbar-h);
+  max-width: 100%;
+  padding-top: calc(var(--navbar-h) + env(safe-area-inset-top, 0px));
   margin-left: 0;
   transition: margin-left 0.25s cubic-bezier(0.4,0,0.2,1);
 }
 
 .content-shell {
   width: 100%;
-  max-width: 1440px;
+  max-width: min(1440px, 100%);
+  min-width: 0;
   margin: 0 auto;
   padding: 24px;
 }
@@ -2937,14 +2966,16 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
 
 .responsive-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 14px;
+  min-width: 0;
 }
 
 .responsive-grid-sm {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
   gap: 14px;
+  min-width: 0;
 }
 
 .term-calendar-form {
@@ -3116,7 +3147,11 @@ div:has(> .thai-table) {
     padding: 20px;
   }
   .navbar {
-    padding: 0 16px;
+    padding:
+      env(safe-area-inset-top, 0px)
+      max(12px, env(safe-area-inset-right, 0px))
+      0
+      max(12px, env(safe-area-inset-left, 0px));
   }
 }
 
@@ -3144,6 +3179,11 @@ div:has(> .thai-table) {
     gap: 12px;
     padding: 16px;
     border-radius: 18px;
+  }
+
+  .page-hero > div:last-child {
+    width: 56px !important;
+    height: 56px !important;
   }
 
   .page-hero h1,
@@ -3207,12 +3247,17 @@ div:has(> .thai-table) {
   }
 
   .navbar {
-    height: 56px;
-    padding: 0 12px;
+    --navbar-h: 56px;
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    padding:
+      env(safe-area-inset-top, 0px)
+      max(10px, env(safe-area-inset-right, 0px))
+      0
+      max(10px, env(safe-area-inset-left, 0px));
   }
 
   .main-content {
-    padding-top: 56px;
+    padding-top: calc(56px + env(safe-area-inset-top, 0px));
   }
 
   .thai-table,
