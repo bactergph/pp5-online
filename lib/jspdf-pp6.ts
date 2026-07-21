@@ -26,7 +26,8 @@ const PAGE_W = 210
 const PX_TO_MM = 25.4 / 96
 
 const BORDER: [number, number, number] = [17, 24, 39]
-const MUTED_BG: [number, number, number] = [226, 232, 240]
+/** ตรงกับ CSS `.pp6-muted-cell { background: #D9D9D9 }` */
+const MUTED_BG: [number, number, number] = [217, 217, 217]
 const TEXT: [number, number, number] = [17, 24, 39]
 
 const CHARACTER_KEYS = Array.from({ length: 8 }, (_, i) => `trait${i + 1}_score`)
@@ -299,6 +300,8 @@ function drawCell(
     fontSize?: number
     fill?: [number, number, number]
     muted?: boolean
+    /** ไม่ตัดข้อความด้วย … — ใช้เมื่อต้องการแสดงเต็มหรือครอบเอง */
+    noFit?: boolean
   },
 ) {
   const align = opts?.align || 'center'
@@ -315,13 +318,51 @@ function drawCell(
   setText(doc)
   doc.setFont('THSarabunNew', opts?.bold ? 'bold' : 'normal')
   doc.setFontSize(fontSize)
-  const pad = 0.6
+  const pad = 0.8
   const maxW = Math.max(1, w - pad * 2)
-  const label = fitText(doc, text, maxW)
-  const textY = y + h / 2 + fontSize * 0.12
+  const label = opts?.noFit ? (text || '') : fitText(doc, text, maxW)
+  const textY = y + h / 2 + fontSize * 0.08
   if (align === 'left') doc.text(label, x + pad, textY, { baseline: 'middle' })
   else if (align === 'right') doc.text(label, x + w - pad, textY, { baseline: 'middle', align: 'right' })
   else doc.text(label, x + w / 2, textY, { baseline: 'middle', align: 'center' })
+}
+
+/** ช่องป้ายซ้ายยาว — ย่อฟอนต์ให้ครบ ไม่ตัดคำขึ้นต้น */
+function drawLabelValueRow(
+  doc: jsPDF,
+  x: number,
+  y: number,
+  totalW: number,
+  h: number,
+  label: string,
+  value: string,
+  opts: { fontSize: number; muted?: boolean; header?: boolean },
+) {
+  if (opts.header) {
+    drawCell(doc, x, y, totalW, h, label, { bold: true, fontSize: opts.fontSize, noFit: true })
+    return
+  }
+  const valueW = 20
+  const labelW = Math.max(24, totalW - valueW)
+  doc.setFont('THSarabunNew', 'normal')
+  doc.setFontSize(opts.fontSize)
+  let fontSize = opts.fontSize
+  const maxLabelW = labelW - 1.6
+  while (fontSize > 8 && doc.getTextWidth(label) > maxLabelW) {
+    fontSize -= 0.4
+    doc.setFontSize(fontSize)
+  }
+  drawCell(doc, x, y, labelW, h, label, {
+    align: 'left',
+    fontSize,
+    noFit: true,
+  })
+  drawCell(doc, x + labelW, y, valueW, h, value, {
+    fontSize: opts.fontSize,
+    bold: true,
+    muted: opts.muted,
+    noFit: true,
+  })
 }
 
 function tableWidth(layout: Pp6SectionLayout) {
@@ -566,10 +607,11 @@ async function drawStudentPage(
   const electiveUnits = subjects.filter(s => pp6SubjectType(s) === 'เพิ่มเติม').reduce((sum, s) => sum + pp6SubjectWeight(s), 0)
 
   const bottomTop = y
-  const summaryW = actW * 0.58
+  // ตรง CSS: grid 89mm + signatures
+  const summaryW = 89
   const summaryX = actX
-  const sumH = 5.6
-  const sumFont = 10.5
+  const sumH = 6.2
+  const sumFont = ptFromCssPx(15)
   const summaryRows: Array<{ label: string; value: string; header?: boolean }> = [
     { label: 'สรุปผลการประเมิน', value: '', header: true },
     { label: 'จำนวนหน่วยกิต/น้ำหนักวิชาพื้นฐานที่ได้', value: term === 1 ? '' : formatPp6Number(basicUnits) },
@@ -583,15 +625,11 @@ async function drawStudentPage(
 
   let sy = bottomTop
   summaryRows.forEach(row => {
-    if (row.header) {
-      drawCell(doc, summaryX, sy, summaryW, sumH, row.label, { bold: true, fontSize: sumFont })
-    } else {
-      drawCell(doc, summaryX, sy, summaryW * 0.78, sumH, row.label, { align: 'left', fontSize: sumFont })
-      drawCell(doc, summaryX + summaryW * 0.78, sy, summaryW * 0.22, sumH, row.value, {
-        fontSize: sumFont,
-        muted: term === 1,
-      })
-    }
+    drawLabelValueRow(doc, summaryX, sy, summaryW, sumH, row.label, row.value, {
+      fontSize: sumFont,
+      muted: term === 1 && !row.header,
+      header: row.header,
+    })
     sy += sumH
   })
 
