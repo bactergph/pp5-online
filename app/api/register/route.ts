@@ -11,6 +11,17 @@ export async function POST(req: NextRequest) {
   if (String(password).length < 8) {
     return NextResponse.json({ error: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร' }, { status: 400 })
   }
+  const resolvedPrefix = String(prefix || '').trim()
+  if (!resolvedPrefix || resolvedPrefix === 'อื่นๆ') {
+    return NextResponse.json({ error: 'กรุณาระบุคำนำหน้า' }, { status: 400 })
+  }
+  if (resolvedPrefix.length > 40) {
+    return NextResponse.json({ error: 'คำนำหน้ายาวเกินไป' }, { status: 400 })
+  }
+  const resolvedPosition = String(position || '').trim()
+  if (resolvedPosition.length > 80) {
+    return NextResponse.json({ error: 'ตำแหน่งยาวเกินไป' }, { status: 400 })
+  }
 
   const db = createServerClient()
 
@@ -34,8 +45,8 @@ export async function POST(req: NextRequest) {
     id: authData.user.id,
     email,
     full_name,
-    prefix: prefix || 'นาย',
-    position: position || '',
+    prefix: resolvedPrefix,
+    position: resolvedPosition,
     role: 'admin',
     is_homeroom: false,
     school_id: null,

@@ -5,13 +5,24 @@ import { logActivity } from '@/lib/audit'
 
 // สมัครสมาชิกผ่านหน้า login ของโรงเรียน (public) — username ล้วน, สถานะรออนุมัติ
 export async function POST(req: NextRequest) {
-  const { schoolId, username, prefix, full_name, password } = await req.json()
+  const { schoolId, username, prefix, full_name, password, position } = await req.json()
 
   if (!schoolId || !username || !full_name || !password) {
     return NextResponse.json({ error: 'กรุณากรอก username ชื่อ-สกุล และรหัสผ่าน' }, { status: 400 })
   }
   if (String(password).length < 6) {
     return NextResponse.json({ error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' }, { status: 400 })
+  }
+  const resolvedPrefix = String(prefix || '').trim()
+  if (!resolvedPrefix || resolvedPrefix === 'อื่นๆ') {
+    return NextResponse.json({ error: 'กรุณาระบุคำนำหน้า' }, { status: 400 })
+  }
+  if (resolvedPrefix.length > 40) {
+    return NextResponse.json({ error: 'คำนำหน้ายาวเกินไป' }, { status: 400 })
+  }
+  const resolvedPosition = String(position || '').trim()
+  if (resolvedPosition.length > 80) {
+    return NextResponse.json({ error: 'ตำแหน่งยาวเกินไป' }, { status: 400 })
   }
   const uname = String(username).trim().toLowerCase().replace(/\s+/g, '')
   if (!/^[a-z0-9._]+$/.test(uname)) {
@@ -41,7 +52,9 @@ export async function POST(req: NextRequest) {
   const { error: profileError } = await db.from('users').upsert({
     id: authData.user.id,
     email, username: uname, full_name,
-    prefix: prefix || 'นาย', role: 'teacher', is_homeroom: false,
+    prefix: resolvedPrefix,
+    position: resolvedPosition,
+    role: 'teacher', is_homeroom: false,
     school_id: schoolId, is_active: false,   // รอ admin โรงเรียนอนุมัติ
   })
   if (profileError) {
@@ -58,7 +71,7 @@ export async function POST(req: NextRequest) {
     targetId: authData.user.id,
     targetLabel: full_name,
     description: `สมัครสมาชิกใหม่รออนุมัติ ${full_name}`,
-    metadata: { username: uname, role: 'teacher' },
+    metadata: { username: uname, role: 'teacher', position: resolvedPosition || null, prefix: resolvedPrefix },
   })
 
   return NextResponse.json({ success: true })

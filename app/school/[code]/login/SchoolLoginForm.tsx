@@ -5,7 +5,7 @@ import { resolveSchoolLoginEmail } from '@/lib/schoolAuth'
 import ScoutAuthLayout from '@/components/auth/ScoutAuthLayout'
 import PasswordInput from '@/components/auth/PasswordInput'
 
-const PREFIXES = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นาง', 'นางสาว']
+const PREFIXES = ['นาย', 'นาง', 'นางสาว', 'อื่นๆ'] as const
 
 type Props = {
   schoolId: string
@@ -19,6 +19,8 @@ export default function SchoolLoginForm({ schoolId, logoUrl, programName, create
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [registered, setRegistered] = useState(false)
+  const [prefixChoice, setPrefixChoice] = useState<string>('นาย')
+  const [customPrefix, setCustomPrefix] = useState('')
 
   async function doLogin(identifier: string, password: string) {
     setLoading(true); setError(null)
@@ -46,13 +48,23 @@ export default function SchoolLoginForm({ schoolId, logoUrl, programName, create
     if (password.length < 6) { setLoading(false); setError('รหัสผ่านต้องมีอย่างน้อย 6 ตัว'); return }
     if (password !== password2) { setLoading(false); setError('รหัสผ่านไม่ตรงกัน'); return }
 
+    const resolvedPrefix = prefixChoice === 'อื่นๆ'
+      ? customPrefix.trim()
+      : prefixChoice
+    if (!resolvedPrefix) {
+      setLoading(false)
+      setError(prefixChoice === 'อื่นๆ' ? 'กรุณาระบุคำนำหน้า' : 'กรุณาเลือกคำนำหน้า')
+      return
+    }
+
     const res = await fetch('/api/school-register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         schoolId,
-        prefix: fd.get('prefix'),
+        prefix: resolvedPrefix,
         full_name: fd.get('full_name'),
+        position: String(fd.get('position') || '').trim(),
         username: fd.get('username'),
         password,
       }),
@@ -62,6 +74,8 @@ export default function SchoolLoginForm({ schoolId, logoUrl, programName, create
     if (!res.ok) { setError(json.error || 'สมัครไม่สำเร็จ'); return }
     setRegistered(true)
     setMode('login')
+    setPrefixChoice('นาย')
+    setCustomPrefix('')
   }
 
   return (
@@ -123,19 +137,51 @@ export default function SchoolLoginForm({ schoolId, logoUrl, programName, create
         <form onSubmit={handleRegister}>
           <div className="auth-scout-register-grid">
             <div className="auth-scout-field" style={{ marginBottom: 0 }}>
-              <label className="auth-scout-label">คำนำหน้า</label>
-              <select name="prefix" className="auth-scout-select" defaultValue="นาย">
-                {PREFIXES.map(p => <option key={p}>{p}</option>)}
+              <label className="auth-scout-label" htmlFor="reg-prefix">คำนำหน้า</label>
+              <select
+                id="reg-prefix"
+                name="prefix"
+                className="auth-scout-select"
+                value={prefixChoice}
+                onChange={e => setPrefixChoice(e.target.value)}
+              >
+                {PREFIXES.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div className="auth-scout-field" style={{ marginBottom: 0 }}>
-              <label className="auth-scout-label">ชื่อ-นามสกุล *</label>
-              <input name="full_name" required className="auth-scout-input" placeholder="สมชาย ใจดี" />
+              <label className="auth-scout-label" htmlFor="reg-full-name">ชื่อ-นามสกุล *</label>
+              <input id="reg-full-name" name="full_name" required className="auth-scout-input" placeholder="สมชาย ใจดี" autoComplete="name" />
             </div>
           </div>
+          {prefixChoice === 'อื่นๆ' && (
+            <div className="auth-scout-field">
+              <label className="auth-scout-label" htmlFor="reg-prefix-custom">ระบุคำนำหน้า *</label>
+              <input
+                id="reg-prefix-custom"
+                className="auth-scout-input"
+                value={customPrefix}
+                onChange={e => setCustomPrefix(e.target.value)}
+                placeholder="เช่น ว่าที่ร้อยตรี, พันจ่าเอก"
+                required
+                maxLength={40}
+                autoComplete="honorific-prefix"
+              />
+            </div>
+          )}
           <div className="auth-scout-field">
-            <label className="auth-scout-label">ชื่อผู้ใช้ (username) *</label>
-            <input name="username" required className="auth-scout-input" placeholder="username" pattern="[A-Za-z0-9._]+" />
+            <label className="auth-scout-label" htmlFor="reg-position">ตำแหน่ง</label>
+            <input
+              id="reg-position"
+              name="position"
+              className="auth-scout-input"
+              placeholder="เช่น ครู, ครูชำนาญการ, ผู้อำนวยการ"
+              maxLength={80}
+              autoComplete="organization-title"
+            />
+          </div>
+          <div className="auth-scout-field">
+            <label className="auth-scout-label" htmlFor="reg-username">ชื่อผู้ใช้ (username) *</label>
+            <input id="reg-username" name="username" required className="auth-scout-input" placeholder="username" pattern="[A-Za-z0-9._]+" autoComplete="username" />
           </div>
           <div className="auth-scout-password-grid">
             <div className="auth-scout-field" style={{ marginBottom: 0 }}>

@@ -4,12 +4,14 @@ import Link from 'next/link'
 import GlassLoginShell from '@/components/auth/GlassLoginShell'
 import PasswordInput from '@/components/auth/PasswordInput'
 
-const PREFIXES = ['นาย', 'นาง', 'นางสาว']
+const PREFIXES = ['นาย', 'นาง', 'นางสาว', 'อื่นๆ'] as const
 
 export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const [prefixChoice, setPrefixChoice] = useState<string>('นาย')
+  const [customPrefix, setCustomPrefix] = useState('')
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -21,13 +23,19 @@ export default function RegisterPage() {
       setError('รหัสผ่านทั้งสองช่องไม่ตรงกัน')
       return
     }
+    const resolvedPrefix = prefixChoice === 'อื่นๆ' ? customPrefix.trim() : prefixChoice
+    if (!resolvedPrefix) {
+      setLoading(false)
+      setError(prefixChoice === 'อื่นๆ' ? 'กรุณาระบุคำนำหน้า' : 'กรุณาเลือกคำนำหน้า')
+      return
+    }
     const res = await fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: fd.get('email'),
         password: fd.get('password'),
-        prefix: fd.get('prefix'),
+        prefix: resolvedPrefix,
         full_name: fd.get('full_name'),
         position: fd.get('position'),
       }),
@@ -89,9 +97,15 @@ export default function RegisterPage() {
         <div className="jarnsek-login__grid jarnsek-login__grid--name">
           <div className="jarnsek-login__field">
             <label className="jarnsek-login__label" htmlFor="prefix">คำนำหน้า</label>
-            <select id="prefix" name="prefix" className="jarnsek-login__input jarnsek-login__input--plain" defaultValue="นาย">
+            <select
+              id="prefix"
+              name="prefix"
+              className="jarnsek-login__input jarnsek-login__input--plain"
+              value={prefixChoice}
+              onChange={e => setPrefixChoice(e.target.value)}
+            >
               {PREFIXES.map((p) => (
-                <option key={p}>{p}</option>
+                <option key={p} value={p}>{p}</option>
               ))}
             </select>
           </div>
@@ -108,6 +122,22 @@ export default function RegisterPage() {
           </div>
         </div>
 
+        {prefixChoice === 'อื่นๆ' && (
+          <div className="jarnsek-login__field">
+            <label className="jarnsek-login__label" htmlFor="prefix_custom">ระบุคำนำหน้า *</label>
+            <input
+              id="prefix_custom"
+              className="jarnsek-login__input jarnsek-login__input--plain"
+              value={customPrefix}
+              onChange={e => setCustomPrefix(e.target.value)}
+              placeholder="เช่น ว่าที่ร้อยตรี, พันจ่าเอก"
+              required
+              maxLength={40}
+              autoComplete="honorific-prefix"
+            />
+          </div>
+        )}
+
         <div className="jarnsek-login__field">
           <label className="jarnsek-login__label" htmlFor="position">ตำแหน่ง</label>
           <input
@@ -115,6 +145,8 @@ export default function RegisterPage() {
             name="position"
             className="jarnsek-login__input jarnsek-login__input--plain"
             placeholder="ครู / ผู้อำนวยการ ..."
+            maxLength={80}
+            autoComplete="organization-title"
           />
         </div>
 
