@@ -541,7 +541,7 @@ async function drawStudentPage(
     doc.text(bit.value, bx + vw / 2, lineY, { align: 'center', baseline: 'middle' })
     if (bit.underline) {
       setStroke(doc, BORDER, 0.35)
-      doc.line(bx, lineY + 1.8, bx + vw, lineY + 1.8)
+      doc.line(bx, lineY + 2.8, bx + vw, lineY + 2.8)
     }
     bx += vw + bitGap
     void i
