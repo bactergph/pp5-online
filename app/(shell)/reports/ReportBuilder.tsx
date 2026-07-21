@@ -63,6 +63,7 @@ import {
 } from '@/lib/school-director'
 import { expandEducationAreaOffice } from '@/lib/education-area-office'
 import { enqueueFileExport, enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
+import { printPdfBlob } from '@/lib/pdf/print-pdf-blob'
 import { buildPp6PdfBlob } from '@/lib/jspdf-pp6'
 import { buildPp5SubjectPdfBlob, type Pp5SubjectPdfSection } from '@/lib/jspdf-pp5-subject'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
@@ -3781,6 +3782,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const [logoResolved, setLogoResolved] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [printing, setPrinting] = useState(false)
   const [scale, setScale] = useState(88)
   const [pp6Individual, setPp6Individual] = useState(true)
   const [pp6Ranked, setPp6Ranked] = useState(true)
@@ -4205,9 +4207,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
     setSections(prev => prev.includes(section) ? prev.filter(item => item !== section) : [...prev, section])
   }
 
-  function savePdf() {
-    if (!data) return
-    setError('')
+  function reportExportNameParts() {
+    if (!data) return [] as string[]
     const classText = data.classroom ? `${data.classroom.level}-${data.classroom.room}` : 'รายงาน'
     const yearText = data.academicYear?.year_be || ''
     const nameParts = [MODE_CONFIG[mode].title, classText]
@@ -4218,40 +4219,53 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
       if (subjectName) nameParts.push(subjectName)
     }
     if (yearText) nameParts.push(yearText)
+    return nameParts
+  }
+
+  async function buildJsPdfExport() {
+    if (!data) throw new Error('ยังไม่มีข้อมูลรายงาน')
+    const nameParts = reportExportNameParts()
     const fileName = `${nameParts.join('_')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
 
-    // ปพ.6 → jsPDF (วาดตาม layout พรีวิว) ไม่ผ่าน Puppeteer
     if (mode === 'pp6') {
-      enqueueFileExport({
+      return buildPp6PdfBlob({
+        data,
+        term: pp6Term,
+        individual: pp6Individual,
+        selectedStudentId,
+        ranked: pp6Ranked,
+        showGrade: pp6ShowGrade,
+        layout: pp6PrintLayouts.page,
         fileName,
-        label: nameParts.join(' · '),
-        run: async () => buildPp6PdfBlob({
-          data,
-          term: pp6Term,
-          individual: pp6Individual,
-          selectedStudentId,
-          ranked: pp6Ranked,
-          showGrade: pp6ShowGrade,
-          layout: pp6PrintLayouts.page,
-          fileName,
-        }),
       })
-      return
     }
 
-    // ปพ.5 รายวิชา → jsPDF ไม่ผ่าน Puppeteer
     if (mode === 'pp5-subject' && selectedSubject) {
+      return buildPp5SubjectPdfBlob({
+        data,
+        subject: selectedSubject,
+        term: reportTerm,
+        sections: sections as Pp5SubjectPdfSection[],
+        layouts: pp5PrintLayouts,
+        fileName,
+      })
+    }
+
+    throw new Error('โหมดนี้ยังไม่รองรับ jsPDF')
+  }
+
+  function savePdf() {
+    if (!data) return
+    setError('')
+    const nameParts = reportExportNameParts()
+    const fileName = `${nameParts.join('_')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
+
+    // ปพ.6 / ปพ.5 รายวิชา → jsPDF ไม่ผ่าน Puppeteer
+    if (mode === 'pp6' || (mode === 'pp5-subject' && selectedSubject)) {
       enqueueFileExport({
         fileName,
         label: nameParts.join(' · '),
-        run: async () => buildPp5SubjectPdfBlob({
-          data,
-          subject: selectedSubject,
-          term: reportTerm,
-          sections: sections as Pp5SubjectPdfSection[],
-          layouts: pp5PrintLayouts,
-          fileName,
-        }),
+        run: () => buildJsPdfExport(),
       })
       return
     }
@@ -4283,6 +4297,27 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
       localStorageSeed: Object.keys(localStorageSeed).length > 0 ? localStorageSeed : undefined,
       flattenEffects: true,
     })
+  }
+
+  async function printReport() {
+    if (!data) return
+    setError('')
+
+    // ปพ.6 / ปพ.5 รายวิชา → พิมพ์จาก jsPDF ชุดเดียวกับบันทึก PDF
+    if (mode === 'pp6' || (mode === 'pp5-subject' && selectedSubject)) {
+      setPrinting(true)
+      try {
+        const result = await buildJsPdfExport()
+        await printPdfBlob(result.blob)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'พิมพ์ไม่สำเร็จ')
+      } finally {
+        setPrinting(false)
+      }
+      return
+    }
+
+    window.print()
   }
 
   return (
@@ -4503,10 +4538,12 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                 {pp5TunerOpen ? 'ปิดปรับ layout' : mode === 'pp6' ? 'ปรับ layout ปพ.6' : 'ปรับ layout ปพ.5'}
               </button>
               )}
-              <button type="button" onClick={savePdf} disabled={!data} className="btn btn-secondary">
+              <button type="button" onClick={savePdf} disabled={!data || printing} className="btn btn-secondary">
                 บันทึก PDF
               </button>
-              <button type="button" onClick={() => window.print()} disabled={!data} className="btn btn-primary">{MODE_CONFIG[mode].printLabel}</button>
+              <button type="button" onClick={() => void printReport()} disabled={!data || printing} className="btn btn-primary">
+                {printing ? 'กำลังสร้าง PDF…' : MODE_CONFIG[mode].printLabel}
+              </button>
             </div>
           </div>
           )}
