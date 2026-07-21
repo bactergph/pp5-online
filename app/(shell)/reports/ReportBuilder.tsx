@@ -62,7 +62,8 @@ import {
   directorSchoolLine,
 } from '@/lib/school-director'
 import { expandEducationAreaOffice } from '@/lib/education-area-office'
-import { enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
+import { enqueueFileExport, enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
+import { buildPp6PdfBlob } from '@/lib/jspdf-pp6'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
 import {
   PRINT_STUDENTS_PER_PAGE,
@@ -4191,33 +4192,42 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
     if (yearText) nameParts.push(yearText)
     const fileName = `${nameParts.join('_')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
 
-    // พิมพ์จาก HTML พรีวิวชุดเดียว (Puppeteer) → PDF จัดหน้าตรงกับที่เห็นบนจอ
+    // ปพ.6 → jsPDF (วาดตาม layout พรีวิว) ไม่ผ่าน Puppeteer
+    if (mode === 'pp6') {
+      enqueueFileExport({
+        fileName,
+        label: nameParts.join(' · '),
+        run: async () => buildPp6PdfBlob({
+          data,
+          term: pp6Term,
+          individual: pp6Individual,
+          selectedStudentId,
+          ranked: pp6Ranked,
+          showGrade: pp6ShowGrade,
+          layout: pp6PrintLayouts.page,
+          fileName,
+        }),
+      })
+      return
+    }
+
     const params = new URLSearchParams()
     params.set('print', '1')
     if (yearId) params.set('year', yearId)
     if (level) params.set('level', level)
-    const exportClassroomId = classroomId || (mode === 'pp6' ? data.classroom?.id : '')
+    const exportClassroomId = classroomId || ''
     if (exportClassroomId) params.set('classroom', exportClassroomId)
     if (mode === 'pp5-subject') {
       if (isSecondaryClassLevel(level)) params.set('term', String(reportTerm))
     } else {
-      params.set('term', String(mode === 'pp6' ? pp6Term : term))
+      params.set('term', String(term))
     }
     params.set('sections', sections.join(','))
     if (classSubjectId) params.set('subject', classSubjectId)
-    if (mode === 'pp6') {
-      if (pp6Individual) params.set('individual', '1')
-      if (selectedStudentId) params.set('student', selectedStudentId)
-      params.set('ranked', pp6Ranked ? '1' : '0')
-      params.set('showGrade', pp6ShowGrade ? '1' : '0')
-    }
 
     const localStorageSeed: Record<string, string> = {}
     if (mode === 'pp5-subject' || mode === 'pp5-class') {
       localStorageSeed[PP5_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp5PrintLayouts)
-    }
-    if (mode === 'pp6') {
-      localStorageSeed[PP6_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp6PrintLayouts)
     }
 
     enqueueReportPdf({

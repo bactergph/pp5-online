@@ -473,17 +473,45 @@ async function drawStudentPage(
 
   y = Math.max(headTop + logoSize + 2, headTop + 18) + layout.sectionGapMm
 
-  // student line
+  // student line — แยกป้ายกับค่า แบบพรีวิว
+  const studentFont = ptFromCssPx(layout.fontStudentLinePx)
   doc.setFont('THSarabunNew', 'normal')
-  doc.setFontSize(ptFromCssPx(layout.fontStudentLinePx))
-  const studentLine = [
-    `เลขประจำตัวนักเรียน ${student.student_code || '-'}`,
-    `ชื่อ-นามสกุล ${studentName(student)}`,
-    `ชั้น ${classLabel(data.classroom)}`,
-    termTitle(term),
-  ].join('   ')
-  doc.text(studentLine, PAGE_W / 2, y + 3, { align: 'center', baseline: 'middle' })
-  y += 7 + layout.sectionGapMm
+  doc.setFontSize(studentFont)
+  setText(doc)
+  const studentBits: Array<{ label: string; value: string; underline?: boolean }> = [
+    { label: 'เลขประจำตัวนักเรียน', value: student.student_code || '-', underline: false },
+    { label: 'ชื่อ-นามสกุล', value: studentName(student), underline: true },
+    { label: 'ชั้น', value: classLabel(data.classroom), underline: true },
+    { label: '', value: termTitle(term), underline: true },
+  ]
+  const bitGap = 3
+  const bitWidths = studentBits.map(bit => {
+    doc.setFont('THSarabunNew', 'bold')
+    const labelW = bit.label ? doc.getTextWidth(bit.label) + 1.5 : 0
+    doc.setFont('THSarabunNew', 'normal')
+    const valueW = Math.max(16, doc.getTextWidth(bit.value) + 4)
+    return labelW + valueW
+  })
+  const totalBitsW = bitWidths.reduce((a, b) => a + b, 0) + bitGap * (studentBits.length - 1)
+  let bx = (PAGE_W - totalBitsW) / 2
+  const lineY = y + 3.2
+  studentBits.forEach((bit, i) => {
+    if (bit.label) {
+      doc.setFont('THSarabunNew', 'bold')
+      doc.text(bit.label, bx, lineY, { baseline: 'middle' })
+      bx += doc.getTextWidth(bit.label) + 1.5
+    }
+    doc.setFont('THSarabunNew', 'bold')
+    const vw = Math.max(16, doc.getTextWidth(bit.value) + 4)
+    doc.text(bit.value, bx + vw / 2, lineY, { align: 'center', baseline: 'middle' })
+    if (bit.underline) {
+      setStroke(doc, BORDER, 0.35)
+      doc.line(bx, lineY + 1.8, bx + vw, lineY + 1.8)
+    }
+    bx += vw + bitGap
+    void i
+  })
+  y += 8 + layout.sectionGapMm
 
   // score table
   const header = drawScoreTableHeader(doc, layout, y)
@@ -554,32 +582,34 @@ async function drawStudentPage(
   }
 
   if (term === 1) {
-    doc.setFont('THSarabunNew', 'normal')
+    doc.setFont('THSarabunNew', 'bold')
     doc.setFontSize(ptFromCssPx(layout.fontNotePx))
+    doc.setTextColor(255, 0, 0)
     const note = 'หมายเหตุ.- ภาคเรียนที่ 1 จะเป็นการรายงานความก้าวหน้าทางการเรียนของผู้เรียน ส่วนผลการพัฒนาคุณภาพผู้เรียน นั้น โรงเรียนจะรายงานให้ผู้ปกครองทราบเมื่อสิ้นปีการศึกษา เกรดที่แสดงนี้ เป็นเพียงการเทียบเคียงเกณฑ์การวัดผล ไม่ใช่เกรดจริง'
     const noteLines = doc.splitTextToSize(note, tableWidth(layout))
     doc.text(noteLines, tableLeft(layout), y + 2, { baseline: 'top' })
-    y += noteLines.length * 3.4 + 1
+    setText(doc)
+    y += noteLines.length * 4.2 + 1.5
   }
 
-  // activity table
+  // activity table — หัวตารางแบบพรีวิว (colspan 2 + ชั่วโมง + ผล)
   const actW = tableWidth(layout)
   const actX = tableLeft(layout)
   const actH = 6.4
-  const actFont = 11.25
-  drawCell(doc, actX, y, actW * 0.7, actH, 'กิจกรรมพัฒนาผู้เรียน', { bold: true, fontSize: actFont })
-  drawCell(doc, actX + actW * 0.7, y, actW * 0.15, actH, 'จำนวนชั่วโมง', { bold: true, fontSize: actFont })
-  drawCell(doc, actX + actW * 0.85, y, actW * 0.15, actH, 'ผลการประเมิน', { bold: true, fontSize: actFont })
+  const actFont = ptFromCssPx(15)
+  const codeW = 19
+  const hoursW = actW * 0.15
+  const resultW = actW * 0.15
+  const nameW = actW - codeW - hoursW - resultW
+  drawCell(doc, actX, y, codeW + nameW, actH, 'กิจกรรมพัฒนาผู้เรียน', { bold: true, fontSize: actFont })
+  drawCell(doc, actX + codeW + nameW, y, hoursW, actH, 'จำนวนชั่วโมง', { bold: true, fontSize: actFont })
+  drawCell(doc, actX + codeW + nameW + hoursW, y, resultW, actH, 'ผลการประเมิน', { bold: true, fontSize: actFont })
   y += actH
 
   const activityRow = rowFor(data.evaluations.activities || [], student.id)
   ACTIVITY_LABELS.forEach((label, index) => {
-    const codeW = actW * 0.12
-    const nameW = actW * 0.58
-    const hoursW = actW * 0.15
-    const resultW = actW * 0.15
     drawCell(doc, actX, y, codeW, actH, pp6ActivityCode(data, index), { bold: true, fontSize: actFont })
-    drawCell(doc, actX + codeW, y, nameW, actH, pp6ActivityLabel(data, index) || label, { align: 'left', fontSize: actFont })
+    drawCell(doc, actX + codeW, y, nameW, actH, pp6ActivityLabel(data, index) || label, { align: 'left', fontSize: actFont, noFit: true })
     drawCell(doc, actX + codeW + nameW, y, hoursW, actH, String(pp6ActivityHours(data, index)), { fontSize: actFont })
     drawCell(doc, actX + codeW + nameW + hoursW, y, resultW, actH,
       term === 1 ? '' : String(activityRow?.[ACTIVITY_KEYS[index]] || '-'),
