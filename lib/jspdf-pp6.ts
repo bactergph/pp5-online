@@ -518,7 +518,7 @@ async function drawStudentPage(
   doc.setFontSize(studentFont)
   setText(doc)
   const studentBits: Array<{ label: string; value: string; underline?: boolean }> = [
-    { label: 'เลขประจำตัวนักเรียน', value: student.student_code || '-', underline: false },
+    { label: 'เลขประจำตัวนักเรียน', value: student.student_code || '-', underline: true },
     { label: 'ชื่อ-นามสกุล', value: studentName(student), underline: true },
     { label: 'ชั้น', value: classLabel(data.classroom), underline: true },
     { label: '', value: termTitle(term), underline: true },
