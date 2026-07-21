@@ -86,6 +86,7 @@ import { usePp5Layout, usePp5SectionLayout, Pp5PrintLayoutsProvider } from '@/li
 import { pp6SectionLayoutStyle, savePp6PrintLayouts, PP6_PRINT_LAYOUTS_STORAGE_KEY } from '@/lib/pp6-print-layout'
 import { usePp6SectionLayout, Pp6PrintLayoutsProvider } from '@/lib/pp6-print-layout-context'
 import Pp5PrintLayoutTuner, { usePp5PrintLayoutsState, usePp6PrintLayoutsState } from '@/components/reports/Pp5PrintLayoutTuner'
+import Pp6JsPdfLivePreview from '@/components/reports/Pp6JsPdfLivePreview'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 
 function usePp5PageStyle(section: Pp5PrintSection) {
@@ -3762,6 +3763,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const [pp5TunerOpen, setPp5TunerOpen] = useState(false)
   const [layoutSaved, setLayoutSaved] = useState(false)
   const [pp5TunerSection, setPp5TunerSection] = useState<Pp5PrintSection>('coverClass')
+  /** ปพ.6: พรีวิว HTML หรือ PDF จริงจาก jsPDF */
+  const [pp6PreviewMode, setPp6PreviewMode] = useState<'html' | 'pdf'>('pdf')
   const { layouts: pp5PrintLayouts, setLayouts: setPp5PrintLayouts } = usePp5PrintLayoutsState()
   const { layouts: pp6PrintLayouts, setLayouts: setPp6PrintLayouts } = usePp6PrintLayoutsState()
 
@@ -4447,11 +4450,37 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                 <option value={100}>เต็ม (100%)</option>
               </select>
             </label>
+            {mode === 'pp6' && (
+              <div className="report-preview-mode" role="group" aria-label="โหมดพรีวิว">
+                <button
+                  type="button"
+                  className={`btn btn-secondary${pp6PreviewMode === 'pdf' ? ' active' : ''}`}
+                  disabled={!data}
+                  onClick={() => setPp6PreviewMode('pdf')}
+                >
+                  PDF (jsPDF)
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-secondary${pp6PreviewMode === 'html' ? ' active' : ''}`}
+                  disabled={!data}
+                  onClick={() => setPp6PreviewMode('html')}
+                >
+                  HTML
+                </button>
+              </div>
+            )}
             <div className="report-preview-actions">
               {layoutTunerEnabled && (
               <button
                 type="button"
-                onClick={() => setPp5TunerOpen(open => !open)}
+                onClick={() => {
+                  setPp5TunerOpen(open => {
+                    const next = !open
+                    if (next && mode === 'pp6') setPp6PreviewMode('pdf')
+                    return next
+                  })
+                }}
                 className={`btn btn-secondary pp5-tuner-toggle${pp5TunerOpen ? ' active' : ''}`}
                 disabled={!data}
               >
@@ -4501,6 +4530,18 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                   : mode === 'pp6' ? 'เลือกระดับชั้นเพื่อดูพรีวิว ปพ.6' : 'เลือกข้อมูลด้านซ้ายเพื่อดูพรีวิว'}</span>
               </div>
             ) : mode === 'pp6' ? (
+              pp6PreviewMode === 'pdf' && !printMode && !embedMode ? (
+                <Pp6JsPdfLivePreview
+                  data={data}
+                  term={pp6Term}
+                  individual={pp6Individual}
+                  selectedStudentId={selectedStudentId}
+                  ranked={pp6Ranked}
+                  showGrade={pp6ShowGrade}
+                  layout={pp6PrintLayouts.page}
+                  scale={scale}
+                />
+              ) : (
               <Pp6PrintLayoutsProvider layouts={pp6PrintLayouts}>
               <div
                 className={printMode ? 'report-print-zone is-pdf-export' : 'report-print-zone'}
@@ -4509,6 +4550,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                 <Pp6Page data={data} term={pp6Term} individual={pp6Individual} selectedStudentId={selectedStudentId} ranked={pp6Ranked} showGrade={pp6ShowGrade} />
               </div>
               </Pp6PrintLayoutsProvider>
+              )
             ) : (
               <Pp5PrintLayoutsProvider layouts={pp5PrintLayouts}>
               <div
@@ -7252,6 +7294,75 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           align-items: center;
           justify-content: flex-end;
           gap: 8px;
+        }
+        .report-preview-mode {
+          display: inline-flex;
+          gap: 4px;
+          margin-left: auto;
+          margin-right: 8px;
+        }
+        .report-preview-mode .btn {
+          min-height: 30px;
+          padding: 4px 10px;
+          font-size: 12px;
+        }
+        .report-preview-mode .btn.active {
+          border-color: #8B6B45;
+          background: #F5EDE3;
+          color: #6B4F32;
+          font-weight: 800;
+        }
+        .pp6-jspdf-live {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          width: 100%;
+          min-height: 70vh;
+        }
+        .pp6-jspdf-live__bar {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          font-size: 12px;
+        }
+        .pp6-jspdf-live__badge {
+          display: inline-flex;
+          padding: 4px 10px;
+          border-radius: 999px;
+          background: #F5EDE3;
+          color: #6B4F32;
+          font-weight: 800;
+        }
+        .pp6-jspdf-live__status { color: var(--text-3); }
+        .pp6-jspdf-live__error { color: #b91c1c; font-weight: 700; }
+        .pp6-jspdf-live__frame-wrap {
+          width: 210mm;
+          max-width: 100%;
+          margin: 0 auto;
+          background: #e2e8f0;
+          border-radius: 8px;
+          padding: 12px;
+        }
+        .pp6-jspdf-live__frame {
+          display: block;
+          width: 210mm;
+          height: 297mm;
+          max-width: 100%;
+          border: 0;
+          background: white;
+          box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+        }
+        .pp6-jspdf-live__empty {
+          display: grid;
+          place-items: center;
+          width: 210mm;
+          max-width: 100%;
+          min-height: 40vh;
+          margin: 0 auto;
+          background: white;
+          color: var(--text-3);
+          border-radius: 8px;
         }
         .pp5-tuner-toggle.active {
           border-color: #8B6B45;

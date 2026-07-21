@@ -94,6 +94,11 @@ const PP6_FIELD_META: Record<keyof Pp6SectionLayout, { unit: 'mm' | 'px' | 'rows
   docMarkFontPx: { unit: 'px', min: 14, max: 28, step: 1, group: 'โลโก้ & ปพ.' },
   headTopMm: { unit: 'mm', min: 0, max: 20, step: 0.5, group: 'ระยะส่วน' },
   sectionGapMm: { unit: 'mm', min: 0, max: 8, step: 0.2, group: 'ระยะส่วน' },
+  cellTextNudgeMm: { unit: 'mm', min: -3, max: 3, step: 0.05, group: 'jsPDF' },
+  rankGapTopMm: { unit: 'mm', min: 0, max: 10, step: 0.2, group: 'jsPDF' },
+  rankGapBottomMm: { unit: 'mm', min: 0, max: 10, step: 0.2, group: 'jsPDF' },
+  noteGapTopMm: { unit: 'mm', min: 0, max: 10, step: 0.2, group: 'jsPDF' },
+  noteGapBottomMm: { unit: 'mm', min: 0, max: 10, step: 0.2, group: 'jsPDF' },
 }
 
 function loadPanelPos(): PanelPos | null {

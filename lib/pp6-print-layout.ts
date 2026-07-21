@@ -26,6 +26,14 @@ export type Pp6SectionLayout = {
   tableWidthPct: number
   sectionGapMm: number
   minSubjectRows: number
+  /** jsPDF — ขยับตัวอักษรในช่องตารางขึ้น/ลง (ลบ = ขึ้น) */
+  cellTextNudgeMm: number
+  /** jsPDF — ระยะก่อน/หลังบรรทัดอันดับ */
+  rankGapTopMm: number
+  rankGapBottomMm: number
+  /** jsPDF — ระยะก่อน/หลังหมายเหตุแดง */
+  noteGapTopMm: number
+  noteGapBottomMm: number
 }
 
 export type Pp6PrintLayouts = Record<Pp6PrintSection, Pp6SectionLayout>
@@ -52,6 +60,11 @@ export const DEFAULT_PP6_SECTION_LAYOUT: Pp6SectionLayout = {
   tableWidthPct: 85,
   sectionGapMm: 1.2,
   minSubjectRows: 15,
+  cellTextNudgeMm: -0.85,
+  rankGapTopMm: 2,
+  rankGapBottomMm: 3,
+  noteGapTopMm: 2,
+  noteGapBottomMm: 2,
 }
 
 export const DEFAULT_PP6_PRINT_LAYOUTS: Pp6PrintLayouts = {
@@ -121,6 +134,7 @@ export const PP6_SECTION_FIELD_KEYS: (keyof Pp6SectionLayout)[] = [
   'logoSizeMm', 'logoLeftMm',
   'docMarkTopMm', 'docMarkRightMm', 'docMarkFontPx',
   'headTopMm', 'tableWidthPct', 'sectionGapMm',
+  'cellTextNudgeMm', 'rankGapTopMm', 'rankGapBottomMm', 'noteGapTopMm', 'noteGapBottomMm',
 ]
 
 export const PP6_SECTION_FIELD_LABELS: Record<keyof Pp6SectionLayout, string> = {
@@ -145,6 +159,11 @@ export const PP6_SECTION_FIELD_LABELS: Record<keyof Pp6SectionLayout, string> = 
   tableWidthPct: 'ความกว้างตาราง (%)',
   sectionGapMm: 'ระยะห่างส่วน',
   minSubjectRows: 'จำนวนแถววิชา',
+  cellTextNudgeMm: 'ตัวอักษรในช่อง (ขึ้น=ลบ)',
+  rankGapTopMm: 'ระยะก่อนอันดับ',
+  rankGapBottomMm: 'ระยะหลังอันดับ',
+  noteGapTopMm: 'ระยะก่อนหมายเหตุ',
+  noteGapBottomMm: 'ระยะหลังหมายเหตุ',
 }
 
 export function pp6SectionLayoutCssSnippet(layout: Pp6SectionLayout): string {
