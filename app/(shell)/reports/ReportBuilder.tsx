@@ -6991,7 +6991,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           padding: 1mm 0 !important;
           color: #FF0000 !important;
           font-size: var(--pp6-font-note, 17px);
-          line-height: var(--pp6-note-line-height, 1.1);
+          line-height: var(--pp6-note-line-height, 0.85);
           text-align: left !important;
           font-weight: 700;
           box-sizing: border-box;

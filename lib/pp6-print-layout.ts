@@ -89,7 +89,7 @@ export const DEFAULT_PP6_SECTION_LAYOUT: Pp6SectionLayout = {
   rankGapBottomMm: 3,
   noteGapTopMm: 2,
   noteGapBottomMm: 2,
-  noteLineHeight: 1.1,
+  noteLineHeight: 0.85,
   activityGapTopMm: 0,
   activityRowHeightMm: 6.4,
   afterActivityGapMm: 1.2,
@@ -147,9 +147,12 @@ export function loadPp6PrintLayouts(): Pp6PrintLayouts {
       || window.localStorage.getItem('pp6-print-layouts-v1')
     if (!raw) return { ...DEFAULT_PP6_PRINT_LAYOUTS }
     const parsed = JSON.parse(raw) as Partial<Pp6PrintLayouts>
-    return {
-      page: { ...DEFAULT_PP6_PRINT_LAYOUTS.page, ...parsed.page },
+    const page = { ...DEFAULT_PP6_PRINT_LAYOUTS.page, ...parsed.page }
+    // ค่าเก่า (1.1–1.35) กว้างเกิน — ดึงเข้า default ใหม่
+    if (typeof page.noteLineHeight === 'number' && page.noteLineHeight >= 1.05) {
+      page.noteLineHeight = DEFAULT_PP6_SECTION_LAYOUT.noteLineHeight
     }
+    return { page }
   } catch {
     return { ...DEFAULT_PP6_PRINT_LAYOUTS }
   }

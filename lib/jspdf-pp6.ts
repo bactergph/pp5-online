@@ -626,9 +626,11 @@ async function drawStudentPage(
     const note = 'หมายเหตุ.- ภาคเรียนที่ 1 จะเป็นการรายงานความก้าวหน้าทางการเรียนของผู้เรียน ส่วนผลการพัฒนาคุณภาพผู้เรียน นั้น โรงเรียนจะรายงานให้ผู้ปกครองทราบเมื่อสิ้นปีการศึกษา เกรดที่แสดงนี้ เป็นเพียงการเทียบเคียงเกณฑ์การวัดผล ไม่ใช่เกรดจริง'
     const noteLines = doc.splitTextToSize(note, tableWidth(layout))
     y += layout.noteGapTopMm ?? 2
-    const lineFactor = layout.noteLineHeight ?? 1.1
+    const lineFactor = layout.noteLineHeight ?? 0.85
     const lineH = noteFontPt * 0.352777778 * lineFactor
-    doc.text(noteLines, tableLeft(layout), y, { baseline: 'top', lineHeightFactor: lineFactor })
+    noteLines.forEach((line, i) => {
+      doc.text(line, tableLeft(layout), y + i * lineH, { baseline: 'top' })
+    })
     setText(doc)
     y += noteLines.length * lineH + (layout.noteGapBottomMm ?? 2)
   }

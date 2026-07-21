@@ -107,7 +107,7 @@ const PP6_FIELD_META: Record<keyof Pp6SectionLayout, { unit: 'mm' | 'px' | 'rows
   rankGapBottomMm: { unit: 'mm', min: 0, max: 10, step: 0.1, group: 'อันดับ & หมายเหตุ' },
   noteGapTopMm: { unit: 'mm', min: 0, max: 10, step: 0.1, group: 'อันดับ & หมายเหตุ' },
   noteGapBottomMm: { unit: 'mm', min: 0, max: 10, step: 0.1, group: 'อันดับ & หมายเหตุ' },
-  noteLineHeight: { unit: 'x', min: 1, max: 2, step: 0.05, group: 'อันดับ & หมายเหตุ' },
+  noteLineHeight: { unit: 'x', min: 0.7, max: 2, step: 0.05, group: 'อันดับ & หมายเหตุ' },
   activityGapTopMm: { unit: 'mm', min: 0, max: 10, step: 0.1, group: 'กิจกรรม' },
   activityRowHeightMm: { unit: 'mm', min: 4, max: 12, step: 0.1, group: 'กิจกรรม' },
   afterActivityGapMm: { unit: 'mm', min: 0, max: 10, step: 0.1, group: 'กิจกรรม' },
