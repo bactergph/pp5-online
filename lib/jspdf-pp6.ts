@@ -321,7 +321,8 @@ function drawCell(
   const pad = 0.8
   const maxW = Math.max(1, w - pad * 2)
   const label = opts?.noFit ? (text || '') : fitText(doc, text, maxW)
-  const textY = y + h / 2 + fontSize * 0.08
+  // กลางแนวตั้ง — ขยับขึ้นนิดสำหรับ TH Sarabun ใน jsPDF (อย่าบวก fontSize เป็น mm)
+  const textY = y + h / 2 - 0.85
   if (align === 'left') doc.text(label, x + pad, textY, { baseline: 'middle' })
   else if (align === 'right') doc.text(label, x + w - pad, textY, { baseline: 'middle', align: 'right' })
   else doc.text(label, x + w / 2, textY, { baseline: 'middle', align: 'center' })
