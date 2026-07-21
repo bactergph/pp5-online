@@ -7001,7 +7001,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           gap: 14mm;
           padding-top: 5mm;
           text-align: center;
-          font-size: 17px;
+          font-size: 16px;
           font-weight: 700;
         }
         .pp6-homeroom-pair {
@@ -7010,19 +7010,18 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           gap: 3mm;
           align-items: start;
         }
-        .pp6-homeroom-pair p {
-          font-size: 14px;
-        }
         .pp6-sign-line {
           height: 7mm;
           border-bottom: 1px solid #111827;
         }
         .pp6-signatures p {
           margin: 1mm 0 0;
+          font-size: 16px;
           font-weight: 900;
         }
         .pp6-signatures span {
           display: block;
+          font-size: 16px;
         }
         .pp6-muted-cell {
           background: #D9D9D9 !important;

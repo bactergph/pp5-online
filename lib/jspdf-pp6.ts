@@ -743,13 +743,12 @@ async function drawStudentPage(
       doc.line(boxX + 2, blockY + imgH, boxX + boxW - 2, blockY + imgH)
     }
     doc.setFont('THSarabunNew', 'normal')
-    const nameFont = Math.min(10, Math.max(7.5, boxW * 0.22))
-    doc.setFontSize(nameFont)
+    const sigFont = ptFromCssPx(16)
+    doc.setFontSize(sigFont)
     const nameText = fitText(doc, `(${name})`, boxW - 2)
-    doc.text(nameText, boxX + boxW / 2, blockY + imgH + 4, { align: 'center' })
-    doc.setFontSize(10)
+    doc.text(nameText, boxX + boxW / 2, blockY + imgH + 4.2, { align: 'center' })
     lines.forEach((line, i) => {
-      doc.text(line, boxX + boxW / 2, blockY + imgH + 8 + i * 3.5, { align: 'center' })
+      doc.text(line, boxX + boxW / 2, blockY + imgH + 8.5 + i * 4, { align: 'center' })
     })
   }
 
