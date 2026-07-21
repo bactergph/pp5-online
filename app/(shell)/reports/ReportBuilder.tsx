@@ -6846,7 +6846,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         .pp6-student-line {
           display: flex;
           justify-content: center;
-          gap: 2mm;
+          gap: 1.5mm;
           align-items: end;
           margin-bottom: var(--pp6-section-gap, 1.2mm);
           font-size: var(--pp6-font-student, 18px);
@@ -6854,19 +6854,27 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         }
         .pp6-student-line span {
           white-space: nowrap;
+          display: inline-flex;
+          align-items: end;
+          gap: 1mm;
         }
-        .pp6-student-line b {
+        .pp6-student-line > span > b:not(.pp6-student-value) {
+          font-weight: 700;
+        }
+        .pp6-student-value {
           display: inline-block;
-          min-width: 16mm;
-          padding: 0 2mm;
+          padding: 0 1mm;
           border-bottom: 1px solid #111827;
           text-align: center;
           font-weight: 700;
+          line-height: 1.1;
         }
-        .pp6-student-line b:first-child {
+        .pp6-student-value.is-plain {
           border-bottom: none;
-          min-width: 0;
           padding: 0;
+        }
+        .pp6-student-line b {
+          font-weight: 700;
         }
         .pp6-score-table,
         .pp6-activity-table,
