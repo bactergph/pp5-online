@@ -515,10 +515,15 @@ export async function fetchGlobalTermCalendarsForSchoolYears() {
     .eq('school_id', session.schoolId)
   const yearBes = [...new Set((years || []).map(y => y.year_be))]
   if (yearBes.length === 0) return []
-  const { data } = await db.from('global_term_calendars')
+  const { data, error } = await db.from('global_term_calendars')
     .select('id, year_be, term1_start_date, term1_end_date, term2_start_date, term2_end_date')
     .in('year_be', yearBes)
     .order('year_be', { ascending: false })
+  // ตารางยังไม่ migrate / schema cache ยังไม่มี → ถือว่ายังไม่มีข้อมูลกลาง
+  if (error) {
+    console.warn('[fetchGlobalTermCalendarsForSchoolYears]', error.message)
+    return []
+  }
   return data || []
 }
 

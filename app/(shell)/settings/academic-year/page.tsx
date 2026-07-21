@@ -178,7 +178,7 @@ export default function AcademicYearPage() {
         </div>
       )}
 
-      {globalCalendars.length > 0 && (
+      {globalCalendars.length > 0 ? (
         <section className="control-card">
           <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>ข้อมูลกลางที่พร้อมใช้</h3>
           <p style={{ color: 'var(--text-3)', fontSize: 13, margin: '2px 0 12px' }}>
@@ -189,6 +189,17 @@ export default function AcademicYearPage() {
               <span key={calendar.id} className="badge badge-primary">ปี {calendar.year_be}</span>
             ))}
           </div>
+        </section>
+      ) : (
+        <section className="control-card" style={{ borderStyle: 'dashed' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>ยังไม่มีปุ่มซิงก์จากส่วนกลาง</h3>
+          <p style={{ color: 'var(--text-3)', fontSize: 13, margin: '6px 0 0', lineHeight: 1.55 }}>
+            ปุ่ม「ใช้จากข้อมูลกลาง」จะแสดงเมื่อสำนักงานเขตตั้ง<span style={{ fontWeight: 700 }}>ปฏิทินภาคเรียนกลาง</span>
+            ของปีเดียวกับโรงเรียนนี้แล้ว (เมนูเขต → ปฏิทินภาคเรียน)
+            {years.length > 0 && (
+              <> · ปีที่มีในโรงเรียน: {years.map(y => y.year_be).join(', ')}</>
+            )}
+          </p>
         </section>
       )}
 
