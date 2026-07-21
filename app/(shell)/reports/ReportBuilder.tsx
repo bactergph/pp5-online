@@ -3583,10 +3583,10 @@ function Pp6Page({
             </header>
 
             <div className="pp6-student-line">
-              <span><b>เลขประจำตัวนักเรียน</b> <b>{student.student_code || '-'}</b></span>
-              <span><b>ชื่อ-นามสกุล</b> <b>{studentName(student)}</b></span>
-              <span><b>ชั้น</b> <b>{classLabel(data?.classroom || null)}</b></span>
-              <span><b>{termTitle(term)}</b></span>
+              <span><b>เลขประจำตัวนักเรียน</b> <b className="pp6-student-value is-plain">{student.student_code || '-'}</b></span>
+              <span><b>ชื่อ-นามสกุล</b> <b className="pp6-student-value">{studentName(student)}</b></span>
+              <span><b>ชั้น</b> <b className="pp6-student-value">{classLabel(data?.classroom || null)}</b></span>
+              <span><b className="pp6-student-value">{termTitle(term)}</b></span>
             </div>
 
             <table className="pp6-score-table">

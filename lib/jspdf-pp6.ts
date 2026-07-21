@@ -523,12 +523,12 @@ async function drawStudentPage(
     { label: 'ชั้น', value: classLabel(data.classroom), underline: true },
     { label: '', value: termTitle(term), underline: true },
   ]
-  const bitGap = 3
+  const bitGap = 1.5
   const bitWidths = studentBits.map(bit => {
     doc.setFont('THSarabunNew', 'bold')
-    const labelW = bit.label ? doc.getTextWidth(bit.label) + 1.5 : 0
-    doc.setFont('THSarabunNew', 'normal')
-    const valueW = Math.max(16, doc.getTextWidth(bit.value) + 4)
+    const labelW = bit.label ? doc.getTextWidth(bit.label) + 1 : 0
+    doc.setFont('THSarabunNew', 'bold')
+    const valueW = doc.getTextWidth(bit.value) + (bit.underline ? 2.5 : 1)
     return labelW + valueW
   })
   const totalBitsW = bitWidths.reduce((a, b) => a + b, 0) + bitGap * (studentBits.length - 1)
@@ -538,10 +538,10 @@ async function drawStudentPage(
     if (bit.label) {
       doc.setFont('THSarabunNew', 'bold')
       doc.text(bit.label, bx, lineY, { baseline: 'middle' })
-      bx += doc.getTextWidth(bit.label) + 1.5
+      bx += doc.getTextWidth(bit.label) + 1
     }
     doc.setFont('THSarabunNew', 'bold')
-    const vw = Math.max(16, doc.getTextWidth(bit.value) + 4)
+    const vw = doc.getTextWidth(bit.value) + (bit.underline ? 2.5 : 1)
     doc.text(bit.value, bx + vw / 2, lineY, { align: 'center', baseline: 'middle' })
     if (bit.underline) {
       setStroke(doc, BORDER, 0.35)
