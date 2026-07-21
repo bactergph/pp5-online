@@ -19,18 +19,57 @@ type Classroom = {
 }
 type AcademicYear = { id: string; year_be: number; is_active: boolean }
 type Grid = (string | number)[][]
-type ColMap = { prefix: number; first: number; last: number; gender: number; birth: number; code: number; national: number; level: number; room: number }
+type ColMap = { prefix: number; first: number; last: number; gender: number; birth: number; code: number; national: number; level: number; room: number; fullName: number }
 type ImportMode = 'classroom' | 'school'
 
 function parseBirthDate(raw: string | number | null): string | null {
-  if (!raw) return null
+  if (raw == null || raw === '') return null
+  // Excel serial date (ตัวเลขวัน เช่น 35000)
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 20000 && raw < 80000) {
+    const utc = Math.round((raw - 25569) * 86400 * 1000)
+    const d = new Date(utc)
+    if (!Number.isNaN(d.getTime())) {
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+    }
+  }
   const s = String(raw).trim()
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s)
+    if (Number.isFinite(n) && n > 20000 && n < 80000) return parseBirthDate(n)
+  }
   const m = s.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/)
   if (!m) return null
   let year = parseInt(m[3])
   if (year > 2400) year -= 543      // พ.ศ. → ค.ศ.
   else if (year < 100) year += 2000
   return `${year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+}
+
+function normalizeNationalId(raw: unknown): string | null {
+  if (raw == null || raw === '') return null
+  let s = String(raw).trim()
+  if (!s) return null
+  if (/e[+-]?\d+/i.test(s)) {
+    const n = Number(s)
+    if (Number.isFinite(n)) s = Math.round(n).toString()
+  }
+  const digits = s.replace(/\D/g, '')
+  return digits.length >= 10 ? digits : (digits || null)
+}
+
+function roomsMatch(a: unknown, b: unknown) {
+  const na = Number(String(a ?? '').trim())
+  const nb = Number(String(b ?? '').trim())
+  if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb
+  return String(a ?? '').trim() === String(b ?? '').trim()
+}
+
+function splitFullName(raw: unknown): { first: string; last: string } {
+  const s = String(raw ?? '').trim().replace(/\s+/g, ' ')
+  if (!s) return { first: '', last: '' }
+  const parts = s.split(' ')
+  if (parts.length === 1) return { first: parts[0], last: '' }
+  return { first: parts[0], last: parts.slice(1).join(' ') }
 }
 
 function normalizeHeader(raw: unknown): string {
@@ -76,16 +115,28 @@ function sampleRows(grid: Grid, headerRow: number, count = 8): (string | number)
 // จับคู่คอลัมน์อัตโนมัติ (รองรับกับดัก C3 = เลขบัตร 13 หลัก แม้ป้ายว่า "เลขประจำตัวนักเรียน")
 function autoMap(headers: string[], samples: (string | number)[][]): ColMap {
   const hs = headers.map(normalizeHeader)
-  const cellAt = (row: (string | number)[], col: number) => String(row[col] ?? '').trim()
 
   const idCols = hs.map((h, i) => ({ h, i })).filter(x =>
     x.h.includes('เลขประจำตัวนักเรียน') || x.h.includes('รหัสนักเรียน') || x.h.includes('รหัสประจำตัว'))
-  const is13 = (v: unknown) => /^\d{13}$/.test(String(v ?? '').trim())
+  const is13 = (v: unknown) => {
+    const n = normalizeNationalId(v)
+    return Boolean(n && n.length === 13)
+  }
   let national = -1
   for (const col of idCols) {
-    if (samples.some(row => is13(cellAt(row, col.i)))) {
+    if (samples.some(row => is13(row[col.i]))) {
       national = col.i
       break
+    }
+  }
+  // fallback: คอลัมน์ใดก็ได้ที่มีเลข 13 หลักในตัวอย่าง (แม้ชื่อหัวไม่ชัด)
+  if (national === -1 && samples.length > 0) {
+    const width = Math.max(hs.length, ...samples.map(r => r.length))
+    for (let i = 0; i < width; i++) {
+      if (samples.some(row => is13(row[i]))) {
+        national = i
+        break
+      }
     }
   }
   if (national === -1) {
@@ -96,19 +147,27 @@ function autoMap(headers: string[], samples: (string | number)[][]): ColMap {
   const code = idCols.find(x => x.i !== national)?.i
     ?? findCol(hs, [h => h.includes('รหัสนักเรียน') && !h.includes('บัตร')])
 
+  const fullName = findCol(hs, [
+    h => h === 'ชื่อ-นามสกุล' || h === 'ชื่อ นามสกุล' || h === 'ชื่อและนามสกุล',
+    h => h.includes('ชื่อ') && h.includes('นามสกุล') && !h.includes('บิดา') && !h.includes('มารดา') && !h.includes('ปกครอง'),
+  ])
+  const first = findCol(hs, [
+    h => h === 'ชื่อ',
+    h => h.startsWith('ชื่อ') && !h.includes('นามสกุล') && !h.includes('บิดา') && !h.includes('มารดา') && !h.includes('ปกครอง'),
+  ])
+  const last = findCol(hs, [
+    h => h === 'นามสกุล' || h === 'สกุล' || h === 'ชื่อสกุล',
+    h => h.includes('นามสกุล') && !h.includes('บิดา') && !h.includes('มารดา') && !h.includes('ปกครอง'),
+  ])
+
   return {
     prefix: findCol(hs, [
       h => h.includes('คำนำหน้า') && !h.includes('ปกครอง') && !h.includes('บิดา') && !h.includes('มารดา'),
       h => h === 'คำนำหน้าชื่อ',
     ]),
-    first: findCol(hs, [
-      h => h === 'ชื่อ',
-      h => h.startsWith('ชื่อ') && !h.includes('นามสกุล') && !h.includes('บิดา') && !h.includes('มารดา') && !h.includes('ปกครอง'),
-    ]),
-    last: findCol(hs, [
-      h => h === 'นามสกุล',
-      h => h.includes('นามสกุล') && !h.includes('บิดา') && !h.includes('มารดา') && !h.includes('ปกครอง'),
-    ]),
+    first,
+    last,
+    fullName: first < 0 && last < 0 ? fullName : -1,
     gender: findCol(hs, [
       h => h === 'เพศ',
       h => h.includes('เพศ'),
@@ -151,6 +210,7 @@ function normalizeClassLevel(level: string) {
 
 const FIELD_LABELS: { key: keyof ColMap; label: string }[] = [
   { key: 'prefix', label: 'คำนำหน้า' }, { key: 'first', label: 'ชื่อ' }, { key: 'last', label: 'นามสกุล' },
+  { key: 'fullName', label: 'ชื่อ-นามสกุล (คอลัมน์เดียว)' },
   { key: 'gender', label: 'เพศ' }, { key: 'birth', label: 'วันเกิด' }, { key: 'code', label: 'เลขประจำตัวนักเรียน' },
   { key: 'national', label: 'เลขบัตรประชาชน' }, { key: 'level', label: 'ชั้น (กรองห้อง)' }, { key: 'room', label: 'ห้อง (กรองห้อง)' },
 ]
@@ -227,49 +287,74 @@ export default function DmcImportTool({
   }, [years, classrooms])
   const classroomsInYear = useMemo(() => classrooms.filter(c => c.academic_year_id === targetYear), [classrooms, targetYear])
 
+  function resolveNames(r: (string | number)[], map: ColMap) {
+    if (map.fullName >= 0 && map.first < 0 && map.last < 0) {
+      return splitFullName(r[map.fullName])
+    }
+    let first = String(r[map.first] ?? '').trim()
+    let last = String(r[map.last] ?? '').trim()
+    // ถ้าไม่มีนามสกุล แต่ชื่อมีช่องว่าง → แยกชื่อ-นามสกุล
+    if (!last && first.includes(' ')) {
+      const split = splitFullName(first)
+      first = split.first
+      last = split.last
+    }
+    if (!last && map.fullName >= 0) {
+      const split = splitFullName(r[map.fullName])
+      if (!first) first = split.first
+      last = split.last
+    }
+    return { first, last: last || '-' }
+  }
+
   // กรองเฉพาะแถวที่ตรงกับชั้น/ห้องปลายทาง (ถ้าไฟล์มีคอลัมน์ชั้น+ห้อง)
   const matchedRows = useMemo(() => {
     if (!colMap || !targetClass) return dataRows
     if (colMap.level < 0 || colMap.room < 0) return dataRows
+    const targetLevel = normalizeClassLevel(targetClass.level)
     return dataRows.filter(r =>
-      String(r[colMap.level]).trim() === targetClass.level &&
-      String(r[colMap.room]).trim() === String(targetClass.room))
+      normalizeClassLevel(String(r[colMap.level] ?? '')) === targetLevel &&
+      roomsMatch(r[colMap.room], targetClass.room))
   }, [dataRows, colMap, targetClass])
 
   const parsed = useMemo(() => {
     if (!colMap) return []
     return matchedRows.map(r => {
       const prefix = String(r[colMap.prefix] ?? '').trim() || 'เด็กชาย'
+      const { first, last } = resolveNames(r, colMap)
       return {
         student_code: String(r[colMap.code] ?? '').trim() || null,
-        national_id: String(r[colMap.national] ?? '').trim() || null,
+        national_id: normalizeNationalId(r[colMap.national]),
         prefix,
-        first_name: String(r[colMap.first] ?? '').trim(),
-        last_name: String(r[colMap.last] ?? '').trim(),
+        first_name: first,
+        last_name: last,
         gender: parseGender(r[colMap.gender], prefix),
         birth_date: parseBirthDate(r[colMap.birth] as string | number),
         status: 'เรียน',
       }
-    }).filter(s => s.first_name)
+    }).filter(s => s.first_name && s.first_name !== '-')
   }, [matchedRows, colMap])
 
   const parsedSchool = useMemo(() => {
     if (!colMap || colMap.level < 0 || colMap.room < 0) return []
     return dataRows.map(r => {
       const prefix = String(r[colMap.prefix] ?? '').trim() || 'เด็กชาย'
+      const { first, last } = resolveNames(r, colMap)
+      const roomRaw = String(r[colMap.room] ?? '').trim()
+      const roomNum = Number(roomRaw)
       return {
         student_code: String(r[colMap.code] ?? '').trim() || null,
-        national_id: String(r[colMap.national] ?? '').trim() || null,
+        national_id: normalizeNationalId(r[colMap.national]),
         prefix,
-        first_name: String(r[colMap.first] ?? '').trim(),
-        last_name: String(r[colMap.last] ?? '').trim(),
+        first_name: first,
+        last_name: last,
         gender: parseGender(r[colMap.gender], prefix),
         birth_date: parseBirthDate(r[colMap.birth] as string | number),
         status: 'เรียน',
         level: normalizeClassLevel(String(r[colMap.level] ?? '')),
-        room: String(r[colMap.room] ?? '').trim(),
+        room: Number.isFinite(roomNum) ? String(roomNum) : roomRaw,
       }
-    }).filter(s => s.first_name && s.level && s.room)
+    }).filter(s => s.first_name && s.first_name !== '-' && s.level && s.room)
   }, [dataRows, colMap])
 
   const schoolSummary = useMemo(() => {
@@ -354,12 +439,31 @@ export default function DmcImportTool({
       : await importStudents(target, parsed)
     setImporting(false)
     if (res.error) { setError(res.error); return false }
-    notify('success', `นำเข้าสำเร็จ: เพิ่มใหม่ ${res.inserted} คน · ซ้ำ/ข้าม ${res.skipped} คน${'missingClass' in res && res.missingClass ? ` · ไม่พบห้อง ${res.missingClass} คน` : ''}`)
-    setGrid([]); setColMap(null); setFileName('')
+
+    const parts = [`เพิ่มใหม่ ${res.inserted} คน`]
+    if (res.duplicate) parts.push(`มีเลขบัตรในระบบแล้ว ${res.duplicate} คน`)
+    if (res.failed) parts.push(`บันทึกไม่สำเร็จ ${res.failed} คน`)
+    if ('missingClass' in res && res.missingClass) parts.push(`ไม่พบห้อง ${res.missingClass} คน`)
+    if (!res.duplicate && !res.failed && !('missingClass' in res && res.missingClass) && res.skipped > 0) {
+      parts.push(`ข้าม ${res.skipped} คน`)
+    }
+    const detail = parts.join(' · ')
+    if (res.inserted === 0 && res.skipped > 0) {
+      const reason = res.firstError
+        ? `สาเหตุ: ${res.firstError}`
+        : res.duplicate === res.skipped
+          ? 'สาเหตุ: เลขบัตรประชาชนซ้ำกับที่มีอยู่ในปี/ห้องนี้แล้ว (นำเข้าซ้ำ)'
+          : 'ตรวจสอบการจับคู่คอลัมน์ชั้น/ห้อง/ชื่อ-นามสกุล แล้วลองใหม่'
+      setError(`ข้ามทั้งหมด · ${detail} · ${reason}`)
+      notify('error', `ข้ามทั้งหมด · ${detail}`)
+    } else {
+      notify('success', `นำเข้าสำเร็จ: ${detail}`)
+      setGrid([]); setColMap(null); setFileName('')
+    }
     // โหลดชั้นเรียน/ปีใหม่ (โหมดทั้งโรงเรียนอาจสร้างห้องเพิ่ม)
     await loadData()
     onImported?.({ inserted: res.inserted, skipped: res.skipped })
-    return true
+    return res.inserted > 0
   }
 
   const importLabel = mode === 'school'
@@ -575,7 +679,8 @@ export default function DmcImportTool({
             <li>Export รายชื่อนักเรียนจากระบบ DMC เป็นไฟล์ Excel (.xlsx)</li>
             <li>เลือก “ทั้งโรงเรียน” เพื่อให้ระบบอ่านคอลัมน์ชั้น/ห้องแล้วสร้างห้อง + กระจายเข้าห้องให้อัตโนมัติ</li>
             <li>หรือเลือก “เฉพาะห้อง” หากต้องการนำเข้าไฟล์เดียวเข้าห้องปลายทางห้องเดียว</li>
-            <li>วันเกิดรองรับ วว/ดด/ปปปป (พ.ศ. หรือ ค.ศ.) · เพศ ช/ญ · กันซ้ำด้วยเลขบัตรประชาชน</li>
+            <li>วันเกิดรองรับ วว/ดด/ปปปป (พ.ศ. หรือ ค.ศ.) และวันที่แบบตัวเลขจาก Excel · เพศ ช/ญ</li>
+            <li>กันซ้ำด้วยเลขบัตรประชาชนในปี/ห้องปลายทาง — ถ้าข้ามหมดมักเพราะนำเข้าไฟล์เดิมซ้ำแล้ว</li>
             <li>เลขที่ในห้องจะไล่ต่อจากที่มีอยู่อัตโนมัติ (ปรับภายหลังได้ที่เมนูนักเรียน)</li>
           </ul>
         </div>

@@ -30,7 +30,7 @@ function nameListFileName(classroomLabel: string, yearBe: number) {
 
 /** สร้าง PDF รายชื่อนักเรียนด้วย jsPDF ที่เครื่องผู้ใช้ — คืน Blob ใส่คิวได้ */
 export async function buildStudentNameListPdfBlob(input: NameListPdfInput) {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
   await applyThaiFonts(doc)
 
   const marginX = 14
@@ -47,7 +47,7 @@ export async function buildStudentNameListPdfBlob(input: NameListPdfInput) {
 
   doc.setFont('THSarabunNew', 'normal')
   doc.setFontSize(13)
-  doc.text(`ชั้น ${input.classroomLabel} · ปีการศึกษา ${input.yearBe}`, 105, y, { align: 'center' })
+  doc.text(`ชั้น ${input.classroomLabel}  |  ปีการศึกษา ${input.yearBe}`, 105, y, { align: 'center' })
   y += 4
 
   doc.setFontSize(11)

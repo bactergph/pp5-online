@@ -132,34 +132,29 @@ const CLASSROOM_ADMIN_PRINT_RULES = `
     position: relative;
   }
   .attendance-print-holiday-stack {
+    position: absolute;
+    inset: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
-    min-height: 100%;
-    padding: 4px 2px;
+    padding: 2px 0;
     box-sizing: border-box;
+    overflow: hidden;
   }
+  /* ตรงกับ jsPDF angle 90: ข้อความหมุนทวนเข็ม อ่านจากล่างขึ้นบน */
   .attendance-print-holiday-name {
     display: block;
-    writing-mode: horizontal-tb;
+    writing-mode: vertical-rl;
     text-orientation: mixed;
+    transform: rotate(180deg);
     color: #111827 !important;
     font-size: var(--ca-font-holiday, 7px);
     font-weight: 900;
-    line-height: 1.15;
+    line-height: 1.1;
     text-align: center;
-    white-space: normal;
-    word-break: break-word;
+    white-space: nowrap;
     overflow: hidden;
-    max-width: 100%;
-  }
-  .attendance-print-sheet.is-pdf-export .attendance-print-holiday-name {
-    writing-mode: horizontal-tb !important;
-    text-orientation: mixed !important;
-    transform: none !important;
+    max-height: calc(100% - 2px);
   }
   .attendance-print-summary-good { background: #DCFCE7 !important; font-weight: 900; }
   .attendance-print-summary-sick { background: #FEF3C7 !important; font-weight: 900; }

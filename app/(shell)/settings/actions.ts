@@ -1068,6 +1068,32 @@ export async function fetchClassroomsForImport() {
   return data || []
 }
 
+function normalizeImportNationalId(raw: unknown): string | null {
+  if (raw == null || raw === '') return null
+  let s = String(raw).trim()
+  if (!s) return null
+  // Excel บางไฟล์อ่านเลขบัตรเป็น scientific notation
+  if (/e[+-]?\d+/i.test(s)) {
+    const n = Number(s)
+    if (Number.isFinite(n)) s = Math.round(n).toString()
+  }
+  const digits = s.replace(/\D/g, '')
+  return digits.length >= 10 ? digits : (digits || null)
+}
+
+function normalizeImportName(raw: unknown, fallback = '-'): string {
+  const s = String(raw ?? '').trim()
+  return s || fallback
+}
+
+function normalizeImportGender(raw: unknown, prefix: string): string {
+  const r = String(raw ?? '').trim()
+  if (r === 'M' || r === 'F') return r
+  if (r === 'ช' || r.includes('ชาย') || r.toLowerCase() === 'm') return 'M'
+  if (r === 'ญ' || r.includes('หญิง') || r.toLowerCase() === 'f') return 'F'
+  return prefix === 'เด็กหญิง' || prefix === 'นางสาว' || prefix === 'นาง' ? 'F' : 'M'
+}
+
 export async function importStudents(classroomId: string, rows: {
   student_code: string | null
   national_id: string | null
@@ -1080,24 +1106,52 @@ export async function importStudents(classroomId: string, rows: {
   status: string
 }[]) {
   const session = await requireSchoolSession()
-  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์', inserted: 0, skipped: 0 }
-  if (!classroomId) return { error: 'ยังไม่ได้เลือกชั้นเรียนปลายทาง', inserted: 0, skipped: 0 }
-  if (rows.length === 0) return { error: 'ไม่มีข้อมูลนักเรียน', inserted: 0, skipped: 0 }
+  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์', inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
+  if (!classroomId) return { error: 'ยังไม่ได้เลือกชั้นเรียนปลายทาง', inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
+  if (rows.length === 0) return { error: 'ไม่มีข้อมูลนักเรียน', inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
   const db = createServerClient()
 
   // กันซ้ำด้วยเลขบัตร + หาเลขที่ล่าสุดในห้อง (เพื่อไล่เลขที่ต่อ)
   const { data: existing } = await db.from('students')
     .select('student_number, national_id').eq('classroom_id', classroomId)
-  const existingNat = new Set((existing || []).filter(e => e.national_id).map(e => e.national_id))
+  const existingNat = new Set(
+    (existing || [])
+      .map(e => normalizeImportNationalId(e.national_id))
+      .filter((v): v is string => Boolean(v)),
+  )
   let maxNo = Math.max(0, ...((existing || []).map(e => e.student_number || 0)))
 
-  let inserted = 0, skipped = 0
+  let inserted = 0
+  let duplicate = 0
+  let failed = 0
+  let firstError: string | null = null
   for (const row of rows) {
-    if (row.national_id && existingNat.has(row.national_id)) { skipped++; continue }
-    const { error } = await db.from('students').insert({ ...row, classroom_id: classroomId, student_number: maxNo + 1 })
-    if (!error) { inserted++; maxNo++; if (row.national_id) existingNat.add(row.national_id) }
-    else skipped++
+    const nationalId = normalizeImportNationalId(row.national_id)
+    if (nationalId && existingNat.has(nationalId)) { duplicate++; continue }
+    const payload = {
+      student_code: row.student_code ? String(row.student_code).trim() || null : null,
+      national_id: nationalId,
+      prefix: normalizeImportName(row.prefix, 'เด็กชาย'),
+      first_name: normalizeImportName(row.first_name),
+      last_name: normalizeImportName(row.last_name),
+      gender: normalizeImportGender(row.gender, String(row.prefix || '')),
+      birth_date: row.birth_date || null,
+      address: row.address ?? null,
+      status: row.status || 'เรียน',
+      classroom_id: classroomId,
+      student_number: maxNo + 1,
+    }
+    const { error } = await db.from('students').insert(payload)
+    if (!error) {
+      inserted++
+      maxNo++
+      if (nationalId) existingNat.add(nationalId)
+    } else {
+      failed++
+      if (!firstError) firstError = error.message
+    }
   }
+  const skipped = duplicate + failed
   if (inserted > 0) invalidateClassroomStudents(classroomId)
   await logActivity({
     actor: session,
@@ -1107,9 +1161,9 @@ export async function importStudents(classroomId: string, rows: {
     targetType: 'classroom',
     targetId: classroomId,
     description: `นำเข้านักเรียน DMC สำเร็จ ${inserted} คน ข้าม ${skipped} คน`,
-    metadata: { classroomId, inserted, skipped, total: rows.length },
+    metadata: { classroomId, inserted, skipped, duplicate, failed, total: rows.length, firstError },
   })
-  return { error: null, inserted, skipped }
+  return { error: null, inserted, skipped, duplicate, failed, firstError }
 }
 
 type ImportStudentRow = {
@@ -1147,10 +1201,11 @@ function normalizeClassKey(level: string, room: number | string) {
 }
 
 export async function importStudentsWholeSchool(academicYearId: string, rows: ImportStudentSchoolRow[]) {
+  const empty = { inserted: 0, skipped: 0, missingClass: 0, duplicate: 0, failed: 0, firstError: null as string | null }
   const session = await requireSchoolSession()
-  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์', inserted: 0, skipped: 0, missingClass: 0 }
-  if (!academicYearId) return { error: 'ยังไม่ได้เลือกปีการศึกษา', inserted: 0, skipped: 0, missingClass: 0 }
-  if (rows.length === 0) return { error: 'ไม่มีข้อมูลนักเรียน', inserted: 0, skipped: 0, missingClass: 0 }
+  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์', ...empty }
+  if (!academicYearId) return { error: 'ยังไม่ได้เลือกปีการศึกษา', ...empty }
+  if (rows.length === 0) return { error: 'ไม่มีข้อมูลนักเรียน', ...empty }
 
   const db = createServerClient()
   const { data: initialClassrooms } = await db.from('classrooms')
@@ -1178,7 +1233,7 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
       })))
       .select('id, level, room, school_id')
     if (createClassError) {
-      return { error: `สร้างห้องเรียนที่ขาดไม่สำเร็จ: ${createClassError.message}`, inserted: 0, skipped: rows.length, missingClass: rows.length }
+      return { error: `สร้างห้องเรียนที่ขาดไม่สำเร็จ: ${createClassError.message}`, ...empty, skipped: rows.length, missingClass: rows.length }
     }
     for (const classroom of createdClassrooms || []) {
       classroomRows.push(classroom)
@@ -1187,7 +1242,7 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
   }
 
   if (classroomRows.length === 0) {
-    return { error: 'ยังไม่มีชั้นเรียนในปีการศึกษานี้', inserted: 0, skipped: rows.length, missingClass: rows.length }
+    return { error: 'ยังไม่มีชั้นเรียนในปีการศึกษานี้', ...empty, skipped: rows.length, missingClass: rows.length }
   }
 
   const classroomIds = classroomRows.map(c => c.id)
@@ -1195,7 +1250,11 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
     .select('classroom_id, student_number, national_id')
     .in('classroom_id', classroomIds)
 
-  const existingNat = new Set((existing || []).filter(s => s.national_id).map(s => s.national_id as string))
+  const existingNat = new Set(
+    (existing || [])
+      .map(s => normalizeImportNationalId(s.national_id))
+      .filter((v): v is string => Boolean(v)),
+  )
   const maxNoByClass = new Map<string, number>()
   for (const classroomId of classroomIds) maxNoByClass.set(classroomId, 0)
   for (const s of existing || []) {
@@ -1203,39 +1262,44 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
   }
 
   let inserted = 0
-  let skipped = 0
+  let duplicate = 0
+  let failed = 0
   let missingClass = 0
+  let firstError: string | null = null
   const touchedClassroomIds = new Set<string>()
 
   for (const row of rows) {
     const classroom = classroomByKey.get(normalizeClassKey(row.level, row.room))
-    if (!classroom) { skipped++; missingClass++; continue }
-    if (row.national_id && existingNat.has(row.national_id)) { skipped++; continue }
+    if (!classroom) { missingClass++; continue }
+    const nationalId = normalizeImportNationalId(row.national_id)
+    if (nationalId && existingNat.has(nationalId)) { duplicate++; continue }
 
     const nextNo = (maxNoByClass.get(classroom.id) || 0) + 1
     const { error } = await db.from('students').insert({
-      student_code: row.student_code,
-      national_id: row.national_id,
-      prefix: row.prefix,
-      first_name: row.first_name,
-      last_name: row.last_name,
-      gender: row.gender,
-      birth_date: row.birth_date,
+      student_code: row.student_code ? String(row.student_code).trim() || null : null,
+      national_id: nationalId,
+      prefix: normalizeImportName(row.prefix, 'เด็กชาย'),
+      first_name: normalizeImportName(row.first_name),
+      last_name: normalizeImportName(row.last_name),
+      gender: normalizeImportGender(row.gender, String(row.prefix || '')),
+      birth_date: row.birth_date || null,
       address: row.address ?? null,
-      status: row.status,
+      status: row.status || 'เรียน',
       classroom_id: classroom.id,
       student_number: nextNo,
     })
     if (error) {
-      skipped++
+      failed++
+      if (!firstError) firstError = error.message
       continue
     }
     inserted++
     touchedClassroomIds.add(classroom.id)
     maxNoByClass.set(classroom.id, nextNo)
-    if (row.national_id) existingNat.add(row.national_id)
+    if (nationalId) existingNat.add(nationalId)
   }
 
+  const skipped = duplicate + failed + missingClass
   if (touchedClassroomIds.size > 0) invalidateClassroomStudentsMany(touchedClassroomIds)
 
   await logActivity({
@@ -1246,10 +1310,10 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
     targetType: 'school',
     targetId: session.schoolId,
     description: `นำเข้านักเรียน DMC ทั้งโรงเรียน สำเร็จ ${inserted} คน ข้าม ${skipped} คน`,
-    metadata: { academicYearId, inserted, skipped, missingClass, total: rows.length },
+    metadata: { academicYearId, inserted, skipped, missingClass, duplicate, failed, total: rows.length, firstError },
   })
 
-  return { error: null, inserted, skipped, missingClass }
+  return { error: null, inserted, skipped, missingClass, duplicate, failed, firstError }
 }
 
 // ============================================================

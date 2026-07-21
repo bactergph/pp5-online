@@ -582,13 +582,14 @@ export default function ClassroomAdminExportPage() {
 
     return studentPages.map((pageStudents, pageIndex) => {
       const pageOffset = pageIndex * PRINT_STUDENTS_PER_PAGE
-      const holidayRowSpan = pageStudents.length
       const targetRows = monthly
         ? printPageRowCount(pageStudents.length, {
           pageSize: PRINT_STUDENTS_PER_PAGE,
           minRows: printLayouts.monthly.minBlankRows,
         })
         : pageStudents.length
+      // ให้คอลัมน์วันหยุดยาวเต็มตาราง (รวมแถวว่าง) เหมือนหน้า 1
+      const holidayRowSpan = targetRows
       type PrintRow =
         | { type: 'student'; student: Student; number: number }
         | { type: 'blank'; number: number }
@@ -665,7 +666,7 @@ export default function ClassroomAdminExportPage() {
         })
       }
 
-      const pageLabel = pageCount > 1 ? ` · หน้า ${pageIndex + 1}/${pageCount}` : ''
+      const pageLabel = pageCount > 1 ? `  |  หน้า ${pageIndex + 1}/${pageCount}` : ''
 
       return (
       <section className="attendance-print-sheet" key={`${type}-${sheetMonthKey}-p${pageIndex}`} style={sheetLayoutStyle}>
@@ -681,7 +682,7 @@ export default function ClassroomAdminExportPage() {
           <div>
             <h1>{reportLabel(type)}</h1>
             <div className="attendance-print-school">{schoolName || 'ชื่อโรงเรียน'}</div>
-            <p>ภาคเรียนที่ {term} · ห้อง {data.classroom?.level}/{data.classroom?.room} · เดือน{monthName(sheetMonthKey)} พ.ศ.{data.academicYear?.year_be}{pageLabel}</p>
+            <p>ภาคเรียนที่ {term}  |  ห้อง {data.classroom?.level}/{data.classroom?.room}  |  เดือน{monthName(sheetMonthKey)} พ.ศ.{data.academicYear?.year_be}{pageLabel}</p>
           </div>
         </header>
 
@@ -1871,34 +1872,29 @@ ${fontFaces}
         position: relative;
       }
       .attendance-print-holiday-stack {
+        position: absolute;
+        inset: 0;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        width: 100%;
-        height: 100%;
-        min-height: 100%;
-        padding: 4px 2px;
+        padding: 2px 0;
         box-sizing: border-box;
+        overflow: hidden;
       }
+      /* ตรงกับ jsPDF angle 90: ข้อความหมุนทวนเข็ม อ่านจากล่างขึ้นบน */
       .attendance-print-holiday-name {
         display: block;
-        writing-mode: horizontal-tb;
+        writing-mode: vertical-rl;
         text-orientation: mixed;
+        transform: rotate(180deg);
         color: #111827 !important;
         font-size: var(--ca-font-holiday, 7px);
         font-weight: 900;
-        line-height: 1.15;
+        line-height: 1.1;
         text-align: center;
-        white-space: normal;
-        word-break: break-word;
+        white-space: nowrap;
         overflow: hidden;
-        max-width: 100%;
-      }
-      .classroom-export-book.is-pdf-export .attendance-print-holiday-name {
-        writing-mode: horizontal-tb !important;
-        text-orientation: mixed !important;
-        transform: none !important;
+        max-height: calc(100% - 2px);
       }
       .attendance-print-summary-good { background: #DCFCE7 !important; font-weight: 900; }
       .attendance-print-summary-sick { background: #FEF3C7 !important; font-weight: 900; }

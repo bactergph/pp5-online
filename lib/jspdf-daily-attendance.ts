@@ -225,7 +225,11 @@ function drawCenteredText(
   }
 }
 
-function drawWrappedCentered(
+/**
+ * ชื่อวันหยุดแนวตั้ง กึ่งกลางช่อง — หมุน 90° ทวนเข็ม (อ่านจากล่างขึ้นบน)
+ * จัดตำแหน่งเอง เพราะ align+angle ของ jsPDF มักเพี้ยนในคอลัมน์แคบ
+ */
+function drawHolidayRotatedText(
   doc: jsPDF,
   text: string,
   x: number,
@@ -236,23 +240,59 @@ function drawWrappedCentered(
 ) {
   if (!text) return
   doc.setFont('THSarabunNew', 'bold')
-  doc.setFontSize(fontSize)
   setText(doc, COLORS.text)
-  const lines = doc.splitTextToSize(text, Math.max(1.5, w - 0.8)) as string[]
-  const lineH = fontSize * 0.3528 * 1.15
-  const totalH = lines.length * lineH
-  let ty = y + (h - totalH) / 2 + lineH * 0.75
-  for (const line of lines) {
-    if (ty > y + h - 0.4) break
-    doc.text(line, x + w / 2, ty, { align: 'center' })
-    ty += lineH
+
+  let size = Math.max(5, fontSize)
+  const maxLen = Math.max(5, h - 2)
+  doc.setFontSize(size)
+  let textLen = doc.getTextWidth(text)
+  while (textLen > maxLen && size > 4) {
+    size -= 0.35
+    doc.setFontSize(size)
+    textLen = doc.getTextWidth(text)
   }
+
+  // จุดยึด: กึ่งกลางแนวนอนของช่อง + จุดเริ่มข้อความจากด้านล่างของช่วงแนวตั้งที่จัดกลาง
+  // angle 90 = หมุนทวนเข็ม ข้อความวิ่งขึ้นด้านบนจากจุด (x,y)
+  const fontH = size * 0.352777778
+  const anchorX = x + w / 2 + fontH * 0.35
+  const anchorY = y + (h + textLen) / 2
+  doc.text(text, anchorX, anchorY, { angle: 90 })
+}
+
+/** รวมวันหยุดชื่อเดียวกันที่ติดกัน เพื่อวาดข้อความครั้งเดียวกึ่งกลาง */
+function buildHolidayRuns(
+  days: number[],
+  holidayMap: Record<string, string>,
+  monthKey: string,
+) {
+  const runs: { startIdx: number; endIdx: number; name: string }[] = []
+  let i = 0
+  while (i < days.length) {
+    const day = days[i]
+    const name = holidayMap[dayDateKey(monthKey, day)]
+    if (!name) {
+      i += 1
+      continue
+    }
+    let j = i
+    while (
+      j + 1 < days.length
+      && holidayMap[dayDateKey(monthKey, days[j + 1])] === name
+      && days[j + 1] === days[j] + 1
+    ) {
+      j += 1
+    }
+    runs.push({ startIdx: i, endIdx: j, name })
+    i = j + 1
+  }
+  return runs
 }
 
 function detectImageFormat(dataUrl: string): 'PNG' | 'JPEG' | 'WEBP' {
-  if (dataUrl.startsWith('data:image/jpeg') || dataUrl.startsWith('data:image/jpg')) return 'JPEG'
+  if (dataUrl.startsWith('data:image/png')) return 'PNG'
   if (dataUrl.startsWith('data:image/webp')) return 'WEBP'
-  return 'PNG'
+  return 'JPEG'
 }
 
 /** สร้าง PDF แบบบันทึกรายเดือน (เวลาเรียน / กิจวัตร) ด้วย jsPDF */
@@ -266,13 +306,14 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
     orientation: 'landscape',
     unit: 'mm',
     format: 'a4',
+    compress: true,
   })
   await applyThaiFonts(doc)
 
   const [logoData, homeroomSign, directorSign] = await Promise.all([
-    loadImageDataUrl(input.schoolLogoUrl),
-    loadImageDataUrl(input.signatures?.homeroom),
-    loadImageDataUrl(input.signatures?.director),
+    loadImageDataUrl(input.schoolLogoUrl, 160, 0.7),
+    loadImageDataUrl(input.signatures?.homeroom, 220, 0.75),
+    loadImageDataUrl(input.signatures?.director, 220, 0.75),
   ])
 
   const padTop = px(layout.padTopPx)
@@ -341,11 +382,12 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
     if (pageIndex > 0) doc.addPage('a4', 'landscape')
 
     const pageOffset = pageIndex * PRINT_STUDENTS_PER_PAGE
-    const holidayRowSpan = pageStudents.length
     const targetRows = printPageRowCount(pageStudents.length, {
       pageSize: PRINT_STUDENTS_PER_PAGE,
       minRows: layout.minBlankRows,
     })
+    // ให้คอลัมน์วันหยุดยาวเต็มตาราง (รวมแถวว่าง) เหมือนหน้า 1 — ไม่ตัดแค่จำนวนนักเรียนในหน้านั้น
+    const holidayRowSpan = targetRows
 
     type PrintRow =
       | { type: 'student'; student: DailyAttendancePdfStudent; number: number }
@@ -363,7 +405,7 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
       })),
     ]
 
-    const pageLabel = pages.length > 1 ? ` · หน้า ${pageIndex + 1}/${pages.length}` : ''
+    const pageLabel = pages.length > 1 ? `  |  หน้า ${pageIndex + 1}/${pages.length}` : ''
     let y = padTop
 
     // —— Header ——
@@ -405,7 +447,11 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
     doc.setFont('THSarabunNew', 'bold')
     doc.setFontSize(metaPt)
     setText(doc, COLORS.meta)
-    const meta = `ภาคเรียนที่ ${input.term} · ห้อง ${input.classroomLabel} · เดือน${monthLabel} พ.ศ.${input.yearBe}${pageLabel}`
+    const meta = [
+      `ภาคเรียนที่ ${input.term}`,
+      `ห้อง ${input.classroomLabel || '-'}`,
+      `เดือน${monthLabel} พ.ศ.${input.yearBe}${pageLabel}`,
+    ].join('  |  ')
     doc.text(meta, PAGE_W / 2, y, { align: 'center', baseline: 'top' })
     y += lineStepMm(metaPt, headLineGap + 1.5)
 
@@ -493,23 +539,15 @@ export async function buildDailyAttendancePdfBlob(input: DailyAttendancePdfInput
       })
     })
 
-    // —— TBODY ——
-    const holidayDays = days.filter(day => isHoliday(day))
+    // —— TBODY: วันหยุด (รวมชื่อเดียวกันที่ติดกัน + ตัวหนังสือหมุนกึ่งกลางช่อง) ——
     if (holidayRowSpan > 0) {
-      for (const day of holidayDays) {
-        const i = day - 1
-        const x = colX(2 + i)
-        const h = holidayRowSpan * rowH
-        drawRect(doc, x, bodyTop, dayW, h, COLORS.holiday)
-        drawWrappedCentered(
-          doc,
-          holidayMap[dayDateKey(input.monthKey, day)] || '',
-          x,
-          bodyTop,
-          dayW,
-          h,
-          holidayPt,
-        )
+      const holidayRuns = buildHolidayRuns(days, holidayMap, input.monthKey)
+      const h = holidayRowSpan * rowH
+      for (const run of holidayRuns) {
+        const x = colX(2 + run.startIdx)
+        const spanW = dayW * (run.endIdx - run.startIdx + 1)
+        drawRect(doc, x, bodyTop, spanW, h, COLORS.holiday)
+        drawHolidayRotatedText(doc, run.name, x, bodyTop, spanW, h, holidayPt)
       }
     }
 

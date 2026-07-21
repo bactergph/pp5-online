@@ -1032,8 +1032,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
   function renderPrintableAttendanceDocument({ preview = false }: { preview?: boolean } = {}) {
     const documentMetaBase = isMonthlyMode
-      ? `${termLabel} · ห้อง ${currentClassLabel(classrooms, classroomId)} · เดือน${thaiMonthTitle(monthKey, years, yearId)}`
-      : `ห้อง ${currentClassLabel(classrooms, classroomId)} · เดือน${MONTHS.find(m => m.value === month)?.label || ''}${years.find(y => y.id === yearId)?.year_be ? ` พ.ศ.${years.find(y => y.id === yearId)?.year_be}` : ''}`
+      ? `${termLabel}  |  ห้อง ${currentClassLabel(classrooms, classroomId)}  |  เดือน${thaiMonthTitle(monthKey, years, yearId)}`
+      : `ห้อง ${currentClassLabel(classrooms, classroomId)}  |  เดือน${MONTHS.find(m => m.value === month)?.label || ''}${years.find(y => y.id === yearId)?.year_be ? ` พ.ศ.${years.find(y => y.id === yearId)?.year_be}` : ''}`
     const standardTableFieldCount = INSPECTION_FIELDS.length
     const studentPages = chunkStudentsForPrintPages(students)
     const pageCount = studentPages.length
@@ -1046,8 +1046,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       <Fragment>
         {studentPages.map((pageStudents, pageIndex) => {
           const pageOffset = pageIndex * PRINT_STUDENTS_PER_PAGE
-          const pageHolidayRowSpan = pageStudents.length
-          const pageLabel = pageCount > 1 ? ` · หน้า ${pageIndex + 1}/${pageCount}` : ''
+          const pageLabel = pageCount > 1 ? `  |  หน้า ${pageIndex + 1}/${pageCount}` : ''
           const documentMeta = `${documentMetaBase}${pageLabel}`
           const targetRows = isMonthlyMode
             ? printPageRowCount(pageStudents.length, {
@@ -1055,6 +1054,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               minRows: printLayouts.monthly.minBlankRows,
             })
             : pageStudents.length
+          // ให้คอลัมน์วันหยุดยาวเต็มตาราง (รวมแถวว่าง) เหมือนหน้า 1
+          const pageHolidayRowSpan = targetRows
           const pagePrintRows: PrintRow[] = isMonthlyMode
             ? [
                 ...pageStudents.map((student, index) => ({
