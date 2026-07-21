@@ -58,8 +58,8 @@ export default function proxy(req: NextRequest) {
     }
 
     if (schoolPath === 'login') {
-      // ถ้ามี session อยู่แล้วให้เข้าแอป — หน้าที่ต้องเปลี่ยนรหัสจะถูกบังคับใน verifySession
-      if (hasSession) return NextResponse.redirect(new URL('/dashboard', req.nextUrl))
+      // แสดงหน้า login ของโรงเรียนเสมอ — ลิงก์แชร์จาก Line/บราวเซอร์อื่นต้องเข้าได้
+      // อย่าเด้งไป /dashboard เมื่อมี cookie session ค้าง (หมดอายุแล้วจะถูกส่งต่อไป /login หลัก)
       return NextResponse.next()
     }
 
