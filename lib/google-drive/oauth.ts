@@ -30,7 +30,7 @@ export function googleOAuthRedirectUri(origin?: string) {
     if (fromEnv && !isLocalhostOrigin(fromEnv.includes('://') ? fromEnv : `https://${fromEnv}`)) {
       return fromEnv
     }
-    return 'https://pp5-online.vercel.app/api/integrations/google-drive/callback'
+    return 'https://jarnsek.com/api/integrations/google-drive/callback'
   }
 
   const fromEnv = process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim().replace(/\/$/, '')

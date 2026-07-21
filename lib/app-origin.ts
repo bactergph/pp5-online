@@ -28,7 +28,7 @@ function firstPublicOrigin(candidates: Array<string | null | undefined>) {
 }
 
 /** Production origin ที่รู้แน่นอน — ใช้เป็น fallback เมื่อ env ชี้ localhost */
-export const KNOWN_PRODUCTION_ORIGIN = 'https://pp5-online.vercel.app'
+export const KNOWN_PRODUCTION_ORIGIN = 'https://jarnsek.com'
 
 /** Base URL ของแอป — ใช้สร้าง PDF, OAuth callback, ฯลฯ */
 export function appOrigin() {
