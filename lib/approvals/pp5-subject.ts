@@ -153,7 +153,11 @@ export function pp5SubjectStatusLabel(
   groupHeads: SubjectGroupHeadMap,
 ): string {
   if (record.status === 'approved') return 'อนุมัติแล้ว'
-  if (record.status === 'rejected') return 'ไม่อนุมัติ'
+  if (record.status === 'rejected') {
+    return record.rejection_note
+      ? `ส่งกลับแก้ไข — ${record.rejection_note}`
+      : 'ส่งกลับแก้ไข'
+  }
   if (record.status === 'draft' || !record.status) {
     return record.teacher_signed_at ? 'ใส่ลายเซ็นแล้ว — พิมพ์ได้' : 'ยังไม่ใส่ลายเซ็น'
   }

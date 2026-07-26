@@ -1,12 +1,6 @@
-import SignClassDocClient from '@/components/sign/SignClassDocClient'
+import { redirect } from 'next/navigation'
 
+/** URL เก่าย้ายไปเมนูธุรการเสนอเซ็นใต้งานประจำชั้น */
 export default function Page() {
-  return (
-    <SignClassDocClient
-      docType="classroom_admin"
-      title="ธุรการชั้นเรียน"
-      subtitle="ครูประจำชั้นส่งขอลงนามงานธุรการ → ผู้บริหารลงนาม"
-      flowHint="ลำดับ: ครูประจำชั้น → ผอ./รักษาการ"
-    />
-  )
+  redirect('/classroom-admin/sign')
 }

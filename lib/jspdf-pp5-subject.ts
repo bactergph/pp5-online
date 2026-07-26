@@ -1016,10 +1016,17 @@ async function drawCoverPage(ctx: DrawCtx) {
   }
   y += blockH * 2 + rowGap + layout.sigAfterBlocksMm
 
-  const drawCheck = (cx: number, cy: number, label: string) => {
+  const directorDecision = data.documentSignatures?.director_decision || ''
+  const drawCheck = (cx: number, cy: number, label: string, checked = false) => {
     const size = px(layout.checkboxSizePx) * 0.85
+    const top = cy - size / 2
     setStroke(doc, BORDER, 0.35)
-    doc.rect(cx, cy - size / 2, size, size, 'S')
+    doc.rect(cx, top, size, size, 'S')
+    if (checked) {
+      setStroke(doc, BORDER, 1.1)
+      doc.line(cx + size * 0.18, cy, cx + size * 0.42, cy + size * 0.28)
+      doc.line(cx + size * 0.4, cy + size * 0.28, cx + size * 0.84, cy - size * 0.3)
+    }
     doc.setFont('THSarabunNew', 'normal')
     doc.setFontSize(sigFont)
     setText(doc)
@@ -1064,10 +1071,10 @@ async function drawCoverPage(ctx: DrawCtx) {
     const checkSize = px(layout.checkboxSizePx) * 0.85
     const opt1Label = 'ไม่อนุมัติ'
     const opt1W = checkSize + px(6) + doc.getTextWidth(opt1Label)
-    drawCheck(optCenter - opt1W / 2, y + px(14), opt1Label)
+    drawCheck(optCenter - opt1W / 2, y + px(14), opt1Label, directorDecision === 'ไม่อนุมัติ')
     const opt2Fitted = fitText(doc, 'อนุมัติ เมื่อวันที่...........................................', halfW - 10)
     const opt2W = checkSize + px(6) + doc.getTextWidth(opt2Fitted)
-    drawCheck(optCenter - opt2W / 2, y + px(26), opt2Fitted)
+    drawCheck(optCenter - opt2W / 2, y + px(26), opt2Fitted, directorDecision === 'อนุมัติ')
 
     const dirSigBottom = drawSignLine(optCenter, y + px(40), halfW - 6, signatures.director)
     const dirNameY = dirSigBottom + layout.sigNameGapMm
@@ -1110,8 +1117,8 @@ async function drawCoverPage(ctx: DrawCtx) {
     const rejectW = checkSize + px(6) + doc.getTextWidth(rejectLabel)
     const optsW = approveW + gap + rejectW
     let ox = centerX - optsW / 2
-    ox = drawCheck(ox, optY, approveLabel) + gap
-    drawCheck(ox, optY, rejectLabel)
+    ox = drawCheck(ox, optY, approveLabel, directorDecision === 'อนุมัติ') + gap
+    drawCheck(ox, optY, rejectLabel, directorDecision === 'ไม่อนุมัติ')
 
     const dirSigBottom = drawSignLine(centerX, y + px(36), mainRight - mainLeft, signatures.director)
     let dy = dirSigBottom + layout.sigNameGapMm

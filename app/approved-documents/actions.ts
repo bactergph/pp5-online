@@ -7,6 +7,7 @@ import { deleteDriveFile } from '@/lib/google-drive'
 import { APPROVED_DOC_KIND_LABELS, buildSignDocumentPreviewUrl, classDocTypeToPreviewKind } from '@/lib/sign-document-preview'
 import type { ApprovedDocKind } from '@/lib/approved-documents/archive'
 import type { ClassDocType } from '@/lib/approvals/types'
+import { getThaiMonthShort } from '@/lib/thaiDate'
 
 export type ApprovedDocumentRow = {
   id: string
@@ -217,7 +218,7 @@ async function fetchWorkflowApprovedDocuments(
   const classDocType = docKind as ClassDocType
   const { data: approvals } = await db.from('class_document_approvals')
     .select(`
-      id, doc_type, classroom_id, term, director_signed_at, updated_at,
+      id, doc_type, classroom_id, term, month, director_signed_at, updated_at,
       homeroom_id, academic_head_id, vice_director_id, director_id,
       classrooms!inner(id, level, room, school_id, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id)
     `)
@@ -239,18 +240,23 @@ async function fetchWorkflowApprovedDocuments(
     if (!allowed) continue
     const approvedAt = record.director_signed_at || record.updated_at || new Date().toISOString()
     const previewKind = classDocTypeToPreviewKind(classDocType)
+    const month = record.month == null ? null : Number(record.month)
     const previewTarget = {
       kind: previewKind,
       academicYearId: classroom.academic_year_id,
       classroomId: classroom.id,
       level: classroom.level,
       signTerm: record.term,
+      month: classDocType === 'classroom_admin' ? month : null,
     }
+    const monthTag = classDocType === 'classroom_admin' && month
+      ? ` · ชุดเดือน ${getThaiMonthShort(month)}`
+      : ''
     rows.push({
-      id: `workflow:${classDocType}:${classroom.id}:${record.term}`,
+      id: `workflow:${classDocType}:${classroom.id}:${record.term}:${month ?? 0}`,
       doc_kind: classDocType,
       doc_kind_label: APPROVED_DOC_KIND_LABELS[classDocType] || classDocType,
-      title: `${APPROVED_DOC_KIND_LABELS[classDocType]} ${classroom.level}/${classroom.room}`,
+      title: `${APPROVED_DOC_KIND_LABELS[classDocType]} ${classroom.level}/${classroom.room}${monthTag}`,
       file_name: `${classDocType}_${classroom.level}_${classroom.room}.pdf`,
       term: record.term,
       approved_at: approvedAt,

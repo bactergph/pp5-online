@@ -161,7 +161,7 @@ export default async function DashboardPage() {
             {[
               { label: 'ปพ.5 รายวิชา',        href: '/documents/sign?tab=subject',             count: signCounts?.pp5 ?? 0, color: '#9D174D' },
               { label: 'ปพ.6 ประจำตัว',       href: '/documents/sign?tab=class_pp6',             count: signCounts?.pp6 ?? 0, color: '#0E7490' },
-              { label: 'ธุรการชั้นเรียน',     href: '/sign/classroom-admin', count: signCounts?.classroomAdmin ?? 0, color: '#B45309' },
+              { label: 'ธุรการชั้นเรียน',     href: '/classroom-admin/sign', count: signCounts?.classroomAdmin ?? 0, color: '#B45309' },
             ].map(d => (
               <a key={d.href} href={d.href} className="card-sm quick-link" style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px 20px' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>

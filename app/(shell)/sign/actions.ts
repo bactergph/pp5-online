@@ -43,6 +43,7 @@ import {
   findClassDocumentApproval,
   findClassDocumentApprovalExact,
 } from '@/lib/approvals/class-doc-lookup'
+import { getThaiMonthShort } from '@/lib/thaiDate'
 
 async function requireSession() {
   const session = await getSession()
@@ -331,7 +332,10 @@ export async function fetchClassDocQueue(docTypes?: ClassDocType[]) {
       canSign,
       isOwner: isHomeroom,
     })) return
-    const monthLabel = month ? ` · เดือน ${month}` : ''
+    const monthShort = month ? getThaiMonthShort(month) : ''
+    const monthLabel = monthShort
+      ? (docType === 'classroom_admin' ? ` · ชุดเดือน ${monthShort}` : ` · เดือน ${monthShort}`)
+      : ''
     items.push({
       id: ('id' in record && record.id) || null,
       doc_type: docType,
@@ -580,29 +584,32 @@ export async function signPp5Subject(
     session.userId, session.role, next, school, subjectGroup, groupHeads, cs.teacher_id,
   )) return { error: 'ไม่มีสิทธิ์ลงนามในขั้นตอนนี้' }
 
-  const { data: signer } = await db.from('users')
-    .select('signature_url')
-    .eq('id', session.userId)
-    .maybeSingle()
-  if (!signer?.signature_url) {
-    return { error: 'ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่ ตั้งค่า → ข้อมูลตัวเอง เพื่ออัปโหลดก่อน แล้วค่อยลงนาม/อนุมัติ' }
-  }
-
+  const stepLabel = PP5_SUBJECT_STEP_LABELS[next]
+  const note = rejectionNote?.trim() || ''
   const now = new Date().toISOString()
   const fields = PP5_STEP_DB[next]
-  const updates: Record<string, unknown> = {
-    [fields.at]: now,
-    [fields.id]: session.userId,
-    updated_at: now,
-  }
+  const updates: Record<string, unknown> = { updated_at: now }
 
-  if (next === 'director') {
-    if (!decision) return { error: 'ผู้อำนวยการต้องเลือกอนุมัติหรือไม่อนุมัติ' }
-    updates.director_decision = decision === 'approve' ? 'อนุมัติ' : 'ไม่อนุมัติ'
-    if (decision === 'reject') {
-      updates.status = 'rejected'
-      updates.rejection_note = rejectionNote?.trim() || null
-    } else {
+  if (decision === 'reject') {
+    if (!note) return { error: 'กรุณาระบุเหตุผลที่ส่งกลับแก้ไข' }
+    updates.status = 'rejected'
+    updates.rejection_note = `${stepLabel}: ${note}`
+    if (next === 'director') updates.director_decision = 'ไม่อนุมัติ'
+  } else {
+    if (next === 'director' && decision !== 'approve') {
+      return { error: 'ผู้อำนวยการต้องเลือกอนุมัติหรือไม่อนุมัติ' }
+    }
+    const { data: signer } = await db.from('users')
+      .select('signature_url')
+      .eq('id', session.userId)
+      .maybeSingle()
+    if (!signer?.signature_url) {
+      return { error: 'ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่ ตั้งค่า → ข้อมูลตัวเอง เพื่ออัปโหลดก่อน แล้วค่อยลงนาม/อนุมัติ' }
+    }
+    updates[fields.at] = now
+    updates[fields.id] = session.userId
+    if (next === 'director') {
+      updates.director_decision = 'อนุมัติ'
       updates.status = 'approved'
       await db.from('scores').update({ locked: true, updated_at: now })
         .eq('class_subject_id', classSubjectId)
@@ -641,11 +648,13 @@ export async function signPp5Subject(
   await logActivity({
     actor: session,
     schoolId: session.schoolId,
-    action: 'sign',
+    action: decision === 'reject' ? 'reject' : 'sign',
     module: 'sign',
     targetType: 'pp5_subject',
     targetId: classSubjectId,
-    description: `ลงนาม ปพ.5 รายวิชา (${PP5_SUBJECT_STEP_LABELS[next]}) เทอม ${term}`,
+    description: decision === 'reject'
+      ? `ส่งกลับแก้ไข ปพ.5 รายวิชา โดย${stepLabel} เทอม ${term}`
+      : `ลงนาม ปพ.5 รายวิชา (${stepLabel}) เทอม ${term}`,
   })
   return { success: true }
 }
@@ -882,27 +891,34 @@ export async function signClassDocument(
     classroom.homeroom_teacher_id, classroom.homeroom_teacher2_id,
   )) return { error: 'ไม่มีสิทธิ์ลงนามในขั้นตอนนี้' }
 
-  const { data: signer } = await db.from('users')
-    .select('signature_url')
-    .eq('id', session.userId)
-    .maybeSingle()
-  if (!signer?.signature_url) {
-    return { error: 'ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่ ตั้งค่า → ข้อมูลตัวเอง เพื่ออัปโหลดก่อน แล้วค่อยลงนาม/อนุมัติ' }
-  }
-
+  const stepLabel = CLASS_DOC_STEP_LABELS[next]
+  const note = rejectionNote?.trim() || ''
   const now = new Date().toISOString()
   const fields = CLASS_DOC_STEP_FIELDS[next]
-  const updates: Record<string, unknown> = {
-    [fields.at]: now,
-    [fields.id]: session.userId,
-    updated_at: now,
-  }
+  const updates: Record<string, unknown> = { updated_at: now }
 
-  if (next === 'director') {
-    if (!decision) return { error: 'ผู้อำนวยการต้องเลือกอนุมัติหรือไม่อนุมัติ' }
-    updates.director_decision = decision === 'approve' ? 'อนุมัติ' : 'ไม่อนุมัติ'
-    updates.status = decision === 'approve' ? 'approved' : 'rejected'
-    if (decision === 'reject') updates.rejection_note = rejectionNote?.trim() || null
+  if (decision === 'reject') {
+    if (!note) return { error: 'กรุณาระบุเหตุผลที่ส่งกลับแก้ไข' }
+    updates.status = 'rejected'
+    updates.rejection_note = `${stepLabel}: ${note}`
+    if (next === 'director') updates.director_decision = 'ไม่อนุมัติ'
+  } else {
+    if (next === 'director' && decision !== 'approve') {
+      return { error: 'ผู้อำนวยการต้องเลือกอนุมัติหรือไม่อนุมัติ' }
+    }
+    const { data: signer } = await db.from('users')
+      .select('signature_url')
+      .eq('id', session.userId)
+      .maybeSingle()
+    if (!signer?.signature_url) {
+      return { error: 'ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่ ตั้งค่า → ข้อมูลตัวเอง เพื่ออัปโหลดก่อน แล้วค่อยลงนาม/อนุมัติ' }
+    }
+    updates[fields.at] = now
+    updates[fields.id] = session.userId
+    if (next === 'director') {
+      updates.director_decision = 'อนุมัติ'
+      updates.status = 'approved'
+    }
   }
 
   const { error } = await db.from('class_document_approvals').update(updates).eq('id', record.id)
@@ -937,13 +953,17 @@ export async function signClassDocument(
   await logActivity({
     actor: session,
     schoolId: session.schoolId,
-    action: 'sign',
+    action: decision === 'reject' ? 'reject' : 'sign',
     module: 'sign',
     targetType: docType,
     targetId: classroomId,
-    description: periodMonth
-      ? `ลงนาม ${docType} เทอม ${term} เดือน ${periodMonth}`
-      : `ลงนาม ${docType} เทอม ${term}`,
+    description: decision === 'reject'
+      ? (periodMonth
+        ? `ส่งกลับแก้ไข ${docType} โดย${stepLabel} เทอม ${term} เดือน ${periodMonth}`
+        : `ส่งกลับแก้ไข ${docType} โดย${stepLabel} เทอม ${term}`)
+      : (periodMonth
+        ? `ลงนาม ${docType} (${stepLabel}) เทอม ${term} เดือน ${periodMonth}`
+        : `ลงนาม ${docType} (${stepLabel}) เทอม ${term}`),
   })
   return { success: true }
 }
@@ -983,7 +1003,7 @@ export async function cancelPp5SubjectProposal(classSubjectId: string, term: num
   })
   if (!allowed) {
     return { error: hasApproverSignatures
-      ? 'มีผู้อนุมัติลงนามแล้ว — เฉพาะผู้บริหารยกเลิกได้'
+      ? 'ลำดับถัดไปลงนามแล้ว — ไม่สามารถยกเลิกการเสนอเซ็นได้'
       : 'ไม่มีสิทธิ์ยกเลิกการเสนอเซ็น' }
   }
 
@@ -1058,7 +1078,7 @@ export async function cancelClassDocumentProposal(
   })
   if (!allowed) {
     return { error: hasApproverSignatures
-      ? 'มีผู้อนุมัติลงนามแล้ว — เฉพาะผู้บริหารยกเลิกได้'
+      ? 'ลำดับถัดไปลงนามแล้ว — ไม่สามารถยกเลิกการเสนอเซ็นได้'
       : 'ไม่มีสิทธิ์ยกเลิกการเสนอเซ็น' }
   }
 

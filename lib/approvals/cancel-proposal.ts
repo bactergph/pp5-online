@@ -46,11 +46,10 @@ export function canUserCancelProposal(params: {
   hasApproverSignatures: boolean
 }) {
   if (params.status !== 'in_review') return false
-  if (!params.hasApproverSignatures) {
-    return params.isInitiator
-      || isPrivilegedProposalCanceller(params.role, params.userId, params.school)
-  }
-  return isPrivilegedProposalCanceller(params.role, params.userId, params.school)
+  // ลำดับถัดไปลงนามแล้ว — ยกเลิกไม่ได้ (รวมผู้บริหาร)
+  if (params.hasApproverSignatures) return false
+  return params.isInitiator
+    || isPrivilegedProposalCanceller(params.role, params.userId, params.school)
 }
 
 export function pp5SubjectCancelProposalReset(now: string) {

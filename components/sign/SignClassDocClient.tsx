@@ -13,18 +13,26 @@ import {
 import type { ClassDocType } from '@/lib/approvals/types'
 import { CLASS_DOC_TYPE_LABELS } from '@/lib/approvals/types'
 import { classDocTypeToPreviewKind } from '@/lib/sign-document-preview'
+import { getThaiMonthShort } from '@/lib/thaiDate'
 
 type ClassDocRow = Awaited<ReturnType<typeof fetchClassDocQueue>>[number]
 
 function mapClassDoc(row: ClassDocRow): ApprovalQueueItem & { classroom_id: string; doc_type: ClassDocType; term_value: number; month_value: number | null } {
+  const isClassroomAdmin = row.doc_type === 'classroom_admin'
+  const monthShort = row.month ? getThaiMonthShort(row.month) : ''
   return {
     key: `${row.doc_type}:${row.classroom_id}:${row.term}:${row.month ?? 0}`,
-    title: `${CLASS_DOC_TYPE_LABELS[row.doc_type]} ${row.classroom_label}`,
-    subtitle: CLASS_DOC_TYPE_LABELS[row.doc_type],
+    title: isClassroomAdmin && monthShort
+      ? `ชุดธุรการ ${row.classroom_label.replace(/ · ชุดเดือน .+$/, '')} · เดือน ${monthShort}`
+      : `${CLASS_DOC_TYPE_LABELS[row.doc_type]} ${row.classroom_label}`,
+    subtitle: isClassroomAdmin && monthShort
+      ? `ทั้งชุดเดือน ${monthShort}`
+      : CLASS_DOC_TYPE_LABELS[row.doc_type],
     term: row.term,
     status: row.status,
     status_label: row.status_label,
     next_step: row.next_step,
+    workflow_steps: row.workflow_steps,
     canSign: row.canSign,
     canPutSignature: row.canPutSignature,
     canPropose: row.canPropose,
@@ -39,6 +47,7 @@ function mapClassDoc(row: ClassDocRow): ApprovalQueueItem & { classroom_id: stri
       classroomId: row.classroom_id,
       level: row.level,
       signTerm: row.term,
+      month: isClassroomAdmin ? (row.month ?? null) : null,
     },
   }
 }

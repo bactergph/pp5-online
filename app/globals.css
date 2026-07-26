@@ -9088,9 +9088,37 @@ body.staff-picker-menu-open .school-save-bar {
   line-height: 1.45;
 }
 
+.document-sign-card__detail--danger {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.document-sign-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .document-sign-card__view {
   width: fit-content;
-  margin-top: 4px;
+}
+
+.document-sign-card__cancel {
+  width: fit-content;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.document-sign-card__cancel:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.document-sign-card__cancel:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .document-sign-modal__panel {

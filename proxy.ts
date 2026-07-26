@@ -28,6 +28,7 @@ const protectedPrefixes = [
   '/reports',
   '/export',
   '/documents',
+  '/sign',
 ]
 
 /** URL เก่าที่ย้ายไปหน้าเอกสารเสนอเซ็นแล้ว */
@@ -37,6 +38,7 @@ const LEGACY_SIGN_REDIRECTS: Record<string, string> = {
   'reports/pp6/approved': '/documents/sign?tab=class_pp6&section=approved',
   'sign/pp5': '/documents/sign?tab=subject',
   'sign/pp6': '/documents/sign?tab=class_pp6',
+  'sign/classroom-admin': '/classroom-admin/sign',
 }
 
 function legacySignRedirect(req: NextRequest, target: string, schoolCode?: string) {

@@ -216,8 +216,8 @@ export default function DocumentsSignHub() {
     <div className="page-stack documents-sign-hub">
       <div className="page-hero">
         <div>
-          <span className="page-hero-kicker">เอกสารเสนอเซ็น</span>
-          <h1 className="page-title">เอกสารเสนอเซ็น</h1>
+          <span className="page-hero-kicker">ปพ.5เสนอเซ็น</span>
+          <h1 className="page-title">ปพ.5เสนอเซ็น</h1>
           <p className="page-subtitle">{heroSubtitle}</p>
         </div>
       </div>

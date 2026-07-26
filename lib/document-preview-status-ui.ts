@@ -62,20 +62,21 @@ export function buildPreviewShellStatusUi(
     message = 'พร้อมเสนอเซ็นแล้ว — กดเสนอเซ็นเพื่อส่งเข้าสายอนุมัติ'
   } else if (status.canSign) {
     message = status.isDirectorStep
-      ? 'ถึงลำดับผู้อำนวยการแล้ว — กดอนุมัติจะใส่ลายเซ็นผอ. พร้อมบันทึกผล (ต้องมีลายเซ็นในโปรไฟล์)'
-      : 'ถึงลำดับของท่านแล้ว — กดเซ็นจะใส่ลายเซ็นจากโปรไฟล์ลงเอกสาร'
+      ? 'ถึงลำดับผู้อำนวยการแล้ว — อนุมัติจะใส่ลายเซ็นผอ. หรือส่งกลับพร้อมเหตุผล'
+      : 'ถึงลำดับของท่านแล้ว — ลงนามเพื่อส่งต่อ หรือส่งกลับแก้ไขพร้อมเหตุผล'
   } else if (status.status === 'in_review' && status.next_step) {
     message = `ยังไม่ถึงลำดับของท่าน — รอ${status.next_step}ลงนามก่อน`
   } else if (status.status === 'approved') {
     message = 'เอกสารอนุมัติครบแล้ว'
   } else if (status.status === 'rejected') {
-    message = 'เอกสารถูกส่งกลับ — ครูผู้รับผิดชอบต้องแก้ไขและเสนอใหม่'
+    message = status.status_label || 'เอกสารถูกส่งกลับ — ครูผู้รับผิดชอบต้องแก้ไขและเสนอใหม่'
   }
 
   let signLabel: string | null = 'เซ็น'
   if (status.canPutSignature) signLabel = 'ใส่ลายเซ็น'
   else if (status.canPropose) signLabel = 'เสนอเซ็น'
   else if (status.canSign && status.isDirectorStep) signLabel = 'ลงนามและอนุมัติ'
+  else if (status.canSign) signLabel = 'ลงนาม'
   else if (!canAct) signLabel = null
 
   const badge = status.status === 'in_review' && status.status_label

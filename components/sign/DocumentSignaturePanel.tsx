@@ -18,6 +18,10 @@ import {
 import type { ApprovalSubmissionHistoryItem } from '@/lib/approvals/submission-history'
 import type { ClassDocType } from '@/lib/approvals/types'
 import { approvalTermFromReport } from '@/lib/approvals/types'
+import { getThaiMonthShort } from '@/lib/thaiDate'
+
+const CLASSROOM_ADMIN_SET_LABEL =
+  'เวลาเรียน, แปรงฟัน, ดื่มนม, อาหารกลางวัน, ทำความสะอาดห้อง, การออมเงิน, น้ำหนัก-ส่วนสูง, ตรวจสุขภาพ'
 
 type SignatureState = {
   status: string
@@ -81,7 +85,7 @@ export default function DocumentSignaturePanel({
   enabled = true,
   onSignatureChange,
 }: Props) {
-  const { notify, AlertModal } = useAppAlert('ดำเนินการสำเร็จ', 'ดำเนินการไม่สำเร็จ')
+  const { notify, confirm, AlertModal } = useAppAlert('ดำเนินการสำเร็จ', 'ดำเนินการไม่สำเร็จ')
   const [state, setState] = useState<SignatureState | null>(null)
   const [history, setHistory] = useState<ApprovalSubmissionHistoryItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -186,6 +190,24 @@ export default function DocumentSignaturePanel({
       notify('error', 'กรุณากดใส่ลายเซ็นก่อน')
       return
     }
+    if (variant === 'classroom_admin') {
+      if (signMonth == null) {
+        notify('error', 'ไม่พบเดือนที่ต้องการเสนอเซ็น')
+        return
+      }
+      const monthShort = getThaiMonthShort(signMonth)
+      const ok = await confirm({
+        title: `เสนอเซ็นชุดเดือน ${monthShort}?`,
+        message:
+          `จะส่งเอกสารทั้งชุดของเดือน ${monthShort} เข้าสายอนุมัติ\n`
+          + `(${CLASSROOM_ADMIN_SET_LABEL})\n\n`
+          + 'ไม่ใช่เฉพาะหน้านี้ — ในคิวเสนอเซ็นจะเป็นชุดเฉพาะเดือนนี้',
+        confirmLabel: 'ยืนยันเสนอเซ็น',
+        cancelLabel: 'ยังไม่ส่ง',
+        confirmTone: 'primary',
+      })
+      if (!ok) return
+    }
     setBusy(true)
     try {
       let result: { error?: string }
@@ -220,7 +242,7 @@ export default function DocumentSignaturePanel({
       }
       if (result.error) notify('error', result.error)
       else {
-        notify('success', decision === 'reject' ? 'บันทึกไม่อนุมัติแล้ว' : 'ลงนามเรียบร้อย')
+        notify('success', decision === 'reject' ? 'ส่งกลับแก้ไขเรียบร้อย' : 'ลงนามเรียบร้อย')
         setRejectOpen(false)
         await reload()
         try {
@@ -237,10 +259,17 @@ export default function DocumentSignaturePanel({
   }
 
   async function handleCancelProposal() {
-    const message = state?.hasApproverSignatures
-      ? 'มีผู้อนุมัติลงนามแล้ว — ยืนยันยกเลิกการเสนอเซ็น?'
-      : 'ยืนยันยกเลิกการเสนอเซ็น?'
-    if (!window.confirm(message)) return
+    if (state?.hasApproverSignatures) {
+      notify('error', 'ลำดับถัดไปลงนามแล้ว — ไม่สามารถยกเลิกการเสนอเซ็นได้')
+      return
+    }
+    const ok = await confirm({
+      title: 'ยกเลิกการเสนอเซ็น?',
+      message: 'เอกสารจะกลับเป็นร่าง\nลำดับถัดไปที่ยังไม่ลงนามจะถูกยกเลิกคิวนี้',
+      confirmLabel: 'ยืนยันยกเลิก',
+      cancelLabel: 'เก็บไว้',
+    })
+    if (!ok) return
 
     setBusy(true)
     try {
@@ -296,7 +325,9 @@ export default function DocumentSignaturePanel({
               <p className="sign-panel__hint">
                 {state?.canRepropose
                   ? 'เอกสารรอบก่อนเสร็จแล้ว — กดเสนอเซ็นอีกครั้งเพื่อส่งรอบใหม่'
-                  : 'ใส่ลายเซ็นเพื่อพิมพ์ได้ทันที — กดเสนอเซ็นเมื่อต้องการส่งเข้าสายอนุมัติ'}
+                  : variant === 'classroom_admin' && signMonth
+                    ? `ใส่ลายเซ็นเพื่อพิมพ์ได้ทันที — กดเสนอเซ็นจะส่งทั้งชุดเดือน ${getThaiMonthShort(signMonth)} ทั้งหมดเข้าสายอนุมัติ`
+                    : 'ใส่ลายเซ็นเพื่อพิมพ์ได้ทันที — กดเสนอเซ็นเมื่อต้องการส่งเข้าสายอนุมัติ'}
               </p>
             )}
             <div className="sign-panel__dual-actions">
@@ -333,7 +364,16 @@ export default function DocumentSignaturePanel({
 
         {state?.canSign && !actionsLocked && (
           <div className="sign-panel__dual-actions">
-            {!state.isDirectorStep ? (
+            {state.isDirectorStep ? (
+              <button
+                type="button"
+                className={`sign-panel__btn sign-panel__btn--approve${busy ? ' is-dimmed' : ''}`}
+                disabled={busy}
+                onClick={() => handleSign('approve')}
+              >
+                ลงนามและอนุมัติ
+              </button>
+            ) : (
               <button
                 type="button"
                 className={`sign-panel__btn sign-panel__btn--propose${busy ? ' is-dimmed' : ''}`}
@@ -342,21 +382,15 @@ export default function DocumentSignaturePanel({
               >
                 ลงนาม
               </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className={`sign-panel__btn sign-panel__btn--approve${busy ? ' is-dimmed' : ''}`}
-                  disabled={busy}
-                  onClick={() => handleSign('approve')}
-                >
-                  อนุมัติ
-                </button>
-                <button type="button" className="sign-panel__btn sign-panel__btn--ghost" disabled={busy} onClick={() => setRejectOpen(true)}>
-                  ไม่อนุมัติ
-                </button>
-              </>
             )}
+            <button
+              type="button"
+              className="sign-panel__btn sign-panel__btn--ghost"
+              disabled={busy}
+              onClick={() => setRejectOpen(true)}
+            >
+              {state.isDirectorStep ? 'ไม่อนุมัติ' : 'ส่งกลับแก้ไข'}
+            </button>
           </div>
         )}
 
@@ -364,9 +398,7 @@ export default function DocumentSignaturePanel({
           <>
             {!compact && (
               <p className="sign-panel__hint sign-panel__hint--warning">
-                {state.hasApproverSignatures
-                  ? 'มีผู้อนุมัติลงนามแล้ว — ยกเลิกได้เฉพาะผู้บริหาร'
-                  : 'ยังไม่มีผู้อนุมัติลงนาม — ครูเจ้าของเอกสารยกเลิกได้'}
+                ยกเลิกได้เฉพาะเมื่อลำดับถัดไปยังไม่ลงนาม
               </p>
             )}
             <div className="sign-panel__dual-actions">
@@ -384,19 +416,27 @@ export default function DocumentSignaturePanel({
 
         {rejectOpen && (
           <div className="sign-panel__reject">
-            <label className="form-label">เหตุผลไม่อนุมัติ</label>
-            <textarea className="form-input" rows={2} value={rejectNote} onChange={e => setRejectNote(e.target.value)} />
+            <label className="form-label">
+              {state?.isDirectorStep ? 'เหตุผลไม่อนุมัติ (บังคับ)' : 'เหตุผลที่ส่งกลับแก้ไข (บังคับ)'}
+            </label>
+            <textarea
+              className="form-input"
+              rows={2}
+              value={rejectNote}
+              onChange={e => setRejectNote(e.target.value)}
+              placeholder="ระบุเหตุผลให้ชัดเจน"
+            />
             <div className="sign-panel__dual-actions" style={{ marginTop: 8 }}>
               <button type="button" className="sign-panel__btn sign-panel__btn--ghost" onClick={() => setRejectOpen(false)}>
                 ยกเลิก
               </button>
               <button
                 type="button"
-                className={`sign-panel__btn sign-panel__btn--danger${busy ? ' is-dimmed' : ''}`}
-                disabled={busy}
-                onClick={() => handleSign('reject', rejectNote)}
+                className={`sign-panel__btn sign-panel__btn--danger${busy || !rejectNote.trim() ? ' is-dimmed' : ''}`}
+                disabled={busy || !rejectNote.trim()}
+                onClick={() => handleSign('reject', rejectNote.trim())}
               >
-                ยืนยัน
+                {state?.isDirectorStep ? 'ยืนยันไม่อนุมัติ' : 'ยืนยันส่งกลับ'}
               </button>
             </div>
           </div>

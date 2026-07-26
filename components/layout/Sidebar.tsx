@@ -63,6 +63,7 @@ const ICON_BY_PREFIX: Record<string, string> = {
   '/attendance': I.clock,
   '/schedules': I.calendar,
   '/documents': I.sign,
+  '/classroom-admin/sign': I.sign,
   '/classroom-admin': I.grid,
   '/activity': I.clock,
 }
@@ -301,7 +302,12 @@ const EXPORT_FULL: NavItem = {
 }
 const DOCUMENTS_SIGN_NAV: NavItem = {
   href: '/documents/sign',
-  label: 'เอกสารเสนอเซ็น',
+  label: 'ปพ.5เสนอเซ็น',
+  icon: ic(I.sign),
+}
+const CLASSROOM_ADMIN_SIGN_NAV: NavItem = {
+  href: '/classroom-admin/sign',
+  label: 'ธุรการเสนอเซ็น',
   icon: ic(I.sign),
 }
 const ASSIGN: NavItem = {
@@ -374,7 +380,7 @@ const DISTRICT_NAV: NavSection[] = [
 const ADMIN_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'ตั้งค่าโรงเรียน', items: [ADMIN_SETTINGS] },
-  { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN, SCHEDULE_MANAGE_MAIN] },
+  { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN, SCHEDULE_MANAGE_MAIN, CLASSROOM_ADMIN_SIGN_NAV] },
   { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
   { label: 'ติดตามและรายงาน', items: [EVAL_SUMMARY, REPORT_STATUS, EXPORT_FULL, ACTIVITY_LOG] },
 ]
@@ -383,7 +389,7 @@ const PRINCIPAL_NAV: NavSection[] = [
   { label: 'ภาพรวมโรงเรียน', items: [CLASSROOMS, STUDENTS, EVAL_SUMMARY, SCHEDULE_VIEW_MAIN] },
   { label: 'ตรวจสอบข้อมูล', items: [REPORT_OVERSIGHT] },
   { label: 'เอกสาร ปพ.', items: [PP5_PRINT_ONLY, DOCUMENTS_SIGN_NAV] },
-  { label: 'ตรวจสอบและอนุมัติ', items: [DOCUMENTS_SIGN_NAV] },
+  { label: 'ตรวจสอบและอนุมัติ', items: [DOCUMENTS_SIGN_NAV, CLASSROOM_ADMIN_SIGN_NAV] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
   { label: 'ระบบ', items: [ACTIVITY_LOG] },
 ]
@@ -408,7 +414,7 @@ const HOMEROOM_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'งานสอนรายวิชา', items: [SCORES, SCORE_CONFIG, ATTENDANCE, SCHEDULE_VIEW_MAIN] },
   { label: 'นักเรียน', items: [STUDENTS] },
-  { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN] },
+  { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN, CLASSROOM_ADMIN_SIGN_NAV] },
   { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
   { label: 'รายงาน / เอกสาร', items: [TEACHER_REPORTS, ACTIVITY_LOG] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
@@ -559,6 +565,16 @@ export default function Sidebar({
   }
   const isActive = (href: string) => {
     if (!mounted) return false
+    // /classroom-admin/sign เป็นเมนูแยก (ธุรการเสนอเซ็น) — ไม่นับเป็นลูกของธุรการชั้นเรียน
+    if (
+      href === '/classroom-admin'
+      && (pathname === scopedHref('/classroom-admin/sign')
+        || pathname === '/classroom-admin/sign'
+        || pathname.startsWith(scopedHref('/classroom-admin/sign') + '/')
+        || pathname.startsWith('/classroom-admin/sign/'))
+    ) {
+      return false
+    }
     const scoped = scopedHref(href)
     return pathname === scoped || pathname.startsWith(scoped + '/') || pathname === href || pathname.startsWith(href + '/')
   }

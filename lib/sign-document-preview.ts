@@ -8,6 +8,8 @@ export type SignDocumentPreviewTarget = {
   level: string
   signTerm: number
   classSubjectId?: string
+  /** ธุรการชั้นเรียน — เดือนที่เสนอเซ็น (1–12) บังคับใช้ชุดเดียวของเดือนนั้น */
+  month?: number | null
 }
 
 const TERM_MONTHS: Record<1 | 2, number[]> = {
@@ -48,23 +50,30 @@ function defaultSections(kind: SignDocumentPreviewTarget['kind']) {
   return 'cover,criteria,scores'
 }
 
-function monthKeyForTerm(signTerm: number) {
-  const month = TERM_MONTHS[signTerm === 2 ? 2 : 1][0]
-  const year = new Date().getFullYear() + 543
+/** YYYY-MM แบบ ค.ศ. สำหรับเดือนในเทอม — เดือน 1–4 ข้ามปีถัดจาก พ.ค.–ธ.ค. */
+function classroomAdminMonthKey(month: number) {
+  const now = new Date()
+  let year = now.getFullYear()
+  const nowMonth = now.getMonth() + 1
+  if (month <= 4 && nowMonth >= 5) year += 1
+  else if (month >= 5 && nowMonth <= 4) year -= 1
   return `${year}-${String(month).padStart(2, '0')}`
 }
 
 export function buildSignDocumentPreviewUrl(target: SignDocumentPreviewTarget, mode: 'embed' | 'print' = 'embed') {
   if (target.kind === 'classroom_admin') {
     const term = target.signTerm === 2 ? 2 : 1
+    const month = target.month != null && target.month >= 1 && target.month <= 12
+      ? target.month
+      : TERM_MONTHS[term][0]
     const params = new URLSearchParams({
       [mode]: '1',
       year: target.academicYearId,
       classroom: target.classroomId,
       term: String(term),
-      months: TERM_MONTHS[term].join(','),
+      months: String(month),
       reports: CLASSROOM_ADMIN_REPORTS,
-      monthkey: monthKeyForTerm(term),
+      monthkey: classroomAdminMonthKey(month),
     })
     return `/export/classroom-admin?${params}`
   }
@@ -107,6 +116,9 @@ export function signDocumentPreviewTargetToParams(target: SignDocumentPreviewTar
     signTerm: String(target.signTerm),
   })
   if (target.classSubjectId) params.set('subject', target.classSubjectId)
+  if (target.month != null && target.month >= 1 && target.month <= 12) {
+    params.set('month', String(target.month))
+  }
   return params
 }
 
@@ -118,6 +130,8 @@ export function parseSignDocumentPreviewTarget(params: URLSearchParams): SignDoc
   const signTerm = Number(params.get('signTerm'))
   if (!kind || !academicYearId || !classroomId || !level || !Number.isFinite(signTerm)) return null
   if (!['pp5-subject', 'pp5-class', 'pp6', 'classroom_admin'].includes(kind)) return null
+  const monthRaw = params.get('month')
+  const month = monthRaw != null ? Number(monthRaw) : null
   return {
     kind,
     academicYearId,
@@ -125,6 +139,7 @@ export function parseSignDocumentPreviewTarget(params: URLSearchParams): SignDoc
     level,
     signTerm,
     classSubjectId: params.get('subject') || undefined,
+    month: month != null && Number.isFinite(month) && month >= 1 && month <= 12 ? month : null,
   }
 }
 

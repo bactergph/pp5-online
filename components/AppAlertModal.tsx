@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-type AlertType = 'success' | 'error'
+type AlertType = 'success' | 'error' | 'confirm'
 
 const APP_ALERT_STYLES = `
   .app-alert-backdrop {
@@ -22,7 +22,7 @@ const APP_ALERT_STYLES = `
     animation: app-alert-backdrop-out 0.2s ease forwards;
   }
   .app-alert-card {
-    width: min(100%, 300px);
+    width: min(100%, 320px);
     padding: 28px 22px 24px;
     border-radius: 30px;
     border: 1px solid rgba(226, 232, 240, 0.95);
@@ -62,6 +62,14 @@ const APP_ALERT_STYLES = `
       0 10px 28px rgba(239, 68, 68, 0.24),
       0 1px 0 rgba(255, 255, 255, 0.42) inset;
   }
+  .app-alert-icon-confirm {
+    color: #FFFFFF;
+    background:
+      linear-gradient(180deg, rgba(251, 191, 36, 0.98), rgba(245, 158, 11, 0.95));
+    box-shadow:
+      0 10px 28px rgba(245, 158, 11, 0.28),
+      0 1px 0 rgba(255, 255, 255, 0.45) inset;
+  }
   .app-alert-title {
     margin: 0;
     color: rgba(15, 23, 42, 0.92);
@@ -76,11 +84,15 @@ const APP_ALERT_STYLES = `
     font-size: 14px;
     font-weight: 600;
     line-height: 1.5;
+    white-space: pre-line;
   }
   .app-alert-actions {
     display: grid;
     gap: 8px;
     margin-top: 18px;
+  }
+  .app-alert-actions--confirm {
+    grid-template-columns: 1fr 1fr;
   }
   .app-alert-btn {
     width: 100%;
@@ -105,6 +117,19 @@ const APP_ALERT_STYLES = `
   .app-alert-btn--error {
     color: #FFFFFF;
     background: linear-gradient(180deg, #F87171, #EF4444);
+  }
+  .app-alert-btn--confirm {
+    color: #FFFFFF;
+    background: linear-gradient(180deg, #F87171, #EF4444);
+  }
+  .app-alert-btn--confirm-primary {
+    color: #FFFFFF;
+    background: linear-gradient(180deg, #60A5FA, #2563EB);
+  }
+  .app-alert-btn--ghost {
+    color: rgba(51, 65, 85, 0.95);
+    background: rgba(241, 245, 249, 0.96);
+    border: 1px solid rgba(226, 232, 240, 0.95);
   }
   @keyframes app-alert-backdrop-in {
     from { opacity: 0; }
@@ -134,6 +159,10 @@ export default function AppAlertModal({
   title,
   message,
   onClose,
+  onConfirm,
+  confirmLabel = 'ยืนยัน',
+  cancelLabel = 'ไม่ยกเลิก',
+  confirmTone = 'danger',
   autoCloseMs,
 }: {
   open: boolean
@@ -141,11 +170,16 @@ export default function AppAlertModal({
   title: string
   message?: string
   onClose: () => void
+  onConfirm?: () => void
+  confirmLabel?: string
+  cancelLabel?: string
+  confirmTone?: 'danger' | 'primary'
   autoCloseMs?: number
 }) {
   const [mounted, setMounted] = useState(false)
   const [closing, setClosing] = useState(false)
-  // error ค้างไว้ให้อ่าน — ปิดด้วยปุ่ม; success ปิดอัตโนมัติ
+  const isConfirm = type === 'confirm'
+  // error/confirm ค้างไว้ให้อ่าน — ปิดด้วยปุ่ม; success ปิดอัตโนมัติ
   const duration = autoCloseMs ?? (type === 'success' ? 1200 : 0)
 
   useEffect(() => {
@@ -175,6 +209,14 @@ export default function AppAlertModal({
     window.setTimeout(onClose, 200)
   }
 
+  function handleConfirm() {
+    if (closing) return
+    setClosing(true)
+    window.setTimeout(() => {
+      onConfirm?.()
+    }, 180)
+  }
+
   if (!open || !mounted) return null
 
   return createPortal(
@@ -194,6 +236,12 @@ export default function AppAlertModal({
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 6 9 17l-5-5" />
               </svg>
+            ) : type === 'confirm' ? (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v4" />
+                <path d="M12 17h.01" />
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              </svg>
             ) : (
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 9v4" />
@@ -203,7 +251,20 @@ export default function AppAlertModal({
           </div>
           <h3 id="app-alert-title" className="app-alert-title">{title}</h3>
           {message ? <p id="app-alert-message" className="app-alert-message">{message}</p> : null}
-          {type === 'error' || duration <= 0 ? (
+          {isConfirm ? (
+            <div className="app-alert-actions app-alert-actions--confirm">
+              <button type="button" className="app-alert-btn app-alert-btn--ghost" onClick={handleClose}>
+                {cancelLabel}
+              </button>
+              <button
+                type="button"
+                className={`app-alert-btn ${confirmTone === 'primary' ? 'app-alert-btn--confirm-primary' : 'app-alert-btn--confirm'}`}
+                onClick={handleConfirm}
+              >
+                {confirmLabel}
+              </button>
+            </div>
+          ) : type === 'error' || duration <= 0 ? (
             <div className="app-alert-actions">
               <button
                 type="button"

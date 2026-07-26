@@ -120,6 +120,10 @@ export default function DocumentPreviewShell() {
 
   async function handleSign(decision?: 'approve' | 'reject') {
     if (!target || !status) return
+    if (decision === 'reject' && !rejectNote.trim()) {
+      notify('error', 'กรุณาระบุเหตุผลที่ส่งกลับแก้ไข')
+      return
+    }
     setSignBusy(true)
     let result: { error?: string; success?: boolean } = { error: 'ไม่สามารถดำเนินการได้' }
 
@@ -209,7 +213,8 @@ export default function DocumentPreviewShell() {
     )
   }
 
-  const directorReject = status?.canSign && status.isDirectorStep
+  const canRejectStep = Boolean(status?.canSign)
+  const isDirectorStep = Boolean(status?.isDirectorStep)
 
   return (
     <div className="document-preview-shell">
@@ -227,19 +232,19 @@ export default function DocumentPreviewShell() {
                   className="doc-preview-chrome__btn doc-preview-chrome__btn--sign"
                   loading={signBusy}
                   onClick={() => {
-                    if (directorReject) void handleSign('approve')
+                    if (isDirectorStep) void handleSign('approve')
                     else void handleSign()
                   }}
                 >
                   {statusUi.signLabel}
                 </LoadingButton>
-                {directorReject && (
+                {canRejectStep && (
                   <button
                     type="button"
                     className="doc-preview-chrome__btn doc-preview-chrome__btn--ghost"
                     onClick={() => setShowReject(v => !v)}
                   >
-                    ไม่อนุมัติ
+                    {isDirectorStep ? 'ไม่อนุมัติ' : 'ส่งกลับแก้ไข'}
                   </button>
                 )}
               </div>
@@ -303,21 +308,23 @@ export default function DocumentPreviewShell() {
         </div>
       </header>
 
-      {showReject && directorReject && (
+      {showReject && canRejectStep && (
         <div className="doc-preview-chrome__reject">
           <textarea
             className="form-input"
             rows={2}
             value={rejectNote}
             onChange={e => setRejectNote(e.target.value)}
-            placeholder="เหตุผล (ถ้ามี)"
+            placeholder="ระบุเหตุผลที่ส่งกลับแก้ไข (บังคับ)"
+            required
           />
           <LoadingButton
             className="btn btn-danger btn-sm"
             loading={signBusy}
+            disabled={!rejectNote.trim()}
             onClick={() => void handleSign('reject')}
           >
-            ยืนยันไม่อนุมัติ
+            {isDirectorStep ? 'ยืนยันไม่อนุมัติ' : 'ยืนยันส่งกลับแก้ไข'}
           </LoadingButton>
         </div>
       )}

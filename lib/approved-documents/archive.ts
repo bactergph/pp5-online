@@ -12,6 +12,7 @@ import {
   type SignDocumentPreviewTarget,
 } from '@/lib/sign-document-preview'
 import type { ClassDocType } from '@/lib/approvals/types'
+import { getThaiMonthShort } from '@/lib/thaiDate'
 
 export type ApprovedDocKind = 'pp5_subject' | 'pp5_class' | 'pp6' | 'classroom_admin'
 
@@ -134,7 +135,16 @@ export async function archiveApprovedClassDocument(params: {
   })
   const kind = params.docType as ApprovedDocKind
   const previewKind = classDocTypeToPreviewKind(params.docType)
-  const title = `${APPROVED_DOC_FOLDER_LABELS[previewKind]} · ${classroom.level}/${classroom.room} · ${teacherName}`
+  let month: number | null = null
+  if (params.docType === 'classroom_admin') {
+    const { data: approval } = await db.from('class_document_approvals')
+      .select('month')
+      .eq('id', params.classDocumentApprovalId)
+      .maybeSingle()
+    month = approval?.month == null ? null : Number(approval.month)
+  }
+  const monthTag = month ? ` · ชุดเดือน ${getThaiMonthShort(month)}` : ''
+  const title = `${APPROVED_DOC_FOLDER_LABELS[previewKind]} · ${classroom.level}/${classroom.room}${monthTag} · ${teacherName}`
 
   const previewTarget: SignDocumentPreviewTarget = {
     kind: previewKind,
@@ -142,6 +152,7 @@ export async function archiveApprovedClassDocument(params: {
     classroomId: classroom.id,
     level: classroom.level,
     signTerm: params.term,
+    month,
   }
 
   const { data: row, error } = await db.from('approved_document_exports').insert({

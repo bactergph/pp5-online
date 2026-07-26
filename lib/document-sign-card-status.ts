@@ -10,7 +10,11 @@ export function documentSignCardStatus(status: string, statusLabel: string) {
     return { label: 'อนุมัติแล้ว', tone: 'success' as const }
   }
   if (status === 'rejected') {
-    return { label: 'ส่งกลับแก้ไข', tone: 'danger' as const }
+    return {
+      label: 'ส่งกลับแก้ไข',
+      tone: 'danger' as const,
+      detail: statusLabel.includes('—') ? statusLabel.split('—').slice(1).join('—').trim() : statusLabel,
+    }
   }
   if (status === 'in_review') {
     // หัวการ์ดแสดงว่าอยู่ลำดับไหน เช่น "รอหัวหน้าวิชาการ"
