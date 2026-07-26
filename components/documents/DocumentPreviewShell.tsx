@@ -31,6 +31,7 @@ type SignStatus = NonNullable<Awaited<ReturnType<typeof fetchPp5SubjectApprovalS
 function classDocTypeFromKind(kind: SignDocumentPreviewTarget['kind']): ClassDocType | null {
   if (kind === 'pp5-class') return 'pp5_class'
   if (kind === 'pp6') return 'pp6'
+  if (kind === 'classroom_admin') return 'classroom_admin'
   return null
 }
 
@@ -80,7 +81,12 @@ export default function DocumentPreviewShell() {
       }
       const docType = classDocTypeFromKind(target.kind)
       if (docType) {
-        setStatus(await fetchClassDocApprovalStatus(docType, target.classroomId, target.signTerm))
+        setStatus(await fetchClassDocApprovalStatus(
+          docType,
+          target.classroomId,
+          target.signTerm,
+          docType === 'classroom_admin' ? (target.month ?? null) : null,
+        ))
       }
     } finally {
       setStatusLoading(false)
@@ -128,26 +134,40 @@ export default function DocumentPreviewShell() {
     let result: { error?: string; success?: boolean } = { error: 'ไม่สามารถดำเนินการได้' }
 
     try {
+      const classMonth = target.kind === 'classroom_admin' ? (target.month ?? null) : null
       if (status.canPutSignature) {
         if (target.kind === 'pp5-subject' && target.classSubjectId) {
           result = await putPp5SubjectSignature(target.classSubjectId, target.signTerm)
         } else {
           const docType = classDocTypeFromKind(target.kind)
-          if (docType) result = await putClassDocumentSignature(docType, target.classroomId, target.signTerm)
+          if (docType) {
+            result = await putClassDocumentSignature(docType, target.classroomId, target.signTerm, classMonth)
+          }
         }
       } else if (status.canPropose) {
         if (target.kind === 'pp5-subject' && target.classSubjectId) {
           result = await proposePp5Subject(target.classSubjectId, target.signTerm)
         } else {
           const docType = classDocTypeFromKind(target.kind)
-          if (docType) result = await proposeClassDocument(docType, target.classroomId, target.signTerm)
+          if (docType) {
+            result = await proposeClassDocument(docType, target.classroomId, target.signTerm, classMonth)
+          }
         }
       } else if (status.canSign) {
         if (target.kind === 'pp5-subject' && target.classSubjectId) {
           result = await signPp5Subject(target.classSubjectId, target.signTerm, decision, rejectNote || undefined)
         } else {
           const docType = classDocTypeFromKind(target.kind)
-          if (docType) result = await signClassDocument(docType, target.classroomId, target.signTerm, decision, rejectNote || undefined)
+          if (docType) {
+            result = await signClassDocument(
+              docType,
+              target.classroomId,
+              target.signTerm,
+              decision,
+              rejectNote || undefined,
+              classMonth,
+            )
+          }
         }
       }
     } finally {

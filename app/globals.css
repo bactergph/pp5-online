@@ -575,6 +575,8 @@
 html {
   max-width: 100%;
   overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -589,6 +591,15 @@ body {
     radial-gradient(circle at top right, rgba(139, 107, 69, 0.1), transparent 34vw),
     var(--bg);
   -webkit-font-smoothing: antialiased;
+}
+
+/* มือถือ: input/select/textarea ต้อง ≥16px ไม่งั้น iOS จะซูมเข้าแล้วค้างหลังล็อกอิน */
+@media (max-width: 1023px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='button']):not([type='submit']):not([type='reset']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 a { text-decoration: none; }
@@ -667,7 +678,7 @@ a { text-decoration: none; }
   padding: 11px 13px;
   border: 1.5px solid var(--border-2);
   border-radius: 11px;
-  font-size: 14px;
+  font-size: 16px; /* กัน iOS Safari auto-zoom ตอนโฟกัส */
   font-family: 'Sarabun', sans-serif;
   color: var(--text);
   background: var(--surface);
@@ -1719,7 +1730,7 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
   padding: 12px 14px;
   border: 1.5px solid #C5CAE0;
   border-radius: 10px;
-  font-size: 15px;
+  font-size: 16px; /* กัน iOS Safari auto-zoom ตอนโฟกัส */
   font-family: inherit;
   color: #1A1F36;
   background: #FAFBFF;
@@ -3260,8 +3271,17 @@ div:has(> .thai-table) {
   }
 
   .hero-panel {
-    padding: 22px 18px;
-    border-radius: 20px;
+    padding: 18px 16px;
+    border-radius: 18px;
+  }
+
+  .hero-panel h2 {
+    font-size: 20px !important;
+  }
+
+  .responsive-grid,
+  .responsive-grid-sm {
+    gap: 10px;
   }
 
   .grid,

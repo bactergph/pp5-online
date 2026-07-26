@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { kanit, sarabun } from '@/lib/fonts'
 import PdfExportDockBoot from '@/components/pdf/PdfExportDockBoot'
+import IosViewportFix from '@/components/layout/IosViewportFix'
 import './globals.css'
 import './glass-login.css'
 import './report-fonts.css'
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="th" className={`${sarabun.variable} ${kanit.variable}`}>
       <body className={sarabun.className}>
+        <IosViewportFix />
         {children}
         <PdfExportDockBoot />
       </body>
