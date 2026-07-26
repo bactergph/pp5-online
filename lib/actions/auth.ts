@@ -103,7 +103,10 @@ export async function login(
         .eq('id', effectiveSchoolId)
         .maybeSingle()
       const code = requestedSchoolCode || (school?.code ? String(school.code).trim().toLowerCase() : '')
-      if (code) redirectTo = `/school/${code}/dashboard`
+      if (code) {
+        const { schoolDashboardPath } = await import('@/lib/school-path')
+        redirectTo = schoolDashboardPath(code)
+      }
     }
   } else if (effectiveSchoolId && userProfile.role !== 'district') {
     const { data: school } = await serverClient
@@ -112,7 +115,10 @@ export async function login(
       .eq('id', effectiveSchoolId)
       .maybeSingle()
     const code = requestedSchoolCode || (school?.code ? String(school.code).trim().toLowerCase() : '')
-    if (code) redirectTo = `/school/${code}/dashboard`
+    if (code) {
+      const { schoolDashboardPath } = await import('@/lib/school-path')
+      redirectTo = schoolDashboardPath(code)
+    }
   }
 
   // สร้าง session cookie
@@ -144,7 +150,10 @@ export async function logout() {
       const db = createServerClient()
       const { data } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()
       const code = data?.code ? String(data.code).trim().toLowerCase() : ''
-      if (code) redirectTo = `/school/${code}/login`
+      if (code) {
+        const { schoolLoginPath } = await import('@/lib/school-path')
+        redirectTo = schoolLoginPath(code)
+      }
     }
   } catch {
     // ถ้าดึงโรงเรียนไม่สำเร็จ ให้ไปหน้า login กลาง

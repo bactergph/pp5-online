@@ -37,6 +37,7 @@ function mapPp5Subject(row: Pp5Row): ApprovalQueueItem & { class_subject_id: str
     status: row.status,
     status_label: row.status_label,
     next_step: row.next_step,
+    workflow_steps: row.workflow_steps,
     canSign: row.canSign,
     canPutSignature: row.canPutSignature,
     canPropose: row.canPropose,
@@ -63,6 +64,7 @@ function mapClassDoc(row: ClassDocRow): ApprovalQueueItem & { classroom_id: stri
     status: row.status,
     status_label: row.status_label,
     next_step: row.next_step,
+    workflow_steps: row.workflow_steps,
     canSign: row.canSign,
     canPutSignature: row.canPutSignature,
     canPropose: row.canPropose,
@@ -79,6 +81,11 @@ function mapClassDoc(row: ClassDocRow): ApprovalQueueItem & { classroom_id: stri
       signTerm: row.term,
     },
   }
+}
+
+/** แท็บนี้แสดงเฉพาะเอกสารที่เสนอเซ็นไปแล้ว (หรือถูกส่งกลับ) */
+function submittedOnly<T extends { status: string }>(items: T[]) {
+  return items.filter(item => item.status === 'in_review' || item.status === 'rejected')
 }
 
 function parseMainTab(value: string | null): MainTab {
@@ -104,6 +111,9 @@ export default function DocumentsSignHub() {
     () => [...pp5ClassItems, ...pp6Items],
     [pp5ClassItems, pp6Items],
   )
+  const subjectSubmitted = useMemo(() => submittedOnly(subjectItems), [subjectItems])
+  const classSubmitted = useMemo(() => submittedOnly(classItems), [classItems])
+  const tabExplicit = searchParams.has('tab')
 
   const syncUrl = useCallback((tab: MainTab, section: SectionTab) => {
     const params = new URLSearchParams()
@@ -139,6 +149,28 @@ export default function DocumentsSignHub() {
     if (sectionTab === 'pending') void reloadPending()
   }, [sectionTab, reloadPending])
 
+  // ถ้าแท็บปัจจุบันว่าง แต่แท็บอื่นมีเอกสารเสนอเซ็นแล้ว — สลับให้อัตโนมัติ
+  useEffect(() => {
+    if (loading || sectionTab !== 'pending' || tabExplicit) return
+    if (mainTab === 'subject' && subjectSubmitted.length === 0 && classSubmitted.length > 0) {
+      setMainTab('class_pp6')
+      syncUrl('class_pp6', sectionTab)
+      return
+    }
+    if (mainTab === 'class_pp6' && classSubmitted.length === 0 && subjectSubmitted.length > 0) {
+      setMainTab('subject')
+      syncUrl('subject', sectionTab)
+    }
+  }, [
+    loading,
+    sectionTab,
+    tabExplicit,
+    mainTab,
+    subjectSubmitted.length,
+    classSubmitted.length,
+    syncUrl,
+  ])
+
   useEffect(() => {
     function onPreviewUpdated(event: MessageEvent) {
       if (event.origin !== window.location.origin) return
@@ -162,11 +194,11 @@ export default function DocumentsSignHub() {
     }
     if (mainTab === 'subject') {
       return sectionTab === 'pending'
-        ? 'ปพ.5 รายวิชา — เอกสารที่รอลงนาม / อนุมัติ'
+        ? 'ปพ.5 รายวิชา — เอกสารที่เสนอเซ็นแล้ว'
         : 'ปพ.5 รายวิชา — เอกสารที่อนุมัติแล้ว'
     }
     return sectionTab === 'pending'
-      ? 'ปพ.5 รวมชั้นเรียน และ ปพ.6 — เอกสารที่รอลงนาม / อนุมัติ'
+      ? 'ปพ.5 รวมชั้นเรียน และ ปพ.6 — เอกสารที่เสนอเซ็นแล้ว'
       : 'ปพ.5 รวมชั้นเรียน และ ปพ.6 — เอกสารที่อนุมัติแล้ว'
   }, [mainTab, sectionTab, trackingView])
 
@@ -198,6 +230,9 @@ export default function DocumentsSignHub() {
             onClick={() => selectMainTab('subject')}
           >
             ปพ.5 รายวิชา
+            {sectionTab === 'pending' && subjectSubmitted.length > 0 && (
+              <span className="documents-sign-tab-count">{subjectSubmitted.length}</span>
+            )}
           </button>
           <button
             type="button"
@@ -205,6 +240,9 @@ export default function DocumentsSignHub() {
             onClick={() => selectMainTab('class_pp6')}
           >
             ปพ.5 รวมชั้น / ปพ.6
+            {sectionTab === 'pending' && classSubmitted.length > 0 && (
+              <span className="documents-sign-tab-count">{classSubmitted.length}</span>
+            )}
           </button>
         </div>
 
@@ -214,7 +252,7 @@ export default function DocumentsSignHub() {
             className={`documents-sign-section-tab${sectionTab === 'pending' ? ' is-active' : ''}`}
             onClick={() => selectSectionTab('pending')}
           >
-            รออนุมัติ
+            เสนอเซ็นแล้ว
           </button>
           <button
             type="button"
@@ -241,11 +279,13 @@ export default function DocumentsSignHub() {
               </p>
             )}
             <ApprovalQueueWithPreview
-              items={subjectItems}
+              items={subjectSubmitted}
               emptyText={
-                trackingView
-                  ? 'ยังไม่มีเอกสารที่เสนอเซ็น — ส่งจากหน้าบันทึกคะแนน'
-                  : 'ไม่มีเอกสารในคิว — ครูผู้สอนส่งจากหน้าบันทึกคะแนน'
+                classSubmitted.length > 0
+                  ? `ยังไม่มีปพ.5 รายวิชา — มีเอกสารที่แท็บ "ปพ.5 รวมชั้น / ปพ.6" ${classSubmitted.length} รายการ`
+                  : trackingView
+                    ? 'ยังไม่มีเอกสารที่เสนอเซ็น — ส่งจากหน้าบันทึกคะแนน'
+                    : 'ยังไม่มีเอกสารที่เสนอเซ็น — ครูผู้สอนส่งจากหน้าบันทึกคะแนน'
               }
               onPutSignature={async item => {
                 const row = item as ReturnType<typeof mapPp5Subject>
@@ -281,11 +321,11 @@ export default function DocumentsSignHub() {
               </p>
             )}
             <ApprovalQueueWithPreview
-              items={classItems}
+              items={classSubmitted}
               emptyText={
-                trackingView
-                  ? 'ยังไม่มีเอกสารที่เสนอเซ็น — ส่งจากหน้ารายงาน'
-                  : 'ไม่มีเอกสาร ปพ.5 รวมชั้น / ปพ.6 ในคิว'
+                subjectSubmitted.length > 0
+                  ? `ยังไม่มีปพ.5 รวมชั้น / ปพ.6 — มีเอกสารที่แท็บ "ปพ.5 รายวิชา" ${subjectSubmitted.length} รายการ`
+                  : 'ยังไม่มีเอกสารที่เสนอเซ็น — ส่งจากหน้ารายงาน'
               }
               onPutSignature={async item => {
                 const row = item as ReturnType<typeof mapClassDoc>

@@ -101,9 +101,8 @@ export default async function DashboardPage() {
     const { fetchSignPendingCounts } = await import('@/app/sign/actions')
     signCounts = await fetchSignPendingCounts()
   }
-  const scopeHref = (href: string) => schoolCode && href.startsWith('/') && !href.startsWith('/district')
-    ? `/school/${schoolCode}${href}`
-    : href
+  const { withSchoolPrefix } = await import('@/lib/school-path')
+  const scopeHref = (href: string) => withSchoolPrefix(schoolCode, href)
 
   return (
     <div className="page-stack">

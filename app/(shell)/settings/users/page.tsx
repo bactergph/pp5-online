@@ -217,10 +217,10 @@ export default function UsersPage() {
             <>
               <span style={{ fontSize: '13px', color: 'var(--text-2)', fontWeight: 600 }}>🔗 ลิงก์เข้าระบบ/สมัครของโรงเรียน (ส่งให้ครู):</span>
               <code style={{ fontSize: '13px', background: 'var(--bg-2)', padding: '4px 10px', borderRadius: '6px' }}>
-                {typeof window !== 'undefined' ? window.location.origin : ''}/school/{schoolCode}/login
+                {typeof window !== 'undefined' ? window.location.origin : ''}/{schoolCode}/login
               </code>
               <button
-                onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/school/${schoolCode}/login`); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/${schoolCode}/login`); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
                 className="btn btn-secondary" style={{ fontSize: '13px' }}>
                 {copied ? 'คัดลอกแล้ว ✓' : 'คัดลอกลิงก์'}
               </button>

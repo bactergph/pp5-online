@@ -2,6 +2,7 @@
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
+import { loadReportDigitalReference } from '@/lib/document-reference'
 import { loadReportDocumentSignatures, type ReportDocumentSignatures } from '@/lib/report-signatures'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
 import {
@@ -185,6 +186,13 @@ export type ReportPayload = {
   readingSettings: ReportReadingSetting[]
   subjectGroupHeads: Record<string, string>
   documentSignatures?: ReportDocumentSignatures
+  /** Digital Reference หลังอนุมัติ — ใช้วาด QR บนปก */
+  digitalReference?: {
+    code: string
+    verifyUrl: string
+    status: string
+    pdfUrl: string | null
+  } | null
 }
 
 type DbRow = Record<string, unknown>
@@ -647,10 +655,17 @@ export async function fetchReportData(params: {
 
   const homeroomIds = [classroomBase.homeroom_teacher_id, classroomBase.homeroom_teacher2_id]
     .filter((id): id is string => Boolean(id))
-  const [subjectGroupHeads, documentSignatures, activitySettings, characterSettings, readingSettings, homeroomTeachers] = await Promise.all([
+  const [subjectGroupHeads, documentSignatures, digitalReference, activitySettings, characterSettings, readingSettings, homeroomTeachers] = await Promise.all([
     loadSubjectGroupHeads(db, schoolId),
     loadReportDocumentSignatures(db, {
       mode: params.mode,
+      classSubjectId: params.classSubjectId,
+      classroomId: params.classroomId,
+      academicYearId: params.academicYearId,
+      term: params.term,
+    }),
+    loadReportDigitalReference({
+      mode: params.mode || 'pp5-subject',
       classSubjectId: params.classSubjectId,
       classroomId: params.classroomId,
       academicYearId: params.academicYearId,
@@ -693,6 +708,7 @@ export async function fetchReportData(params: {
       readingSettings,
       subjectGroupHeads,
       documentSignatures,
+      digitalReference,
       error: null,
     } satisfies ReportPayload
   }
@@ -805,6 +821,7 @@ export async function fetchReportData(params: {
     readingSettings,
     subjectGroupHeads,
     documentSignatures,
+    digitalReference,
     error: null,
   } satisfies ReportPayload
 }

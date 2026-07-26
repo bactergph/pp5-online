@@ -35,7 +35,7 @@ export function isPp5CoverSection(section: Pp5PrintSection): section is Pp5Cover
   return section === 'coverClass' || section === 'coverSubject'
 }
 
-/** ค่า layout หน้าปก */
+/** ค่า layout หน้าปก (รวม knobs ละเอียดสำหรับ jsPDF / HTML) */
 export type Pp5CoverLayout = {
   padTopMm: number
   padSideMm: number
@@ -47,14 +47,35 @@ export type Pp5CoverLayout = {
   fontTableSmallPx: number
   fontSignaturePx: number
   logoSizePx: number
+  logoGapPx: number
+  logoOffsetXPx: number
+  logoOffsetYPx: number
   docMarkTopPx: number
   docMarkRightPx: number
   docMarkFontPx: number
+  docMarkLineGapPx: number
   headerGapPx: number
+  infoTopGapPx: number
+  infoRowPadPx: number
+  infoLineHeight: number
+  checkboxSizePx: number
+  checkboxGapPx: number
   tableTopMm: number
   tableRowHeightPx: number
+  tableCellPadPx: number
+  bannerFontBoostPx: number
+  gradeTotalColPct: number
+  gradeNoteColPct: number
   summaryGapPx: number
+  evalGapPx: number
+  evalFirstColPct: number
+  borderWidthMm: number
+  cellTextNudgeMm: number
   approvalGapPx: number
+  sigBlockGapMm: number
+  sigImageHeightMm: number
+  sigAfterBlocksMm: number
+  sigNameGapMm: number
 }
 
 /** ค่า layout หน้าเนื้อหา */
@@ -100,6 +121,30 @@ const BODY_DEFAULT: Pp5SectionLayout = {
   logoOffsetYPx: 0,
 }
 
+const COVER_FINE_DEFAULT = {
+  logoGapPx: 2,
+  logoOffsetXPx: 0,
+  logoOffsetYPx: 0,
+  docMarkLineGapPx: 16,
+  infoTopGapPx: 10,
+  infoRowPadPx: 2,
+  infoLineHeight: 1.12,
+  checkboxSizePx: 13,
+  checkboxGapPx: 3,
+  tableCellPadPx: 2,
+  bannerFontBoostPx: 6,
+  gradeTotalColPct: 10,
+  gradeNoteColPct: 7,
+  evalGapPx: 8,
+  evalFirstColPct: 36,
+  borderWidthMm: 0.3,
+  cellTextNudgeMm: 0,
+  sigBlockGapMm: 1.5,
+  sigImageHeightMm: 8,
+  sigAfterBlocksMm: 3,
+  sigNameGapMm: 3.5,
+} as const
+
 const COVER_CLASS_DEFAULT: Pp5CoverLayout = {
   padTopMm: 9,
   padSideMm: 10,
@@ -119,6 +164,7 @@ const COVER_CLASS_DEFAULT: Pp5CoverLayout = {
   tableRowHeightPx: 11,
   summaryGapPx: 3,
   approvalGapPx: 5,
+  ...COVER_FINE_DEFAULT,
 }
 
 const COVER_SUBJECT_DEFAULT: Pp5CoverLayout = {
@@ -138,8 +184,9 @@ const COVER_SUBJECT_DEFAULT: Pp5CoverLayout = {
   headerGapPx: 18,
   tableTopMm: 10,
   tableRowHeightPx: 10,
-  summaryGapPx: 3,
+  summaryGapPx: 6,
   approvalGapPx: 4,
+  ...COVER_FINE_DEFAULT,
 }
 
 export const DEFAULT_PP5_SECTION_LAYOUT = BODY_DEFAULT
@@ -229,14 +276,34 @@ export function pp5CoverLayoutToCssVars(layout: Pp5CoverLayout): Record<string, 
     '--pp5-cover-font-table-sm': `${layout.fontTableSmallPx}px`,
     '--pp5-cover-font-signature': `${layout.fontSignaturePx}px`,
     '--pp5-cover-logo-size': `${layout.logoSizePx}px`,
+    '--pp5-cover-logo-gap': `${layout.logoGapPx}px`,
+    '--pp5-cover-logo-offset-x': `${layout.logoOffsetXPx}px`,
+    '--pp5-cover-logo-offset-y': `${layout.logoOffsetYPx}px`,
     '--pp5-cover-doc-mark-top': `${layout.docMarkTopPx}px`,
     '--pp5-cover-doc-mark-right': `${layout.docMarkRightPx}px`,
     '--pp5-cover-doc-mark-font': `${layout.docMarkFontPx}px`,
+    '--pp5-cover-doc-mark-line-gap': `${layout.docMarkLineGapPx}px`,
     '--pp5-cover-header-gap': `${layout.headerGapPx}px`,
+    '--pp5-cover-info-top-gap': `${layout.infoTopGapPx}px`,
+    '--pp5-cover-info-row-pad': `${layout.infoRowPadPx}px`,
+    '--pp5-cover-info-line-height': String(layout.infoLineHeight),
+    '--pp5-cover-checkbox-size': `${layout.checkboxSizePx}px`,
+    '--pp5-cover-checkbox-gap': `${layout.checkboxGapPx}px`,
     '--pp5-cover-table-top': `${layout.tableTopMm}mm`,
     '--pp5-cover-table-row-h': `${layout.tableRowHeightPx}px`,
+    '--pp5-cover-table-cell-pad': `${layout.tableCellPadPx}px`,
+    '--pp5-cover-banner-boost': `${layout.bannerFontBoostPx}px`,
+    '--pp5-cover-grade-total-pct': `${layout.gradeTotalColPct}%`,
+    '--pp5-cover-grade-note-pct': `${layout.gradeNoteColPct}%`,
     '--pp5-cover-summary-gap': `${layout.summaryGapPx}px`,
+    '--pp5-cover-eval-gap': `${layout.evalGapPx}px`,
+    '--pp5-cover-eval-first-pct': `${layout.evalFirstColPct}%`,
+    '--pp5-cover-border-width': `${layout.borderWidthMm}mm`,
     '--pp5-cover-approval-gap': `${layout.approvalGapPx}px`,
+    '--pp5-cover-sig-block-gap': `${layout.sigBlockGapMm}mm`,
+    '--pp5-cover-sig-image-h': `${layout.sigImageHeightMm}mm`,
+    '--pp5-cover-sig-after': `${layout.sigAfterBlocksMm}mm`,
+    '--pp5-cover-sig-name-gap': `${layout.sigNameGapMm}mm`,
   }
 }
 
@@ -416,10 +483,15 @@ export const PP5_COVER_FIELD_KEYS: (keyof Pp5CoverLayout)[] = [
   'padTopMm', 'padSideMm', 'padBottomMm',
   'fontBasePx', 'fontH1Px', 'fontInfoPx',
   'fontTablePx', 'fontTableSmallPx', 'fontSignaturePx',
-  'logoSizePx',
-  'docMarkTopPx', 'docMarkRightPx', 'docMarkFontPx',
-  'headerGapPx', 'tableTopMm', 'tableRowHeightPx',
-  'summaryGapPx', 'approvalGapPx',
+  'logoSizePx', 'logoGapPx', 'logoOffsetXPx', 'logoOffsetYPx',
+  'docMarkTopPx', 'docMarkRightPx', 'docMarkFontPx', 'docMarkLineGapPx',
+  'headerGapPx', 'infoTopGapPx', 'infoRowPadPx', 'infoLineHeight',
+  'checkboxSizePx', 'checkboxGapPx',
+  'tableTopMm', 'tableRowHeightPx', 'tableCellPadPx', 'bannerFontBoostPx',
+  'gradeTotalColPct', 'gradeNoteColPct',
+  'summaryGapPx', 'evalGapPx', 'evalFirstColPct',
+  'borderWidthMm', 'cellTextNudgeMm',
+  'approvalGapPx', 'sigBlockGapMm', 'sigImageHeightMm', 'sigAfterBlocksMm', 'sigNameGapMm',
 ]
 
 export const PP5_COVER_FIELD_LABELS: Record<keyof Pp5CoverLayout, string> = {
@@ -430,17 +502,38 @@ export const PP5_COVER_FIELD_LABELS: Record<keyof Pp5CoverLayout, string> = {
   fontH1Px: 'หัวข้อหลัก',
   fontInfoPx: 'ข้อมูลโรงเรียน/ชั้น',
   fontTablePx: 'ตารางหลัก',
-  fontTableSmallPx: 'ตารางย่อย',
+  fontTableSmallPx: 'ตารางย่อย / สรุป',
   fontSignaturePx: 'ลายเซ็น',
   logoSizePx: 'ขนาดโลโก้',
-  docMarkTopPx: 'ปพ.5 บน',
-  docMarkRightPx: 'ปพ.5 ขวา',
+  logoGapPx: 'ระยะโลโก้→หัวข้อ',
+  logoOffsetXPx: 'เลื่อนโลโก้ซ้าย-ขวา',
+  logoOffsetYPx: 'เลื่อนโลโก้ขึ้น-ลง',
+  docMarkTopPx: 'ปพ.5 จากบน',
+  docMarkRightPx: 'ปพ.5 จากขวา',
   docMarkFontPx: 'ฟอนต์ปพ.5',
-  headerGapPx: 'ระยะใต้หัวข้อ',
-  tableTopMm: 'ระยะก่อนตาราง',
+  docMarkLineGapPx: 'ระยะบรรทัดปพ.5',
+  headerGapPx: 'ระยะใต้หัวข้อหลัก',
+  infoTopGapPx: 'ระยะก่อนแถวข้อมูล',
+  infoRowPadPx: 'padding แถวข้อมูล',
+  infoLineHeight: 'ความสูงบรรทัดข้อมูล',
+  checkboxSizePx: 'ขนาดช่องติ๊ก',
+  checkboxGapPx: 'ระยะช่องติ๊ก',
+  tableTopMm: 'ระยะก่อนตารางเกรด',
   tableRowHeightPx: 'ความสูงแถวตาราง',
-  summaryGapPx: 'ระยะตารางสรุป',
-  approvalGapPx: 'ระยะส่วนลายเซ็น',
+  tableCellPadPx: 'padding เซลล์ตาราง',
+  bannerFontBoostPx: 'ขยายฟอนต์แบนเนอร์',
+  gradeTotalColPct: 'คอลัมน์จำนวนนักเรียน %',
+  gradeNoteColPct: 'คอลัมน์หมายเหตุ %',
+  summaryGapPx: 'ระยะแนวตั้งก่อนสรุปคู่',
+  evalGapPx: 'ช่องว่างระหว่างกล่องสรุป',
+  evalFirstColPct: 'คอลัมน์แรกกล่องสรุป %',
+  borderWidthMm: 'ความหนาเส้นตาราง',
+  cellTextNudgeMm: 'เลื่อนข้อความในเซลล์',
+  approvalGapPx: 'ระยะก่อนลายเซ็น',
+  sigBlockGapMm: 'ช่องว่างระหว่างบล็อกลายเซ็น',
+  sigImageHeightMm: 'ความสูงรูปลายเซ็น',
+  sigAfterBlocksMm: 'ระยะหลังบล็อกลายเซ็น',
+  sigNameGapMm: 'ระยะชื่อใต้ลายเซ็น',
 }
 
 /** ฟิลด์ที่แต่ละส่วนปรับได้ */

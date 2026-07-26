@@ -2235,12 +2235,21 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
   min-width: 0;
 }
 
-.sidebar-user-name,
-.navbar-user-name {
+.sidebar-user-name {
   overflow: hidden;
   color: #FFF8E7;
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navbar-user-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2719,11 +2728,41 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
 }
 
 .sidebar-footer {
-  padding: 12px 12px;
+  padding: 10px 12px 12px;
   border-top: 1px solid rgba(184, 149, 106, 0.2);
-  color: #A8947C;
-  font-size: 10.5px;
+}
+
+.sidebar-logout-form {
+  margin: 0;
+}
+
+.sidebar-logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  border-radius: 12px;
+  color: #FECACA;
+  background: rgba(127, 29, 29, 0.35);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
   font-weight: 800;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-logout:hover {
+  color: #FFF1F2;
+  border-color: rgba(252, 165, 165, 0.45);
+  background: rgba(153, 27, 27, 0.55);
+}
+
+.sidebar-logout:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .sidebar-overlay {
@@ -2744,7 +2783,7 @@ select.form-input, select.input { cursor: pointer; appearance: none; }
   width: 100%;
   max-width: 100%;
   height: calc(var(--navbar-h) + env(safe-area-inset-top, 0px));
-  z-index: 40;
+  z-index: 60;
   background: rgba(255, 255, 255, 0.86);
   border-bottom: 1px solid rgba(226, 232, 240, 0.84);
   display: flex;
@@ -8820,6 +8859,26 @@ body.staff-picker-menu-open .school-save-bar {
   margin-bottom: 12px;
 }
 
+.documents-sign-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(107, 79, 50, 0.14);
+  color: #6B4F32;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.score-entry-tab.is-active .documents-sign-tab-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+}
+
 .documents-sign-section-tabs {
   display: inline-flex;
   gap: 6px;
@@ -8894,18 +8953,92 @@ body.staff-picker-menu-open .school-save-bar {
 
 .document-sign-card__top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.document-sign-card__status-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.document-sign-card__order {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(107, 79, 50, 0.1);
+  color: #6B4F32;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
 }
 
 .document-sign-card__status {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 800;
+  line-height: 1.3;
+}
+
+.document-sign-card__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.document-sign-card__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  color: #94a3b8;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.document-sign-card__step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.document-sign-card__step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-sign-card__step--done {
+  color: #166534;
+}
+
+.document-sign-card__step--current {
+  color: #6B4F32;
+  font-weight: 900;
+}
+
+.document-sign-card__step--upcoming {
+  color: #94a3b8;
+}
+
+.document-sign-card__step--skipped {
+  color: #cbd5e1;
+  text-decoration: line-through;
 }
 
 .document-sign-card__status--success {

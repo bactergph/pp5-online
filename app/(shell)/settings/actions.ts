@@ -242,6 +242,10 @@ export async function saveSchool(id: string | null, payload: Record<string, stri
   if (payload.code != null && String(payload.code).trim() !== '') {
     const code = String(payload.code).trim().toLowerCase()
     if (!/^[a-z0-9-]+$/.test(code)) return { error: 'รหัสโรงเรียนใช้ได้เฉพาะ a-z 0-9 - (ห้ามเว้นวรรค/ภาษาไทย)' }
+    const { isReservedSchoolPathSegment } = await import('@/lib/school-path')
+    if (isReservedSchoolPathSegment(code)) {
+      return { error: 'รหัสนี้ใช้เป็นชื่อเมนูระบบไม่ได้ เลือกรหัสอื่น' }
+    }
     const { data: ex } = await db.from('schools').select('id').ilike('code', code)
       .neq('id', id || '00000000-0000-0000-0000-000000000000').maybeSingle()
     if (ex) return { error: 'รหัสนี้ถูกใช้แล้ว เลือกรหัสอื่น' }
@@ -262,8 +266,15 @@ export async function saveSchool(id: string | null, payload: Record<string, stri
     }
     if (!error) {
       const nextCode = (payload.code ? String(payload.code) : previousCode) || null
-      if (previousCode) revalidatePath(`/school/${previousCode}/login`)
-      if (nextCode && nextCode !== previousCode) revalidatePath(`/school/${nextCode}/login`)
+      const { schoolLoginPath, schoolLoginPhysicalPath } = await import('@/lib/school-path')
+      if (previousCode) {
+        revalidatePath(schoolLoginPhysicalPath(previousCode))
+        revalidatePath(schoolLoginPath(previousCode))
+      }
+      if (nextCode && nextCode !== previousCode) {
+        revalidatePath(schoolLoginPhysicalPath(nextCode))
+        revalidatePath(schoolLoginPath(nextCode))
+      }
       await logActivity({
         actor: session,
         schoolId: id,

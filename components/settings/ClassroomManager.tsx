@@ -76,6 +76,16 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
     else if (years.length === 0) setYearBeInput(defaultYearBe())
   }, [isHomeroom, selectedYear, years])
 
+  // พิมพ์ปี พ.ศ. ครบ 4 หลักแล้วตรงกับปีที่มี → เลือกปีนั้นให้อัตโนมัติ
+  useEffect(() => {
+    if (isHomeroom || yearBeInput.length !== 4) return
+    const match = years.find(y => String(y.year_be) === yearBeInput)
+    if (match && match.id !== selectedYear) {
+      skipYearFetch.current = false
+      setSelectedYear(match.id)
+    }
+  }, [isHomeroom, yearBeInput, years, selectedYear])
+
   // sync กริดชั้นจากห้องที่มีจริงของปีที่เลือก
   useEffect(() => {
     if (isHomeroom) return

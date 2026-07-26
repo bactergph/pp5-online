@@ -69,7 +69,10 @@ export async function completeForcedPasswordChange(
   if (session.schoolId && session.role !== 'district') {
     const { data: school } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()
     const code = school?.code ? String(school.code).trim().toLowerCase() : ''
-    if (code) redirectTo = `/school/${code}/dashboard`
+    if (code) {
+      const { schoolDashboardPath } = await import('@/lib/school-path')
+      redirectTo = schoolDashboardPath(code)
+    }
   }
 
   redirect(redirectTo)

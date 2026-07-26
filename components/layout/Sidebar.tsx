@@ -1,7 +1,9 @@
 'use client'
 import Link from 'next/link'
+import { useFormStatus } from 'react-dom'
 import { ROLE_LABELS } from '@/lib/roles'
 import { defaultSidebarIcon, normalizeSidebarTone, type SidebarTone } from '@/lib/sidebar-tones'
+import { logout } from '@/lib/actions/auth'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
@@ -294,6 +296,7 @@ const EXPORT_FULL: NavItem = {
     { href: '/export/name-list',       label: 'รายชื่อนักเรียน', icon: ic(I.users) },
     { href: '/export/classroom-admin', label: 'ธุรการชั้นเรียน', icon: ic(I.grid) },
     { href: '/export/schedules',       label: 'ตารางเรียน/สอน', icon: ic(I.calendar) },
+    { href: '/export/qr-code',         label: 'QR-Code', icon: ic(I.grid) },
   ],
 }
 const DOCUMENTS_SIGN_NAV: NavItem = {
@@ -549,7 +552,7 @@ export default function Sidebar({
   }, [pathname])
 
   const sections = buildNav(navRole, isHomeroom)
-  const schoolPrefix = schoolCode && userRole !== 'district' ? `/school/${schoolCode}` : ''
+  const schoolPrefix = schoolCode && userRole !== 'district' ? `/${schoolCode}` : ''
   const scopedHref = (href: string) => {
     if (!schoolPrefix || !href.startsWith('/') || href.startsWith('/district')) return href
     return `${schoolPrefix}${href}`
@@ -706,9 +709,23 @@ export default function Sidebar({
 
       {/* Footer */}
       <div className="sidebar-footer">
-        <div>พร้อมใช้งานระบบเอกสาร</div>
+        <form action={logout} className="sidebar-logout-form">
+          <SidebarLogoutButton />
+        </form>
       </div>
     </aside>
+  )
+}
+
+function SidebarLogoutButton() {
+  const { pending } = useFormStatus()
+  return (
+    <button type="submit" className="sidebar-logout" disabled={pending} aria-busy={pending}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4 M16 17l5-5-5-5 M21 12H9" />
+      </svg>
+      {pending ? 'กำลังออก...' : 'ออกจากระบบ'}
+    </button>
   )
 }
 

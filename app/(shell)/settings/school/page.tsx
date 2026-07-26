@@ -689,7 +689,7 @@ export default function SchoolSettingsPage() {
                     <div>
                       <label className="form-label">URL โรงเรียน *</label>
                       <input name="code" defaultValue={school.code || ''} className="form-input" placeholder="เช่น bannong" pattern="[a-z0-9-]+" />
-                      <p className="field-hint">ใช้ a-z, 0-9 และ - เท่านั้น · เป็นส่วนท้ายของลิงก์ /school/.../login</p>
+                      <p className="field-hint">ใช้ a-z, 0-9 และ - เท่านั้น · เป็นส่วนท้ายของลิงก์ /.../login</p>
                     </div>
                     <div>
                       <label className="form-label">ชื่อโปรแกรม</label>
@@ -704,7 +704,7 @@ export default function SchoolSettingsPage() {
                   {school.code && (
                     <div className="school-login-link">
                       <span>ลิงก์เข้าระบบ</span>
-                      <code>{typeof window !== 'undefined' ? window.location.origin : ''}/school/{school.code}/login</code>
+                      <code>{typeof window !== 'undefined' ? window.location.origin : ''}/{school.code}/login</code>
                     </div>
                   )}
                 </form>
@@ -749,7 +749,7 @@ export default function SchoolSettingsPage() {
               {step === 8 && (() => {
                 const origin = typeof window !== 'undefined' ? window.location.origin : ''
                 const schoolLoginUrl = school.code
-                  ? `${origin}/school/${String(school.code).trim().toLowerCase()}/login`
+                  ? `${origin}/${String(school.code).trim().toLowerCase()}/login`
                   : null
                 const hasText = (v: unknown) => Boolean(String(v || '').trim())
                 const generalOk = hasText(school.name) && (
@@ -776,7 +776,7 @@ export default function SchoolSettingsPage() {
                   {
                     label: 'หน้า login โรงเรียน',
                     ok: hasText(school.code),
-                    detail: school.code ? `/school/${school.code}/login` : 'ยังไม่ได้ตั้ง URL',
+                    detail: school.code ? `/${school.code}/login` : 'ยังไม่ได้ตั้ง URL',
                   },
                   {
                     label: 'โลโก้และตรา',
@@ -919,7 +919,7 @@ export default function SchoolSettingsPage() {
         <div className="school-settings-tab-card">
           <div className="school-settings-toolbar">
             <div className="school-settings-header-actions">
-              {school.code && <span className="badge badge-success school-settings-code">/school/{school.code}</span>}
+              {school.code && <span className="badge badge-success school-settings-code">/{school.code}</span>}
               <button
                 type="button"
                 onClick={() => { setReselect(true); setCreateMode(false); setQ(''); setResults([]) }}
@@ -1177,7 +1177,7 @@ export default function SchoolSettingsPage() {
                 <div>
                   <label className="form-label">URL โรงเรียน *</label>
                   <input name="code" defaultValue={school.code || ''} className="form-input" placeholder="เช่น bannong" pattern="[a-z0-9-]+" />
-                  <p className="field-hint">ใช้ a-z, 0-9 และ - เท่านั้น · เป็นส่วนท้ายของลิงก์ /school/.../login</p>
+                  <p className="field-hint">ใช้ a-z, 0-9 และ - เท่านั้น · เป็นส่วนท้ายของลิงก์ /.../login</p>
                 </div>
                 <div>
                   <label className="form-label">ชื่อโปรแกรม</label>
@@ -1192,7 +1192,7 @@ export default function SchoolSettingsPage() {
               {school.code && (
                 <div className="school-login-link">
                   <span>ลิงก์เข้าระบบ</span>
-                  <code>{typeof window !== 'undefined' ? window.location.origin : ''}/school/{school.code}/login</code>
+                  <code>{typeof window !== 'undefined' ? window.location.origin : ''}/{school.code}/login</code>
                 </div>
               )}
           </section>

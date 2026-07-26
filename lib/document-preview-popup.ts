@@ -1,3 +1,5 @@
+import { schoolCodeFromPathname, withSchoolPrefix } from '@/lib/school-path'
+
 const POPUP_NAME = 'pp5-document-preview'
 const POPUP_FEATURES = 'popup=yes,width=1000,height=720,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes'
 
@@ -5,9 +7,10 @@ let activePopup: Window | null = null
 
 export function scopeDocumentPreviewPath(path: string) {
   if (typeof window === 'undefined') return path
-  const match = window.location.pathname.match(/^\/school\/([^/]+)/)
-  if (!match || !path.startsWith('/')) return path
-  return `/school/${match[1]}${path}`
+  if (!path.startsWith('/')) return path
+  const code = schoolCodeFromPathname(window.location.pathname)
+  if (!code) return path
+  return withSchoolPrefix(code, path)
 }
 
 export function resolveDocumentPreviewUrl(path: string) {

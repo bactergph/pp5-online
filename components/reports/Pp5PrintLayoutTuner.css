@@ -14,7 +14,6 @@
   overflow: hidden;
   color: #0f172a;
   font-size: 13px;
-  touch-action: none;
   font-family: inherit;
 }
 
@@ -32,6 +31,7 @@
   background: linear-gradient(135deg, #1e3a8a 0%, #8B6B45 55%, #3b82f6 100%);
   color: #eff6ff;
   cursor: grab;
+  touch-action: none;
 }
 
 .layout-tuner.is-dragging .layout-tuner-header {

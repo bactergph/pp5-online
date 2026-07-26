@@ -1,5 +1,6 @@
 import 'server-only'
 import { createServerClient } from '@/lib/supabase'
+import { ensureDocumentReference } from '@/lib/document-reference'
 import { encrypt, type SessionPayload } from '@/lib/session'
 import { generateReportPdf, appOrigin } from '@/lib/pdf/generate-report-pdf'
 import { uploadPdfToDrive } from '@/lib/google-drive'
@@ -85,6 +86,8 @@ export async function archiveApprovedPp5Subject(params: {
   }).select('id').single()
 
   if (error || !row?.id) return
+  // สร้างรหัส Digital Reference ก่อนเรนเดอร์ PDF เพื่อให้หน้าปกมี QR จริง
+  await ensureDocumentReference({ schoolId: params.schoolId, exportId: row.id })
   await generateAndStoreApprovedDocument({
     exportId: row.id,
     actor: params.actor,
@@ -156,6 +159,7 @@ export async function archiveApprovedClassDocument(params: {
   }).select('id').single()
 
   if (error || !row?.id) return
+  await ensureDocumentReference({ schoolId: params.schoolId, exportId: row.id })
   await generateAndStoreApprovedDocument({
     exportId: row.id,
     actor: params.actor,

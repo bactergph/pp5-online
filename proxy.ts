@@ -2,9 +2,18 @@
 // ใช้ Optimistic Check: ตรวจแค่ว่ามี cookie อยู่ไหม ไม่ decrypt (เร็วกว่า)
 // การ verify จริงๆ ทำที่ verifySession() ใน dal.ts แต่ละ page
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  isSchoolCodeSegment,
+  normalizeSchoolCode,
+  schoolDashboardPath,
+  schoolLoginPath,
+  schoolLoginPhysicalPath,
+} from '@/lib/school-path'
 
 // Routes สาธารณะ (ไม่ต้อง login) — ถ้ามี session แล้วจะเด้งไป dashboard
 const publicRoutes = ['/login', '/forgot-password', '/register']
+/** เข้าได้โดยไม่ login และไม่เด้งไป dashboard แม้มี session */
+const openRoutes = ['/v']
 
 // Routes ที่ต้องการ login
 const protectedPrefixes = [
@@ -33,7 +42,7 @@ const LEGACY_SIGN_REDIRECTS: Record<string, string> = {
 function legacySignRedirect(req: NextRequest, target: string, schoolCode?: string) {
   const [basePath, queryString] = target.split('?')
   const url = req.nextUrl.clone()
-  url.pathname = schoolCode ? `/school/${schoolCode}${basePath}` : basePath
+  url.pathname = schoolCode ? `/${normalizeSchoolCode(schoolCode)}${basePath}` : basePath
   url.search = queryString ? `?${queryString}` : ''
   return NextResponse.redirect(url, 308)
 }
@@ -42,47 +51,67 @@ function matchLegacySignRedirect(pathWithoutLeadingSlash: string) {
   return LEGACY_SIGN_REDIRECTS[pathWithoutLeadingSlash] ?? null
 }
 
+function handleSchoolScopedPath(req: NextRequest, codeRaw: string, schoolPath: string, hasSession: boolean) {
+  const code = normalizeSchoolCode(codeRaw)
+
+  if (!schoolPath) {
+    return NextResponse.redirect(
+      new URL(hasSession ? schoolDashboardPath(code) : schoolLoginPath(code), req.nextUrl),
+    )
+  }
+
+  if (schoolPath === 'login') {
+    // แสดงหน้า login ของโรงเรียนเสมอ — rewrite ไปไฟล์เดิมใต้ app/school/[code]/login
+    const url = req.nextUrl.clone()
+    url.pathname = schoolLoginPhysicalPath(code)
+    return NextResponse.rewrite(url)
+  }
+
+  if (!hasSession) {
+    return NextResponse.redirect(new URL(schoolLoginPath(code), req.nextUrl))
+  }
+
+  const legacyTarget = matchLegacySignRedirect(schoolPath)
+  if (legacyTarget) {
+    return legacySignRedirect(req, legacyTarget, code)
+  }
+
+  const url = req.nextUrl.clone()
+  url.pathname = `/${schoolPath}`
+  return NextResponse.rewrite(url)
+}
+
 export default function proxy(req: NextRequest) {
   const path = req.nextUrl.pathname
   const parts = path.split('/').filter(Boolean)
   const hasSession = req.cookies.has('session')
 
-  if (parts[0] === 'school') {
-    const code = parts[1]
-    const schoolPath = parts.slice(2).join('/')
-
-    if (!code) return NextResponse.next()
-
-    if (!schoolPath) {
-      return NextResponse.redirect(new URL(hasSession ? `/school/${code}/dashboard` : `/school/${code}/login`, req.nextUrl))
-    }
-
-    if (schoolPath === 'login') {
-      // แสดงหน้า login ของโรงเรียนเสมอ — ลิงก์แชร์จาก Line/บราวเซอร์อื่นต้องเข้าได้
-      // อย่าเด้งไป /dashboard เมื่อมี cookie session ค้าง (หมดอายุแล้วจะถูกส่งต่อไป /login หลัก)
-      return NextResponse.next()
-    }
-
-    if (!hasSession) {
-      return NextResponse.redirect(new URL(`/school/${code}/login`, req.nextUrl))
-    }
-
-    const legacyTarget = matchLegacySignRedirect(schoolPath)
-    if (legacyTarget) {
-      return legacySignRedirect(req, legacyTarget, code)
-    }
-
+  // Legacy /school/{code}/... → /{code}/...
+  if (parts[0] === 'school' && parts[1] && isSchoolCodeSegment(parts[1])) {
+    const code = normalizeSchoolCode(parts[1])
+    const rest = parts.slice(2).join('/')
     const url = req.nextUrl.clone()
-    url.pathname = `/${schoolPath}`
-    return NextResponse.rewrite(url)
+    url.pathname = rest ? `/${code}/${rest}` : `/${code}`
+    return NextResponse.redirect(url, 308)
+  }
+
+  // New /{code}/... school-scoped URLs
+  if (parts[0] && isSchoolCodeSegment(parts[0])) {
+    return handleSchoolScopedPath(req, parts[0], parts.slice(1).join('/'), hasSession)
   }
 
   const isPublicRoute = publicRoutes.some(r => path === r || path.startsWith(r + '/'))
+  const isOpenRoute = openRoutes.some(r => path === r || path.startsWith(r + '/'))
   const isProtectedRoute = protectedPrefixes.some(r => path === r || path.startsWith(r + '/'))
 
   const legacyTarget = matchLegacySignRedirect(path.slice(1))
   if (legacyTarget) {
     return legacySignRedirect(req, legacyTarget)
+  }
+
+  // หน้าตรวจเอกสารสาธารณะ — ผ่านได้เสมอ
+  if (isOpenRoute) {
+    return NextResponse.next()
   }
 
   // ถ้าเป็น protected route และไม่มี session cookie → ไป login

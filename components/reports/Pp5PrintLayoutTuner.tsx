@@ -31,25 +31,46 @@ const PANEL_POS_KEY = 'pp-print-tuner-pos-v1'
 
 type PanelPos = { x: number; y: number }
 
-const COVER_FIELD_META: Record<keyof Pp5CoverLayout, { unit: 'mm' | 'px'; min: number; max: number; step: number; group: string }> = {
-  padTopMm: { unit: 'mm', min: 3, max: 40, step: 0.5, group: 'ระยะขอบ' },
-  padSideMm: { unit: 'mm', min: 3, max: 30, step: 0.5, group: 'ระยะขอบ' },
-  padBottomMm: { unit: 'mm', min: 3, max: 30, step: 0.5, group: 'ระยะขอบ' },
-  fontBasePx: { unit: 'px', min: 12, max: 28, step: 1, group: 'ฟอนต์' },
-  fontH1Px: { unit: 'px', min: 18, max: 40, step: 1, group: 'ฟอนต์' },
-  fontInfoPx: { unit: 'px', min: 12, max: 24, step: 1, group: 'ฟอนต์' },
-  fontTablePx: { unit: 'px', min: 10, max: 24, step: 1, group: 'ฟอนต์' },
-  fontTableSmallPx: { unit: 'px', min: 9, max: 20, step: 1, group: 'ฟอนต์' },
-  fontSignaturePx: { unit: 'px', min: 10, max: 22, step: 1, group: 'ฟอนต์' },
-  logoSizePx: { unit: 'px', min: 48, max: 120, step: 1, group: 'โลโก้ & ปพ.' },
-  docMarkTopPx: { unit: 'px', min: 8, max: 80, step: 1, group: 'โลโก้ & ปพ.' },
-  docMarkRightPx: { unit: 'px', min: 8, max: 80, step: 1, group: 'โลโก้ & ปพ.' },
-  docMarkFontPx: { unit: 'px', min: 14, max: 32, step: 1, group: 'โลโก้ & ปพ.' },
-  headerGapPx: { unit: 'px', min: 0, max: 40, step: 1, group: 'ตาราง & ระยะ' },
-  tableTopMm: { unit: 'mm', min: 0, max: 15, step: 0.5, group: 'ตาราง & ระยะ' },
-  tableRowHeightPx: { unit: 'px', min: 0, max: 24, step: 1, group: 'ตาราง & ระยะ' },
-  summaryGapPx: { unit: 'px', min: 0, max: 20, step: 1, group: 'ตาราง & ระยะ' },
-  approvalGapPx: { unit: 'px', min: 0, max: 24, step: 1, group: 'ตาราง & ระยะ' },
+const COVER_FIELD_META: Record<keyof Pp5CoverLayout, { unit: 'mm' | 'px' | 'pct' | 'x'; min: number; max: number; step: number; group: string }> = {
+  padTopMm: { unit: 'mm', min: 2, max: 40, step: 0.1, group: 'ระยะขอบ' },
+  padSideMm: { unit: 'mm', min: 2, max: 30, step: 0.1, group: 'ระยะขอบ' },
+  padBottomMm: { unit: 'mm', min: 2, max: 30, step: 0.1, group: 'ระยะขอบ' },
+  fontBasePx: { unit: 'px', min: 12, max: 28, step: 0.5, group: 'ฟอนต์' },
+  fontH1Px: { unit: 'px', min: 18, max: 42, step: 0.5, group: 'ฟอนต์' },
+  fontInfoPx: { unit: 'px', min: 11, max: 26, step: 0.5, group: 'ฟอนต์' },
+  fontTablePx: { unit: 'px', min: 9, max: 24, step: 0.5, group: 'ฟอนต์' },
+  fontTableSmallPx: { unit: 'px', min: 8, max: 20, step: 0.5, group: 'ฟอนต์' },
+  fontSignaturePx: { unit: 'px', min: 10, max: 24, step: 0.5, group: 'ฟอนต์' },
+  logoSizePx: { unit: 'px', min: 40, max: 140, step: 1, group: 'โลโก้' },
+  logoGapPx: { unit: 'px', min: 0, max: 40, step: 0.5, group: 'โลโก้' },
+  logoOffsetXPx: { unit: 'px', min: -60, max: 60, step: 1, group: 'โลโก้' },
+  logoOffsetYPx: { unit: 'px', min: -40, max: 40, step: 1, group: 'โลโก้' },
+  docMarkTopPx: { unit: 'px', min: 0, max: 90, step: 0.5, group: 'ปพ.5 มุมขวา' },
+  docMarkRightPx: { unit: 'px', min: 0, max: 90, step: 0.5, group: 'ปพ.5 มุมขวา' },
+  docMarkFontPx: { unit: 'px', min: 12, max: 34, step: 0.5, group: 'ปพ.5 มุมขวา' },
+  docMarkLineGapPx: { unit: 'px', min: 8, max: 28, step: 0.5, group: 'ปพ.5 มุมขวา' },
+  headerGapPx: { unit: 'px', min: 0, max: 48, step: 0.5, group: 'แถวข้อมูล' },
+  infoTopGapPx: { unit: 'px', min: 0, max: 32, step: 0.5, group: 'แถวข้อมูล' },
+  infoRowPadPx: { unit: 'px', min: 0, max: 12, step: 0.5, group: 'แถวข้อมูล' },
+  infoLineHeight: { unit: 'x', min: 0.8, max: 1.8, step: 0.01, group: 'แถวข้อมูล' },
+  checkboxSizePx: { unit: 'px', min: 6, max: 16, step: 0.5, group: 'แถวข้อมูล' },
+  checkboxGapPx: { unit: 'px', min: 0, max: 12, step: 0.5, group: 'แถวข้อมูล' },
+  tableTopMm: { unit: 'mm', min: 0, max: 20, step: 0.1, group: 'ตารางเกรด' },
+  tableRowHeightPx: { unit: 'px', min: 0, max: 28, step: 0.5, group: 'ตารางเกรด' },
+  tableCellPadPx: { unit: 'px', min: 0, max: 8, step: 0.5, group: 'ตารางเกรด' },
+  bannerFontBoostPx: { unit: 'px', min: 0, max: 14, step: 0.5, group: 'ตารางเกรด' },
+  gradeTotalColPct: { unit: 'pct', min: 6, max: 18, step: 0.5, group: 'ตารางเกรด' },
+  gradeNoteColPct: { unit: 'pct', min: 4, max: 14, step: 0.5, group: 'ตารางเกรด' },
+  borderWidthMm: { unit: 'mm', min: 0.1, max: 1.2, step: 0.05, group: 'ตารางเกรด' },
+  cellTextNudgeMm: { unit: 'mm', min: -2, max: 2, step: 0.05, group: 'ตารางเกรด' },
+  summaryGapPx: { unit: 'px', min: 0, max: 24, step: 0.5, group: 'กล่องสรุปคู่' },
+  evalGapPx: { unit: 'px', min: 0, max: 24, step: 0.5, group: 'กล่องสรุปคู่' },
+  evalFirstColPct: { unit: 'pct', min: 24, max: 48, step: 0.5, group: 'กล่องสรุปคู่' },
+  approvalGapPx: { unit: 'px', min: 0, max: 32, step: 0.5, group: 'ลายเซ็น' },
+  sigBlockGapMm: { unit: 'mm', min: 0, max: 6, step: 0.1, group: 'ลายเซ็น' },
+  sigImageHeightMm: { unit: 'mm', min: 4, max: 16, step: 0.1, group: 'ลายเซ็น' },
+  sigAfterBlocksMm: { unit: 'mm', min: 0, max: 36, step: 0.2, group: 'ลายเซ็น' },
+  sigNameGapMm: { unit: 'mm', min: 0, max: 10, step: 0.1, group: 'ลายเซ็น' },
 }
 
 const BODY_FIELD_META: Record<keyof Pp5SectionLayout, { unit: 'mm' | 'px' | 'rows'; min: number; max: number; step: number; group: string }> = {
@@ -241,6 +262,10 @@ type Pp5Props = {
   onChange: (layouts: Pp5PrintLayouts) => void
   onSave: () => void
   saved: boolean
+  /** ชื่อแผง (เช่น แยกเมนูพรีวิว HTML / PDF) */
+  panelTitle?: string
+  panelSubtitle?: string
+  panelBadge?: string
 }
 
 type Pp6Props = {
@@ -260,10 +285,20 @@ const TUNER_CATEGORY_META: Record<string, { icon: string; description: string }>
   'หัวกระดาษ': { icon: '≡', description: 'ระยะบรรทัดหัวกระดาษ' },
   'ฟอนต์': { icon: 'Aa', description: 'ขนาดตัวอักษรและหัวข้อ' },
   'โลโก้': { icon: '◇', description: 'ตำแหน่งและขนาดโลโก้' },
+  'ปพ.5 มุมขวา': { icon: '↗', description: 'ตำแหน่งและฟอนต์ปพ.5' },
+  'แถวข้อมูล': { icon: '☰', description: 'เส้นคั่น / ช่องติ๊ก / ระยะแถว' },
+  'ตารางเกรด': { icon: '▤', description: 'สรุปผลการเรียนละเอียด' },
+  'กล่องสรุปคู่': { icon: '▥', description: 'คุณลักษณะ / อ่านคิดวิเคราะห์' },
+  'ลายเซ็น': { icon: '✎', description: 'บล็อกลงชื่อและอนุมัติ' },
   'ตาราง': { icon: '▤', description: 'ความสูงแถวและจำนวนแถว' },
   'โลโก้ & ปพ.': { icon: '◇', description: 'โลโก้และเลข ปพ.5' },
   'ตาราง & ระยะ': { icon: '▤', description: 'ระยะห่างและตารางหน้าปก' },
   'ระยะส่วน': { icon: '↕', description: 'ระยะห่างระหว่างส่วน' },
+  'ตารางคะแนน': { icon: '▤', description: 'ตารางคะแนน ปพ.6' },
+  'บรรทัดนักเรียน': { icon: '≡', description: 'บรรทัดข้อมูลนักเรียน' },
+  'อันดับ & หมายเหตุ': { icon: '※', description: 'อันดับและหมายเหตุ' },
+  'กิจกรรม': { icon: '◎', description: 'ตารางกิจกรรม' },
+  'สรุป & ลายเซ็น': { icon: '✎', description: 'สรุปผลและลายเซ็น' },
 }
 
 export function groupFields<K extends string>(
@@ -542,6 +577,9 @@ function Pp5Tuner({
   onChange,
   onSave,
   saved,
+  panelTitle,
+  panelSubtitle,
+  panelBadge,
   copied,
   setCopied,
 }: Pp5Props & { copied: boolean; setCopied: (v: boolean) => void }) {
@@ -590,13 +628,16 @@ function Pp5Tuner({
 
   const activeGroup = fieldGroups.find(group => group.title === activeCategory) || fieldGroups[0]
   const bodyLayout = layout as Pp5SectionLayout
-  const showLogoPad = !isCover && activeSection === 'achievement' && activeCategory === 'โลโก้'
+  const coverLayout = layout as Pp5CoverLayout
+  const showLogoPad =
+    (isCover && activeCategory === 'โลโก้')
+    || (!isCover && activeSection === 'achievement' && activeCategory === 'โลโก้')
 
   return (
     <TunerShell
-      badge="PP5"
-      title="ปรับ Layout"
-      subtitle="เลือกส่วน → เลือกหมวด → ปรับค่า"
+      badge={panelBadge || 'PP5'}
+      title={panelTitle || 'ปรับ Layout'}
+      subtitle={panelSubtitle || 'เลือกส่วน → เลือกหมวด → ปรับละเอียด'}
       open={open}
       onClose={onClose}
       onReset={resetSection}
@@ -621,7 +662,7 @@ function Pp5Tuner({
 
       {activeGroup && (
         <div className="lt-step-card">
-          <span className="lt-step-label">2. เลือกหมวด · 3. ปรับค่า</span>
+          <span className="lt-step-label">2. เลือกหมวด · 3. ปรับละเอียด</span>
           <div className="lt-workspace">
             <CategoryPicker
               categories={categories}
@@ -636,38 +677,45 @@ function Pp5Tuner({
               <div className="lt-panel-body">
                 {showLogoPad && (
                   <LogoPositionPad
-                    offsetX={bodyLayout.logoOffsetXPx}
-                    offsetY={bodyLayout.logoOffsetYPx}
-                    sizePx={bodyLayout.logoSizePx}
+                    offsetX={isCover ? coverLayout.logoOffsetXPx : bodyLayout.logoOffsetXPx}
+                    offsetY={isCover ? coverLayout.logoOffsetYPx : bodyLayout.logoOffsetYPx}
+                    sizePx={isCover ? coverLayout.logoSizePx : bodyLayout.logoSizePx}
                     onOffsetChange={(x, y) => {
-                      onChange({
-                        ...layouts,
-                        [activeSection]: { ...(layouts[activeSection] as Pp5SectionLayout), logoOffsetXPx: x, logoOffsetYPx: y },
-                      })
+                      if (isCover) {
+                        onChange({
+                          ...layouts,
+                          [activeSection]: { ...layouts[activeSection], logoOffsetXPx: x, logoOffsetYPx: y },
+                        })
+                      } else {
+                        onChange({
+                          ...layouts,
+                          [activeSection]: { ...(layouts[activeSection] as Pp5SectionLayout), logoOffsetXPx: x, logoOffsetYPx: y },
+                        })
+                      }
                     }}
                   />
                 )}
-                {activeGroup.keys.map(key => (
-                  isCover ? (
+                {isCover
+                  ? (activeGroup.keys as (keyof Pp5CoverLayout)[]).map(key => (
                     <FieldSlider
                       key={key}
                       fieldKey={key}
-                      label={PP5_COVER_FIELD_LABELS[key as keyof Pp5CoverLayout]}
-                      value={(layout as Pp5CoverLayout)[key as keyof Pp5CoverLayout]}
-                      meta={COVER_FIELD_META[key as keyof Pp5CoverLayout]}
+                      label={PP5_COVER_FIELD_LABELS[key]}
+                      value={coverLayout[key]}
+                      meta={COVER_FIELD_META[key]}
                       onChange={setCoverField}
                     />
-                  ) : (
+                  ))
+                  : (activeGroup.keys as (keyof Pp5SectionLayout)[]).map(key => (
                     <FieldSlider
                       key={key}
                       fieldKey={key}
-                      label={PP5_SECTION_FIELD_LABELS[key as keyof Pp5SectionLayout]}
-                      value={bodyLayout[key] as number}
-                      meta={BODY_FIELD_META[key as keyof Pp5SectionLayout]}
+                      label={PP5_SECTION_FIELD_LABELS[key]}
+                      value={bodyLayout[key]}
+                      meta={BODY_FIELD_META[key]}
                       onChange={setBodyField}
                     />
-                  )
-                ))}
+                  ))}
               </div>
             </div>
           </div>

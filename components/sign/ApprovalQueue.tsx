@@ -2,7 +2,11 @@
 
 import { openDocumentPreviewPopup } from '@/lib/document-preview-popup'
 import { buildDocumentPreviewShellUrl } from '@/lib/sign-document-preview'
-import { documentSignCardStatus } from '@/lib/document-sign-card-status'
+import {
+  documentSignCardStatus,
+  documentSignCardStepMeta,
+  type DocumentSignWorkflowStep,
+} from '@/lib/document-sign-card-status'
 import type { SignDocumentPreviewTarget } from '@/lib/sign-document-preview'
 
 export type ApprovalQueueItem = {
@@ -14,6 +18,7 @@ export type ApprovalQueueItem = {
   status: string
   status_label: string
   next_step: string | null
+  workflow_steps?: DocumentSignWorkflowStep[]
   canSign: boolean
   canPutSignature: boolean
   canPropose: boolean
@@ -44,37 +49,56 @@ export default function ApprovalQueue({
   }
 
   return (
-    <>
-      <div className="document-sign-cards">
-        {items.map(item => {
-          const statusMeta = documentSignCardStatus(item.status, item.status_label)
-          return (
-            <article key={item.key} className={`document-sign-card document-sign-card--${statusMeta.tone}`}>
-              <div className="document-sign-card__top">
+    <div className="document-sign-cards">
+      {items.map(item => {
+        const statusMeta = documentSignCardStatus(item.status, item.status_label)
+        const stepMeta = item.status === 'in_review'
+          ? documentSignCardStepMeta(item.workflow_steps)
+          : null
+        return (
+          <article key={item.key} className={`document-sign-card document-sign-card--${statusMeta.tone}`}>
+            <div className="document-sign-card__top">
+              <div className="document-sign-card__status-stack">
+                {stepMeta && (
+                  <span className="document-sign-card__order">{stepMeta.orderLabel}</span>
+                )}
                 <span className={`document-sign-card__status document-sign-card__status--${statusMeta.tone}`}>
                   {statusMeta.label}
                 </span>
-                <span className="document-sign-card__term">เทอม {item.term}</span>
               </div>
-              <h3 className="document-sign-card__title">{item.title}</h3>
-              <p className="document-sign-card__subtitle">{item.subtitle}</p>
-              {statusMeta.detail && (
-                <p className="document-sign-card__detail">{statusMeta.detail}</p>
-              )}
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm document-sign-card__view"
-                onClick={() => {
-                  if (!item.preview) return
-                  openDocumentPreviewPopup(buildDocumentPreviewShellUrl(item.preview, { title: item.title }))
-                }}
-              >
-                ดูเอกสาร
-              </button>
-            </article>
-          )
-        })}
-      </div>
-    </>
+              <span className="document-sign-card__term">เทอม {item.term}</span>
+            </div>
+
+            {stepMeta && stepMeta.steps.length > 0 && (
+              <ol className="document-sign-card__steps" aria-label="ลำดับการลงนาม">
+                {stepMeta.steps.map((step, index) => (
+                  <li
+                    key={`${item.key}-step-${index}`}
+                    className={`document-sign-card__step document-sign-card__step--${step.state}`}
+                    title={step.state === 'skipped' ? `${step.label} (ข้าม)` : step.label}
+                  >
+                    <span className="document-sign-card__step-dot" />
+                    <span className="document-sign-card__step-label">{step.label}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            <h3 className="document-sign-card__title">{item.title}</h3>
+            <p className="document-sign-card__subtitle">{item.subtitle}</p>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm document-sign-card__view"
+              onClick={() => {
+                if (!item.preview) return
+                openDocumentPreviewPopup(buildDocumentPreviewShellUrl(item.preview, { title: item.title }))
+              }}
+            >
+              ดูเอกสาร
+            </button>
+          </article>
+        )
+      })}
+    </div>
   )
 }

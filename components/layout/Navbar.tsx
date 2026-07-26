@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import Link from 'next/link'
 import { logout } from '@/lib/actions/auth'
+import { withSchoolPrefix } from '@/lib/school-path'
 
 type Props = {
   title: string
@@ -27,7 +28,7 @@ function LogoutButton() {
 export default function Navbar({ title, userFullName, userRole, schoolCode, onMenuClick }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const profileHref = schoolCode && userRole !== 'district'
-    ? `/school/${schoolCode}/settings/profile`
+    ? withSchoolPrefix(schoolCode, '/settings/profile')
     : '/settings/profile'
 
   return (

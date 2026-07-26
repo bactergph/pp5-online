@@ -325,7 +325,7 @@ export async function resetSchoolMemberSettings(schoolId: string) {
     targetType: 'school',
     targetId: id,
     targetLabel: school.name,
-    description: `ล้างการตั้งค่าโรงเรียน ${school.name}${school.code ? ` (เดิม /school/${school.code})` : ''}`.trim(),
+    description: `ล้างการตั้งค่าโรงเรียน ${school.name}${school.code ? ` (เดิม /${school.code})` : ''}`.trim(),
     metadata: { previousCode: school.code || null },
   })
 

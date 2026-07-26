@@ -829,6 +829,42 @@ function PrintSignatureSlot({
   return <>{fallback}</>
 }
 
+/** QR Digital Reference บนปก — มีเมื่อเอกสารอนุมัติแล้ว */
+function CoverDigitalReferenceQr({
+  data,
+  className = 'pp5-subject-cover-qr-block',
+  placeholderClassName = 'pp5-subject-cover-qr-placeholder',
+}: {
+  data: ReportPayload | null
+  className?: string
+  placeholderClassName?: string
+}) {
+  const ref = data?.digitalReference
+  if (!ref?.verifyUrl) {
+    return (
+      <div className={className} aria-hidden="true">
+        <div className={placeholderClassName} />
+        <span>ตรวจสอบเอกสาร</span>
+        <small>Digital Reference</small>
+      </div>
+    )
+  }
+  return (
+    <div className={className}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/qr?text=${encodeURIComponent(ref.verifyUrl)}`}
+        alt={`QR ตรวจสอบเอกสาร ${ref.code}`}
+        width={64}
+        height={64}
+        className="pp5-cover-qr-img"
+      />
+      <span>ตรวจสอบเอกสาร</span>
+      <small>{ref.code}</small>
+    </div>
+  )
+}
+
 function gradeBucket(score: ReportScore | null) {
   if (!score) return null
   if (score.result && score.result !== 'เรียน') return '0'
@@ -887,15 +923,33 @@ function subjectIsElective(subject: ReportSubject | null | undefined) {
   return /เพิ่มเติม|elective/i.test(type)
 }
 
-function CoverFormCheckbox({ checked, label }: { checked: boolean; label: string }) {
+function CoverFormCheckbox({
+  checked,
+  label,
+  variant = 'subject',
+}: {
+  checked: boolean
+  label: string
+  variant?: 'subject' | 'class'
+}) {
+  const boxClass = variant === 'class' ? 'pp5-class-cover-checkbox' : 'pp5-subject-cover-checkbox'
+  const itemClass = variant === 'class' ? 'pp5-class-cover-check-item' : 'pp5-subject-cover-check-item'
   return (
-    <span className="pp5-subject-cover-check-item">
-      <span className={`pp5-subject-cover-checkbox${checked ? ' is-checked' : ''}`}>
+    <span className={itemClass}>
+      <span className={`${boxClass}${checked ? ' is-checked' : ''}`}>
         {checked ? <ReportCheckMark size={10} /> : null}
       </span>
       {label}
     </span>
   )
+}
+
+function directorDecisionFlags(signatures?: ReportPayload['documentSignatures'] | null) {
+  const decision = signatures?.director_decision || ''
+  return {
+    approved: decision === 'อนุมัติ',
+    rejected: decision === 'ไม่อนุมัติ',
+  }
 }
 
 function CoverLabel({ children }: { children: ReactNode }) {
@@ -1198,7 +1252,9 @@ function Pp5ClassCoverPage({ data, term, pageNumber }: { data: ReportPayload | n
             <span>หัวหน้าวิชาการ</span>
           </div>
         </div>
-        {viceDirectorName ? (
+        {(() => {
+          const decision = directorDecisionFlags(data?.documentSignatures)
+          return viceDirectorName ? (
           <div className="pp5-class-cover-approval-bottom">
             <div className="pp5-class-cover-approval-col-box pp5-class-cover-vice-director">
               <p className="pp5-class-cover-propose-line">เสนอเพื่อพิจารณา</p>
@@ -1208,8 +1264,8 @@ function Pp5ClassCoverPage({ data, term, pageNumber }: { data: ReportPayload | n
             </div>
             <div className="pp5-class-cover-approval-col-box pp5-class-cover-director">
               <div className="pp5-class-cover-approval-options">
-                <label><span className="pp5-class-cover-checkbox" /> ไม่อนุมัติ</label>
-                <label><span className="pp5-class-cover-checkbox" /> อนุมัติ เมื่อวันที่...........................................</label>
+                <CoverFormCheckbox variant="class" checked={decision.rejected} label="ไม่อนุมัติ" />
+                <CoverFormCheckbox variant="class" checked={decision.approved} label="อนุมัติ เมื่อวันที่..........................................." />
               </div>
               <div className="pp5-class-cover-director-signature">
                 <p className="pp5-class-cover-director-sign-line">ลงชื่อ <PrintSignatureSlot url={data?.documentSignatures?.director} fallback="..........................................." /></p>
@@ -1219,11 +1275,11 @@ function Pp5ClassCoverPage({ data, term, pageNumber }: { data: ReportPayload | n
               </div>
             </div>
           </div>
-        ) : (
+          ) : (
           <div className="pp5-class-cover-director-box-full">
             <div className="pp5-class-cover-approval-options pp5-class-cover-approval-options-full">
-              <label><span className="pp5-class-cover-checkbox" /> อนุมัติ</label>
-              <label><span className="pp5-class-cover-checkbox" /> ไม่อนุมัติ</label>
+              <CoverFormCheckbox variant="class" checked={decision.approved} label="อนุมัติ" />
+              <CoverFormCheckbox variant="class" checked={decision.rejected} label="ไม่อนุมัติ" />
             </div>
             <div className="pp5-class-cover-director-main">
               <p className="pp5-class-cover-director-sign-line">ลงชื่อ <PrintSignatureSlot url={data?.documentSignatures?.director} /></p>
@@ -1232,13 +1288,14 @@ function Pp5ClassCoverPage({ data, term, pageNumber }: { data: ReportPayload | n
               <span>{directorSchoolLine(data?.school)}</span>
               <span className="pp5-class-cover-verify-date">............ / ............ / ............</span>
             </div>
-            <div className="pp5-class-cover-qr-block" aria-hidden="true">
-              <div className="pp5-class-cover-qr-placeholder" />
-              <span>ตรวจสอบเอกสาร</span>
-              <small>Digital Reference</small>
-            </div>
+            <CoverDigitalReferenceQr
+              data={data}
+              className="pp5-class-cover-qr-block"
+              placeholderClassName="pp5-class-cover-qr-placeholder"
+            />
           </div>
-        )}
+          )
+        })()}
       </section>
     </section>
   )
@@ -1418,8 +1475,8 @@ function Pp5SubjectCoverPage({
             </div>
             <div className="pp5-subject-cover-approval-col-box pp5-subject-cover-director">
               <div className="pp5-subject-cover-approval-options pp5-subject-cover-approval-options-split">
-                <label><span className="pp5-subject-cover-checkbox" /> ไม่อนุมัติ</label>
-                <label><span className="pp5-subject-cover-checkbox" /> อนุมัติ เมื่อวันที่...........................................</label>
+                <CoverFormCheckbox checked={directorDecisionFlags(data?.documentSignatures).rejected} label="ไม่อนุมัติ" />
+                <CoverFormCheckbox checked={directorDecisionFlags(data?.documentSignatures).approved} label="อนุมัติ เมื่อวันที่..........................................." />
               </div>
               <div className="pp5-subject-cover-director-signature">
                 <p className="pp5-subject-cover-director-sign">ลงชื่อ <PrintSignatureSlot url={data?.documentSignatures?.director} /></p>
@@ -1432,8 +1489,8 @@ function Pp5SubjectCoverPage({
         ) : (
           <div className="pp5-subject-cover-director-box">
             <div className="pp5-subject-cover-approval-options">
-              <label><span className="pp5-subject-cover-checkbox" /> อนุมัติ</label>
-              <label><span className="pp5-subject-cover-checkbox" /> ไม่อนุมัติ</label>
+              <CoverFormCheckbox checked={directorDecisionFlags(data?.documentSignatures).approved} label="อนุมัติ" />
+              <CoverFormCheckbox checked={directorDecisionFlags(data?.documentSignatures).rejected} label="ไม่อนุมัติ" />
             </div>
             <div className="pp5-subject-cover-director-main">
               <p className="pp5-subject-cover-director-sign">ลงชื่อ <PrintSignatureSlot url={data?.documentSignatures?.director} /></p>
@@ -1442,11 +1499,7 @@ function Pp5SubjectCoverPage({
               <span>{directorSchoolLine(data?.school)}</span>
               <span className="pp5-subject-cover-verify-date">............ / ............ / ............</span>
             </div>
-            <div className="pp5-subject-cover-qr-block" aria-hidden="true">
-              <div className="pp5-subject-cover-qr-placeholder" />
-              <span>ตรวจสอบเอกสาร</span>
-              <small>Digital Reference</small>
-            </div>
+            <CoverDigitalReferenceQr data={data} />
           </div>
         )}
       </section>
@@ -3789,9 +3842,12 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const [pp6ShowGrade, setPp6ShowGrade] = useState(true)
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [pp6StudentOptions, setPp6StudentOptions] = useState<ReportPp6StudentOption[]>([])
-  const [pp5TunerOpen, setPp5TunerOpen] = useState(false)
+  /** off | preview=พรีวิว HTML | pdf=พรีวิว jsPDF */
+  const [pp5TunerMode, setPp5TunerMode] = useState<'off' | 'preview' | 'pdf'>('off')
+  const pp5TunerOpen = pp5TunerMode !== 'off'
+  const pp5PdfPreviewOpen = pp5TunerMode === 'pdf'
   const [layoutSaved, setLayoutSaved] = useState(false)
-  const [pp5TunerSection, setPp5TunerSection] = useState<Pp5PrintSection>('coverClass')
+  const [pp5TunerSection, setPp5TunerSection] = useState<Pp5PrintSection>('coverSubject')
   const { layouts: pp5PrintLayouts, setLayouts: setPp5PrintLayouts } = usePp5PrintLayoutsState()
   const { layouts: pp6PrintLayouts, setLayouts: setPp6PrintLayouts } = usePp6PrintLayoutsState()
 
@@ -3893,30 +3949,30 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   )
   const pp5TunerSections = useMemo(() => {
     if (mode === 'pp6') return []
+    const coverKey: Pp5PrintSection = mode === 'pp5-class' ? 'coverClass' : 'coverSubject'
     const picked = new Set<Pp5PrintSection>()
     for (const section of sections) {
       if (!(ALL_SECTIONS[mode] as readonly PrintSection[]).includes(section)) continue
-      if (section === 'cover') {
-        picked.add('coverClass')
-        picked.add('coverSubject')
-      } else {
-        picked.add(section as Pp5PrintSection)
-      }
+      if (section === 'cover') picked.add(coverKey)
+      else picked.add(section as Pp5PrintSection)
     }
     return PP5_PRINT_SECTIONS.filter(section => picked.has(section))
   }, [mode, sections])
 
   useEffect(() => {
     if (mode === 'pp6' || pp5TunerSections.length === 0) return
-    const preferred = sections.find(section => pp5TunerSections.includes(section as Pp5PrintSection)) as Pp5PrintSection | undefined
     if (!pp5TunerSections.includes(pp5TunerSection)) {
-      setPp5TunerSection(preferred || pp5TunerSections[0])
+      setPp5TunerSection(pp5TunerSections[0])
     }
-  }, [mode, sections, pp5TunerSection, pp5TunerSections])
+  }, [mode, pp5TunerSection, pp5TunerSections])
 
   useEffect(() => {
     setLayoutSaved(false)
   }, [pp5PrintLayouts, pp6PrintLayouts])
+
+  useEffect(() => {
+    setPp5TunerMode('off')
+  }, [mode])
 
   const savePrintLayouts = useCallback(() => {
     if (mode === 'pp6') {
@@ -4528,10 +4584,35 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               </select>
             </label>
             <div className="report-preview-actions">
-              {layoutTunerEnabled && (
+              {layoutTunerEnabled && mode === 'pp5-subject' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setPp5TunerMode(current => (current === 'pdf' ? 'off' : 'pdf'))}
+                    className={`btn btn-secondary pp5-tuner-toggle${pp5TunerMode === 'pdf' ? ' active' : ''}`}
+                    disabled={!data}
+                    title="ปรับ layout ของ PDF จริง (jsPDF)"
+                  >
+                    {pp5TunerMode === 'pdf' ? 'ปิดปรับ layout' : 'ปรับ layout ปพ.5'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPp5TunerMode(current => (current === 'preview' ? 'off' : 'preview'))}
+                    className={`btn btn-secondary pp5-tuner-toggle${pp5TunerMode === 'preview' ? ' active' : ''}`}
+                    disabled={!data}
+                    title="ปรับ layout ของพรีวิว HTML ที่ /reports/pp5"
+                  >
+                    {pp5TunerMode === 'preview' ? 'ปิดปรับ preview' : 'ปรับ layout ปพ.5 preview'}
+                  </button>
+                </>
+              )}
+              {layoutTunerEnabled && mode !== 'pp5-subject' && (
               <button
                 type="button"
-                onClick={() => setPp5TunerOpen(open => !open)}
+                onClick={() => setPp5TunerMode(current => {
+                  if (current !== 'off') return 'off'
+                  return mode === 'pp6' ? 'pdf' : 'preview'
+                })}
                 className={`btn btn-secondary pp5-tuner-toggle${pp5TunerOpen ? ' active' : ''}`}
                 disabled={!data}
               >
@@ -4549,7 +4630,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           )}
           {!embedMode && !printMode && mode === 'pp6' && data && (
             <Pp6JsPdfLivePreview
-              open={pp5TunerOpen}
+              open={pp5PdfPreviewOpen}
               data={data}
               term={pp6Term}
               individual={pp6Individual}
@@ -4561,7 +4642,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           )}
           {!embedMode && !printMode && mode === 'pp5-subject' && data && selectedSubject && (
             <Pp5SubjectJsPdfLivePreview
-              open={pp5TunerOpen}
+              open={pp5PdfPreviewOpen}
               data={data}
               subject={selectedSubject}
               term={reportTerm}
@@ -4574,7 +4655,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
             <Pp5PrintLayoutTuner
               variant="pp6"
               open={pp5TunerOpen}
-              onClose={() => setPp5TunerOpen(false)}
+              onClose={() => setPp5TunerMode('off')}
               layouts={pp6PrintLayouts}
               onChange={setPp6PrintLayouts}
               onSave={savePrintLayouts}
@@ -4583,7 +4664,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           ) : (
             <Pp5PrintLayoutTuner
               open={pp5TunerOpen}
-              onClose={() => setPp5TunerOpen(false)}
+              onClose={() => setPp5TunerMode('off')}
               availableSections={pp5TunerSections}
               sectionLabels={PP5_TUNER_SECTION_LABELS}
               activeSection={pp5TunerSection}
@@ -4592,6 +4673,13 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               onChange={setPp5PrintLayouts}
               onSave={savePrintLayouts}
               saved={layoutSaved}
+              panelBadge={pp5TunerMode === 'pdf' ? 'PDF' : 'HTML'}
+              panelTitle={pp5TunerMode === 'pdf' ? 'ปรับ Layout ปพ.5' : 'ปรับ Layout Preview'}
+              panelSubtitle={
+                pp5TunerMode === 'pdf'
+                  ? 'ปรับค่าแล้วดูผลในพรีวิว PDF (jsPDF)'
+                  : 'ปรับค่าแล้วดูผลในพรีวิว HTML ที่ /reports/pp5'
+              }
             />
           ))}
 
@@ -4616,9 +4704,18 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               </Pp6PrintLayoutsProvider>
             ) : (
               <Pp5PrintLayoutsProvider layouts={pp5PrintLayouts}>
+              {mode === 'pp5-subject' && pp5PdfPreviewOpen ? (
+                <div className="report-empty" style={{ minHeight: 120 }}>
+                  <b>กำลังใช้พรีวิว PDF จริง (jsPDF)</b>
+                  <span>ปรับค่าในแผงด้านขวา แล้วดูผลในพรีวิว PDF — ไม่เทียบกับ HTML เพื่อเลี่ยงคลาดจากคนละเอนจิน</span>
+                </div>
+              ) : null}
               <div
                 className={printMode ? 'report-print-zone is-pdf-export' : 'report-print-zone'}
-                style={printMode ? undefined : { transform: `scale(${(embedMode ? 72 : scale) / 100})`, transformOrigin: 'top center' }}
+                style={{
+                  ...(printMode ? undefined : { transform: `scale(${(embedMode ? 72 : scale) / 100})`, transformOrigin: 'top center' }),
+                  ...(mode === 'pp5-subject' && pp5PdfPreviewOpen && !printMode ? { display: 'none' } : null),
+                }}
               >
                 {mode === 'pp5-subject' && sections.includes('cover') && <CoverPage data={data} mode={mode} subject={selectedSubject} term={reportTerm} pageNumber={pageNumbers.cover} />}
                 {mode === 'pp5-class' && sections.includes('cover') && <CoverPage data={data} mode={mode} subject={null} term={term} pageNumber={pageNumbers.cover} />}
@@ -5171,7 +5268,19 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         }
         .pp5-class-cover-director-main .pp5-class-cover-director-sign-line {
           margin: 0 0 2px;
+          white-space: normal;
+        }
+        .pp5-class-cover-check-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
           white-space: nowrap;
+        }
+        .pp5-class-cover-checkbox.is-checked {
+          display: inline-grid;
+          place-items: center;
+          background: #111827;
+          color: #fff;
         }
         .pp5-class-cover-verify-date {
           display: block;
@@ -5283,19 +5392,23 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           right: var(--pp5-cover-doc-mark-right, 34px);
           display: flex;
           flex-direction: column;
-          gap: 4px;
-          text-align: center;
+          gap: 0;
+          text-align: right;
           font-size: var(--pp5-cover-doc-mark-font, 23px);
           font-weight: 700;
           line-height: 1;
         }
+        .pp5-subject-cover-doc-mark span + span {
+          margin-top: calc(var(--pp5-cover-doc-mark-line-gap, 16px) - 1em);
+        }
         .pp5-subject-cover-logo {
           width: var(--pp5-cover-logo-size, 88px);
           height: var(--pp5-cover-logo-size, 88px);
-          margin: 0 auto 2px;
+          margin: 0 auto var(--pp5-cover-logo-gap, 8px);
           display: grid;
           place-items: center;
           overflow: hidden;
+          transform: translate(var(--pp5-cover-logo-offset-x, 0px), var(--pp5-cover-logo-offset-y, 0px));
         }
         .pp5-subject-cover-logo img {
           width: 100%;
@@ -5325,7 +5438,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         }
         .pp5-subject-cover-info {
           width: 100%;
-          margin-top: 10px;
+          margin-top: var(--pp5-cover-info-top-gap, 10px);
           border-top: 1px solid #d1d5db;
         }
         .report-cover-label {
@@ -5338,11 +5451,11 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           display: grid;
           align-items: baseline;
           column-gap: 6px;
-          padding: 2px 0;
+          padding: var(--pp5-cover-info-row-pad, 2px) 0;
           border-bottom: 1px solid #d1d5db;
           font-size: var(--pp5-cover-font-info, 18px);
           font-weight: 400;
-          line-height: 1.12;
+          line-height: var(--pp5-cover-info-line-height, 1.12);
           text-align: left;
         }
         .pp5-subject-cover-grid-row.is-school {
@@ -5452,7 +5565,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         .pp5-subject-cover-check-item {
           display: inline-flex;
           align-items: center;
-          gap: 3px;
+          gap: var(--pp5-cover-checkbox-gap, 3px);
           line-height: 1;
           white-space: nowrap;
         }
@@ -5460,11 +5573,11 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 13px;
-          height: 13px;
+          width: var(--pp5-cover-checkbox-size, 13px);
+          height: var(--pp5-cover-checkbox-size, 13px);
           box-sizing: border-box;
           border: 1px solid #111827;
-          font-size: 10px;
+          font-size: calc(var(--pp5-cover-checkbox-size, 13px) * 0.77);
           font-weight: 700;
           line-height: 1;
           flex: 0 0 auto;
@@ -5487,7 +5600,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           line-height: 1.1;
         }
         .pp5-subject-cover-grade-table .pp5-subject-cover-grade-banner {
-          font-size: calc(var(--pp5-cover-font-table, 15px) + 6px);
+          font-size: calc(var(--pp5-cover-font-table, 15px) + var(--pp5-cover-banner-boost, 6px));
           font-weight: 700;
           padding: 3px 2px;
         }
@@ -5495,8 +5608,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         .pp5-subject-cover-grade-table td,
         .pp5-subject-cover-eval-table th,
         .pp5-subject-cover-eval-table td {
-          border: 1px solid #111827;
-          padding: 2px 2px;
+          border: var(--pp5-cover-border-width, 0.3mm) solid #111827;
+          padding: var(--pp5-cover-table-cell-pad, 2px);
           text-align: center;
           vertical-align: middle;
         }
@@ -5509,17 +5622,21 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         }
         .pp5-subject-cover-grade-table th:first-child,
         .pp5-subject-cover-grade-table td:first-child {
-          width: 10%;
+          width: var(--pp5-cover-grade-total-pct, 10%);
         }
         .pp5-subject-cover-grade-table th:last-child,
         .pp5-subject-cover-grade-table td:last-child {
-          width: 7%;
+          width: var(--pp5-cover-grade-note-pct, 7%);
         }
         .pp5-subject-cover-summary-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: var(--pp5-cover-summary-gap, 3px) 8px;
-          margin-top: 6px;
+          gap: 3px var(--pp5-cover-eval-gap, 8px);
+          margin-top: var(--pp5-cover-summary-gap, 6px);
+        }
+        .pp5-subject-cover-summary-grid .pp5-class-cover-mini-table th:first-child,
+        .pp5-subject-cover-summary-grid .pp5-class-cover-mini-table td:first-child {
+          width: var(--pp5-cover-eval-first-pct, 36%);
         }
         .pp5-subject-cover-eval-table {
           font-size: var(--pp5-cover-font-table-sm, 14px);
@@ -5657,6 +5774,13 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
             linear-gradient(45deg, #111827 25%, transparent 25%, transparent 75%, #111827 75%);
           background-size: 8px 8px;
           background-position: 0 0, 4px 4px;
+        }
+        .pp5-cover-qr-img {
+          width: 64px;
+          height: 64px;
+          margin-bottom: 2px;
+          display: block;
+          image-rendering: pixelated;
         }
         .pp5-subject-cover-qr-block small {
           font-size: 10px;
@@ -7146,10 +7270,11 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           min-width: 120px;
         }
         .print-signature-img {
-          display: block;
+          display: inline-block;
           max-height: 42px;
           max-width: 180px;
-          margin: 0 auto 4px;
+          margin: 0 0 2px;
+          vertical-align: middle;
           object-fit: contain;
         }
         .report-sign-grid .print-signature-img,
@@ -7375,6 +7500,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           display: inline-flex;
           align-items: center;
           justify-content: flex-end;
+          flex-wrap: wrap;
           gap: 8px;
         }
         .report-preview-mode {

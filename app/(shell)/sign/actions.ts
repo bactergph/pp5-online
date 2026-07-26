@@ -155,10 +155,11 @@ export async function fetchPp5SubjectQueue() {
     status: string
     status_label: string
     next_step: string | null
-        canSign: boolean
-        canPutSignature: boolean
-        canPropose: boolean
-        canCancelProposal: boolean
+    workflow_steps: Array<{ label: string; state: string }>
+    canSign: boolean
+    canPutSignature: boolean
+    canPropose: boolean
+    canCancelProposal: boolean
     teacher_id: string | null
     subject_code: string
     subject_name: string
@@ -216,6 +217,7 @@ export async function fetchPp5SubjectQueue() {
         status,
         status_label: pp5SubjectStatusLabel(fullRecord, school, subject.subject_group, groupHeads),
         next_step: next ? PP5_SUBJECT_STEP_LABELS[next] : null,
+        workflow_steps: getPp5SubjectWorkflowProgress(fullRecord, school, subject.subject_group, groupHeads),
         canSign,
         canPutSignature,
         canPropose,
@@ -269,6 +271,7 @@ export async function fetchClassDocQueue(docTypes?: ClassDocType[]) {
     status: string
     status_label: string
     next_step: string | null
+    workflow_steps: Array<{ label: string; state: string }>
     canSign: boolean
     canPutSignature: boolean
     canPropose: boolean
@@ -338,6 +341,7 @@ export async function fetchClassDocQueue(docTypes?: ClassDocType[]) {
       status,
       status_label: classDocStatusLabel(fullRecord, school, docType),
       next_step: next ? CLASS_DOC_STEP_LABELS[next] : null,
+      workflow_steps: getClassDocWorkflowProgress(fullRecord, school, docType),
       canSign,
       canPutSignature,
       canPropose,
@@ -575,6 +579,14 @@ export async function signPp5Subject(
   if (!canUserSignPp5SubjectStep(
     session.userId, session.role, next, school, subjectGroup, groupHeads, cs.teacher_id,
   )) return { error: 'ไม่มีสิทธิ์ลงนามในขั้นตอนนี้' }
+
+  const { data: signer } = await db.from('users')
+    .select('signature_url')
+    .eq('id', session.userId)
+    .maybeSingle()
+  if (!signer?.signature_url) {
+    return { error: 'ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่ ตั้งค่า → ข้อมูลตัวเอง เพื่ออัปโหลดก่อน แล้วค่อยลงนาม/อนุมัติ' }
+  }
 
   const now = new Date().toISOString()
   const fields = PP5_STEP_DB[next]
@@ -869,6 +881,14 @@ export async function signClassDocument(
     session.userId, session.role, next, school,
     classroom.homeroom_teacher_id, classroom.homeroom_teacher2_id,
   )) return { error: 'ไม่มีสิทธิ์ลงนามในขั้นตอนนี้' }
+
+  const { data: signer } = await db.from('users')
+    .select('signature_url')
+    .eq('id', session.userId)
+    .maybeSingle()
+  if (!signer?.signature_url) {
+    return { error: 'ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่ ตั้งค่า → ข้อมูลตัวเอง เพื่ออัปโหลดก่อน แล้วค่อยลงนาม/อนุมัติ' }
+  }
 
   const now = new Date().toISOString()
   const fields = CLASS_DOC_STEP_FIELDS[next]

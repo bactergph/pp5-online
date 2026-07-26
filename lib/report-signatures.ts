@@ -12,6 +12,8 @@ export type ReportDocumentSignatures = {
   vice_director?: string | null
   director?: string | null
   homeroom?: string | null
+  /** 'อนุมัติ' | 'ไม่อนุมัติ' จากขั้นตอนผู้อำนวยการ — ใช้ติ๊ก checkbox บนปก */
+  director_decision?: string | null
 }
 
 type DbClient = ReturnType<typeof createServerClient>
@@ -60,6 +62,7 @@ export async function loadPp5SubjectReportSignatures(
     academic_head: signedUrl(map, record.academic_head_signed_at, record.academic_head_id),
     vice_director: signedUrl(map, record.vice_director_signed_at, record.vice_director_id),
     director: signedUrl(map, record.director_signed_at, record.director_id),
+    director_decision: typeof record.director_decision === 'string' ? record.director_decision : null,
   }
 }
 
@@ -111,6 +114,7 @@ export async function loadClassDocReportSignatures(
     academic_head: signedUrl(map, record.academic_head_signed_at, record.academic_head_id),
     vice_director: signedUrl(map, record.vice_director_signed_at, record.vice_director_id),
     director: signedUrl(map, record.director_signed_at, record.director_id),
+    director_decision: typeof record.director_decision === 'string' ? record.director_decision : null,
   }
 }
 

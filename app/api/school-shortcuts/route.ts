@@ -20,7 +20,7 @@ export async function GET() {
       name: s.name,
       code: String(s.code).trim().toLowerCase(),
       programName: s.program_name || 'ระบบ ปพ.5 ออนไลน์',
-      loginUrl: `/school/${String(s.code).trim().toLowerCase()}/login`,
+      loginUrl: `/${String(s.code).trim().toLowerCase()}/login`,
     }))
 
   return NextResponse.json({ schools })

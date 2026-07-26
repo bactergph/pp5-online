@@ -82,12 +82,13 @@ export async function ensureDriveFolderPath(
   return { folderId: parentId, folderPath: built.join('/') }
 }
 
-export async function uploadPdfToDrive(params: {
+export async function uploadFileToDrive(params: {
   schoolId: string
   rootFolderId: string
   folderSegments: string[]
   fileName: string
   buffer: Buffer
+  mimeType?: string
 }) {
   const drive = await resolveDriveClient(params.schoolId)
   if (!drive) {
@@ -109,7 +110,7 @@ export async function uploadPdfToDrive(params: {
       parents: [folderId],
     },
     media: {
-      mimeType: 'application/pdf',
+      mimeType: params.mimeType || 'application/octet-stream',
       body: Readable.from(params.buffer),
     },
     fields: 'id, webViewLink, webContentLink',
@@ -121,6 +122,16 @@ export async function uploadPdfToDrive(params: {
     webViewLink: res.data.webViewLink || res.data.webContentLink || null,
     folderPath,
   }
+}
+
+export async function uploadPdfToDrive(params: {
+  schoolId: string
+  rootFolderId: string
+  folderSegments: string[]
+  fileName: string
+  buffer: Buffer
+}) {
+  return uploadFileToDrive({ ...params, mimeType: 'application/pdf' })
 }
 
 export async function deleteDriveFile(schoolId: string, fileId: string | null | undefined) {
