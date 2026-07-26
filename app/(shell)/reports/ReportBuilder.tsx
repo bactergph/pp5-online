@@ -849,12 +849,13 @@ function CoverDigitalReferenceQr({
       </div>
     )
   }
+  const qrUrl = ref.pdfUrl?.trim() || ref.verifyUrl
   return (
     <div className={className}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={`/api/qr?text=${encodeURIComponent(ref.verifyUrl)}`}
-        alt={`QR ตรวจสอบเอกสาร ${ref.code}`}
+        src={`/api/qr?text=${encodeURIComponent(qrUrl)}`}
+        alt={`QR เปิดไฟล์เอกสาร ${ref.code}`}
         width={64}
         height={64}
         className="pp5-cover-qr-img"
@@ -936,8 +937,8 @@ function CoverFormCheckbox({
   const itemClass = variant === 'class' ? 'pp5-class-cover-check-item' : 'pp5-subject-cover-check-item'
   return (
     <span className={itemClass}>
-      <span className={`${boxClass}${checked ? ' is-checked' : ''}`}>
-        {checked ? <ReportCheckMark size={10} /> : null}
+      <span className={`${boxClass}${checked ? ' is-checked' : ''}`} aria-checked={checked}>
+        {checked ? <ReportCheckMark size={variant === 'class' ? 12 : 14} stamp /> : null}
       </span>
       {label}
     </span>
@@ -945,9 +946,11 @@ function CoverFormCheckbox({
 }
 
 function directorDecisionFlags(signatures?: ReportPayload['documentSignatures'] | null) {
-  const decision = signatures?.director_decision || ''
+  const decision = String(signatures?.director_decision || '').trim()
+  // อนุมัติแล้วแต่ยังไม่มีค่า decision เก่า — ถือว่าติ๊กอนุมัติเมื่อมีลายเซ็นผอ.
+  const approved = decision === 'อนุมัติ' || (!decision && Boolean(signatures?.director))
   return {
-    approved: decision === 'อนุมัติ',
+    approved: approved && decision !== 'ไม่อนุมัติ',
     rejected: decision === 'ไม่อนุมัติ',
   }
 }
@@ -5279,8 +5282,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         .pp5-class-cover-checkbox.is-checked {
           display: inline-grid;
           place-items: center;
-          background: #111827;
-          color: #fff;
+          background: transparent;
+          color: #111827;
         }
         .pp5-class-cover-verify-date {
           display: block;
@@ -5366,13 +5369,24 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           white-space: nowrap;
         }
         .pp5-class-cover-checkbox {
-          display: inline-block;
-          width: 9px;
-          height: 9px;
+          position: relative;
+          display: inline-grid;
+          place-items: center;
+          width: 11px;
+          height: 11px;
           border: 1px solid #111827;
           margin: 0;
           vertical-align: -1px;
           flex: 0 0 auto;
+          overflow: visible;
+          box-sizing: border-box;
+        }
+        .pp5-class-cover-checkbox .report-checkmark--stamp {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -52%) scale(1.35);
+          pointer-events: none;
         }
         .pp5-subject-cover-page {
           position: relative;
@@ -5570,23 +5584,30 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           white-space: nowrap;
         }
         .pp5-subject-cover-checkbox {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
+          position: relative;
+          display: inline-grid;
+          place-items: center;
           width: var(--pp5-cover-checkbox-size, 13px);
           height: var(--pp5-cover-checkbox-size, 13px);
           box-sizing: border-box;
           border: 1px solid #111827;
-          font-size: calc(var(--pp5-cover-checkbox-size, 13px) * 0.77);
-          font-weight: 700;
           line-height: 1;
           flex: 0 0 auto;
+          overflow: visible;
+          color: #111827;
         }
         .pp5-subject-cover-checkbox.is-checked {
           color: #111827;
+          background: transparent;
         }
-        .pp5-subject-cover-checkbox .report-checkmark {
+        .pp5-subject-cover-checkbox .report-checkmark,
+        .pp5-subject-cover-checkbox .report-checkmark--stamp {
           display: block;
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -52%) scale(1.45);
+          pointer-events: none;
         }
         .pp5-subject-cover-grade-table,
         .pp5-subject-cover-eval-table {

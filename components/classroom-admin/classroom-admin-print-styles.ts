@@ -204,12 +204,37 @@ const CLASSROOM_ADMIN_PRINT_RULES = `
   .attendance-print-value-done { background: #CFF8D8 !important; color: #14532D !important; font-weight: 900; }
   .attendance-print-value-alert { background: #FEE2E2 !important; color: #7F1D1D !important; font-weight: 900; }
   .attendance-print-signatures {
-    display: grid; grid-template-columns: 1fr 1fr; gap: var(--ca-signature-gap, 120px); margin-top: var(--ca-signature-margin-top, 32px);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--ca-signature-gap, 48px);
+    flex: 0 0 auto;
+    margin-top: var(--ca-signature-margin-top, 10px);
+    width: 100%;
+    box-sizing: border-box;
+    padding-left: 6%;
+    padding-right: 6%;
   }
-  .attendance-print-signatures > div { text-align: center; font-size: var(--ca-font-signature, 12px); color: #111827; }
-  .attendance-print-sign-line { width: 260px; margin: 0 auto 4px; line-height: 1.15; }
-  .attendance-print-signatures strong { display: block; min-height: 15px; font-size: var(--ca-font-signature, 12px); font-weight: 900; line-height: 1.15; }
-  .attendance-print-signatures span { display: block; margin-top: 2px; font-size: var(--ca-font-signature-role, 11px); line-height: 1.15; }
+  .attendance-print-signatures > div { text-align: center; font-size: var(--ca-font-signature, 12px); color: #111827; min-width: 0; }
+  .attendance-print-sign-line {
+    width: min(240px, 100%);
+    margin: 0 auto 2px;
+    line-height: 1.1;
+    min-height: 28px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 6px;
+  }
+  .attendance-print-sign-img {
+    display: inline-block;
+    height: 28px;
+    width: auto;
+    max-width: 140px;
+    object-fit: contain;
+    vertical-align: bottom;
+  }
+  .attendance-print-signatures strong { display: block; min-height: 14px; font-size: var(--ca-font-signature, 12px); font-weight: 900; line-height: 1.15; }
+  .attendance-print-signatures span { display: block; margin-top: 1px; font-size: var(--ca-font-signature-role, 11px); line-height: 1.15; }
   @media print {
     @page { size: A4 landscape; margin: 0; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -244,7 +269,9 @@ const CLASSROOM_ADMIN_PRINT_RULES = `
       vertical-align: middle !important;
     }
     .attendance-print-signatures {
-      margin-top: 8.5mm !important;
+      margin-top: 3mm !important;
+      padding-left: 6% !important;
+      padding-right: 6% !important;
     }
     .classroom-admin-print-header {
       display: flex !important; align-items: flex-start; justify-content: space-between; gap: 10px;

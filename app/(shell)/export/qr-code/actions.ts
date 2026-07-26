@@ -8,6 +8,7 @@ import {
   buildDocumentVerifyUrl,
   ensureDocumentReference,
 } from '@/lib/document-reference'
+import { documentQrUrl } from '@/lib/document-qr-url'
 import {
   buildQrExportFileName,
   buildQrExportFolderSegments,
@@ -35,6 +36,7 @@ export type QrExportInit = {
 export type QrExportMatch = {
   exportId: string
   code: string
+  /** URL ใน QR — ลิงก์ Google Drive เมื่อมีไฟล์ */
   verifyUrl: string
   title: string
   docKind: QrExportDocKind
@@ -135,7 +137,7 @@ async function loadMatchingExports(filter: QrExportFilter): Promise<QrExportMatc
   const classroomById = new Map((classrooms || []).map(c => [c.id, c]))
 
   let query = db.from('approved_document_exports')
-    .select('id, title, doc_kind, term, classroom_id, class_subject_id, academic_year_id, status')
+    .select('id, title, doc_kind, term, classroom_id, class_subject_id, academic_year_id, status, drive_web_view_link')
     .eq('school_id', session.schoolId!)
     .eq('academic_year_id', filter.academicYearId)
     .eq('doc_kind', filter.docKind)
@@ -224,7 +226,10 @@ async function loadMatchingExports(filter: QrExportFilter): Promise<QrExportMatc
       matches.push({
         exportId: row.id,
         code: ref.code,
-        verifyUrl: buildDocumentVerifyUrl(ref.code),
+        verifyUrl: documentQrUrl({
+          pdfUrl: row.drive_web_view_link ? String(row.drive_web_view_link) : null,
+          verifyUrl: buildDocumentVerifyUrl(ref.code),
+        }),
         title: row.title,
         docKind: filter.docKind,
         level: meta.level,
@@ -272,7 +277,10 @@ async function loadMatchingExports(filter: QrExportFilter): Promise<QrExportMatc
     matches.push({
       exportId: row.id,
       code: ref.code,
-      verifyUrl: buildDocumentVerifyUrl(ref.code),
+      verifyUrl: documentQrUrl({
+        pdfUrl: row.drive_web_view_link ? String(row.drive_web_view_link) : null,
+        verifyUrl: buildDocumentVerifyUrl(ref.code),
+      }),
       title: row.title,
       docKind: filter.docKind,
       level: cr.level,

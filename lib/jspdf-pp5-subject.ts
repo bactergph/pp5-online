@@ -21,6 +21,8 @@ import {
   type HourlyStatus,
 } from '@/lib/hourly-attendance'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
+import { documentQrUrl } from '@/lib/document-qr-url'
+import { drawJsPdfCheckbox } from '@/lib/jspdf-check-mark'
 import { qrDataUrl } from '@/lib/qr-data-url'
 import {
   DEFAULT_PP5_PRINT_LAYOUTS,
@@ -666,15 +668,7 @@ async function drawCoverPage(ctx: DrawCtx) {
   const drawCheckbox = (x: number, textY: number, checked: boolean, label: string) => {
     const size = px(layout.checkboxSizePx)
     const gap = px(layout.checkboxGapPx)
-    const boxY = textY - size / 2
-    setStroke(doc, BORDER, borderW)
-    doc.rect(x, boxY, size, size, 'S')
-    if (checked) {
-      doc.setFont('THSarabunNew', 'bold')
-      doc.setFontSize(infoFont)
-      setText(doc)
-      doc.text('✓', x + size / 2, textY, { align: 'center', baseline: 'middle' })
-    }
+    drawJsPdfCheckbox(doc, x, textY, size, checked, { strokeRgb: BORDER, boxStroke: borderW })
     const labelX = x + size + gap
     writeAt(labelX, textY, label)
     return labelX + doc.getTextWidth(label) + px(4)
@@ -1016,17 +1010,12 @@ async function drawCoverPage(ctx: DrawCtx) {
   }
   y += blockH * 2 + rowGap + layout.sigAfterBlocksMm
 
-  const directorDecision = data.documentSignatures?.director_decision || ''
+  const directorDecisionRaw = String(data.documentSignatures?.director_decision || '').trim()
+  const directorDecision = directorDecisionRaw
+    || (data.documentSignatures?.director ? 'อนุมัติ' : '')
   const drawCheck = (cx: number, cy: number, label: string, checked = false) => {
-    const size = px(layout.checkboxSizePx) * 0.85
-    const top = cy - size / 2
-    setStroke(doc, BORDER, 0.35)
-    doc.rect(cx, top, size, size, 'S')
-    if (checked) {
-      setStroke(doc, BORDER, 1.1)
-      doc.line(cx + size * 0.18, cy, cx + size * 0.42, cy + size * 0.28)
-      doc.line(cx + size * 0.4, cy + size * 0.28, cx + size * 0.84, cy - size * 0.3)
-    }
+    const size = px(layout.checkboxSizePx) * 0.95
+    drawJsPdfCheckbox(doc, cx, cy, size, checked, { strokeRgb: BORDER, boxStroke: 0.35 })
     doc.setFont('THSarabunNew', 'normal')
     doc.setFontSize(sigFont)
     setText(doc)
@@ -1068,7 +1057,7 @@ async function drawCoverPage(ctx: DrawCtx) {
     doc.setFont('THSarabunNew', 'normal')
     doc.setFontSize(sigFont)
     setText(doc)
-    const checkSize = px(layout.checkboxSizePx) * 0.85
+    const checkSize = px(layout.checkboxSizePx) * 0.95
     const opt1Label = 'ไม่อนุมัติ'
     const opt1W = checkSize + px(6) + doc.getTextWidth(opt1Label)
     drawCheck(optCenter - opt1W / 2, y + px(14), opt1Label, directorDecision === 'ไม่อนุมัติ')
@@ -1112,7 +1101,7 @@ async function drawCoverPage(ctx: DrawCtx) {
     const gap = px(28)
     const approveLabel = 'อนุมัติ'
     const rejectLabel = 'ไม่อนุมัติ'
-    const checkSize = px(layout.checkboxSizePx) * 0.85
+    const checkSize = px(layout.checkboxSizePx) * 0.95
     const approveW = checkSize + px(6) + doc.getTextWidth(approveLabel)
     const rejectW = checkSize + px(6) + doc.getTextWidth(rejectLabel)
     const optsW = approveW + gap + rejectW
@@ -1137,7 +1126,7 @@ async function drawCoverPage(ctx: DrawCtx) {
     doc.setFontSize(sigLineFont)
     doc.text('............ / ............ / ............', centerX, dy, { align: 'center' })
 
-    // QR / Digital Reference — ลิงก์หน้าตรวจเอกสารหลังอนุมัติ
+    // QR / Digital Reference — ลิงก์ Google Drive ของไฟล์ (หรือหน้าตรวจถ้ายังไม่มีไฟล์)
     if (ctx.qrPng) {
       try {
         doc.addImage(ctx.qrPng, 'PNG', qrX, qrY, qrSize, qrSize)
@@ -2044,7 +2033,9 @@ export async function buildPp5SubjectPdfBlob(options: Pp5SubjectPdfOptions): Pro
   const sigKeys = ['teacher', 'subject_head', 'measurement_head', 'academic_head', 'vice_director', 'director', 'homeroom'] as const
   const [logoData, qrPng, ...sigUrls] = await Promise.all([
     loadImageDataUrl(data.school?.logo_url, 160, 0.7),
-    data.digitalReference?.verifyUrl ? qrDataUrl(data.digitalReference.verifyUrl, 256) : Promise.resolve(null),
+    data.digitalReference?.verifyUrl
+      ? qrDataUrl(documentQrUrl(data.digitalReference), 256)
+      : Promise.resolve(null),
     ...sigKeys.map(k => loadImageDataUrl(data.documentSignatures?.[k], 220, 0.75)),
   ])
   const signatures = Object.fromEntries(sigKeys.map((k, i) => [k, sigUrls[i]])) as Record<string, string | null>

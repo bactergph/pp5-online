@@ -1,9 +1,10 @@
 import 'server-only'
+import { after } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { ensureDocumentReference } from '@/lib/document-reference'
 import { encrypt, type SessionPayload } from '@/lib/session'
 import { generateReportPdf, appOrigin } from '@/lib/pdf/generate-report-pdf'
-import { uploadPdfToDrive } from '@/lib/google-drive'
+import { updateDriveFileMedia, uploadPdfToDrive } from '@/lib/google-drive'
 import {
   APPROVED_DOC_FOLDER_LABELS,
   approvedDocumentFileName,
@@ -71,26 +72,49 @@ export async function archiveApprovedPp5Subject(params: {
     classSubjectId: params.classSubjectId,
   }
 
-  const { data: row, error } = await db.from('approved_document_exports').insert({
-    school_id: params.schoolId,
-    doc_kind: 'pp5_subject',
-    academic_year_id: cs.academic_year_id,
-    term: params.term,
-    class_subject_id: params.classSubjectId,
-    classroom_id: classroom.id,
-    approval_signature_id: params.approvalSignatureId,
-    owner_user_id: cs.teacher_id,
-    title,
-    file_name: fileName,
-    approved_at: params.approvedAt,
-    status: 'pending',
-  }).select('id').single()
+  const { data: existing } = await db.from('approved_document_exports')
+    .select('id, status')
+    .eq('approval_signature_id', params.approvalSignatureId)
+    .maybeSingle()
 
-  if (error || !row?.id) return
-  // สร้างรหัส Digital Reference ก่อนเรนเดอร์ PDF เพื่อให้หน้าปกมี QR จริง
-  await ensureDocumentReference({ schoolId: params.schoolId, exportId: row.id })
+  let exportId = existing?.id as string | undefined
+  if (existing?.status === 'ready') return
+
+  if (exportId) {
+    await db.from('approved_document_exports').update({
+      title,
+      file_name: fileName,
+      approved_at: params.approvedAt,
+      status: 'pending',
+      error_message: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', exportId)
+  } else {
+    const { data: row, error } = await db.from('approved_document_exports').insert({
+      school_id: params.schoolId,
+      doc_kind: 'pp5_subject',
+      academic_year_id: cs.academic_year_id,
+      term: params.term,
+      class_subject_id: params.classSubjectId,
+      classroom_id: classroom.id,
+      approval_signature_id: params.approvalSignatureId,
+      owner_user_id: cs.teacher_id,
+      title,
+      file_name: fileName,
+      approved_at: params.approvedAt,
+      status: 'pending',
+    }).select('id').single()
+
+    if (error || !row?.id) {
+      console.error('[archiveApprovedPp5Subject] insert failed', error?.message)
+      return
+    }
+    exportId = row.id
+  }
+
+  await ensureDocumentReference({ schoolId: params.schoolId, exportId })
   await generateAndStoreApprovedDocument({
-    exportId: row.id,
+    exportId,
     actor: params.actor,
     schoolId: params.schoolId,
     previewTarget,
@@ -113,14 +137,30 @@ export async function archiveApprovedClassDocument(params: {
     .select('id, level, room, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id')
     .eq('id', params.classroomId)
     .maybeSingle()
-  if (!classroom) return
+  if (!classroom) {
+    console.error('[archiveApprovedClassDocument] classroom not found', params.classroomId)
+    return
+  }
 
-  const homeroomId = classroom.homeroom_teacher_id || classroom.homeroom_teacher2_id
+  const { data: approval } = await db.from('class_document_approvals')
+    .select('month, homeroom_id')
+    .eq('id', params.classDocumentApprovalId)
+    .maybeSingle()
+
+  const month = params.docType === 'classroom_admin' && approval?.month != null
+    ? Number(approval.month)
+    : null
+
+  const ownerUserId = approval?.homeroom_id
+    || classroom.homeroom_teacher_id
+    || classroom.homeroom_teacher2_id
+    || null
+
   let teacherName = 'ครูประจำชั้น'
-  if (homeroomId) {
+  if (ownerUserId) {
     const { data: teacher } = await db.from('users')
       .select('prefix, first_name, last_name')
-      .eq('id', homeroomId)
+      .eq('id', ownerUserId)
       .maybeSingle()
     if (teacher) teacherName = displayName(teacher.prefix, teacher.first_name, teacher.last_name)
   }
@@ -135,14 +175,6 @@ export async function archiveApprovedClassDocument(params: {
   })
   const kind = params.docType as ApprovedDocKind
   const previewKind = classDocTypeToPreviewKind(params.docType)
-  let month: number | null = null
-  if (params.docType === 'classroom_admin') {
-    const { data: approval } = await db.from('class_document_approvals')
-      .select('month')
-      .eq('id', params.classDocumentApprovalId)
-      .maybeSingle()
-    month = approval?.month == null ? null : Number(approval.month)
-  }
   const monthTag = month ? ` · ชุดเดือน ${getThaiMonthShort(month)}` : ''
   const title = `${APPROVED_DOC_FOLDER_LABELS[previewKind]} · ${classroom.level}/${classroom.room}${monthTag} · ${teacherName}`
 
@@ -155,24 +187,49 @@ export async function archiveApprovedClassDocument(params: {
     month,
   }
 
-  const { data: row, error } = await db.from('approved_document_exports').insert({
-    school_id: params.schoolId,
-    doc_kind: kind,
-    academic_year_id: classroom.academic_year_id,
-    term: params.term,
-    classroom_id: classroom.id,
-    class_document_approval_id: params.classDocumentApprovalId,
-    owner_user_id: homeroomId,
-    title,
-    file_name: fileName,
-    approved_at: params.approvedAt,
-    status: 'pending',
-  }).select('id').single()
+  const { data: existing } = await db.from('approved_document_exports')
+    .select('id, status')
+    .eq('class_document_approval_id', params.classDocumentApprovalId)
+    .maybeSingle()
 
-  if (error || !row?.id) return
-  await ensureDocumentReference({ schoolId: params.schoolId, exportId: row.id })
+  let exportId = existing?.id as string | undefined
+  if (existing?.status === 'ready') return
+
+  if (exportId) {
+    await db.from('approved_document_exports').update({
+      title,
+      file_name: fileName,
+      owner_user_id: ownerUserId,
+      approved_at: params.approvedAt,
+      status: 'pending',
+      error_message: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', exportId)
+  } else {
+    const { data: row, error } = await db.from('approved_document_exports').insert({
+      school_id: params.schoolId,
+      doc_kind: kind,
+      academic_year_id: classroom.academic_year_id,
+      term: params.term,
+      classroom_id: classroom.id,
+      class_document_approval_id: params.classDocumentApprovalId,
+      owner_user_id: ownerUserId,
+      title,
+      file_name: fileName,
+      approved_at: params.approvedAt,
+      status: 'pending',
+    }).select('id').single()
+
+    if (error || !row?.id) {
+      console.error('[archiveApprovedClassDocument] insert failed', error?.message, params)
+      return
+    }
+    exportId = row.id
+  }
+
+  await ensureDocumentReference({ schoolId: params.schoolId, exportId })
   await generateAndStoreApprovedDocument({
-    exportId: row.id,
+    exportId,
     actor: params.actor,
     schoolId: params.schoolId,
     previewTarget,
@@ -193,15 +250,13 @@ async function generateAndStoreApprovedDocument(params: {
   try {
     const printReq = buildSignDocumentPrintRequest(params.previewTarget)
     const sessionToken = await sessionTokenFromActor(params.actor)
-    const pdfBuffer = await generateReportPdf({
-      origin: appOrigin(),
-      path: printReq.path,
-      query: printReq.query,
-      sessionToken,
-      landscape: printReq.landscape,
-    })
+    const wantsDriveQr = params.previewTarget.kind !== 'classroom_admin'
 
-    // เก็บ PDF ไว้ที่ Google Drive ของโรงเรียนอย่างเดียว (ไม่เก็บใน Supabase Storage)
+    const { data: existingExport } = await db.from('approved_document_exports')
+      .select('drive_file_id, drive_web_view_link, drive_folder_path')
+      .eq('id', params.exportId)
+      .maybeSingle()
+
     const { data: school } = await db.from('schools')
       .select('google_drive_folder_id')
       .eq('id', params.schoolId)
@@ -212,29 +267,93 @@ async function generateAndStoreApprovedDocument(params: {
     }
 
     const folderLabel = APPROVED_DOC_FOLDER_LABELS[params.previewTarget.kind]
-    const drive = await uploadPdfToDrive({
-      schoolId: params.schoolId,
-      rootFolderId: school.google_drive_folder_id,
-      folderSegments: [String(params.yearBe), folderLabel],
-      fileName: params.fileName,
-      buffer: pdfBuffer,
+    const monthSeg = params.previewTarget.kind === 'classroom_admin' && params.previewTarget.month
+      ? getThaiMonthShort(params.previewTarget.month)
+      : null
+    const folderSegments = monthSeg
+      ? [String(params.yearBe), folderLabel, monthSeg]
+      : [String(params.yearBe), folderLabel]
+
+    let fileId = existingExport?.drive_file_id ? String(existingExport.drive_file_id) : null
+    let webViewLink = existingExport?.drive_web_view_link
+      ? String(existingExport.drive_web_view_link)
+      : null
+    let folderPath = existingExport?.drive_folder_path
+      ? String(existingExport.drive_folder_path)
+      : folderSegments.join('/')
+
+    // ถ้ามีลิงก์ Drive แล้ว — สร้าง PDF ครั้งเดียวให้ QR ชี้ Drive แล้วอัปเดตไฟล์เดิม
+    // ถ้ายังไม่มี — อัปโหลดก่อน แล้วสร้าง PDF อีกรอบพร้อม QR Drive
+    const pdfBuffer = await generateReportPdf({
+      origin: appOrigin(),
+      path: printReq.path,
+      query: printReq.query,
+      sessionToken,
+      landscape: printReq.landscape,
     })
 
-    if (!drive.fileId) {
-      throw new Error('อัปโหลดไฟล์ขึ้น Google Drive ไม่สำเร็จ')
+    if (fileId && webViewLink) {
+      const ok = await updateDriveFileMedia({
+        schoolId: params.schoolId,
+        fileId,
+        buffer: pdfBuffer,
+      })
+      if (!ok) throw new Error('อัปเดตไฟล์บน Google Drive ไม่สำเร็จ')
+    } else {
+      const drive = await uploadPdfToDrive({
+        schoolId: params.schoolId,
+        rootFolderId: school.google_drive_folder_id,
+        folderSegments,
+        fileName: params.fileName,
+        buffer: pdfBuffer,
+      })
+      if (!drive.fileId) {
+        throw new Error('อัปโหลดไฟล์ขึ้น Google Drive ไม่สำเร็จ')
+      }
+      fileId = drive.fileId
+      webViewLink = drive.webViewLink
+      folderPath = drive.folderPath
+
+      await db.from('approved_document_exports').update({
+        storage_path: null,
+        drive_file_id: fileId,
+        drive_web_view_link: webViewLink,
+        drive_folder_path: folderPath,
+        updated_at: new Date().toISOString(),
+      }).eq('id', params.exportId)
+
+      if (wantsDriveQr && webViewLink) {
+        try {
+          const pdfWithDriveQr = await generateReportPdf({
+            origin: appOrigin(),
+            path: printReq.path,
+            query: printReq.query,
+            sessionToken,
+            landscape: printReq.landscape,
+          })
+          await updateDriveFileMedia({
+            schoolId: params.schoolId,
+            fileId,
+            buffer: pdfWithDriveQr,
+          })
+        } catch (qrErr) {
+          console.error('[generateAndStoreApprovedDocument] drive QR regenerate failed', qrErr)
+        }
+      }
     }
 
     await db.from('approved_document_exports').update({
       storage_path: null,
-      drive_file_id: drive.fileId,
-      drive_web_view_link: drive.webViewLink,
-      drive_folder_path: drive.folderPath,
+      drive_file_id: fileId,
+      drive_web_view_link: webViewLink,
+      drive_folder_path: folderPath,
       generated_at: new Date().toISOString(),
       status: 'ready',
       error_message: null,
       updated_at: new Date().toISOString(),
     }).eq('id', params.exportId)
   } catch (err) {
+    console.error('[generateAndStoreApprovedDocument]', err)
     await db.from('approved_document_exports').update({
       status: 'failed',
       error_message: err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ',
@@ -243,8 +362,71 @@ async function generateAndStoreApprovedDocument(params: {
   }
 }
 
+/** สร้าง/สร้างใหม่ PDF ของรายการที่อนุมัติแล้ว (ใช้จากปุ่มลองใหม่) */
+export async function regenerateApprovedDocumentExport(params: {
+  actor: SessionPayload
+  schoolId: string
+  exportId: string
+}) {
+  const db = createServerClient()
+  const { data: row } = await db.from('approved_document_exports')
+    .select('*')
+    .eq('id', params.exportId)
+    .eq('school_id', params.schoolId)
+    .maybeSingle()
+  if (!row) return { error: 'ไม่พบเอกสาร' }
+
+  // อนุญาตสร้างใหม่แม้สถานะ ready — เพื่ออัปเดต QR ให้เป็นลิงก์ Drive
+  await db.from('approved_document_exports').update({
+    status: 'pending',
+    error_message: null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', params.exportId)
+
+  if (row.doc_kind === 'pp5_subject' && row.approval_signature_id && row.class_subject_id) {
+    await archiveApprovedPp5Subject({
+      actor: params.actor,
+      schoolId: params.schoolId,
+      approvalSignatureId: row.approval_signature_id,
+      classSubjectId: row.class_subject_id,
+      term: row.term,
+      approvedAt: row.approved_at,
+    })
+    return { success: true }
+  }
+
+  if (row.class_document_approval_id && row.classroom_id) {
+    await archiveApprovedClassDocument({
+      actor: params.actor,
+      schoolId: params.schoolId,
+      classDocumentApprovalId: row.class_document_approval_id,
+      docType: row.doc_kind as ClassDocType,
+      classroomId: row.classroom_id,
+      term: row.term,
+      approvedAt: row.approved_at,
+    })
+    return { success: true }
+  }
+
+  return { error: 'ข้อมูลเอกสารไม่ครบสำหรับสร้างไฟล์ใหม่' }
+}
+
+/**
+ * รันหลัง response — ใช้ after() เพื่อไม่ให้ serverless ตัดงานสร้าง PDF กลางคัน
+ */
 export function scheduleApprovedDocumentArchive(task: () => Promise<void>) {
-  void task().catch(err => {
-    console.error('[approved-document-archive]', err)
-  })
+  const run = async () => {
+    try {
+      await task()
+    } catch (err) {
+      console.error('[approved-document-archive]', err)
+    }
+  }
+
+  try {
+    after(run)
+  } catch {
+    // นอก request scope — รันต่อทันที
+    void run()
+  }
 }

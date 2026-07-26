@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import { verifySession } from '@/lib/dal'
 import { isAcademicHeadRole } from '@/lib/roles'
 
+export const dynamic = 'force-dynamic'
+
 async function getSchoolStats(schoolId: string) {
   const { createServerClient } = await import('@/lib/supabase')
   const db = createServerClient()
@@ -85,7 +87,14 @@ export default async function DashboardPage() {
   const schoolName = !isDistrict && s.schoolId ? await getSchoolName(s.schoolId) : ''
 
   let isActingDirector = false
-  let signCounts: { pp5: number; pp6: number; classroomAdmin: number } | null = null
+  let signCounts: {
+    pp5: number
+    pp6: number
+    classroomAdmin: number
+    actionablePp5: number
+    actionablePp6: number
+    actionableClassroomAdmin: number
+  } | null = null
   if (!isDistrict && s.schoolId) {
     const { createServerClient } = await import('@/lib/supabase')
     const db = createServerClient()
@@ -103,6 +112,7 @@ export default async function DashboardPage() {
   }
   const { withSchoolPrefix } = await import('@/lib/school-path')
   const scopeHref = (href: string) => withSchoolPrefix(schoolCode, href)
+  const showClassroomAdminCard = isActingDirector || s.role === 'principal'
 
   return (
     <div className="page-stack">
@@ -158,11 +168,31 @@ export default async function DashboardPage() {
         <div>
           <p className="section-title">เอกสารรออนุมัติ</p>
           <div className="responsive-grid">
-            {[
-              { label: 'ปพ.5 รายวิชา',        href: '/documents/sign?tab=subject',             count: signCounts?.pp5 ?? 0, color: '#9D174D' },
-              { label: 'ปพ.6 ประจำตัว',       href: '/documents/sign?tab=class_pp6',             count: signCounts?.pp6 ?? 0, color: '#0E7490' },
-              { label: 'ธุรการชั้นเรียน',     href: '/classroom-admin/sign', count: signCounts?.classroomAdmin ?? 0, color: '#B45309' },
-            ].map(d => (
+            {([
+              {
+                label: 'ปพ.5 รายวิชา',
+                href: scopeHref('/documents/sign?tab=subject'),
+                count: signCounts?.pp5 ?? 0,
+                actionable: signCounts?.actionablePp5 ?? 0,
+                color: '#9D174D',
+              },
+              {
+                label: 'ปพ.5 รวมชั้น / ปพ.6',
+                href: scopeHref('/documents/sign?tab=class_pp6'),
+                count: signCounts?.pp6 ?? 0,
+                actionable: signCounts?.actionablePp6 ?? 0,
+                color: '#0E7490',
+              },
+              ...(showClassroomAdminCard
+                ? [{
+                    label: 'ธุรการชั้นเรียน',
+                    href: scopeHref('/classroom-admin/sign'),
+                    count: signCounts?.classroomAdmin ?? 0,
+                    actionable: signCounts?.actionableClassroomAdmin ?? 0,
+                    color: '#B45309',
+                  }]
+                : []),
+            ]).map(d => (
               <a key={d.href} href={d.href} className="card-sm quick-link" style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px 20px' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                   <span style={{ fontSize: '28px', fontWeight: 800, color: d.count > 0 ? d.color : '#9CA3AF', lineHeight: 1 }}>{d.count}</span>
@@ -170,15 +200,17 @@ export default async function DashboardPage() {
                 </div>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{d.label}</div>
                 <div style={{ fontSize: '11px', color: d.count > 0 ? d.color : 'var(--text-3)' }}>
-                  {d.count > 0 ? 'รอดำเนินการ →' : 'ยังไม่มีเอกสารส่งเข้ามา'}
+                  {d.count > 0
+                    ? (d.actionable > 0 ? `ถึงคิวคุณ ${d.actionable} · ดูคิว →` : 'เสนอเซ็นแล้ว · ดูคิว →')
+                    : 'ยังไม่มีเอกสารเสนอเซ็น'}
                 </div>
               </a>
             ))}
           </div>
           <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '8px' }}>
-            {isActingDirector || s.role === 'principal'
-              ? 'อนุมัติขั้นสุดท้าย → ล็อกคะแนน (ปพ.5 รายวิชา) / ปิดงานเอกสาร'
-              : 'ตรวจและลงนามตามลำดับ ก่อนส่งผู้อำนวยการอนุมัติ'}
+            {showClassroomAdminCard
+              ? 'ตัวเลขหลัก = เอกสารเสนอเซ็นแล้วทั้งคิว · “ถึงคิวคุณ” = รอผอ./รักษาการลงนาม'
+              : 'ตัวเลขหลัก = เอกสารเสนอเซ็นแล้วทั้งคิว · “ถึงคิวคุณ” = รอหัวหน้าวิชาการลงนาม'}
           </p>
         </div>
       )}

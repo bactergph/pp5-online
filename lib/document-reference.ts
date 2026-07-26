@@ -41,6 +41,8 @@ export function buildDocumentVerifyUrl(code: string, origin = appOrigin()) {
   return `${origin.replace(/\/$/, '')}/v/${encodeURIComponent(code)}`
 }
 
+export { documentQrUrl } from '@/lib/document-qr-url'
+
 export async function ensureDocumentReference(params: {
   schoolId: string
   exportId: string

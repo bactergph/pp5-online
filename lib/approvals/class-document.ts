@@ -34,11 +34,13 @@ function hasClassStepAssignee(step: ClassDocStep, school: SchoolLeaders): boolea
     case 'homeroom':
       return true
     case 'academic_head':
-      return Boolean(school.academic_head_user_id)
+      // มีใน flow เสมอ — ลงนามได้ด้วย academic_head_user_id หรือ role academic_head / deputy_principal
+      return true
     case 'vice_director':
       return Boolean(school.vice_director_user_id || school.vice_director_name)
     case 'director':
-      return Boolean(school.director_user_id || school.acting_director_user_id)
+      // มีใน flow เสมอ — ลงนามได้ด้วย director/acting user หรือ role principal
+      return true
     default:
       return false
   }

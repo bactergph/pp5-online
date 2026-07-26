@@ -2,13 +2,17 @@
 export default function ReportCheckMark({
   size = 10,
   color = '#111827',
+  /** ทับช่องสี่เหลี่ยมให้อ่านชัด (ใช้บนปกปพ.5) */
+  stamp = false,
 }: {
   size?: number
   color?: string
+  stamp?: boolean
 }) {
+  const stroke = stamp ? 2.2 : 1.8
   return (
     <svg
-      className="report-checkmark"
+      className={`report-checkmark${stamp ? ' report-checkmark--stamp' : ''}`}
       viewBox="0 0 12 12"
       width={size}
       height={size}
@@ -16,10 +20,10 @@ export default function ReportCheckMark({
       focusable="false"
     >
       <path
-        d="M2.2 6.1 4.8 8.7 9.8 3.2"
+        d="M1.6 6.2 4.7 9.2 10.4 2.6"
         fill="none"
         stroke={color}
-        strokeWidth="1.8"
+        strokeWidth={stroke}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

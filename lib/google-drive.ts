@@ -134,6 +134,26 @@ export async function uploadPdfToDrive(params: {
   return uploadFileToDrive({ ...params, mimeType: 'application/pdf' })
 }
 
+/** อัปเดตเนื้อหาไฟล์บน Drive โดยคง fileId / webViewLink เดิม */
+export async function updateDriveFileMedia(params: {
+  schoolId: string
+  fileId: string
+  buffer: Buffer
+  mimeType?: string
+}) {
+  const drive = await resolveDriveClient(params.schoolId)
+  if (!drive) return false
+  await drive.files.update({
+    fileId: params.fileId,
+    media: {
+      mimeType: params.mimeType || 'application/pdf',
+      body: Readable.from(params.buffer),
+    },
+    supportsAllDrives: true,
+  })
+  return true
+}
+
 export async function deleteDriveFile(schoolId: string, fileId: string | null | undefined) {
   if (!fileId) return
   const drive = await resolveDriveClient(schoolId)

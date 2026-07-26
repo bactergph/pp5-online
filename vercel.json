@@ -3,6 +3,9 @@
     "app/api/reports/pdf/route.ts": {
       "memory": 1024,
       "maxDuration": 120
+    },
+    "app/(shell)/**/*": {
+      "maxDuration": 300
     }
   }
 }

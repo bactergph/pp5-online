@@ -5,7 +5,10 @@ import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { deleteDriveFile } from '@/lib/google-drive'
 import { APPROVED_DOC_KIND_LABELS, buildSignDocumentPreviewUrl, classDocTypeToPreviewKind } from '@/lib/sign-document-preview'
-import type { ApprovedDocKind } from '@/lib/approved-documents/archive'
+import {
+  regenerateApprovedDocumentExport,
+  type ApprovedDocKind,
+} from '@/lib/approved-documents/archive'
 import type { ClassDocType } from '@/lib/approvals/types'
 import { getThaiMonthShort } from '@/lib/thaiDate'
 
@@ -110,21 +113,38 @@ async function canViewDocument(
 
   const db = createServerClient()
 
+  // ครูประจำชั้นของห้องนั้นมองเห็นได้เสมอ (แม้ owner_user_id ไม่ตรง)
+  if (row.classroom_id) {
+    const { data: classroom } = await db.from('classrooms')
+      .select('homeroom_teacher_id, homeroom_teacher2_id, school_id')
+      .eq('id', row.classroom_id)
+      .maybeSingle()
+    if (
+      classroom
+      && classroom.school_id === session.schoolId
+      && (classroom.homeroom_teacher_id === session.userId
+        || classroom.homeroom_teacher2_id === session.userId)
+    ) {
+      return true
+    }
+  }
+
   if (row.approval_signature_id) {
     const { data } = await db.from('approval_signatures')
       .select('teacher_id, subject_head_id, measurement_head_id, academic_head_id, vice_director_id, director_id')
       .eq('id', row.approval_signature_id)
       .maybeSingle()
-    if (!data) return false
-    const ids = [
-      data.teacher_id,
-      data.subject_head_id,
-      data.measurement_head_id,
-      data.academic_head_id,
-      data.vice_director_id,
-      data.director_id,
-    ]
-    return ids.includes(session.userId)
+    if (data) {
+      const ids = [
+        data.teacher_id,
+        data.subject_head_id,
+        data.measurement_head_id,
+        data.academic_head_id,
+        data.vice_director_id,
+        data.director_id,
+      ]
+      if (ids.includes(session.userId)) return true
+    }
   }
 
   if (row.class_document_approval_id) {
@@ -135,9 +155,10 @@ async function canViewDocument(
       `)
       .eq('id', row.class_document_approval_id)
       .maybeSingle()
-    if (!data) return false
-    const classroom = data.classrooms as { homeroom_teacher_id: string | null; homeroom_teacher2_id: string | null }
-    return canViewClassDocApproval(session, data, classroom)
+    if (data) {
+      const classroom = data.classrooms as { homeroom_teacher_id: string | null; homeroom_teacher2_id: string | null }
+      if (await canViewClassDocApproval(session, data, classroom)) return true
+    }
   }
 
   return false
@@ -301,6 +322,12 @@ export async function fetchApprovedDocuments(docKind: ApprovedDocKind) {
     if (!allowed) continue
     if (row.approval_signature_id) exportedApprovalIds.add(row.approval_signature_id)
     if (row.class_document_approval_id) exportedApprovalIds.add(row.class_document_approval_id)
+
+    let previewUrl: string | null = null
+    if (row.status !== 'ready' || !row.drive_web_view_link) {
+      previewUrl = await buildPreviewUrlForExportRow(db, row)
+    }
+
     rows.push({
       id: row.id,
       doc_kind: row.doc_kind as ApprovedDocKind,
@@ -316,11 +343,96 @@ export async function fetchApprovedDocuments(docKind: ApprovedDocKind) {
       drive_folder_path: row.drive_folder_path,
       can_delete: canDeleteApprovedDocs(session.role),
       has_file: row.status === 'ready' && Boolean(row.drive_web_view_link || row.storage_path),
+      preview_url: previewUrl,
     })
   }
 
   const workflowRows = await fetchWorkflowApprovedDocuments(session, docKind, exportedApprovalIds)
   return [...rows, ...workflowRows].sort((a, b) => b.approved_at.localeCompare(a.approved_at))
+}
+
+async function buildPreviewUrlForExportRow(
+  db: ReturnType<typeof createServerClient>,
+  row: {
+    doc_kind: string
+    term: number
+    classroom_id: string | null
+    class_subject_id: string | null
+    class_document_approval_id: string | null
+    academic_year_id: string
+  },
+) {
+  if (row.doc_kind === 'pp5_subject' && row.class_subject_id && row.classroom_id) {
+    const { data: classroom } = await db.from('classrooms')
+      .select('level')
+      .eq('id', row.classroom_id)
+      .maybeSingle()
+    if (!classroom) return null
+    return buildSignDocumentPreviewUrl({
+      kind: 'pp5-subject',
+      academicYearId: row.academic_year_id,
+      classroomId: row.classroom_id,
+      level: classroom.level,
+      signTerm: row.term,
+      classSubjectId: row.class_subject_id,
+    })
+  }
+
+  if (!row.classroom_id) return null
+  const { data: classroom } = await db.from('classrooms')
+    .select('level')
+    .eq('id', row.classroom_id)
+    .maybeSingle()
+  if (!classroom) return null
+
+  let month: number | null = null
+  if (row.doc_kind === 'classroom_admin' && row.class_document_approval_id) {
+    const { data: approval } = await db.from('class_document_approvals')
+      .select('month')
+      .eq('id', row.class_document_approval_id)
+      .maybeSingle()
+    month = approval?.month == null ? null : Number(approval.month)
+  }
+
+  const kind = classDocTypeToPreviewKind(row.doc_kind as ClassDocType)
+  return buildSignDocumentPreviewUrl({
+    kind,
+    academicYearId: row.academic_year_id,
+    classroomId: row.classroom_id,
+    level: classroom.level,
+    signTerm: row.term,
+    month,
+  })
+}
+
+export async function retryApprovedDocumentFile(exportId: string) {
+  const session = await requireSession()
+  if (!session.schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
+
+  const db = createServerClient()
+  const { data: row } = await db.from('approved_document_exports')
+    .select('id, status, owner_user_id, classroom_id, class_document_approval_id, approval_signature_id, class_subject_id, doc_kind')
+    .eq('id', exportId)
+    .eq('school_id', session.schoolId)
+    .maybeSingle()
+  if (!row) return { error: 'ไม่พบเอกสาร' }
+
+  const allowed = await canViewDocument(session, row as typeof row & {
+    doc_kind: ApprovedDocKind
+    class_subject_id: string | null
+    classroom_id: string | null
+    approval_signature_id: string | null
+    class_document_approval_id: string | null
+  })
+  if (!allowed && !isPrivilegedApprovedViewer(session.role)) {
+    return { error: 'ไม่มีสิทธิ์สร้างไฟล์นี้ใหม่' }
+  }
+
+  return regenerateApprovedDocumentExport({
+    actor: session,
+    schoolId: session.schoolId,
+    exportId,
+  })
 }
 
 export async function deleteApprovedDocument(id: string) {

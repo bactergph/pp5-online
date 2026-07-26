@@ -353,7 +353,6 @@ export async function buildDailyAttendancePdfBlob(
   const numberW = px(layout.numberColWidthPx)
   const nameW = px(layout.nameColWidthPx)
   const summaryW = px(layout.summaryColWidthPx)
-  const signatureGap = px(layout.signatureGapPx)
   const signatureMarginTop = px(layout.signatureMarginTopPx)
   const headLineGap = px(layout.headLineGapPx)
 
@@ -685,15 +684,17 @@ export async function buildDailyAttendancePdfBlob(
       }
     })
 
-    // —— Signatures ——
-    const sigY = PAGE_H - padBottom - 18
+    // —— Signatures (ชิดใต้ตาราง + แสดงชื่อ/ตำแหน่ง) ——
     const tableBottom = bodyTop + printRows.length * rowH
-    const signTop = Math.max(tableBottom + Math.max(4, signatureMarginTop * 0.35), sigY - 2)
+    const signImgH = 8
+    const signBlockH = signImgH + 3.8 + 3.8 + 3.6 * 2
+    const preferredTop = tableBottom + Math.max(2.5, signatureMarginTop)
+    const maxSignTop = PAGE_H - padBottom - signBlockH
+    const signTop = Math.min(preferredTop, Math.max(tableBottom + 2, maxSignTop))
 
-    const colMidGap = signatureGap
-    const leftCenter = PAGE_W / 2 - colMidGap / 2 - 30
-    const rightCenter = PAGE_W / 2 + colMidGap / 2 + 30
-    const signImgH = 11
+    // วางใต้ตาราง ซ้าย/ขวา ~1/4 และ 3/4 ของความกว้างตาราง
+    const leftCenter = tableLeft + tableWidth * 0.28
+    const rightCenter = tableLeft + tableWidth * 0.72
 
     function drawSignBlock(
       centerX: number,
@@ -704,10 +705,10 @@ export async function buildDailyAttendancePdfBlob(
       doc.setFont('THSarabunNew', 'normal')
       doc.setFontSize(signPt)
       setText(doc, COLORS.text)
-      const lineY = signTop + 8
+      const lineY = signTop + signImgH
       if (signData) {
         try {
-          const imgW = 42
+          const imgW = 36
           doc.addImage(
             signData,
             detectImageFormat(signData),
@@ -716,7 +717,7 @@ export async function buildDailyAttendancePdfBlob(
             imgW,
             signImgH,
           )
-          doc.text('ลงชื่อ', centerX - imgW / 2 - 8, lineY, { align: 'right', baseline: 'bottom' })
+          doc.text('ลงชื่อ', centerX - imgW / 2 - 6, lineY, { align: 'right', baseline: 'bottom' })
         } catch {
           doc.text('ลงชื่อ ...........................................', centerX, lineY, { align: 'center' })
         }
@@ -724,16 +725,16 @@ export async function buildDailyAttendancePdfBlob(
         doc.text('ลงชื่อ ...........................................', centerX, lineY, { align: 'center' })
       }
 
-      let ty = lineY + 4.5
+      let ty = lineY + 3.8
       doc.setFont('THSarabunNew', 'bold')
       doc.setFontSize(signPt)
       doc.text(`( ${name} )`, centerX, ty, { align: 'center' })
-      ty += 4.5
+      ty += 3.8
       doc.setFont('THSarabunNew', 'normal')
       doc.setFontSize(signRolePt)
       for (const role of roles) {
         doc.text(role, centerX, ty, { align: 'center' })
-        ty += 4
+        ty += 3.6
       }
     }
 

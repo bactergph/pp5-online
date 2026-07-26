@@ -73,8 +73,8 @@ export const DEFAULT_CLASSROOM_ADMIN_MONTHLY_LAYOUT: ClassroomAdminMonthlyLayout
   numberColWidthPx: 42,
   nameColWidthPx: 190,
   summaryColWidthPx: 40,
-  signatureGapPx: 120,
-  signatureMarginTopPx: 32,
+  signatureGapPx: 48,
+  signatureMarginTopPx: 10,
   fontSignaturePx: 12,
   fontSignatureRolePx: 11,
   minBlankRows: 25,
@@ -93,8 +93,8 @@ export const DEFAULT_CLASSROOM_ADMIN_STANDARD_LAYOUT: ClassroomAdminStandardLayo
   letterSpacingPx: 0,
   standardRowHeightPx: 24,
   logoSizePx: 42,
-  signatureGapPx: 120,
-  signatureMarginTopPx: 32,
+  signatureGapPx: 48,
+  signatureMarginTopPx: 10,
   fontSignaturePx: 12,
   fontSignatureRolePx: 11,
 }
@@ -104,7 +104,8 @@ export const DEFAULT_CLASSROOM_ADMIN_PRINT_LAYOUTS: ClassroomAdminPrintLayouts =
   standard: { ...DEFAULT_CLASSROOM_ADMIN_STANDARD_LAYOUT },
 }
 
-export const CLASSROOM_ADMIN_PRINT_LAYOUTS_STORAGE_KEY = 'classroom-admin-print-layouts-v1'
+/** v2 — ค่าเริ่มต้นลายเซ็นชิดตาราง (รีเซ็ต layout ที่บันทึกในเบราว์เซอร์) */
+export const CLASSROOM_ADMIN_PRINT_LAYOUTS_STORAGE_KEY = 'classroom-admin-print-layouts-v2'
 
 export const CLASSROOM_ADMIN_MONTHLY_FIELD_KEYS = [
   'padTopPx', 'padSidePx', 'padBottomPx',

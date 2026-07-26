@@ -7,6 +7,7 @@ import {
   deleteApprovedDocument,
   fetchApprovedDocuments,
   getApprovedDocumentDownloadPath,
+  retryApprovedDocumentFile,
   type ApprovedDocumentRow,
 } from '@/app/approved-documents/actions'
 import type { ApprovedDocKind } from '@/lib/approved-documents/archive'
@@ -110,6 +111,17 @@ export default function ApprovedDocumentsClient({
     }
   }
 
+  async function handleRetry(item: ApprovedDocumentRow) {
+    setBusyId(item.id)
+    const result = await retryApprovedDocumentFile(item.id)
+    setBusyId(null)
+    if (result.error) notify('error', result.error)
+    else {
+      notify('success', 'สั่งสร้างไฟล์ใหม่แล้ว')
+      await reload()
+    }
+  }
+
   const listBody = embedded ? (
     <>
       {loading ? (
@@ -129,19 +141,33 @@ export default function ApprovedDocumentsClient({
               <h3 className="document-sign-card__title">{item.title}</h3>
               <p className="document-sign-card__subtitle">{item.doc_kind_label}</p>
               <p className="document-sign-card__detail">อนุมัติเมื่อ {formatThaiDate(item.approved_at)}</p>
-              {(item.has_file || item.preview_url) ? (
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm document-sign-card__view"
-                  onClick={() => void handlePreview(item)}
-                >
-                  ดูเอกสาร
-                </button>
-              ) : item.status === 'pending' || item.status === 'failed' ? (
-                <span className="document-sign-card__detail">
-                  {item.status === 'failed' ? 'สร้างไฟล์ไม่สำเร็จ' : 'กำลังสร้างไฟล์...'}
-                </span>
-              ) : null}
+              {(item.status === 'pending' || item.status === 'failed') && (
+                <p className={`document-sign-card__detail${item.status === 'failed' ? ' document-sign-card__detail--danger' : ''}`}>
+                  {item.status === 'failed'
+                    ? (item.error_message || 'สร้างไฟล์ไม่สำเร็จ')
+                    : 'กำลังสร้างไฟล์เก็บใน Google Drive...'}
+                </p>
+              )}
+              <div className="document-sign-card__actions">
+                {(item.has_file || item.preview_url) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm document-sign-card__view"
+                    onClick={() => void handlePreview(item)}
+                  >
+                    ดูเอกสาร
+                  </button>
+                )}
+                {(item.status === 'pending' || item.status === 'failed') && !item.id.startsWith('workflow:') && (
+                  <LoadingButton
+                    className="btn btn-primary btn-sm"
+                    loading={busyId === item.id}
+                    onClick={() => void handleRetry(item)}
+                  >
+                    {item.status === 'failed' ? 'ลองสร้างไฟล์ใหม่' : 'สร้างไฟล์อีกครั้ง'}
+                  </LoadingButton>
+                )}
+              </div>
             </article>
           ))}
         </div>
@@ -197,15 +223,20 @@ export default function ApprovedDocumentsClient({
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {(item.has_file || item.preview_url) && (
+                        <LoadingButton className="btn btn-secondary btn-sm" loading={busyId === item.id} onClick={() => handlePreview(item)}>
+                          พรีวิว
+                        </LoadingButton>
+                      )}
                       {item.has_file && (
-                        <>
-                          <LoadingButton className="btn btn-secondary btn-sm" loading={busyId === item.id} onClick={() => handlePreview(item)}>
-                            พรีวิว
-                          </LoadingButton>
-                          <LoadingButton className="btn btn-primary btn-sm" loading={busyId === item.id} onClick={() => handleDownload(item)}>
-                            ดาวน์โหลด
-                          </LoadingButton>
-                        </>
+                        <LoadingButton className="btn btn-primary btn-sm" loading={busyId === item.id} onClick={() => handleDownload(item)}>
+                          ดาวน์โหลด
+                        </LoadingButton>
+                      )}
+                      {(item.status === 'pending' || item.status === 'failed') && !item.id.startsWith('workflow:') && (
+                        <LoadingButton className="btn btn-primary btn-sm" loading={busyId === item.id} onClick={() => void handleRetry(item)}>
+                          {item.status === 'failed' ? 'ลองสร้างใหม่' : 'สร้างไฟล์อีกครั้ง'}
+                        </LoadingButton>
                       )}
                       {item.drive_web_view_link && (
                         <a href={item.drive_web_view_link} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">

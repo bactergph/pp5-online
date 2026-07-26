@@ -113,16 +113,28 @@ const PP5_STEP_DB: Record<string, { at: string; id: string }> = {
 
 export async function fetchSignPendingCounts() {
   const session = await requireSession()
-  if (!session.schoolId) return { pp5: 0, pp6: 0, classroomAdmin: 0 }
+  if (!session.schoolId) return { pp5: 0, pp6: 0, classroomAdmin: 0, actionablePp5: 0, actionablePp6: 0, actionableClassroomAdmin: 0 }
   const [pp5Items, classItems] = await Promise.all([
     fetchPp5SubjectQueue(),
     fetchClassDocQueue(),
   ])
+  /** ตรงกับ badge หน้าเสนอเซ็น — เอกสารที่เสนอเซ็นแล้ว / ถูกส่งกลับ */
+  const submitted = (items: { status: string }[]) =>
+    items.filter(i => i.status === 'in_review' || i.status === 'rejected').length
+  /** ถึงคิวให้ผู้ใช้นี้ลงนามได้ตอนนี้ */
   const actionable = (items: { canSign: boolean }[]) => items.filter(i => i.canSign).length
+
+  const classPp5Pp6 = classItems.filter(i => i.doc_type === 'pp6' || i.doc_type === 'pp5_class')
+  const classAdmin = classItems.filter(i => i.doc_type === 'classroom_admin')
+
   return {
-    pp5: actionable(pp5Items),
-    pp6: actionable(classItems.filter(i => i.doc_type === 'pp6')),
-    classroomAdmin: actionable(classItems.filter(i => i.doc_type === 'classroom_admin')),
+    // ค่าหลักบน dashboard = จำนวนเอกสารในคิว (เสนอเซ็นแล้ว)
+    pp5: submitted(pp5Items),
+    pp6: submitted(classPp5Pp6),
+    classroomAdmin: submitted(classAdmin),
+    actionablePp5: actionable(pp5Items),
+    actionablePp6: actionable(classPp5Pp6),
+    actionableClassroomAdmin: actionable(classAdmin),
   }
 }
 

@@ -1990,21 +1990,28 @@ ${fontFaces}
       .attendance-print-signatures {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: var(--ca-signature-gap, 120px);
+        gap: var(--ca-signature-gap, 48px);
         flex: 0 0 auto;
-        margin-top: auto;
-        padding-top: var(--ca-signature-margin-top, 20px);
+        /* ชิดใต้ตาราง — ไม่ดันลงก้นหน้า (margin-top: auto ทำให้ชื่อ/ตำแหน่งหาย) */
+        margin-top: var(--ca-signature-margin-top, 10px);
+        padding-top: 0;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        padding-left: 6%;
+        padding-right: 6%;
       }
       .attendance-print-signatures > div {
         text-align: center;
         font-size: var(--ca-font-signature, 12px);
         color: #111827;
+        min-width: 0;
       }
       .attendance-print-sign-line {
-        width: 260px;
-        margin: 0 auto 4px;
-        line-height: 1.15;
-        min-height: 42px;
+        width: min(240px, 100%);
+        margin: 0 auto 2px;
+        line-height: 1.1;
+        min-height: 28px;
         display: flex;
         align-items: flex-end;
         justify-content: center;
@@ -2012,22 +2019,22 @@ ${fontFaces}
       }
       .attendance-print-sign-img {
         display: inline-block;
-        height: 42px;
+        height: 28px;
         width: auto;
-        max-width: 160px;
+        max-width: 140px;
         object-fit: contain;
         vertical-align: bottom;
       }
       .attendance-print-signatures strong {
         display: block;
-        min-height: 15px;
+        min-height: 14px;
         font-size: var(--ca-font-signature, 12px);
         font-weight: 900;
         line-height: 1.15;
       }
       .attendance-print-signatures span {
         display: block;
-        margin-top: 2px;
+        margin-top: 1px;
         font-size: var(--ca-font-signature-role, 11px);
         line-height: 1.15;
       }
@@ -2465,7 +2472,9 @@ ${fontFaces}
           line-height: 1.05 !important;
         }
         .attendance-print-signatures {
-          margin-top: 8.5mm !important;
+          margin-top: 3mm !important;
+          padding-left: 6% !important;
+          padding-right: 6% !important;
         }
         .classroom-export-table-wrap {
           overflow: visible;
