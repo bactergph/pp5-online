@@ -1,5 +1,3 @@
-'use client'
-
 import { jsPDF } from 'jspdf'
 import type {
   ReportPayload,
@@ -15,6 +13,7 @@ import {
   buildTeachingWeeks,
   hourlyCellKey,
   hoursPerWeek,
+  resolveHourlyStatus,
   schoolDayCalendarFromLists,
   summarizeHourlyStatuses,
   termDateRange,
@@ -118,6 +117,12 @@ export type Pp5SubjectPdfOptions = {
   layouts: Pp5PrintLayouts
   previewSection?: Pp5SubjectPdfSection
   fileName?: string
+}
+
+export type Pp5SubjectPdfBuildOptions = {
+  /** ใช้ doc ที่สร้างไว้แล้ว (เช่น ฝั่งเซิร์ฟเวอร์ติดตั้งฟอนต์จากดิสก์แล้ว) */
+  doc?: jsPDF
+  skipApplyFonts?: boolean
 }
 
 type DrawCtx = {
@@ -343,8 +348,7 @@ function studentHourlySummary(
   const statuses: HourlyStatus[] = []
   for (const week of weeks) {
     for (let slot = 1; slot <= dataSlotsPerWeek; slot += 1) {
-      const status = recordMap.get(hourlyCellKey(studentId, week.weekNumber, slot))
-      if (status !== undefined) statuses.push(status)
+      statuses.push(resolveHourlyStatus(recordMap.get(hourlyCellKey(studentId, week.weekNumber, slot))))
     }
   }
   return summarizeHourlyStatuses(statuses)
@@ -359,8 +363,7 @@ function studentSecondaryHourlySummary(
   for (const week of weeks) {
     for (const day of week.days) {
       if (!day.slotInWeek) continue
-      const status = recordMap.get(hourlyCellKey(studentId, week.weekNumber, day.slotInWeek))
-      if (status !== undefined) statuses.push(status)
+      statuses.push(resolveHourlyStatus(recordMap.get(hourlyCellKey(studentId, week.weekNumber, day.slotInWeek))))
     }
   }
   return summarizeHourlyStatuses(statuses)
@@ -374,9 +377,7 @@ function subjectWeekMonthLabel(week: SubjectCalendarWeek) {
 }
 
 function hourlyStatusCellContent(status: HourlyStatus | undefined) {
-  if (status === undefined) return ''
-  if (status === '/') return '/'
-  return status
+  return resolveHourlyStatus(status)
 }
 
 function setStroke(doc: jsPDF, rgb: [number, number, number] = BORDER, width = 0.3) {
@@ -1419,8 +1420,7 @@ function drawPrimaryWeeklyPage(
     ]
     for (const week of pageWeeks) {
       for (let slot = 1; slot <= slotsPerWeek; slot += 1) {
-        const status = recordMap.get(hourlyCellKey(student.id, week.weekNumber, slot))
-        cells.push(status === undefined ? '' : status === '/' ? '/' : status)
+        cells.push(resolveHourlyStatus(recordMap.get(hourlyCellKey(student.id, week.weekNumber, slot))))
       }
     }
     if (showSummary) {
@@ -1554,7 +1554,7 @@ function drawSecondaryWeeklyPage(
         drawCell(doc, x, cy, dayW, rowH, '', { fontSize: font, muted: day.isHoliday })
         return
       }
-      const status = recordMap.get(hourlyCellKey(student.id, day.weekNumber, day.slotInWeek))
+      const status = resolveHourlyStatus(recordMap.get(hourlyCellKey(student.id, day.weekNumber, day.slotInWeek)))
       drawCell(doc, x, cy, dayW, rowH, hourlyStatusCellContent(status), { fontSize: font })
     })
 
@@ -2016,7 +2016,10 @@ const SECTION_ORDER: Pp5SubjectPdfSection[] = [
   'cover', 'criteria', 'attendance', 'scores', 'character', 'reading', 'competency',
 ]
 
-export async function buildPp5SubjectPdfBlob(options: Pp5SubjectPdfOptions): Promise<{ blob: Blob; fileName: string }> {
+export async function buildPp5SubjectPdfBlob(
+  options: Pp5SubjectPdfOptions,
+  buildOptions?: Pp5SubjectPdfBuildOptions,
+): Promise<{ blob: Blob; fileName: string }> {
   const { data, subject, term, sections, previewSection } = options
   const selectedSections = previewSection
     ? [previewSection]
@@ -2027,8 +2030,8 @@ export async function buildPp5SubjectPdfBlob(options: Pp5SubjectPdfOptions): Pro
   }
 
   const layouts = { ...DEFAULT_PP5_PRINT_LAYOUTS, ...options.layouts }
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
-  await applyThaiFonts(doc)
+  const doc = buildOptions?.doc ?? new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
+  if (!buildOptions?.skipApplyFonts) await applyThaiFonts(doc)
 
   const sigKeys = ['teacher', 'subject_head', 'measurement_head', 'academic_head', 'vice_director', 'director', 'homeroom'] as const
   const [logoData, qrPng, ...sigUrls] = await Promise.all([

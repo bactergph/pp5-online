@@ -164,7 +164,7 @@ export type HourlyAttendanceRecord = {
   term: 1 | 2
   week_number: number
   hour_number: number
-  status: HourlyStatus
+  status: HourlyStatus | string
 }
 
 /** สร้าง map สำหรับ lookup ช่องเวลาเรียน — ใช้ร่วมกันระหว่างหน้าเช็คชื่อและรายงาน */
@@ -180,7 +180,7 @@ export function buildHourlyStatusMap(
     if (term !== undefined && record.term !== term) continue
     out.set(
       hourlyCellKey(record.student_id, record.week_number, record.hour_number),
-      record.status,
+      record.status as HourlyStatus,
     )
   }
   return out
@@ -191,12 +191,18 @@ export function nextHourlyStatus(current: HourlyStatus): HourlyStatus {
   return HOURLY_STATUS_CYCLE[(index + 1) % HOURLY_STATUS_CYCLE.length]
 }
 
-/** คลิกจากช่องว่าง → `/` แล้ววนตามรอบปกติ */
+/** Sparse: ช่องว่างแสดงเป็นมา — คลิกแรก → `ข` แล้ววน ข → ล → ป → / */
 export function nextHourlyStatusFromSaved(current: HourlyStatus | null): HourlyStatus {
-  if (current === null) return '/'
+  if (current === null) return 'ข'
   return nextHourlyStatus(current)
 }
 
+/** ไม่มีแถว = มา (`/`) */
+export function resolveHourlyStatus(saved: HourlyStatus | null | undefined): HourlyStatus {
+  return saved ?? '/'
+}
+
+/** Callers that build status lists for expected slots should use resolveHourlyStatus(map.get(key)) so missing counts as present. */
 export function summarizeHourlyStatuses(statuses: HourlyStatus[]): HourlySummary {
   let present = 0
   let sick = 0

@@ -1,5 +1,3 @@
-'use client'
-
 import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import {
@@ -79,24 +77,33 @@ function setMonthInKey(monthKey: string, month: number) {
   return `${year}-${String(month).padStart(2, '0')}`
 }
 
+export type ClassroomAdminBookPdfOptions = {
+  /** ใช้ doc ที่สร้างไว้แล้ว (เช่น ฝั่งเซิร์ฟเวอร์ติดตั้งฟอนต์จากดิสก์แล้ว) */
+  doc?: jsPDF
+  skipApplyFonts?: boolean
+}
+
 /**
  * รวมรายงานธุรการชั้นเรียนทั้งหมดที่เป็น jsPDF เข้าเป็นเล่มเดียว
  * ลำดับ: เดือน × หมวดรายงาน (เหมือนพรีวิวหน้า export)
  */
-export async function buildClassroomAdminBookPdfBlob(input: ClassroomAdminBookPdfInput) {
+export async function buildClassroomAdminBookPdfBlob(
+  input: ClassroomAdminBookPdfInput,
+  options?: ClassroomAdminBookPdfOptions,
+) {
   const reports = input.reports.filter(isJsPdfBookReportType)
   if (!reports.length) throw new Error('ไม่มีรายงานที่รองรับ jsPDF')
 
   const months = input.months.filter(month => input.dataByMonth[month])
   if (!months.length) throw new Error('ไม่พบข้อมูลสำหรับสร้างเล่ม PDF')
 
-  const doc = new jsPDF({
+  const doc = options?.doc ?? new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
     format: 'a4',
     compress: true,
   })
-  await applyThaiFonts(doc)
+  if (!options?.skipApplyFonts) await applyThaiFonts(doc)
   const logoData = await loadImageDataUrl(input.schoolLogoUrl, 160, 0.7)
 
   let isFirstSheet = true

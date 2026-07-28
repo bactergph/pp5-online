@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -28,6 +28,7 @@ import {
   hoursPerWeek,
   buildHourlyStatusMap,
   hourlyCellKey,
+  resolveHourlyStatus,
   schoolDayCalendarFromLists,
   summarizeHourlyStatuses,
   termDateRange,
@@ -62,10 +63,11 @@ import {
   directorSchoolLine,
 } from '@/lib/school-director'
 import { expandEducationAreaOffice } from '@/lib/education-area-office'
-import { enqueueFileExport, enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
+import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { printPdfBlob } from '@/lib/pdf/print-pdf-blob'
 import { buildPp6PdfBlob } from '@/lib/jspdf-pp6'
 import { buildPp5SubjectPdfBlob, type Pp5SubjectPdfSection } from '@/lib/jspdf-pp5-subject'
+import { buildPp5ClassPdfBlob, type Pp5ClassPdfSection } from '@/lib/jspdf-pp5-class'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
 import {
   PRINT_STUDENTS_PER_PAGE,
@@ -79,7 +81,6 @@ import {
   pp5SectionLayoutStyle,
   pp5StudentTableRows,
   savePp5PrintLayouts,
-  PP5_PRINT_LAYOUTS_STORAGE_KEY,
   type Pp5PrintSection,
   PP5_PRINT_SECTIONS,
 } from '@/lib/pp5-print-layout'
@@ -1551,9 +1552,7 @@ function CoverPage({ data, mode, subject, term, pageNumber }: { data: ReportPayl
 }
 
 function hourlyStatusCellContent(status: HourlyStatus | undefined) {
-  if (status === undefined) return ''
-  if (status === '/') return '/'
-  return status
+  return resolveHourlyStatus(status)
 }
 
 function studentHourlySummary(
@@ -1566,8 +1565,7 @@ function studentHourlySummary(
   for (const week of weeks) {
     for (let slot = 1; slot <= dataSlotsPerWeek; slot += 1) {
       const key = hourlyCellKey(studentId, week.weekNumber, slot)
-      const status = recordMap.get(key)
-      if (status !== undefined) statuses.push(status)
+      statuses.push(resolveHourlyStatus(recordMap.get(key)))
     }
   }
   return summarizeHourlyStatuses(statuses)
@@ -1582,8 +1580,7 @@ function studentSecondaryHourlySummary(
   for (const week of weeks) {
     for (const day of week.days) {
       if (!day.slotInWeek) continue
-      const status = recordMap.get(hourlyCellKey(studentId, week.weekNumber, day.slotInWeek))
-      if (status !== undefined) statuses.push(status)
+      statuses.push(resolveHourlyStatus(recordMap.get(hourlyCellKey(studentId, week.weekNumber, day.slotInWeek))))
     }
   }
   return summarizeHourlyStatuses(statuses)
@@ -1720,10 +1717,7 @@ function SubjectPrimaryHourlyAttendancePage({
                     if (!student) {
                       return <td key={`empty-${index}-${week.weekNumber}-${slot}`} className="pp5-subject-hourly-cell" />
                     }
-                    const status = recordMap.get(hourlyCellKey(student.id, week.weekNumber, slot))
-                    if (status === undefined) {
-                      return <td key={`${student.id}-${week.weekNumber}-${slot}`} className="pp5-subject-hourly-cell" />
-                    }
+                    const status = resolveHourlyStatus(recordMap.get(hourlyCellKey(student.id, week.weekNumber, slot)))
                     return (
                       <td
                         key={`${student.id}-${week.weekNumber}-${slot}`}
@@ -1893,7 +1887,7 @@ function SubjectSecondaryHourlyAttendancePage({
                   if (!student) {
                     return <td key={`empty-${index}-${day.iso}`} className={`${weekStartKeys.has(day.iso) ? 'week-start' : ''}`} />
                   }
-                  const status = recordMap.get(hourlyCellKey(student.id, day.weekNumber, day.slotInWeek))
+                  const status = resolveHourlyStatus(recordMap.get(hourlyCellKey(student.id, day.weekNumber, day.slotInWeek)))
                   return (
                     <td
                       key={`${student.id}-${day.iso}`}
@@ -3834,6 +3828,9 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const [classSubjectId, setClassSubjectId] = useState('')
   const [subjectOptions, setSubjectOptions] = useState<ReportSubject[]>([])
   const [sections, setSections] = useState<PrintSection[]>(DEFAULT_SECTIONS[mode])
+  const sectionsRef = useRef(sections)
+  sectionsRef.current = sections
+  const prevSectionsRef = useRef(sections)
   const [data, setData] = useState<ReportPayload | null>(null)
   const [logoResolved, setLogoResolved] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -4014,6 +4011,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         term: reportTerm,
         classSubjectId: classSubjectId || undefined,
         mode,
+        sections: sectionsRef.current,
       })
       if (activeRef && !activeRef.active) return
       setData(result)
@@ -4035,6 +4033,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         classroomId,
         term,
         mode,
+        sections: sectionsRef.current,
       })
       if (activeRef && !activeRef.active) return
       setData(result)
@@ -4104,6 +4103,26 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
       activeRef.active = false
     }
   }, [mode, yearId, term, level, classroomId, loadClassPreview])
+
+  // Lazy-load attendance only when the section is newly toggled on and data is missing
+  useEffect(() => {
+    const prev = prevSectionsRef.current
+    prevSectionsRef.current = sections
+    const newlyAdded = sections.includes('attendance') && !prev.includes('attendance')
+    if (!newlyAdded || !data) return
+
+    if (mode === 'pp5-subject') {
+      if ((data.hourlyAttendanceRecords?.length ?? 0) > 0) return
+      if (!yearId || !classroomId || !classSubjectId) return
+      void loadSubjectPreview()
+      return
+    }
+    if (mode === 'pp5-class') {
+      if ((data.dailyAttendanceRecords?.length ?? 0) > 0) return
+      if (!yearId || !classroomId) return
+      void loadClassPreview()
+    }
+  }, [sections, data, mode, yearId, classroomId, classSubjectId, loadSubjectPreview, loadClassPreview])
 
   useEffect(() => {
     if (mode !== 'pp6' || !yearId) {
@@ -4310,8 +4329,22 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
       })
     }
 
+    if (mode === 'pp5-class') {
+      return buildPp5ClassPdfBlob({
+        data,
+        term: reportTerm,
+        sections: sections as Pp5ClassPdfSection[],
+        layouts: pp5PrintLayouts,
+        fileName,
+      })
+    }
+
     throw new Error('โหมดนี้ยังไม่รองรับ jsPDF')
   }
+
+  const canExportWithJsPdf = mode === 'pp6'
+    || mode === 'pp5-class'
+    || (mode === 'pp5-subject' && !!selectedSubject)
 
   function savePdf() {
     if (!data) return
@@ -4319,42 +4352,15 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
     const nameParts = reportExportNameParts()
     const fileName = `${nameParts.join('_')}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
 
-    // ปพ.6 / ปพ.5 รายวิชา → jsPDF ไม่ผ่าน Puppeteer
-    if (mode === 'pp6' || (mode === 'pp5-subject' && selectedSubject)) {
-      enqueueFileExport({
-        fileName,
-        label: nameParts.join(' · '),
-        run: () => buildJsPdfExport(),
-      })
+    if (!canExportWithJsPdf) {
+      setError(mode === 'pp5-subject' ? 'กรุณาเลือกรายวิชาก่อนบันทึก PDF' : 'โหมดนี้ยังไม่รองรับการบันทึก PDF')
       return
     }
 
-    const params = new URLSearchParams()
-    params.set('print', '1')
-    if (yearId) params.set('year', yearId)
-    if (level) params.set('level', level)
-    const exportClassroomId = classroomId || ''
-    if (exportClassroomId) params.set('classroom', exportClassroomId)
-    if (mode === 'pp5-subject') {
-      if (isSecondaryClassLevel(level)) params.set('term', String(reportTerm))
-    } else {
-      params.set('term', String(term))
-    }
-    params.set('sections', sections.join(','))
-    if (classSubjectId) params.set('subject', classSubjectId)
-
-    const localStorageSeed: Record<string, string> = {}
-    if (mode === 'pp5-subject' || mode === 'pp5-class') {
-      localStorageSeed[PP5_PRINT_LAYOUTS_STORAGE_KEY] = JSON.stringify(pp5PrintLayouts)
-    }
-
-    enqueueReportPdf({
-      path: window.location.pathname,
-      query: params.toString(),
+    enqueueFileExport({
       fileName,
       label: nameParts.join(' · '),
-      localStorageSeed: Object.keys(localStorageSeed).length > 0 ? localStorageSeed : undefined,
-      flattenEffects: true,
+      run: () => buildJsPdfExport(),
     })
   }
 
@@ -4362,21 +4368,20 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
     if (!data) return
     setError('')
 
-    // ปพ.6 / ปพ.5 รายวิชา → พิมพ์จาก jsPDF ชุดเดียวกับบันทึก PDF
-    if (mode === 'pp6' || (mode === 'pp5-subject' && selectedSubject)) {
-      setPrinting(true)
-      try {
-        const result = await buildJsPdfExport()
-        await printPdfBlob(result.blob)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'พิมพ์ไม่สำเร็จ')
-      } finally {
-        setPrinting(false)
-      }
+    if (!canExportWithJsPdf) {
+      setError(mode === 'pp5-subject' ? 'กรุณาเลือกรายวิชาก่อนพิมพ์' : 'โหมดนี้ยังไม่รองรับการพิมพ์ PDF')
       return
     }
 
-    window.print()
+    setPrinting(true)
+    try {
+      const result = await buildJsPdfExport()
+      await printPdfBlob(result.blob)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'พิมพ์ไม่สำเร็จ')
+    } finally {
+      setPrinting(false)
+    }
   }
 
   return (

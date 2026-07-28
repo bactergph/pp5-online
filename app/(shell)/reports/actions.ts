@@ -5,6 +5,7 @@ import { getSession } from '@/lib/session'
 import { loadReportDigitalReference } from '@/lib/document-reference'
 import { loadReportDocumentSignatures, type ReportDocumentSignatures } from '@/lib/report-signatures'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
+import { fetchAllRows } from '@/lib/supabase-paginate'
 import {
   EVALUATION_DEFAULT_SETTINGS,
   characterDefaultSettingsForBand,
@@ -216,11 +217,17 @@ function asNullableNumber(value: unknown) {
   return Number.isFinite(next) ? next : null
 }
 
-async function requireReportSession() {
+type ReportAccess = { schoolId: string; role: string; userId: string }
+
+async function requireReportSession(): Promise<ReportAccess> {
   const session = await getSession()
   if (!session) throw new Error('ไม่มีสิทธิ์')
   if (!session.schoolId) throw new Error('ยังไม่ได้เลือกโรงเรียน')
-  return session
+  return {
+    schoolId: session.schoolId,
+    role: session.role,
+    userId: session.userId,
+  }
 }
 
 function isHomeroomTeacher(classroom: ReportClassroom, userId: string) {
@@ -298,15 +305,45 @@ function normalizeSubject(row: DbRow): ReportSubject {
   }
 }
 
-function summarizeDaily(rows: DbRow[]) {
+function isSchoolDateStr(dateStr: string, holidaySet: Set<string>, openWeekendSet: Set<string>) {
+  const day = new Date(`${dateStr}T00:00:00`).getDay()
+  const isWeekend = day === 0 || day === 6
+  return !holidaySet.has(dateStr) && (!isWeekend || openWeekendSet.has(dateStr))
+}
+
+function schoolDayKeysInRange(start: string | null, end: string | null, holidaySet: Set<string>, openWeekendSet: Set<string>) {
+  const keys: string[] = []
+  if (!start || !end) return keys
+  const cursor = new Date(`${start}T00:00:00`)
+  const endDate = new Date(`${end}T00:00:00`)
+  while (cursor <= endDate) {
+    const key = cursor.toISOString().slice(0, 10)
+    if (isSchoolDateStr(key, holidaySet, openWeekendSet)) keys.push(key)
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return keys
+}
+
+/** Sparse: ไม่มีแถว = มา — นับจากวันเปิดสอนทั้งหมด ไม่ใช่แค่แถวที่มีอยู่ */
+function summarizeDaily(rows: DbRow[], studentIds: string[], schoolDayKeys: string[]) {
   const out: ReportPayload['dailyAttendance'] = {}
+  const byStudent = new Map<string, Map<string, string>>()
   for (const row of rows) {
     const id = String(row.student_id)
-    if (!out[id]) out[id] = { present: 0, sick: 0, leave: 0, absent: 0 }
-    if (row.status === 'ป') out[id].sick += 1
-    else if (row.status === 'ล') out[id].leave += 1
-    else if (row.status === 'ข') out[id].absent += 1
-    else out[id].present += 1
+    if (!byStudent.has(id)) byStudent.set(id, new Map())
+    byStudent.get(id)!.set(String(row.date), String(row.status))
+  }
+  for (const id of studentIds) {
+    const summary = { present: 0, sick: 0, leave: 0, absent: 0 }
+    const dateMap = byStudent.get(id)
+    for (const key of schoolDayKeys) {
+      const status = dateMap?.get(key)
+      if (status === 'ป') summary.sick += 1
+      else if (status === 'ล') summary.leave += 1
+      else if (status === 'ข') summary.absent += 1
+      else summary.present += 1
+    }
+    out[id] = summary
   }
   return out
 }
@@ -506,7 +543,7 @@ async function loadReportSchool(db: ReturnType<typeof createServerClient>, schoo
  */
 async function requireReportClassroom(
   db: ReturnType<typeof createServerClient>,
-  session: Awaited<ReturnType<typeof requireReportSession>>,
+  access: ReportAccess,
   classroomId: string,
   mode?: ReportMode,
 ) {
@@ -514,7 +551,7 @@ async function requireReportClassroom(
     .select('id, level, room, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id, school_id')
     .eq('id', classroomId)
     .maybeSingle()
-  if (!data || asText((data as DbRow).school_id) !== session.schoolId) {
+  if (!data || asText((data as DbRow).school_id) !== access.schoolId) {
     throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
   }
   const classroom: ReportClassroom = {
@@ -525,7 +562,7 @@ async function requireReportClassroom(
     homeroom_teacher_id: asNullableText((data as DbRow).homeroom_teacher_id),
     homeroom_teacher2_id: asNullableText((data as DbRow).homeroom_teacher2_id),
   }
-  if (session.role === 'teacher' && (mode === 'pp5-class' || mode === 'pp6') && !isHomeroomTeacher(classroom, session.userId)) {
+  if (access.role === 'teacher' && (mode === 'pp5-class' || mode === 'pp6') && !isHomeroomTeacher(classroom, access.userId)) {
     throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
   }
   return classroom
@@ -602,15 +639,19 @@ export async function fetchReportSubjects(params: {
   return rows.map(normalizeSubject)
 }
 
-export async function fetchReportData(params: {
-  academicYearId: string
-  classroomId: string
-  term: 0 | 1 | 2
-  classSubjectId?: string
-  mode?: ReportMode
-}) {
-  const session = await requireReportSession()
-  const schoolId = session.schoolId || ''
+export async function loadReportDataForAccess(
+  access: ReportAccess,
+  params: {
+    academicYearId: string
+    classroomId: string
+    term: 0 | 1 | 2
+    classSubjectId?: string
+    mode?: ReportMode
+    /** ถ้าระบุ — โหลด hourly/daily/scores/evals เฉพาะเมื่อมี section ที่เกี่ยวข้อง */
+    sections?: string[]
+  },
+): Promise<ReportPayload> {
+  const schoolId = access.schoolId || ''
   const db = createServerClient()
 
   let subjectQuery = db.from('class_subjects')
@@ -618,14 +659,14 @@ export async function fetchReportData(params: {
     .eq('classroom_id', params.classroomId)
     .eq('academic_year_id', params.academicYearId)
     .order('order_number')
-  if (session.role === 'teacher' && params.mode === 'pp5-subject') {
-    subjectQuery = subjectQuery.eq('teacher_id', session.userId)
+  if (access.role === 'teacher' && params.mode === 'pp5-subject') {
+    subjectQuery = subjectQuery.eq('teacher_id', access.userId)
     if (params.classSubjectId) subjectQuery = subjectQuery.eq('id', params.classSubjectId)
   }
 
   const [school, classroomBase, yearRow, students, classSubjectRows] = await Promise.all([
     loadReportSchool(db, schoolId),
-    requireReportClassroom(db, session, params.classroomId, params.mode),
+    requireReportClassroom(db, access, params.classroomId, params.mode),
     db.from('academic_years')
       .select('id, year_be, is_active, term1_start_date, term1_end_date, term2_start_date, term2_end_date')
       .eq('id', params.academicYearId)
@@ -641,7 +682,7 @@ export async function fetchReportData(params: {
   const academicYear = yearRow || null
   const range = termRange(academicYear, params.term)
 
-  if (session.role === 'teacher' && params.mode === 'pp5-subject' && classSubjectRows.length === 0) {
+  if (access.role === 'teacher' && params.mode === 'pp5-subject' && classSubjectRows.length === 0) {
     throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
   }
   if (params.classSubjectId && params.mode === 'pp5-subject') {
@@ -713,33 +754,67 @@ export async function fetchReportData(params: {
     } satisfies ReportPayload
   }
 
-  let scoreQuery = db.from('scores').select('*').in('student_id', studentIds)
-  if (params.term !== 0) scoreQuery = scoreQuery.eq('term', params.term)
-  const limitedScoreQuery = subjectIds.length ? scoreQuery.in('class_subject_id', subjectIds) : scoreQuery
+  const sectionSet = params.sections ? new Set(params.sections) : null
+  const hasSection = (...keys: string[]) => !sectionSet || keys.some(key => sectionSet.has(key))
 
-  const dailyQuery = db.from('daily_attendance').select('student_id, status, date').eq('classroom_id', params.classroomId).in('student_id', studentIds)
-  if (range.start) dailyQuery.gte('date', range.start)
-  if (range.end) dailyQuery.lte('date', range.end)
-
-  // ตารางเช็คเวลารายชั่วโมงใช้เฉพาะ ปพ.5 รายวิชา — รายห้อง/ปพ.6 ใช้เช็คชื่อรายวันแทน จึงไม่ต้องดึง
-  const needsHourly = params.mode === 'pp5-subject' || !params.mode
-  const hourlyQuery = db.from('hourly_attendance').select('student_id, status, class_subject_id, term, week_number, hour_number')
-  if (!needsHourly) {
-    hourlyQuery.eq('class_subject_id', '__none__')
-  } else if (params.classSubjectId) {
-    hourlyQuery.eq('class_subject_id', params.classSubjectId)
-  } else if (subjectIds.length) {
-    hourlyQuery.in('class_subject_id', subjectIds)
-  } else {
-    hourlyQuery.eq('class_subject_id', '__none__')
-  }
-  if (params.term !== 0) hourlyQuery.eq('term', params.term)
+  const wantsAttendance = hasSection('attendance')
+  // ตารางเช็คเวลารายชั่วโมงใช้เฉพาะ ปพ.5 รายวิชา — และเฉพาะเมื่อต้องการหน้า attendance
+  const needsHourly = wantsAttendance && (params.mode === 'pp5-subject' || !params.mode)
+  // เช็คชื่อรายวันใช้กับ ปพ.5 รวมชั้น (และโหมดอื่นที่เลือก attendance)
+  const needsDaily = wantsAttendance && params.mode !== 'pp6'
+  // cover ต้องมีสรุปเกรดจาก scores; achievement ก็ใช้คะแนน
+  const needsScores = hasSection('scores', 'cover', 'achievement')
+  // cover/criteria และหน้าประเมินต่าง ๆ ใช้ตารางประเมิน
+  const needsEvals = hasSection('character', 'reading', 'competency', 'activities', 'cover', 'criteria')
 
   const [scores, scoreConfigs, dailyRows, hourlyRowsRaw, holidays, weekendSchoolDays, character, reading, competency, activities] = await Promise.all([
-    safeRows<DbRow>(limitedScoreQuery),
-    safeRows<DbRow>(subjectIds.length ? db.from('score_configs').select('*').in('class_subject_id', subjectIds) : db.from('score_configs').select('*').eq('class_subject_id', '__none__')),
-    safeRows<DbRow>(dailyQuery),
-    needsHourly ? safeRows<DbRow>(hourlyQuery) : Promise.resolve([] as DbRow[]),
+    needsScores
+      ? fetchAllRows<DbRow>((from, to) => {
+        let scoreQuery = db.from('scores').select('*').in('student_id', studentIds)
+        if (params.term !== 0) scoreQuery = scoreQuery.eq('term', params.term)
+        if (subjectIds.length) scoreQuery = scoreQuery.in('class_subject_id', subjectIds)
+        return scoreQuery
+          .order('student_id')
+          .order('class_subject_id')
+          .order('term')
+          .range(from, to)
+      })
+      : Promise.resolve([] as DbRow[]),
+    needsScores
+      ? safeRows<DbRow>(subjectIds.length ? db.from('score_configs').select('*').in('class_subject_id', subjectIds) : db.from('score_configs').select('*').eq('class_subject_id', '__none__'))
+      : Promise.resolve([] as DbRow[]),
+    needsDaily
+      ? fetchAllRows<DbRow>((from, to) => {
+        let dailyQuery = db.from('daily_attendance')
+          .select('student_id, status, date')
+          .eq('classroom_id', params.classroomId)
+          .in('student_id', studentIds)
+        if (range.start) dailyQuery = dailyQuery.gte('date', range.start)
+        if (range.end) dailyQuery = dailyQuery.lte('date', range.end)
+        return dailyQuery.order('date').order('student_id').range(from, to)
+      })
+      : Promise.resolve([] as DbRow[]),
+    needsHourly
+      ? fetchAllRows<DbRow>((from, to) => {
+        let hourlyQuery = db.from('hourly_attendance')
+          .select('student_id, status, class_subject_id, term, week_number, hour_number')
+        if (params.classSubjectId) {
+          hourlyQuery = hourlyQuery.eq('class_subject_id', params.classSubjectId)
+        } else if (subjectIds.length) {
+          hourlyQuery = hourlyQuery.in('class_subject_id', subjectIds)
+        } else {
+          hourlyQuery = hourlyQuery.eq('class_subject_id', '__none__')
+        }
+        if (params.term !== 0) hourlyQuery = hourlyQuery.eq('term', params.term)
+        return hourlyQuery
+          .order('class_subject_id')
+          .order('term')
+          .order('week_number')
+          .order('hour_number')
+          .order('student_id')
+          .range(from, to)
+      })
+      : Promise.resolve([] as DbRow[]),
     safeRows<DbRow>(db.from('holidays').select('date, name')
       .eq('academic_year_id', params.academicYearId)
       .gte('date', range.start || '1900-01-01')
@@ -748,21 +823,29 @@ export async function fetchReportData(params: {
       .eq('academic_year_id', params.academicYearId)
       .gte('date', range.start || '1900-01-01')
       .lte('date', range.end || '2999-12-31')),
-    safeRows<ReportEvaluationRow>(db.from('character_traits').select('*')
-      .eq('academic_year_id', params.academicYearId)
-      .filter('term', params.term === 0 ? 'gte' : 'eq', params.term === 0 ? 1 : params.term)
-      .in('student_id', studentIds)),
-    safeRows<ReportEvaluationRow>(db.from('reading_evaluation').select('*')
-      .eq('academic_year_id', params.academicYearId)
-      .filter('term', params.term === 0 ? 'gte' : 'eq', params.term === 0 ? 1 : params.term)
-      .in('student_id', studentIds)),
-    safeRows<ReportEvaluationRow>(db.from('competency_evaluation').select('*')
-      .eq('academic_year_id', params.academicYearId)
-      .filter('term', params.term === 0 ? 'gte' : 'eq', params.term === 0 ? 1 : params.term)
-      .in('student_id', studentIds)),
-    safeRows<ReportEvaluationRow>(db.from('activities_evaluation').select('*')
-      .eq('academic_year_id', params.academicYearId)
-      .in('student_id', studentIds)),
+    needsEvals
+      ? safeRows<ReportEvaluationRow>(db.from('character_traits').select('*')
+        .eq('academic_year_id', params.academicYearId)
+        .filter('term', params.term === 0 ? 'gte' : 'eq', params.term === 0 ? 1 : params.term)
+        .in('student_id', studentIds))
+      : Promise.resolve([] as ReportEvaluationRow[]),
+    needsEvals
+      ? safeRows<ReportEvaluationRow>(db.from('reading_evaluation').select('*')
+        .eq('academic_year_id', params.academicYearId)
+        .filter('term', params.term === 0 ? 'gte' : 'eq', params.term === 0 ? 1 : params.term)
+        .in('student_id', studentIds))
+      : Promise.resolve([] as ReportEvaluationRow[]),
+    needsEvals
+      ? safeRows<ReportEvaluationRow>(db.from('competency_evaluation').select('*')
+        .eq('academic_year_id', params.academicYearId)
+        .filter('term', params.term === 0 ? 'gte' : 'eq', params.term === 0 ? 1 : params.term)
+        .in('student_id', studentIds))
+      : Promise.resolve([] as ReportEvaluationRow[]),
+    needsEvals
+      ? safeRows<ReportEvaluationRow>(db.from('activities_evaluation').select('*')
+        .eq('academic_year_id', params.academicYearId)
+        .in('student_id', studentIds))
+      : Promise.resolve([] as ReportEvaluationRow[]),
   ])
 
   const studentIdSet = new Set(studentIds)
@@ -805,7 +888,16 @@ export async function fetchReportData(params: {
     })),
     holidays: holidays.map(row => ({ date: asText(row.date), name: asNullableText(row.name) })),
     weekendSchoolDays: weekendSchoolDays.map(row => ({ date: asText(row.date), name: asNullableText(row.name) })),
-    dailyAttendance: summarizeDaily(dailyRows),
+    dailyAttendance: summarizeDaily(
+      dailyRows,
+      studentIds,
+      schoolDayKeysInRange(
+        range.start,
+        range.end,
+        new Set(holidays.map(row => asText(row.date))),
+        new Set(weekendSchoolDays.map(row => asText(row.date))),
+      ),
+    ),
     hourlyAttendance: summarizeHourly(hourlyRows),
     hourlyAttendanceRecords: hourlyRows.map(row => ({
       student_id: asText(row.student_id),
@@ -824,6 +916,34 @@ export async function fetchReportData(params: {
     digitalReference,
     error: null,
   } satisfies ReportPayload
+}
+
+export async function fetchReportData(params: {
+  academicYearId: string
+  classroomId: string
+  term: 0 | 1 | 2
+  classSubjectId?: string
+  mode?: ReportMode
+  sections?: string[]
+}) {
+  const session = await requireReportSession()
+  return loadReportDataForAccess(session, params)
+}
+
+/** โหลดรายงานสำหรับ archive / งานระบบ — ไม่ผูก cookie ครู */
+export async function loadReportDataForArchive(params: {
+  schoolId: string
+  academicYearId: string
+  classroomId: string
+  term: 0 | 1 | 2
+  classSubjectId?: string
+  mode?: ReportMode
+  sections?: string[]
+}) {
+  return loadReportDataForAccess(
+    { schoolId: params.schoolId, role: 'admin', userId: 'system-archive' },
+    params,
+  )
 }
 
 export type ReportPp6StudentOption = {

@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
 import { isDailyPresent } from '@/lib/daily-attendance'
+import { fetchAllRows } from '@/lib/supabase-paginate'
 import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
 import {
@@ -158,44 +159,6 @@ async function filterRowsForTeachingDays<T extends { day: number }>(academicYear
   })
 }
 
-async function fetchAcademicYearTermResolver(academicYearId: string) {
-  const db = createServerClient()
-  const { data } = await db.from('academic_years')
-    .select('term1_start_date, term1_end_date, term2_start_date, term2_end_date')
-    .eq('id', academicYearId)
-    .maybeSingle()
-
-  return (date: string): 1 | 2 => {
-    if (data?.term2_start_date && data?.term2_end_date && date >= data.term2_start_date && date <= data.term2_end_date) {
-      return 2
-    }
-    return 1
-  }
-}
-
-async function syncAttendanceActivitiesFromDates(
-  classroomId: string,
-  academicYearId: string,
-  userId: string,
-  rows: { student_id: string; date: string; status: AttendanceStatus }[],
-) {
-  if (rows.length === 0) return null
-  const resolveTerm = await fetchAcademicYearTermResolver(academicYearId)
-  const payload = rows.flatMap(row => ATTENDANCE_SYNC_ACTIVITY_TYPES.map(activityType => ({
-    student_id: row.student_id,
-    classroom_id: classroomId,
-    date: row.date,
-    term: resolveTerm(row.date),
-    activity_type: activityType,
-    value: isDailyPresent(row.status) ? 1 : 0,
-    recorded_by: userId,
-    is_manual_override: false,
-  })))
-
-  const { error } = await upsertDailyActivities(payload)
-  return error?.message || null
-}
-
 async function fetchDailyActivityRows(
   classroomId: string,
   activityType: ActivityType,
@@ -204,24 +167,38 @@ async function fetchDailyActivityRows(
   manualOverridesOnly = false,
 ) {
   const db = createServerClient()
-  const base = db.from('daily_activities')
-  const query = (select: string, filterManualOverride: boolean) => {
-    let q = base.select(select)
+
+  // ตรวจว่ามีคอลัมน์ is_manual_override หรือไม่ (ฐานข้อมูลเก่าอาจยังไม่มี)
+  const probe = await db.from('daily_activities')
+    .select('student_id, is_manual_override')
+    .eq('classroom_id', classroomId)
+    .eq('activity_type', activityType)
+    .limit(1)
+  const hasOverrideColumn = !probe.error
+  if (!hasOverrideColumn && manualOverridesOnly) return []
+
+  if (hasOverrideColumn) {
+    return fetchAllRows<ActivityRecord>((from, to) => {
+      let q = db.from('daily_activities')
+        .select('student_id, date, value, is_manual_override')
+        .eq('classroom_id', classroomId)
+        .eq('activity_type', activityType)
+      if (end) q = q.gte('date', start).lte('date', end)
+      else q = q.eq('date', start)
+      if (manualOverridesOnly) q = q.eq('is_manual_override', true)
+      return q.order('date').order('student_id').range(from, to)
+    })
+  }
+
+  return fetchAllRows<ActivityRecord>((from, to) => {
+    let q = db.from('daily_activities')
+      .select('student_id, date, value')
       .eq('classroom_id', classroomId)
       .eq('activity_type', activityType)
     if (end) q = q.gte('date', start).lte('date', end)
     else q = q.eq('date', start)
-    if (filterManualOverride) q = q.eq('is_manual_override', true)
-    return q
-  }
-
-  const withOverride = await query('student_id, date, value, is_manual_override', manualOverridesOnly)
-  if (!withOverride.error) return (withOverride.data ?? []) as unknown as ActivityRecord[]
-
-  // รองรับฐานข้อมูลเก่าที่ยังไม่มี is_manual_override โดยไม่ใช้ filter คอลัมน์ดังกล่าว
-  const withoutOverride = await query('student_id, date, value', false)
-  if (manualOverridesOnly) return []
-  return (withoutOverride.data ?? []) as unknown as ActivityRecord[]
+    return q.order('date').order('student_id').range(from, to)
+  })
 }
 
 async function upsertDailyActivities(rows: Record<string, unknown>[]) {
@@ -350,22 +327,29 @@ export async function saveDailyAttendance(classroomId: string, date: string, row
   if (!date || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
 
   const db = createServerClient()
-  const payload = rows.map(row => ({
-    student_id: row.student_id,
-    classroom_id: classroomId,
-    date,
-    status: row.status,
-    recorded_by: session.userId,
-  }))
-  const { error } = await db.from('daily_attendance').upsert(payload, { onConflict: 'student_id,date' })
-  let syncError: string | null = null
+  // Sparse: มา (ม) = ไม่มีแถว — ลบแถวแทนการเก็บ ม
+  const toDelete = rows.filter(row => row.status === 'ม').map(row => row.student_id)
+  const toUpsert = rows.filter(row => row.status !== 'ม')
+
+  let error: { message: string } | null = null
+  if (toUpsert.length > 0) {
+    const payload = toUpsert.map(row => ({
+      student_id: row.student_id,
+      classroom_id: classroomId,
+      date,
+      status: row.status,
+      recorded_by: session.userId,
+    }))
+    error = (await db.from('daily_attendance').upsert(payload, { onConflict: 'student_id,date' })).error
+  }
+  if (!error && toDelete.length > 0) {
+    error = (await db.from('daily_attendance')
+      .delete()
+      .eq('classroom_id', classroomId)
+      .eq('date', date)
+      .in('student_id', toDelete)).error
+  }
   if (!error) {
-    syncError = await syncAttendanceActivitiesFromDates(
-      classroomId,
-      access.classroom.academic_year_id,
-      session.userId,
-      payload.map(row => ({ student_id: row.student_id, date: row.date, status: row.status })),
-    )
     await logActivity({
       actor: session,
       schoolId: access.classroom.school_id,
@@ -378,7 +362,7 @@ export async function saveDailyAttendance(classroomId: string, date: string, row
       metadata: { classroomId, date, count: rows.length },
     })
   }
-  return { error: error?.message || (syncError ? `บันทึกเวลาเรียนแล้ว แต่ sync กิจกรรมไม่สำเร็จ: ${syncError}` : null), count: error ? 0 : rows.length }
+  return { error: error?.message || null, count: error ? 0 : rows.length }
 }
 
 export async function fetchMonthlyAttendance(classroomId: string, academicYearId: string, monthKey: string) {
@@ -388,18 +372,23 @@ export async function fetchMonthlyAttendance(classroomId: string, academicYearId
 
   const db = createServerClient()
   const range = monthRange(monthKey)
-  const [students, recordsRes, holidays, weekendSchoolDays] = await Promise.all([
+  const [students, attendanceRows, holidays, weekendSchoolDays] = await Promise.all([
     fetchStudentsForClassroom(classroomId),
-    db.from('daily_attendance')
-      .select('student_id, date, status')
-      .eq('classroom_id', classroomId)
-      .gte('date', range.start)
-      .lte('date', range.end),
+    fetchAllRows<{ student_id: string; date: string; status: string }>((from, to) =>
+      db.from('daily_attendance')
+        .select('student_id, date, status')
+        .eq('classroom_id', classroomId)
+        .gte('date', range.start)
+        .lte('date', range.end)
+        .order('date')
+        .order('student_id')
+        .range(from, to),
+    ),
     fetchHolidaysForRange(academicYearId, range.start, range.end),
     fetchWeekendSchoolDaysForRange(academicYearId, range.start, range.end),
   ])
 
-  const records = (recordsRes.data || []).reduce((acc: Record<string, Record<number, AttendanceStatus>>, row) => {
+  const records = attendanceRows.reduce((acc: Record<string, Record<number, AttendanceStatus>>, row) => {
     acc[row.student_id] = acc[row.student_id] || {}
     acc[row.student_id][dayOf(row.date)] = row.status as AttendanceStatus
     return acc
@@ -422,22 +411,31 @@ export async function saveMonthlyAttendance(
   const db = createServerClient()
   const teachingRows = await filterRowsForTeachingDays(access.classroom.academic_year_id, monthKey, rows)
   if (teachingRows.length === 0) return { error: 'ไม่มีวันเปิดสอนให้บันทึก', count: 0 }
-  const payload = teachingRows.map(row => ({
-    student_id: row.student_id,
-    classroom_id: classroomId,
-    date: isoDateFromMonthDay(monthKey, row.day),
-    status: row.status,
-    recorded_by: session.userId,
-  }))
-  const { error } = await db.from('daily_attendance').upsert(payload, { onConflict: 'student_id,date' })
-  let syncError: string | null = null
+
+  // Sparse: มา (ม) = ไม่มีแถว — ลบแถวแทนการเก็บ ม
+  const toUpsert = teachingRows.filter(row => row.status !== 'ม')
+  const toDelete = teachingRows.filter(row => row.status === 'ม')
+
+  let error: { message: string } | null = null
+  if (toUpsert.length > 0) {
+    const payload = toUpsert.map(row => ({
+      student_id: row.student_id,
+      classroom_id: classroomId,
+      date: isoDateFromMonthDay(monthKey, row.day),
+      status: row.status,
+      recorded_by: session.userId,
+    }))
+    error = (await db.from('daily_attendance').upsert(payload, { onConflict: 'student_id,date' })).error
+  }
+  if (!error && toDelete.length > 0) {
+    const results = await Promise.all(toDelete.map(row => db.from('daily_attendance')
+      .delete()
+      .eq('classroom_id', classroomId)
+      .eq('student_id', row.student_id)
+      .eq('date', isoDateFromMonthDay(monthKey, row.day))))
+    error = results.find(r => r.error)?.error || null
+  }
   if (!error) {
-    syncError = await syncAttendanceActivitiesFromDates(
-      classroomId,
-      access.classroom.academic_year_id,
-      session.userId,
-      payload.map(row => ({ student_id: row.student_id, date: row.date, status: row.status })),
-    )
     await logActivity({
       actor: session,
       schoolId: access.classroom.school_id,
@@ -447,10 +445,10 @@ export async function saveMonthlyAttendance(
       targetId: classroomId,
       targetLabel: `${access.classroom.level}/${access.classroom.room}`,
       description: `บันทึกเวลาเรียนรายเดือน ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey} จำนวน ${teachingRows.length} ช่อง`,
-      metadata: { classroomId, monthKey, count: teachingRows.length, skippedClosedDays: rows.length - teachingRows.length, syncedActivities: !syncError },
+      metadata: { classroomId, monthKey, count: teachingRows.length, skippedClosedDays: rows.length - teachingRows.length },
     })
   }
-  return { error: error?.message || (syncError ? `บันทึกเวลาเรียนแล้ว แต่ sync กิจกรรมไม่สำเร็จ: ${syncError}` : null), count: error ? 0 : teachingRows.length }
+  return { error: error?.message || null, count: error ? 0 : teachingRows.length }
 }
 
 export async function fillDailyPresentAll(classroomId: string, monthKey: string) {
@@ -460,64 +458,39 @@ export async function fillDailyPresentAll(classroomId: string, monthKey: string)
   if (access.error || !access.classroom) return { error: access.error, filled: 0 }
   if (!monthKey) return { error: 'ไม่พบเดือน', filled: 0 }
 
+  // Sparse: มา = ไม่มีแถว — เช็คมาทั้งหมดคือลบแถวขาด/ลา/ป่วยที่มีอยู่ทั้งเดือน
   const db = createServerClient()
   const range = monthRange(monthKey)
-  const [students, recordsRes] = await Promise.all([
-    fetchStudentsForClassroom(classroomId),
-    db.from('daily_attendance')
-      .select('student_id, date')
-      .eq('classroom_id', classroomId)
-      .gte('date', range.start)
-      .lte('date', range.end),
-  ])
+  const { count, error: countError } = await db.from('daily_attendance')
+    .select('id', { count: 'exact', head: true })
+    .eq('classroom_id', classroomId)
+    .gte('date', range.start)
+    .lte('date', range.end)
 
-  const existing = new Set((recordsRes.data || []).map(row => `${row.student_id}:${dayOf(row.date)}`))
-  const rows: { student_id: string; day: number; status: AttendanceStatus }[] = []
+  if (countError) return { error: countError.message, filled: 0 }
+  const filled = count || 0
+  if (filled === 0) return { error: null, filled: 0 }
 
-  for (const student of students) {
-    for (let day = 1; day <= range.days; day += 1) {
-      if (existing.has(`${student.id}:${day}`)) continue
-      rows.push({ student_id: student.id, day, status: 'ม' })
-    }
-  }
+  const { error } = await db.from('daily_attendance')
+    .delete()
+    .eq('classroom_id', classroomId)
+    .gte('date', range.start)
+    .lte('date', range.end)
 
-  if (rows.length === 0) return { error: null, filled: 0 }
+  if (error) return { error: error.message, filled: 0 }
 
-  const teachingRows = await filterRowsForTeachingDays(access.classroom.academic_year_id, monthKey, rows)
-  if (teachingRows.length === 0) return { error: null, filled: 0 }
-
-  const payload = teachingRows.map(row => ({
-    student_id: row.student_id,
-    classroom_id: classroomId,
-    date: isoDateFromMonthDay(monthKey, row.day),
-    status: row.status,
-    recorded_by: session.userId,
-  }))
-  const { error } = await db.from('daily_attendance').upsert(payload, { onConflict: 'student_id,date' })
-  let syncError: string | null = null
-  if (!error) {
-    syncError = await syncAttendanceActivitiesFromDates(
-      classroomId,
-      access.classroom.academic_year_id,
-      session.userId,
-      payload.map(row => ({ student_id: row.student_id, date: row.date, status: row.status })),
-    )
-    await logActivity({
-      actor: session,
-      schoolId: access.classroom.school_id,
-      action: 'upsert',
-      module: 'classroom_admin',
-      targetType: 'daily_attendance',
-      targetId: classroomId,
-      targetLabel: `${access.classroom.level}/${access.classroom.room}`,
-      description: `เช็คมาทั้งหมด ${teachingRows.length} ช่อง · ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey}`,
-      metadata: { classroomId, monthKey, filled: teachingRows.length },
-    })
-  }
-  return {
-    error: error?.message || (syncError ? `บันทึกเวลาเรียนแล้ว แต่ sync กิจกรรมไม่สำเร็จ: ${syncError}` : null),
-    filled: error ? 0 : teachingRows.length,
-  }
+  await logActivity({
+    actor: session,
+    schoolId: access.classroom.school_id,
+    action: 'delete',
+    module: 'classroom_admin',
+    targetType: 'daily_attendance',
+    targetId: classroomId,
+    targetLabel: `${access.classroom.level}/${access.classroom.room}`,
+    description: `เช็คมาทั้งหมด (ลบ ${filled} แถว) · ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey}`,
+    metadata: { classroomId, monthKey, filled },
+  })
+  return { error: null, filled }
 }
 
 export async function fillDailyPresentColumn(classroomId: string, monthKey: string, day: number) {
@@ -527,44 +500,40 @@ export async function fillDailyPresentColumn(classroomId: string, monthKey: stri
   if (access.error || !access.classroom) return { error: access.error, filled: 0 }
   if (!monthKey || day < 1) return { error: 'ข้อมูลไม่ครบ', filled: 0 }
 
-  const students = await fetchStudentsForClassroom(classroomId)
-  const rows = students.map(student => ({ student_id: student.id, day, status: 'ม' as AttendanceStatus }))
-  const teachingRows = await filterRowsForTeachingDays(access.classroom.academic_year_id, monthKey, rows)
+  const teachingRows = await filterRowsForTeachingDays(access.classroom.academic_year_id, monthKey, [{ day }])
   if (teachingRows.length === 0) return { error: 'ไม่มีวันเปิดสอนให้บันทึก', filled: 0 }
 
+  // Sparse: มาทุกคน = ลบแถวขาด/ลา/ป่วยของวันนี้ทั้งหมด
+  const date = isoDateFromMonthDay(monthKey, day)
   const db = createServerClient()
-  const payload = teachingRows.map(row => ({
-    student_id: row.student_id,
-    classroom_id: classroomId,
-    date: isoDateFromMonthDay(monthKey, row.day),
-    status: row.status,
-    recorded_by: session.userId,
-  }))
-  const { error } = await db.from('daily_attendance').upsert(payload, { onConflict: 'student_id,date' })
-  let syncError: string | null = null
-  if (!error) {
-    syncError = await syncAttendanceActivitiesFromDates(
-      classroomId,
-      access.classroom.academic_year_id,
-      session.userId,
-      payload.map(row => ({ student_id: row.student_id, date: row.date, status: row.status })),
-    )
-    await logActivity({
-      actor: session,
-      schoolId: access.classroom.school_id,
-      action: 'upsert',
-      module: 'classroom_admin',
-      targetType: 'daily_attendance',
-      targetId: classroomId,
-      targetLabel: `${access.classroom.level}/${access.classroom.room}`,
-      description: `มาทุกคน วันที่ ${day} · ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey}`,
-      metadata: { classroomId, monthKey, day, filled: teachingRows.length },
-    })
-  }
-  return {
-    error: error?.message || (syncError ? `บันทึกเวลาเรียนแล้ว แต่ sync กิจกรรมไม่สำเร็จ: ${syncError}` : null),
-    filled: error ? 0 : teachingRows.length,
-  }
+  const { count, error: countError } = await db.from('daily_attendance')
+    .select('id', { count: 'exact', head: true })
+    .eq('classroom_id', classroomId)
+    .eq('date', date)
+
+  if (countError) return { error: countError.message, filled: 0 }
+  const filled = count || 0
+  if (filled === 0) return { error: null, filled: 0 }
+
+  const { error } = await db.from('daily_attendance')
+    .delete()
+    .eq('classroom_id', classroomId)
+    .eq('date', date)
+
+  if (error) return { error: error.message, filled: 0 }
+
+  await logActivity({
+    actor: session,
+    schoolId: access.classroom.school_id,
+    action: 'delete',
+    module: 'classroom_admin',
+    targetType: 'daily_attendance',
+    targetId: classroomId,
+    targetLabel: `${access.classroom.level}/${access.classroom.room}`,
+    description: `มาทุกคน (ลบ ${filled} แถว) วันที่ ${day} · ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey}`,
+    metadata: { classroomId, monthKey, day, filled },
+  })
+  return { error: null, filled }
 }
 
 export async function clearDailyPresentColumn(classroomId: string, monthKey: string, day: number) {
@@ -581,48 +550,35 @@ export async function clearDailyPresentColumn(classroomId: string, monthKey: str
   )
   if (teachingRows.length === 0) return { error: 'ไม่มีวันเปิดสอนให้ลบ', deleted: 0 }
 
+  // Sparse: ไม่มาทุกคน = upsert ข ให้ทุกคนของวันนี้ (แทนการลบแถว)
+  const students = await fetchStudentsForClassroom(classroomId)
+  if (students.length === 0) return { error: null, deleted: 0 }
+
   const date = isoDateFromMonthDay(monthKey, day)
   const db = createServerClient()
-  const { data: records, error: fetchError } = await db.from('daily_attendance')
-    .select('student_id, date')
-    .eq('classroom_id', classroomId)
-    .eq('date', date)
-
-  if (fetchError) return { error: fetchError.message, deleted: 0 }
-
-  const deletedCount = records?.length || 0
-  if (deletedCount === 0) return { error: null, deleted: 0 }
-
-  const { error } = await db.from('daily_attendance')
-    .delete()
-    .eq('classroom_id', classroomId)
-    .eq('date', date)
-
+  const payload = students.map(student => ({
+    student_id: student.id,
+    classroom_id: classroomId,
+    date,
+    status: 'ข' as AttendanceStatus,
+    recorded_by: session.userId,
+  }))
+  const { error } = await db.from('daily_attendance').upsert(payload, { onConflict: 'student_id,date' })
   if (error) return { error: error.message, deleted: 0 }
-
-  const syncError = await syncAttendanceActivitiesFromDates(
-    classroomId,
-    access.classroom.academic_year_id,
-    session.userId,
-    (records || []).map(row => ({ student_id: row.student_id, date: row.date, status: 'ข' as AttendanceStatus })),
-  )
 
   await logActivity({
     actor: session,
     schoolId: access.classroom.school_id,
-    action: 'delete',
+    action: 'upsert',
     module: 'classroom_admin',
     targetType: 'daily_attendance',
     targetId: classroomId,
     targetLabel: `${access.classroom.level}/${access.classroom.room}`,
-    description: `ไม่มาทุกคน ลบ ${deletedCount} ช่อง · วันที่ ${day} · ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey}`,
-    metadata: { classroomId, monthKey, day, deleted: deletedCount },
+    description: `ไม่มาทุกคน (ข) ${students.length} คน · วันที่ ${day} · ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey}`,
+    metadata: { classroomId, monthKey, day, deleted: students.length },
   })
 
-  return {
-    error: syncError ? `ลบข้อมูลแล้ว แต่ sync กิจกรรมไม่สำเร็จ: ${syncError}` : null,
-    deleted: deletedCount,
-  }
+  return { error: null, deleted: students.length }
 }
 
 export async function clearDailyAttendanceMonth(classroomId: string, monthKey: string) {
@@ -634,15 +590,15 @@ export async function clearDailyAttendanceMonth(classroomId: string, monthKey: s
 
   const db = createServerClient()
   const range = monthRange(monthKey)
-  const { data: records, error: fetchError } = await db.from('daily_attendance')
-    .select('student_id, date')
+  const { count, error: countError } = await db.from('daily_attendance')
+    .select('id', { count: 'exact', head: true })
     .eq('classroom_id', classroomId)
     .gte('date', range.start)
     .lte('date', range.end)
 
-  if (fetchError) return { error: fetchError.message, deleted: 0 }
+  if (countError) return { error: countError.message, deleted: 0 }
 
-  const deletedCount = records?.length || 0
+  const deletedCount = count || 0
   if (deletedCount === 0) return { error: null, deleted: 0 }
 
   const { error } = await db.from('daily_attendance')
@@ -652,13 +608,6 @@ export async function clearDailyAttendanceMonth(classroomId: string, monthKey: s
     .lte('date', range.end)
 
   if (error) return { error: error.message, deleted: 0 }
-
-  const syncError = await syncAttendanceActivitiesFromDates(
-    classroomId,
-    access.classroom.academic_year_id,
-    session.userId,
-    (records || []).map(row => ({ student_id: row.student_id, date: row.date, status: 'ข' as AttendanceStatus })),
-  )
 
   await logActivity({
     actor: session,
@@ -672,10 +621,7 @@ export async function clearDailyAttendanceMonth(classroomId: string, monthKey: s
     metadata: { classroomId, monthKey, deleted: deletedCount },
   })
 
-  return {
-    error: syncError ? `ลบข้อมูลแล้ว แต่ sync กิจกรรมไม่สำเร็จ: ${syncError}` : null,
-    deleted: deletedCount,
-  }
+  return { error: null, deleted: deletedCount }
 }
 
 async function upsertSyncedActivityTeachingRows(

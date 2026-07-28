@@ -12,8 +12,8 @@ import {
   globalSlotNumber,
   hourlyCellKey,
   HOURLY_STATUS_LABELS,
-  nextHourlyStatus,
   nextHourlyStatusFromSaved,
+  resolveHourlyStatus,
   summarizeHourlyStatuses,
   type HourlyStatus,
   type TeachingWeek,
@@ -217,8 +217,8 @@ export default function HourlyAttendanceEntry() {
     return key in records ? records[key] : null
   }
 
-  function getDisplayStatus(studentId: string, weekNumber: number, slot: number): HourlyStatus | null {
-    return getSavedStatus(studentId, weekNumber, slot)
+  function getDisplayStatus(studentId: string, weekNumber: number, slot: number): HourlyStatus {
+    return getSavedStatus(studentId, weekNumber, slot) ?? '/'
   }
 
   function markColumnFilling(columnKey: string, filling: boolean) {
@@ -240,7 +240,8 @@ export default function HourlyAttendanceEntry() {
     const columnKey = `${week.weekNumber}:${slot}`
     if (fillingColumnKeys[columnKey]) return
     const cellKeys = students.map(student => hourlyCellKey(student.id, week.weekNumber, slot))
-    const clearing = columnHasSavedData(week.weekNumber, slot)
+    // Sparse: has absences → fill present (delete rows); empty → clear to ข
+    const hasAbsences = columnHasSavedData(week.weekNumber, slot)
     markColumnFilling(columnKey, true)
     setSavingCells(prev => ({
       ...prev,
@@ -249,14 +250,16 @@ export default function HourlyAttendanceEntry() {
     setError('')
     let saved = false
     try {
-      const result = clearing
-        ? await clearHourlyPresentColumn({
+      const result = hasAbsences
+        ? await fillHourlyPresentColumn({
+          classroomId: selectedClass,
           classSubjectId: selectedCS,
+          academicYearId: selectedYear,
           term,
           weekNumber: week.weekNumber,
           slot,
         })
-        : await fillHourlyPresentColumn({
+        : await clearHourlyPresentColumn({
           classroomId: selectedClass,
           classSubjectId: selectedCS,
           academicYearId: selectedYear,
@@ -274,8 +277,8 @@ export default function HourlyAttendanceEntry() {
           const next = { ...prev }
           for (const student of students) {
             const key = hourlyCellKey(student.id, week.weekNumber, slot)
-            if (clearing) delete next[key]
-            else next[key] = '/'
+            if (hasAbsences) delete next[key]
+            else next[key] = 'ข'
           }
           return next
         })
@@ -287,7 +290,7 @@ export default function HourlyAttendanceEntry() {
         markColumnFilling(columnKey, false)
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : (clearing ? 'ลบข้อมูลไม่สำเร็จ' : 'บันทึกมาทุกคนไม่สำเร็จ'))
+      setError(err instanceof Error ? err.message : (hasAbsences ? 'บันทึกมาทุกคนไม่สำเร็จ' : 'บันทึกไม่มาทุกคนไม่สำเร็จ'))
     } finally {
       if (!saved) {
         setSavingCells(prev => {
@@ -302,7 +305,7 @@ export default function HourlyAttendanceEntry() {
 
   function requestFillAll() {
     if (!canEdit || bulkFilling || clearingAll || !toolbarConfirmIdle) return
-    const ok = window.confirm('ยืนยันบันทึกมา (/) ให้ทุกช่องที่ยังว่างในภาคเรียนนี้?')
+    const ok = window.confirm('ยืนยันเช็คมาทั้งหมดในภาคเรียนนี้? (ลบรายการขาด/ลา/ป่วยทั้งหมด)')
     if (!ok) return
     setPendingAction('fill')
     setConfirmPhase('countdown')
@@ -350,7 +353,7 @@ export default function HourlyAttendanceEntry() {
       return `บันทึกในอีก ${confirmCountdown}...`
     }
     if (pendingAction === 'fill' && confirmPhase === 'armed') return 'กดอีกครั้งเพื่อบันทึก'
-    return 'เช็คมาทั้งหมด (ช่องที่ยังว่าง)'
+    return 'เช็คมาทั้งหมด'
   }
 
   function requestDeleteAll() {
@@ -410,7 +413,12 @@ export default function HourlyAttendanceEntry() {
     const key = hourlyCellKey(studentId, week.weekNumber, slot)
     const previous = getSavedStatus(studentId, week.weekNumber, slot)
     const next = nextHourlyStatusFromSaved(previous)
-    setRecords(prev => ({ ...prev, [key]: next }))
+    setRecords(prev => {
+      const copy = { ...prev }
+      if (next === '/') delete copy[key]
+      else copy[key] = next
+      return copy
+    })
     setSavingCells(prev => ({ ...prev, [key]: true }))
     const { error: saveError } = await saveHourlyCell({
       classroomId: selectedClass,
@@ -442,8 +450,7 @@ export default function HourlyAttendanceEntry() {
     const statuses: HourlyStatus[] = []
     for (const week of scopeWeeks) {
       for (let slot = 1; slot <= hoursPerWeekCount; slot += 1) {
-        const saved = getSavedStatus(studentId, week.weekNumber, slot)
-        if (saved !== null) statuses.push(saved)
+        statuses.push(resolveHourlyStatus(getSavedStatus(studentId, week.weekNumber, slot)))
       }
     }
     return summarizeHourlyStatuses(statuses)
@@ -462,7 +469,7 @@ export default function HourlyAttendanceEntry() {
       <div className="hourly-head">
         <div>
           <h1 className="hourly-title">เช็คเวลาเรียนรายวิชา</h1>
-          <p className="hourly-subtitle">ช่องว่าง = ยังไม่บันทึก · คลิกเพื่อวน / → ข → ล → ป</p>
+          <p className="hourly-subtitle">ช่องว่าง = มา · คลิกเพื่อวน / → ข → ล → ป</p>
         </div>
         <div className="hourly-legend">
           {(['/', 'ข', 'ล', 'ป'] as HourlyStatus[]).map(s => (
@@ -542,7 +549,7 @@ export default function HourlyAttendanceEntry() {
       ) : selectedCS && weeks.length > 0 ? (
         <div className="data-card dense-grid-card hourly-grid-card">
           <div className="hourly-grid-toolbar">
-            <span className="hourly-grid-toolbar-note">ช่องว่าง = ยังไม่บันทึก · คลิกช่องเพื่อวน / → ข → ล → ป</span>
+            <span className="hourly-grid-toolbar-note">ช่องว่าง = มา · คลิกช่องเพื่อวน / → ข → ล → ป</span>
             {canEdit ? (
               <div className="hourly-grid-toolbar-actions">
                 <button
@@ -615,7 +622,7 @@ export default function HourlyAttendanceEntry() {
                       const isFirstSlot = slot === 1
                       const isLastSlot = slot === hoursPerWeekCount
                       const columnBusy = Boolean(fillingColumnKeys[columnKey])
-                      const columnClearing = columnHasSavedData(week.weekNumber, slot)
+                      const columnClearing = !columnHasSavedData(week.weekNumber, slot)
                       return (
                         <th
                           key={`${week.weekNumber}-${slot}`}

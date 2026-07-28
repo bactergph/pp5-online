@@ -13,18 +13,19 @@ import {
   putPp5SubjectSignature,
   signClassDocument,
   signPp5Subject,
+  buildSignDocumentJsPdfBase64,
 } from '@/app/sign/actions'
 import type { ClassDocType } from '@/lib/approvals/types'
 import { scopeDocumentPreviewPath, resolveDocumentPreviewUrl } from '@/lib/document-preview-popup'
 import {
   buildSignDocumentPreviewUrl,
-  buildSignDocumentPrintRequest,
+  canBuildSignDocumentWithJsPdf,
   parseSignDocumentPreviewTarget,
   type SignDocumentPreviewTarget,
 } from '@/lib/sign-document-preview'
 import { buildPreviewShellStatusUi } from '@/lib/document-preview-status-ui'
 import type { WorkflowStepUiState } from '@/lib/approvals/pp5-subject'
-import { enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
+import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 
 type SignStatus = NonNullable<Awaited<ReturnType<typeof fetchPp5SubjectApprovalStatus>>>
 
@@ -186,22 +187,24 @@ export default function DocumentPreviewShell() {
   }
 
   function handleSavePdf() {
-    let printReq: { path: string; query: string; landscape?: boolean }
-    if (target) {
-      printReq = buildSignDocumentPrintRequest(target)
-    } else if (srcOverride) {
-      const printPath = srcOverride.replace('embed=1', 'print=1')
-      const [path, query = ''] = printPath.split('?')
-      printReq = { path, query, landscape: printPath.includes('classroom-admin') }
-    } else {
+    const fileName = `${title.replace(/[\\/:*?"<>|]/g, '-')}.pdf`
+
+    if (!target || !canBuildSignDocumentWithJsPdf(target.kind)) {
+      notify('error', 'เอกสารนี้ยังไม่รองรับการบันทึก PDF ด้วย jsPDF')
       return
     }
-    const fileName = `${title.replace(/[\\/:*?"<>|]/g, '-')}.pdf`
-    enqueueReportPdf({
-      ...printReq,
+
+    enqueueFileExport({
       fileName,
       label: title,
-      flattenEffects: true,
+      run: async () => {
+        const result = await buildSignDocumentJsPdfBase64({ target, fileName })
+        if ('error' in result) throw new Error(result.error)
+        const binary = atob(result.base64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        return { blob: new Blob([bytes], { type: 'application/pdf' }), fileName: result.fileName }
+      },
     })
   }
 

@@ -25,6 +25,11 @@ import {
   archiveApprovedPp5Subject,
   scheduleApprovedDocumentArchive,
 } from '@/lib/approved-documents/archive'
+import { buildApprovedDocumentJsPdfBuffer } from '@/lib/approved-documents/build-jspdf-archive'
+import {
+  canBuildSignDocumentWithJsPdf,
+  type SignDocumentPreviewTarget,
+} from '@/lib/sign-document-preview'
 import { CLASS_DOC_STEP_LABELS, PP5_SUBJECT_STEP_LABELS } from '@/lib/approvals/types'
 import {
   archiveLegacyApprovalCycle,
@@ -1315,3 +1320,26 @@ export async function fetchDocumentApprovalSubmissionHistory(params: {
   )
   return items.filter(item => item.status !== 'in_review')
 }
+
+/** สร้าง PDF ด้วย jsPDF สำหรับเอกสารที่มี builder แล้ว (ไม่ผ่าน Puppeteer) */
+export async function buildSignDocumentJsPdfBase64(params: {
+  target: SignDocumentPreviewTarget
+  fileName: string
+}): Promise<{ base64: string; fileName: string } | { error: string }> {
+  const session = await requireSession()
+  if (!session.schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
+  if (!canBuildSignDocumentWithJsPdf(params.target.kind)) {
+    return { error: 'เอกสารชนิดนี้ยังไม่รองรับ jsPDF' }
+  }
+  try {
+    const buffer = await buildApprovedDocumentJsPdfBuffer({
+      schoolId: session.schoolId,
+      previewTarget: params.target,
+      fileName: params.fileName,
+    })
+    return { base64: buffer.toString('base64'), fileName: params.fileName }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ' }
+  }
+}
+

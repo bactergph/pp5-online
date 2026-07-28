@@ -1,7 +1,7 @@
 'use server'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
-import { isDailyPresent } from '@/lib/daily-attendance'
+import { isDailyPresentOrDefault } from '@/lib/daily-attendance'
 import { loadClassDocReportSignatures } from '@/lib/report-signatures'
 import {
   fetchClassDocApprovalStatus,
@@ -10,6 +10,7 @@ import {
 } from '@/app/sign/actions'
 import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
+import { fetchAllRows } from '@/lib/supabase-paginate'
 
 type RoleSession = {
   userId: string
@@ -141,7 +142,7 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
     return { error: 'ดูได้เฉพาะห้องที่เป็นครูประจำชั้น' }
   }
 
-  const [students, yearRes, holidays, openWeekends, attendanceRes, activitiesRes, healthRes, inspectionRes] = await Promise.all([
+  const [students, yearRes, holidays, openWeekends, attendanceRows, activitiesRows, healthRes, inspectionRes] = await Promise.all([
     getClassroomStudentsCached(classroomId, async () => {
       const { data } = await db.from('students')
         .select('id, student_number, prefix, first_name, last_name, gender, status')
@@ -166,16 +167,27 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
         .lte('date', range.end)
       return data || []
     }),
-    db.from('daily_attendance')
-      .select('student_id, date, status')
-      .eq('classroom_id', classroomId)
-      .gte('date', range.start)
-      .lte('date', range.end),
-    db.from('daily_activities')
-      .select('student_id, date, activity_type, value')
-      .eq('classroom_id', classroomId)
-      .gte('date', range.start)
-      .lte('date', range.end),
+    fetchAllRows<{ student_id: string; date: string; status: string }>((from, to) =>
+      db.from('daily_attendance')
+        .select('student_id, date, status')
+        .eq('classroom_id', classroomId)
+        .gte('date', range.start)
+        .lte('date', range.end)
+        .order('date')
+        .order('student_id')
+        .range(from, to),
+    ),
+    fetchAllRows<{ student_id: string; date: string; activity_type: string; value: number | null }>((from, to) =>
+      db.from('daily_activities')
+        .select('student_id, date, activity_type, value')
+        .eq('classroom_id', classroomId)
+        .gte('date', range.start)
+        .lte('date', range.end)
+        .order('date')
+        .order('student_id')
+        .order('activity_type')
+        .range(from, to),
+    ),
     db.from('student_health')
       .select('student_id, weight, height, bmi, bmi_result, measured_date')
       .eq('academic_year_id', academicYearId)
@@ -200,7 +212,7 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
   students.forEach(student => {
     attendance[student.id] = {}
   })
-  ;(attendanceRes.data || []).forEach(row => {
+  attendanceRows.forEach(row => {
     attendance[row.student_id] = attendance[row.student_id] || {}
     attendance[row.student_id][dayOf(row.date)] = row.status as AttendanceStatus
   })
@@ -213,12 +225,12 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
       activities[type][student.id] = {}
       schoolDays.forEach(day => {
         activities[type][student.id][day] = ATTENDANCE_SYNC_ACTIVITY_TYPES.includes(type)
-          ? isDailyPresent(attendance[student.id]?.[day]) ? 1 : 0
+          ? isDailyPresentOrDefault(attendance[student.id]?.[day]) ? 1 : 0
           : 0
       })
     })
   })
-  ;(activitiesRes.data || []).forEach(row => {
+  activitiesRows.forEach(row => {
     const type = row.activity_type as ActivityType
     if (!activities[type]) return
     if (ATTENDANCE_SYNC_ACTIVITY_TYPES.includes(type)) return

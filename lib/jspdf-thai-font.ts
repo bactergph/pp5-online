@@ -1,5 +1,3 @@
-'use client'
-
 import { jsPDF } from 'jspdf'
 
 const FONT_CACHE = new Map<string, string>()
@@ -8,14 +6,18 @@ const FONT_CACHE = new Map<string, string>()
 const PDF_FONT_REGULAR = '/fonts/th-sarabun-new/regular-pdf.ttf'
 const PDF_FONT_BOLD = '/fonts/th-sarabun-new/bold.ttf'
 
-function arrayBufferToBase64(buffer: ArrayBuffer) {
+function arrayBufferToBase64(buffer: ArrayBuffer | Buffer) {
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(buffer)) {
+    return buffer.toString('base64')
+  }
   let binary = ''
-  const bytes = new Uint8Array(buffer)
+  const bytes = new Uint8Array(buffer as ArrayBuffer)
   const chunk = 0x8000
   for (let i = 0; i < bytes.length; i += chunk) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
   }
-  return btoa(binary)
+  if (typeof btoa === 'function') return btoa(binary)
+  return Buffer.from(binary, 'binary').toString('base64')
 }
 
 async function loadFontBase64(path: string) {
@@ -28,7 +30,7 @@ async function loadFontBase64(path: string) {
   return base64
 }
 
-/** ติดตั้งฟอนต์ไทยให้ jsPDF — ฝังทั้ง regular และ bold */
+/** ติดตั้งฟอนต์ไทยให้ jsPDF — ฝั่งเบราว์เซอร์ (fetch จาก /public) */
 export async function applyThaiFonts(doc: jsPDF) {
   const [regular, bold] = await Promise.all([
     loadFontBase64(PDF_FONT_REGULAR),
@@ -52,8 +54,8 @@ function loadImageElement(url: string): Promise<HTMLImageElement> {
 }
 
 /**
- * โหลดรูปแล้วย่อเป็น JPEG คุณภาพกลาง — ลดขนาดโลโก้/ลายเซ็นใน PDF
- * maxPx = ความกว้าง/สูงสุดของรูปหลังย่อ
+ * โหลดรูปแล้วย่อเป็น JPEG — ฝั่งเบราว์เซอร์
+ * ฝั่งเซิร์ฟเวอร์: ฝัง base64 ตรงๆ (ไม่มี canvas)
  */
 export async function loadImageDataUrl(
   url: string | null | undefined,
@@ -64,7 +66,14 @@ export async function loadImageDataUrl(
   try {
     const res = await fetch(url)
     if (!res.ok) return null
-    const blob = await res.blob()
+    const buffer = await res.arrayBuffer()
+    const mime = res.headers.get('content-type') || 'image/png'
+
+    if (typeof document === 'undefined') {
+      return `data:${mime};base64,${arrayBufferToBase64(buffer)}`
+    }
+
+    const blob = new Blob([buffer], { type: mime })
     const objectUrl = URL.createObjectURL(blob)
     try {
       const img = await loadImageElement(objectUrl)
@@ -86,4 +95,12 @@ export async function loadImageDataUrl(
   } catch {
     return null
   }
+}
+
+export function jsPdfToBuffer(doc: jsPDF): Buffer {
+  return Buffer.from(doc.output('arraybuffer'))
+}
+
+export async function blobToBuffer(blob: Blob): Promise<Buffer> {
+  return Buffer.from(await blob.arrayBuffer())
 }

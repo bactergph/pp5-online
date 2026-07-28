@@ -41,10 +41,6 @@ import {
   classroomAdminWeightHeightTableWidthStyle,
 } from '@/lib/classroom-admin-standard-table-columns'
 import {
-  classroomAdminPrintLayoutSeed,
-  downloadClassroomAdminPdf,
-} from '@/lib/classroom-admin-pdf-export'
-import {
   fetchClassroomAdminExportContext,
   fetchClassroomAdminExportData,
   fetchClassroomAdminExportSignatures,
@@ -58,7 +54,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scopeDocumentPreviewPath } from '@/lib/document-preview-popup'
 import { resolveClassroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
-import { DAILY_STATUS_LABELS, nextDailyDisplay, toDailyDb, toDailyDisplay } from '@/lib/daily-attendance'
+import { DAILY_STATUS_LABELS, nextDailyDisplay, resolveDailyStatus, toDailyDb, toDailyDisplay } from '@/lib/daily-attendance'
 import {
   PRINT_STUDENTS_PER_PAGE,
   chunkStudentsForPrintPages,
@@ -732,10 +728,21 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     : null
 
   function setMonthlyAttendance(studentId: string, day: number, status: AttendanceStatus) {
-    setMonthlyAttendanceValues(prev => ({
-      ...prev,
-      [studentId]: { ...(prev[studentId] || {}), [day]: status },
-    }))
+    setMonthlyAttendanceValues(prev => {
+      if (status === 'ม') {
+        if (!prev[studentId] || !(day in prev[studentId])) return prev
+        const row = { ...prev[studentId] }
+        delete row[day]
+        const next = { ...prev }
+        if (Object.keys(row).length === 0) delete next[studentId]
+        else next[studentId] = row
+        return next
+      }
+      return {
+        ...prev,
+        [studentId]: { ...(prev[studentId] || {}), [day]: status },
+      }
+    })
   }
 
   function setMonthlyActivity(studentId: string, day: number, value: number) {
@@ -780,12 +787,18 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     return students.some(student => (monthlyActivityValues[student.id]?.[day] ?? 0) === 1)
   }
 
+  /** attendance เป็น sparse (ว่าง = มา) — มีแถวบันทึกแล้ว = มีคนขาด/ลา/ป่วย จึงคลิกแล้วทำให้มาแทน */
+  function dayColumnClearing(day: number) {
+    const saved = dayHasSavedData(day)
+    return mode === 'attendance' ? !saved : saved
+  }
+
   async function toggleMonthlyDayPresent(day: number) {
     if (!canEdit || !classroomId || !hasMonthlyBulkTools || attendanceBulkFilling || attendanceClearingAll || !attendanceToolbarConfirmIdle) return
     if (!isSchoolDay(day)) return
     if (attendanceFillingDays[day]) return
     const cellKeys = students.map(student => `${student.id}-${day}`)
-    const clearing = dayHasSavedData(day)
+    const clearing = dayColumnClearing(day)
     markDayFilling(day, true)
     setSavingCells(prev => ({
       ...prev,
@@ -812,14 +825,12 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             const next = { ...prev }
             for (const student of students) {
               if (clearing) {
-                if (next[student.id]) {
-                  const row = { ...next[student.id] }
-                  delete row[day]
-                  if (Object.keys(row).length === 0) delete next[student.id]
-                  else next[student.id] = row
-                }
-              } else {
-                next[student.id] = { ...(next[student.id] || {}), [day]: 'ม' }
+                next[student.id] = { ...(next[student.id] || {}), [day]: 'ข' }
+              } else if (next[student.id]) {
+                const row = { ...next[student.id] }
+                delete row[day]
+                if (Object.keys(row).length === 0) delete next[student.id]
+                else next[student.id] = row
               }
             }
             return next
@@ -1604,26 +1615,13 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       return
     }
 
-    const monthText = isMonthlyMode
-      ? thaiMonthTitle(monthKey, years, yearId)
-      : (MONTHS.find(m => m.value === month)?.label || '')
-    const fileName = `${documentTitle}_${currentClassLabel(classrooms, classroomId)}_${monthText}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
-    const params = buildExportMenuQuery({ print: '1' })
-
-    downloadClassroomAdminPdf({
-      path: scopeDocumentPreviewPath('/export/classroom-admin'),
-      query: params.toString(),
-      fileName,
-      label: `${documentTitle} · ${currentClassLabel(classrooms, classroomId)} · ${monthText}`,
-      localStorageSeed: classroomAdminPrintLayoutSeed(printLayouts),
-    })
+    notify('error', 'โหมดนี้ยังไม่รองรับการบันทึก PDF ด้วย jsPDF')
   }
 
   function attendanceSummary(student: Student) {
     return activeDays.reduce((acc, day) => {
-      const value = monthlyAttendanceValues[student.id]?.[day]
-      if (!value) return acc
-      acc[value] += 1
+      const display = resolveDailyStatus(monthlyAttendanceValues[student.id]?.[day])
+      acc[display] += 1
       return acc
     }, { 'ม': 0, 'ป': 0, 'ล': 0, 'ข': 0 } as Record<AttendanceStatus, number>)
   }
@@ -1636,15 +1634,15 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function attendanceDisplayValue(studentId: string, day: number) {
-    return toDailyDisplay(monthlyAttendanceValues[studentId]?.[day])
+    return resolveDailyStatus(monthlyAttendanceValues[studentId]?.[day])
   }
 
   function attendanceCellClass(studentId: string, day: number) {
+    if (!isSchoolDay(day)) return 'is-empty'
     const saved = monthlyAttendanceValues[studentId]?.[day]
-    const display = toDailyDisplay(saved)
+    const display = resolveDailyStatus(saved)
     if (display === 'ม') return 'is-present'
-    if (saved) return `attendance-${saved}`
-    return 'is-empty'
+    return `attendance-${saved}`
   }
 
   function renderMonthCell(student: Student, day: number) {
@@ -1666,19 +1664,20 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     if (mode === 'attendance') {
       const saved = schoolDay ? monthlyAttendanceValues[student.id]?.[day] : undefined
       const display = toDailyDisplay(saved)
+      const shown = schoolDay ? resolveDailyStatus(saved) : null
       return (
         <button
           type="button"
           className={`${cellClass} ${attendanceCellClass(student.id, day)}`}
           disabled={disabled}
-          title={holiday || (display ? DAILY_STATUS_LABELS[display] : 'คลิกเพื่อบันทึก')}
+          title={holiday || (shown ? DAILY_STATUS_LABELS[shown] : 'คลิกเพื่อบันทึก')}
           onClick={() => {
             if (!schoolDay) return
             const next = toDailyDb(nextDailyDisplay(display))
             void autoSaveAttendance(student.id, day, next)
           }}
         >
-          {display || ''}
+          {shown || ''}
         </button>
       )
     }
@@ -2224,7 +2223,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <div className="classroom-admin-attendance-toolbar">
               <span className="classroom-admin-attendance-toolbar-note">
                 {mode === 'attendance'
-                  ? 'ช่องว่าง = ยังไม่บันทึก · คลิกเพื่อวน ม → ข → ล → ป'
+                  ? 'ช่องว่าง = มา (ม) · คลิกเพื่อวน ข → ล → ป → ม'
                   : `ช่องว่าง = ยังไม่ทำ · คลิกเพื่อสลับ ${CLASSROOM_ADMIN_CHECK_MARK}`}
               </span>
               {canEdit ? (
@@ -2375,7 +2374,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                     const openWeekend = isOpenWeekend(day)
                     const schoolDay = isSchoolDay(day)
                     const dayBusy = Boolean(attendanceFillingDays[day])
-                    const dayClearing = dayHasSavedData(day)
+                    const dayClearing = dayColumnClearing(day)
                     return (
                       <th
                         key={`all-${day}`}

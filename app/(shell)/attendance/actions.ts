@@ -13,6 +13,7 @@ import {
   type HourlyStatus,
 } from '@/lib/hourly-attendance'
 import { PRIMARY_SLOTS_PER_WEEK } from '@/lib/subject-hourly-report'
+import { fetchAllRows } from '@/lib/supabase-paginate'
 
 const CAN_EDIT = ['admin', 'district', 'academic_head', 'deputy_principal', 'teacher']
 
@@ -52,7 +53,7 @@ export async function fetchHourlyGrid(params: {
   if (cs.classroom_id !== params.classroomId) throw new Error('ห้องเรียนไม่ตรงกับรายวิชา')
 
   const db = createServerClient()
-  const [yearR, studentsR, subjectR, recordsR] = await Promise.all([
+  const [yearR, studentsR, subjectR, records] = await Promise.all([
     db.from('academic_years')
       .select('id, year_be, term1_start_date, term1_end_date, term2_start_date, term2_end_date')
       .eq('id', params.academicYearId)
@@ -65,10 +66,19 @@ export async function fetchHourlyGrid(params: {
       .select('id, subjects(code, name, hours_per_year)')
       .eq('id', params.classSubjectId)
       .maybeSingle(),
-    db.from('hourly_attendance')
+    fetchAllRows<{
+      student_id: string
+      week_number: number
+      hour_number: number
+      status: string
+    }>((from, to) => db.from('hourly_attendance')
       .select('student_id, week_number, hour_number, status')
       .eq('class_subject_id', params.classSubjectId)
-      .eq('term', params.term),
+      .eq('term', params.term)
+      .order('week_number')
+      .order('hour_number')
+      .order('student_id')
+      .range(from, to)),
   ])
 
   const year = yearR.data
@@ -105,12 +115,12 @@ export async function fetchHourlyGrid(params: {
     ? Math.max(hpw, PRIMARY_SLOTS_PER_WEEK)
     : hpw
 
-  const records: Record<string, HourlyStatus> = {}
-  for (const row of recordsR.data || []) {
+  const recordMap: Record<string, HourlyStatus> = {}
+  for (const row of records) {
     const studentId = row.student_id as string
     if (studentIds.length && !studentIds.includes(studentId)) continue
     const key = hourlyCellKey(studentId, Number(row.week_number), Number(row.hour_number))
-    records[key] = row.status as HourlyStatus
+    recordMap[key] = row.status as HourlyStatus
   }
 
   return {
@@ -124,7 +134,7 @@ export async function fetchHourlyGrid(params: {
     },
     weeks: teachingWeeks,
     hoursPerWeek: effectiveHpw,
-    records,
+    records: recordMap,
     yearBe: year.year_be,
     termStart: range.start,
     termEnd: range.end,
@@ -146,6 +156,33 @@ export async function saveHourlyCell(params: {
   await assertClassSubjectAccess(params.classSubjectId, session)
 
   const db = createServerClient()
+
+  // Sparse: present (/) is default — delete row instead of storing '/'
+  if (params.status === '/') {
+    const { error } = await db.from('hourly_attendance')
+      .delete()
+      .eq('student_id', params.studentId)
+      .eq('class_subject_id', params.classSubjectId)
+      .eq('date', params.anchorDate)
+      .eq('hour_number', params.slot)
+
+    if (!error) {
+      const context = await resolveClassSubjectContext(params.classSubjectId)
+      await logActivity({
+        actor: session,
+        schoolId: context.schoolId ?? session.schoolId,
+        action: 'delete',
+        module: 'hourly_attendance',
+        targetType: 'class_subject',
+        targetId: params.classSubjectId,
+        targetLabel: [context.subjectLabel, context.classroomLabel].filter(Boolean).join(' · '),
+        description: `ลบเวลาเรียนรายชั่วโมง (มา) ${context.subjectLabel || ''} สัปดาห์ ${params.weekNumber} คาบ ${params.slot}`,
+        metadata: { ...params },
+      })
+    }
+    return { error: error?.message ?? null }
+  }
+
   const { error } = await db.from('hourly_attendance').upsert({
     student_id: params.studentId,
     classroom_id: params.classroomId,
@@ -187,90 +224,36 @@ export async function fillHourlyPresentAll(params: {
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา', filled: 0 }
 
   const db = createServerClient()
-  const grid = await fetchHourlyGrid({
-    classroomId: params.classroomId,
-    classSubjectId: params.classSubjectId,
-    academicYearId: params.academicYearId,
-    term: params.term,
-  })
+  const { count, error: countError } = await db.from('hourly_attendance')
+    .select('id', { count: 'exact', head: true })
+    .eq('class_subject_id', params.classSubjectId)
+    .eq('term', params.term)
 
-  const existing = new Set(Object.keys(grid.records))
-  const rows: {
-    student_id: string
-    classroom_id: string
-    class_subject_id: string
-    date: string
-    hour_number: number
-    week_number: number
-    term: 1 | 2
-    status: HourlyStatus
-    recorded_by: string
-  }[] = []
+  if (countError) return { error: countError.message, filled: 0 }
+  const filled = count || 0
+  if (filled === 0) return { error: null, filled: 0 }
 
-  for (const student of grid.students) {
-    for (const week of grid.weeks) {
-      for (let slot = 1; slot <= grid.hoursPerWeek; slot += 1) {
-        const key = hourlyCellKey(student.id as string, week.weekNumber, slot)
-        if (existing.has(key)) continue
-        rows.push({
-          student_id: student.id as string,
-          classroom_id: params.classroomId,
-          class_subject_id: params.classSubjectId,
-          date: week.startDate,
-          hour_number: slot,
-          week_number: week.weekNumber,
-          term: params.term,
-          status: '/',
-          recorded_by: session.userId,
-        })
-      }
-    }
-  }
+  const { error } = await db.from('hourly_attendance')
+    .delete()
+    .eq('class_subject_id', params.classSubjectId)
+    .eq('term', params.term)
 
-  if (rows.length === 0) {
-    return { error: null, filled: 0 }
-  }
-
-  const chunkSize = 400
-  let filled = 0
-  const errors: string[] = []
-  for (let i = 0; i < rows.length; i += chunkSize) {
-    const chunk = rows.slice(i, i + chunkSize)
-    const { error } = await db.from('hourly_attendance').upsert(chunk, {
-      onConflict: 'student_id,class_subject_id,date,hour_number',
-    })
-    if (error) {
-      errors.push(error.message)
-      continue
-    }
-    filled += chunk.length
-  }
-
-  if (filled === 0 && errors.length > 0) {
-    return { error: errors[0], filled: 0 }
-  }
+  if (error) return { error: error.message, filled: 0 }
 
   const context = await resolveClassSubjectContext(params.classSubjectId)
   await logActivity({
     actor: session,
     schoolId: context.schoolId ?? session.schoolId,
-    action: 'upsert',
+    action: 'delete',
     module: 'hourly_attendance',
     targetType: 'class_subject',
     targetId: params.classSubjectId,
     targetLabel: [context.subjectLabel, context.classroomLabel].filter(Boolean).join(' · '),
-    description: `เช็คมาทั้งหมด ${filled} ช่อง · ${context.subjectLabel || ''} ภาคเรียนที่ ${params.term}`,
-    metadata: { ...params, filled, requested: rows.length, errors: errors.length },
+    description: `เช็คมาทั้งหมด (ลบ ${filled} แถว) · ${context.subjectLabel || ''} ภาคเรียนที่ ${params.term}`,
+    metadata: { ...params, filled },
   })
 
-  if (errors.length > 0) {
-    return {
-      error: `บันทึกได้ ${filled} จาก ${rows.length} ช่อง — ${errors[0]}`,
-      filled,
-    }
-  }
-
-  return { error: null, filled: rows.length }
+  return { error: null, filled }
 }
 
 export async function fillHourlyPresentColumn(params: {
@@ -287,63 +270,6 @@ export async function fillHourlyPresentColumn(params: {
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา', filled: 0 }
 
   const db = createServerClient()
-  const grid = await fetchHourlyGrid({
-    classroomId: params.classroomId,
-    classSubjectId: params.classSubjectId,
-    academicYearId: params.academicYearId,
-    term: params.term,
-  })
-
-  const week = grid.weeks.find(item => item.weekNumber === params.weekNumber)
-  if (!week) return { error: 'ไม่พบสัปดาห์', filled: 0 }
-  if (params.slot < 1 || params.slot > grid.hoursPerWeek) return { error: 'คาบไม่ถูกต้อง', filled: 0 }
-
-  const rows = grid.students.map(student => ({
-    student_id: student.id as string,
-    classroom_id: params.classroomId,
-    class_subject_id: params.classSubjectId,
-    date: week.startDate,
-    hour_number: params.slot,
-    week_number: params.weekNumber,
-    term: params.term,
-    status: '/' as HourlyStatus,
-    recorded_by: session.userId,
-  }))
-
-  if (rows.length === 0) return { error: null, filled: 0 }
-
-  const { error } = await db.from('hourly_attendance').upsert(rows, {
-    onConflict: 'student_id,class_subject_id,date,hour_number',
-  })
-  if (error) return { error: error.message, filled: 0 }
-
-  const context = await resolveClassSubjectContext(params.classSubjectId)
-  await logActivity({
-    actor: session,
-    schoolId: context.schoolId ?? session.schoolId,
-    action: 'upsert',
-    module: 'hourly_attendance',
-    targetType: 'class_subject',
-    targetId: params.classSubjectId,
-    targetLabel: [context.subjectLabel, context.classroomLabel].filter(Boolean).join(' · '),
-    description: `มาทุกคน สัปดาห์ ${params.weekNumber} คาบ ${params.slot} · ${context.subjectLabel || ''}`,
-    metadata: { ...params, filled: rows.length },
-  })
-
-  return { error: null, filled: rows.length }
-}
-
-export async function clearHourlyPresentColumn(params: {
-  classSubjectId: string
-  term: 1 | 2
-  weekNumber: number
-  slot: number
-}) {
-  const session = await requireSession()
-  if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์', deleted: 0 }
-  await assertClassSubjectAccess(params.classSubjectId, session)
-
-  const db = createServerClient()
   const { count, error: countError } = await db.from('hourly_attendance')
     .select('id', { count: 'exact', head: true })
     .eq('class_subject_id', params.classSubjectId)
@@ -351,9 +277,9 @@ export async function clearHourlyPresentColumn(params: {
     .eq('week_number', params.weekNumber)
     .eq('hour_number', params.slot)
 
-  if (countError) return { error: countError.message, deleted: 0 }
-  const deletedCount = count || 0
-  if (deletedCount === 0) return { error: null, deleted: 0 }
+  if (countError) return { error: countError.message, filled: 0 }
+  const filled = count || 0
+  if (filled === 0) return { error: null, filled: 0 }
 
   const { error } = await db.from('hourly_attendance')
     .delete()
@@ -362,7 +288,7 @@ export async function clearHourlyPresentColumn(params: {
     .eq('week_number', params.weekNumber)
     .eq('hour_number', params.slot)
 
-  if (error) return { error: error.message, deleted: 0 }
+  if (error) return { error: error.message, filled: 0 }
 
   const context = await resolveClassSubjectContext(params.classSubjectId)
   await logActivity({
@@ -373,11 +299,71 @@ export async function clearHourlyPresentColumn(params: {
     targetType: 'class_subject',
     targetId: params.classSubjectId,
     targetLabel: [context.subjectLabel, context.classroomLabel].filter(Boolean).join(' · '),
-    description: `ไม่มาทุกคน ลบ ${deletedCount} ช่อง · สัปดาห์ ${params.weekNumber} คาบ ${params.slot} · ${context.subjectLabel || ''}`,
-    metadata: { ...params, deleted: deletedCount },
+    description: `มาทุกคน (ลบ ${filled} แถว) สัปดาห์ ${params.weekNumber} คาบ ${params.slot} · ${context.subjectLabel || ''}`,
+    metadata: { ...params, filled },
   })
 
-  return { error: null, deleted: deletedCount }
+  return { error: null, filled }
+}
+
+export async function clearHourlyPresentColumn(params: {
+  classroomId: string
+  classSubjectId: string
+  academicYearId: string
+  term: 1 | 2
+  weekNumber: number
+  slot: number
+}) {
+  const session = await requireSession()
+  if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์', deleted: 0 }
+  const cs = await assertClassSubjectAccess(params.classSubjectId, session)
+  if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา', deleted: 0 }
+
+  const db = createServerClient()
+  const grid = await fetchHourlyGrid({
+    classroomId: params.classroomId,
+    classSubjectId: params.classSubjectId,
+    academicYearId: params.academicYearId,
+    term: params.term,
+  })
+
+  const week = grid.weeks.find(item => item.weekNumber === params.weekNumber)
+  if (!week) return { error: 'ไม่พบสัปดาห์', deleted: 0 }
+  if (params.slot < 1 || params.slot > grid.hoursPerWeek) return { error: 'คาบไม่ถูกต้อง', deleted: 0 }
+
+  const rows = grid.students.map(student => ({
+    student_id: student.id as string,
+    classroom_id: params.classroomId,
+    class_subject_id: params.classSubjectId,
+    date: week.startDate,
+    hour_number: params.slot,
+    week_number: params.weekNumber,
+    term: params.term,
+    status: 'ข' as HourlyStatus,
+    recorded_by: session.userId,
+  }))
+
+  if (rows.length === 0) return { error: null, deleted: 0 }
+
+  const { error } = await db.from('hourly_attendance').upsert(rows, {
+    onConflict: 'student_id,class_subject_id,date,hour_number',
+  })
+  if (error) return { error: error.message, deleted: 0 }
+
+  const context = await resolveClassSubjectContext(params.classSubjectId)
+  await logActivity({
+    actor: session,
+    schoolId: context.schoolId ?? session.schoolId,
+    action: 'upsert',
+    module: 'hourly_attendance',
+    targetType: 'class_subject',
+    targetId: params.classSubjectId,
+    targetLabel: [context.subjectLabel, context.classroomLabel].filter(Boolean).join(' · '),
+    description: `ไม่มาทุกคน (ข) ${rows.length} ช่อง · สัปดาห์ ${params.weekNumber} คาบ ${params.slot} · ${context.subjectLabel || ''}`,
+    metadata: { ...params, deleted: rows.length },
+  })
+
+  return { error: null, deleted: rows.length }
 }
 
 export async function clearHourlyAttendanceAll(params: {

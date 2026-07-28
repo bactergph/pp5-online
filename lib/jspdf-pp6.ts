@@ -1,5 +1,3 @@
-'use client'
-
 import { jsPDF } from 'jspdf'
 import type {
   ReportClassroom,
@@ -47,6 +45,12 @@ export type Pp6PdfOptions = {
   showGrade?: boolean
   layout?: Pp6SectionLayout
   fileName?: string
+}
+
+export type Pp6PdfBuildOptions = {
+  /** ใช้ doc ที่สร้างไว้แล้ว (เช่น ฝั่งเซิร์ฟเวอร์ติดตั้งฟอนต์จากดิสก์แล้ว) */
+  doc?: jsPDF
+  skipApplyFonts?: boolean
 }
 
 function px(n: number) {
@@ -773,7 +777,7 @@ async function drawStudentPage(
 /**
  * สร้าง PDF ปพ.6 ด้วย jsPDF (แนวเดียวกับธุรการชั้นเรียน — ไม่ผ่าน Puppeteer)
  */
-export async function buildPp6PdfBlob(options: Pp6PdfOptions) {
+export async function buildPp6PdfBlob(options: Pp6PdfOptions, buildOptions?: Pp6PdfBuildOptions) {
   const data = options.data
   if (!data?.students?.length) throw new Error('ไม่พบข้อมูลนักเรียนสำหรับสร้าง ปพ.6')
 
@@ -786,13 +790,13 @@ export async function buildPp6PdfBlob(options: Pp6PdfOptions) {
     : data.students
   if (!students.length) throw new Error('ไม่พบนักเรียนที่เลือก')
 
-  const doc = new jsPDF({
+  const doc = buildOptions?.doc ?? new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4',
     compress: true,
   })
-  await applyThaiFonts(doc)
+  if (!buildOptions?.skipApplyFonts) await applyThaiFonts(doc)
 
   const [logoData, homeroomSig, directorSig] = await Promise.all([
     loadImageDataUrl(data.school?.logo_url, 160, 0.7),

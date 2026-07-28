@@ -1,5 +1,3 @@
-'use client'
-
 import { jsPDF } from 'jspdf'
 import { CLASSROOM_ADMIN_A4_LANDSCAPE_MM } from '@/lib/classroom-admin-a4-landscape'
 import { CLASSROOM_ADMIN_CHECK_MARK } from '@/lib/classroom-admin-check-mark'
@@ -8,7 +6,7 @@ import {
   DEFAULT_CLASSROOM_ADMIN_MONTHLY_LAYOUT,
   type ClassroomAdminMonthlyLayout,
 } from '@/lib/classroom-admin-print-layout'
-import { toDailyDisplay } from '@/lib/daily-attendance'
+import { resolveDailyStatus } from '@/lib/daily-attendance'
 import {
   PRINT_STUDENTS_PER_PAGE,
   chunkStudentsForPrintPages,
@@ -128,11 +126,8 @@ function summaryFor(
 ) {
   const out = { ม: 0, ป: 0, ล: 0, ข: 0 }
   for (const day of schoolDays) {
-    const value = attendance[studentId]?.[day]
-    if (!value) continue
-    if (value === 'ม' || value === 'ป' || value === 'ล' || value === 'ข') {
-      out[value] += 1
-    }
+    const display = resolveDailyStatus(attendance[studentId]?.[day] as 'ม' | 'ป' | 'ล' | 'ข' | undefined)
+    out[display] += 1
   }
   return out
 }
@@ -161,7 +156,7 @@ function attendanceDisplay(
   day: number,
   attendance: Record<string, Record<number, string | undefined>>,
 ) {
-  return toDailyDisplay(attendance[studentId]?.[day] as 'ม' | 'ป' | 'ล' | 'ข' | undefined) || ''
+  return resolveDailyStatus(attendance[studentId]?.[day] as 'ม' | 'ป' | 'ล' | 'ข' | undefined)
 }
 
 function activityDisplay(

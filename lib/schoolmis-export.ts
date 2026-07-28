@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
+import { fetchAllRows } from '@/lib/supabase-paginate'
 import {
   buildSchoolMisGradesCsv,
   classroomGradeNumber,
@@ -127,14 +128,19 @@ export async function buildSchoolMisGradesExport(params: {
 
   const gradeByKey: Record<string, string> = {}
   if (studentIds.length > 0 && subjectIds.length > 0) {
-    const { data: scores } = await db
-      .from('scores')
-      .select('student_id, class_subject_id, term, grade, result')
-      .in('student_id', studentIds)
-      .in('class_subject_id', subjectIds)
+    const scores = await fetchAllRows<DbRow>((from, to) =>
+      db.from('scores')
+        .select('student_id, class_subject_id, term, grade, result')
+        .in('student_id', studentIds)
+        .in('class_subject_id', subjectIds)
+        .order('student_id')
+        .order('class_subject_id')
+        .order('term')
+        .range(from, to),
+    )
 
     const byTerm = new Map<string, { grade: number | null; result: string | null }>()
-    for (const row of (scores || []) as DbRow[]) {
+    for (const row of scores) {
       const key = `${asText(row.student_id)}:${asText(row.class_subject_id)}:${asNumber(row.term)}`
       byTerm.set(key, {
         grade: row.grade == null ? null : Number(row.grade),

@@ -1,5 +1,3 @@
-'use client'
-
 import { jsPDF } from 'jspdf'
 import { CLASSROOM_ADMIN_A4_LANDSCAPE_MM } from '@/lib/classroom-admin-a4-landscape'
 import { classroomAdminDocumentTitle, type ClassroomAdminReportKey } from '@/lib/classroom-admin-document-titles'
@@ -399,16 +397,17 @@ export async function buildStandardClassroomAdminPdfBlob(
         })
       })
 
-      // —— Signatures —— อ้างอิงจากเส้นล่างสุดของตาราง (เหมือน HTML margin-top)
+      // —— Signatures (ชิดใต้ตาราง + แสดงชื่อ/ตำแหน่ง) ——
       const tableBottom = bodyTop + pageStudents.length * rowH
-      const signBlockH = 22
-      let signTop = tableBottom + signatureMarginTop
-      // กันล้นขอบล่างหน้าเท่านั้น — ไม่ดันขึ้นไปติดขอบล่างเมื่อตารางสั้น
+      const signImgH = 8
+      const signBlockH = signImgH + 3.8 + 3.8 + 3.6 * 2
+      const preferredTop = tableBottom + Math.max(2.5, signatureMarginTop)
       const maxSignTop = PAGE_H - padBottom - signBlockH
-      if (signTop > maxSignTop) signTop = Math.max(tableBottom + 4, maxSignTop)
-      const leftCenter = PAGE_W / 2 - signatureGap / 2 - 30
-      const rightCenter = PAGE_W / 2 + signatureGap / 2 + 30
-      const signImgH = 11
+      const signTop = Math.min(preferredTop, Math.max(tableBottom + 2, maxSignTop))
+
+      const leftCenter = tableLeft + tableWidth * 0.28
+      const rightCenter = tableLeft + tableWidth * 0.72
+      void signatureGap
 
       function drawSignBlock(
         centerX: number,
@@ -419,10 +418,10 @@ export async function buildStandardClassroomAdminPdfBlob(
         doc.setFont('THSarabunNew', 'normal')
         doc.setFontSize(signPt)
         setText(doc, COLORS.text)
-        const lineY = signTop + 8
+        const lineY = signTop + signImgH
         if (signData) {
           try {
-            const imgW = 42
+            const imgW = 36
             doc.addImage(
               signData,
               detectImageFormat(signData),
@@ -431,7 +430,7 @@ export async function buildStandardClassroomAdminPdfBlob(
               imgW,
               signImgH,
             )
-            doc.text('ลงชื่อ', centerX - imgW / 2 - 8, lineY, { align: 'right', baseline: 'bottom' })
+            doc.text('ลงชื่อ', centerX - imgW / 2 - 6, lineY, { align: 'right', baseline: 'bottom' })
           } catch {
             doc.text('ลงชื่อ ...........................................', centerX, lineY, { align: 'center' })
           }
@@ -439,16 +438,16 @@ export async function buildStandardClassroomAdminPdfBlob(
           doc.text('ลงชื่อ ...........................................', centerX, lineY, { align: 'center' })
         }
 
-        let ty = lineY + 4.5
+        let ty = lineY + 3.8
         doc.setFont('THSarabunNew', 'bold')
         doc.setFontSize(signPt)
         doc.text(`( ${name} )`, centerX, ty, { align: 'center' })
-        ty += 4.5
+        ty += 3.8
         doc.setFont('THSarabunNew', 'normal')
         doc.setFontSize(signRolePt)
         for (const role of roles) {
           doc.text(role, centerX, ty, { align: 'center' })
-          ty += 4
+          ty += 3.6
         }
       }
 

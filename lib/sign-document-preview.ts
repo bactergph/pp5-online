@@ -50,6 +50,17 @@ function defaultSections(kind: SignDocumentPreviewTarget['kind']) {
   return 'cover,criteria,scores'
 }
 
+/** ส่วนที่ jsPDF ปพ.5 รายวิชาใช้ตอน archive / ดาวน์โหลดจากพรีวิวเซ็น — ตรงกับ URL พรีวิว */
+export const PP5_SUBJECT_ARCHIVE_SECTIONS = ['cover', 'criteria', 'scores'] as const
+
+/** ส่วนที่ jsPDF ปพ.5 รวมชั้นใช้ตอน archive / ดาวน์โหลดจากพรีวิวเซ็น — ตรงกับ URL พรีวิว */
+export const PP5_CLASS_ARCHIVE_SECTIONS = ['cover', 'criteria', 'scores'] as const
+
+/** true = มี jsPDF builder บนเซิร์ฟเวอร์ (ไม่ต้อง Puppeteer) */
+export function canBuildSignDocumentWithJsPdf(kind: SignDocumentPreviewTarget['kind']) {
+  return kind === 'classroom_admin' || kind === 'pp5-subject' || kind === 'pp5-class' || kind === 'pp6'
+}
+
 /** YYYY-MM แบบ ค.ศ. สำหรับเดือนในเทอม — เดือน 1–4 ข้ามปีถัดจาก พ.ค.–ธ.ค. */
 function classroomAdminMonthKey(month: number) {
   const now = new Date()

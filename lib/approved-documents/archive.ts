@@ -2,13 +2,12 @@ import 'server-only'
 import { after } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { ensureDocumentReference } from '@/lib/document-reference'
-import { encrypt, type SessionPayload } from '@/lib/session'
-import { generateReportPdf, appOrigin } from '@/lib/pdf/generate-report-pdf'
+import type { SessionPayload } from '@/lib/session'
 import { updateDriveFileMedia, uploadPdfToDrive } from '@/lib/google-drive'
+import { buildApprovedDocumentJsPdfBuffer } from '@/lib/approved-documents/build-jspdf-archive'
 import {
   APPROVED_DOC_FOLDER_LABELS,
   approvedDocumentFileName,
-  buildSignDocumentPrintRequest,
   classDocTypeToPreviewKind,
   type SignDocumentPreviewTarget,
 } from '@/lib/sign-document-preview'
@@ -16,10 +15,6 @@ import type { ClassDocType } from '@/lib/approvals/types'
 import { getThaiMonthShort } from '@/lib/thaiDate'
 
 export type ApprovedDocKind = 'pp5_subject' | 'pp5_class' | 'pp6' | 'classroom_admin'
-
-async function sessionTokenFromActor(actor: SessionPayload) {
-  return encrypt(actor)
-}
 
 function displayName(prefix?: string | null, first?: string | null, last?: string | null) {
   return [prefix, first, last].filter(Boolean).join('').trim() || 'ไม่ระบุชื่อ'
@@ -112,6 +107,7 @@ export async function archiveApprovedPp5Subject(params: {
     exportId = row.id
   }
 
+  if (!exportId) return
   await ensureDocumentReference({ schoolId: params.schoolId, exportId })
   await generateAndStoreApprovedDocument({
     exportId,
@@ -227,6 +223,7 @@ export async function archiveApprovedClassDocument(params: {
     exportId = row.id
   }
 
+  if (!exportId) return
   await ensureDocumentReference({ schoolId: params.schoolId, exportId })
   await generateAndStoreApprovedDocument({
     exportId,
@@ -235,6 +232,19 @@ export async function archiveApprovedClassDocument(params: {
     previewTarget,
     fileName,
     yearBe: year?.year_be || approvedAt.getFullYear() + 543,
+  })
+}
+
+async function buildApprovedDocumentPdfBuffer(params: {
+  actor: SessionPayload
+  previewTarget: SignDocumentPreviewTarget
+  fileName: string
+  schoolId: string
+}): Promise<Buffer> {
+  return buildApprovedDocumentJsPdfBuffer({
+    schoolId: params.schoolId,
+    previewTarget: params.previewTarget,
+    fileName: params.fileName,
   })
 }
 
@@ -248,8 +258,6 @@ async function generateAndStoreApprovedDocument(params: {
 }) {
   const db = createServerClient()
   try {
-    const printReq = buildSignDocumentPrintRequest(params.previewTarget)
-    const sessionToken = await sessionTokenFromActor(params.actor)
     const wantsDriveQr = params.previewTarget.kind !== 'classroom_admin'
 
     const { data: existingExport } = await db.from('approved_document_exports')
@@ -282,17 +290,65 @@ async function generateAndStoreApprovedDocument(params: {
       ? String(existingExport.drive_folder_path)
       : folderSegments.join('/')
 
-    // ถ้ามีลิงก์ Drive แล้ว — สร้าง PDF ครั้งเดียวให้ QR ชี้ Drive แล้วอัปเดตไฟล์เดิม
-    // ถ้ายังไม่มี — อัปโหลดก่อน แล้วสร้าง PDF อีกรอบพร้อม QR Drive
-    const pdfBuffer = await generateReportPdf({
-      origin: appOrigin(),
-      path: printReq.path,
-      query: printReq.query,
-      sessionToken,
-      landscape: printReq.landscape,
-    })
+    // PDF ว่างเล็ก ๆ เพื่อจอง fileId/webViewLink ก่อน build จริง (ฝัง QR รอบเดียว)
+    const placeholderPdf = Buffer.from(
+      '%PDF-1.1\n'
+      + '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n'
+      + '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n'
+      + '3 0 obj<</Type/Page/MediaBox[0 0 3 3]>>endobj\n'
+      + 'xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \n'
+      + 'trailer<</Size 4/Root 1 0 R>>\n'
+      + 'startxref\n149\n%%EOF\n',
+    )
 
-    if (fileId && webViewLink) {
+    if (wantsDriveQr && !webViewLink) {
+      // 1) อัปโหลด placeholder → ได้ fileId + webViewLink
+      const drive = await uploadPdfToDrive({
+        schoolId: params.schoolId,
+        rootFolderId: school.google_drive_folder_id,
+        folderSegments,
+        fileName: params.fileName,
+        buffer: placeholderPdf,
+      })
+      if (!drive.fileId) {
+        throw new Error('อัปโหลดไฟล์ขึ้น Google Drive ไม่สำเร็จ')
+      }
+      fileId = drive.fileId
+      webViewLink = drive.webViewLink
+      folderPath = drive.folderPath
+
+      // 2) บันทึก drive fields ก่อน build — loadReportDigitalReference จะเห็น pdfUrl
+      await db.from('approved_document_exports').update({
+        storage_path: null,
+        drive_file_id: fileId,
+        drive_web_view_link: webViewLink,
+        drive_folder_path: folderPath,
+        updated_at: new Date().toISOString(),
+      }).eq('id', params.exportId)
+
+      // 3) build PDF ครั้งเดียว (มี QR ลิงก์ Drive)
+      const pdfBuffer = await buildApprovedDocumentPdfBuffer({
+        actor: params.actor,
+        previewTarget: params.previewTarget,
+        fileName: params.fileName,
+        schoolId: params.schoolId,
+      })
+
+      // 4) แทนที่เนื้อหาไฟล์บน Drive
+      const ok = await updateDriveFileMedia({
+        schoolId: params.schoolId,
+        fileId,
+        buffer: pdfBuffer,
+      })
+      if (!ok) throw new Error('อัปเดตไฟล์บน Google Drive ไม่สำเร็จ')
+    } else if (fileId && webViewLink) {
+      // มีลิงก์ Drive แล้ว — build ครั้งเดียวแล้วอัปเดต media
+      const pdfBuffer = await buildApprovedDocumentPdfBuffer({
+        actor: params.actor,
+        previewTarget: params.previewTarget,
+        fileName: params.fileName,
+        schoolId: params.schoolId,
+      })
       const ok = await updateDriveFileMedia({
         schoolId: params.schoolId,
         fileId,
@@ -300,6 +356,13 @@ async function generateAndStoreApprovedDocument(params: {
       })
       if (!ok) throw new Error('อัปเดตไฟล์บน Google Drive ไม่สำเร็จ')
     } else {
+      // ไม่ต้องการ QR Drive (เช่น classroom_admin) — อัปโหลดครั้งเดียว
+      const pdfBuffer = await buildApprovedDocumentPdfBuffer({
+        actor: params.actor,
+        previewTarget: params.previewTarget,
+        fileName: params.fileName,
+        schoolId: params.schoolId,
+      })
       const drive = await uploadPdfToDrive({
         schoolId: params.schoolId,
         rootFolderId: school.google_drive_folder_id,
@@ -313,33 +376,6 @@ async function generateAndStoreApprovedDocument(params: {
       fileId = drive.fileId
       webViewLink = drive.webViewLink
       folderPath = drive.folderPath
-
-      await db.from('approved_document_exports').update({
-        storage_path: null,
-        drive_file_id: fileId,
-        drive_web_view_link: webViewLink,
-        drive_folder_path: folderPath,
-        updated_at: new Date().toISOString(),
-      }).eq('id', params.exportId)
-
-      if (wantsDriveQr && webViewLink) {
-        try {
-          const pdfWithDriveQr = await generateReportPdf({
-            origin: appOrigin(),
-            path: printReq.path,
-            query: printReq.query,
-            sessionToken,
-            landscape: printReq.landscape,
-          })
-          await updateDriveFileMedia({
-            schoolId: params.schoolId,
-            fileId,
-            buffer: pdfWithDriveQr,
-          })
-        } catch (qrErr) {
-          console.error('[generateAndStoreApprovedDocument] drive QR regenerate failed', qrErr)
-        }
-      }
     }
 
     await db.from('approved_document_exports').update({

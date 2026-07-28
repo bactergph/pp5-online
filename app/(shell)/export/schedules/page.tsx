@@ -11,7 +11,8 @@ import {
 } from '@/app/schedules/actions'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
-import { enqueueReportPdf } from '@/lib/pdf/pdf-export-queue'
+import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
+import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; label: string }
@@ -211,24 +212,23 @@ export default function ScheduleExportPage() {
 
   function exportPdf() {
     setError('')
-    const params = new URLSearchParams()
-    params.set('print', '1')
-    params.set('type', exportType)
-    if (yearId) params.set('year', yearId)
-    if (exportType === 'class' && classroomId) params.set('classroom', classroomId)
-    if (exportType === 'teaching' && teacherId) params.set('teacher', teacherId)
-
     const label = exportType === 'class'
       ? classrooms.find(c => c.id === classroomId)?.label || 'class'
       : teachers.find(t => t.id === teacherId)?.full_name || 'teacher'
     const fileName = `ตารางเรียน_${label}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
 
-    enqueueReportPdf({
-      path: window.location.pathname,
-      query: params.toString(),
+    // สร้างด้วย jsPDF บนเครื่องผู้ใช้ แล้วใส่คิวมุมขวาล่าง (ไม่ผ่าน Puppeteer)
+    enqueueFileExport({
       fileName,
       label: `ตารางเรียน · ${label}`,
-      landscape: true,
+      run: () => buildSchedulePdfBlob({
+        schoolName,
+        schoolLogoUrl,
+        title,
+        periodTimes,
+        gridData,
+        fileName,
+      }),
     })
   }
 
