@@ -91,6 +91,7 @@ import { usePp6SectionLayout, Pp6PrintLayoutsProvider } from '@/lib/pp6-print-la
 import Pp5PrintLayoutTuner, { usePp5PrintLayoutsState, usePp6PrintLayoutsState } from '@/components/reports/Pp5PrintLayoutTuner'
 import Pp6JsPdfLivePreview from '@/components/reports/Pp6JsPdfLivePreview'
 import Pp5SubjectJsPdfLivePreview, { pp5TunerSectionToPreview } from '@/components/reports/Pp5SubjectJsPdfLivePreview'
+import Pp5ClassJsPdfLivePreview, { pp5ClassTunerSectionToPreview } from '@/components/reports/Pp5ClassJsPdfLivePreview'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 
 function usePp5PageStyle(section: Pp5PrintSection) {
@@ -635,11 +636,12 @@ function attendanceSchoolDayKeysForTerm(data: ReportPayload | null, term: 1 | 2,
 function summarizeAttendanceKeys(studentId: string, keys: string[], recordMap: Map<string, string>) {
   const summary = { leave: 0, sick: 0, absent: 0, present: 0 }
   for (const key of keys) {
-    const status = recordMap.get(`${studentId}:${key}`) || 'ม'
+    const status = recordMap.get(`${studentId}:${key}`)
+    if (status === '-') continue // ช่องว่างที่เก็บแล้ว ≠ มา
     if (status === 'ป') summary.sick += 1
     else if (status === 'ล') summary.leave += 1
     else if (status === 'ข') summary.absent += 1
-    else summary.present += 1
+    else summary.present += 1 // ไม่มีแถวหรือ ม
   }
   return summary
 }
@@ -2352,11 +2354,13 @@ function ClassAttendancePages({ data, term, pageStart = 1 }: { data: ReportPaylo
                       {columns.map(({ weekNumber, slot }) => {
                         const isHoliday = slot.key ? holidayMap.has(slot.key) : false
                         const isOpenWeekend = slot.key ? openWeekendMap.has(slot.key) : false
-                        const recordedValue = student && slot.key ? recordMap.get(`${student.id}:${slot.key}`) || '' : ''
+                        const recordedValue = student && slot.key ? recordMap.get(`${student.id}:${slot.key}`) : undefined
                         const rawValue = student && slot.date && slot.key
-                          ? recordedValue || (isAttendanceSchoolDay(slot.date, slot.key, holidayMap, openWeekendMap) ? 'ม' : '')
+                          ? (recordedValue === '-'
+                            ? '-'
+                            : (recordedValue || (isAttendanceSchoolDay(slot.date, slot.key, holidayMap, openWeekendMap) ? 'ม' : '')))
                           : ''
-                        const display = !student ? '' : rawValue === 'ม' || rawValue === '/' ? 'ม' : rawValue
+                        const display = !student || rawValue === '-' ? '' : rawValue === 'ม' || rawValue === '/' ? 'ม' : rawValue
                         return (
                           <td
                             key={`${student?.id || 'empty'}-w${weekNumber}-${slot.weekday}`}
@@ -4592,7 +4596,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               </select>
             </label>
             <div className="report-preview-actions">
-              {layoutTunerEnabled && mode === 'pp5-subject' && (
+              {layoutTunerEnabled && (mode === 'pp5-subject' || mode === 'pp5-class') && (
                 <>
                   <button
                     type="button"
@@ -4608,23 +4612,20 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                     onClick={() => setPp5TunerMode(current => (current === 'preview' ? 'off' : 'preview'))}
                     className={`btn btn-secondary pp5-tuner-toggle${pp5TunerMode === 'preview' ? ' active' : ''}`}
                     disabled={!data}
-                    title="ปรับ layout ของพรีวิว HTML ที่ /reports/pp5"
+                    title={mode === 'pp5-class' ? 'ปรับ layout ของพรีวิว HTML ที่ /reports/pp5-class' : 'ปรับ layout ของพรีวิว HTML ที่ /reports/pp5'}
                   >
                     {pp5TunerMode === 'preview' ? 'ปิดปรับ preview' : 'ปรับ layout ปพ.5 preview'}
                   </button>
                 </>
               )}
-              {layoutTunerEnabled && mode !== 'pp5-subject' && (
+              {layoutTunerEnabled && mode === 'pp6' && (
               <button
                 type="button"
-                onClick={() => setPp5TunerMode(current => {
-                  if (current !== 'off') return 'off'
-                  return mode === 'pp6' ? 'pdf' : 'preview'
-                })}
+                onClick={() => setPp5TunerMode(current => (current === 'pdf' ? 'off' : 'pdf'))}
                 className={`btn btn-secondary pp5-tuner-toggle${pp5TunerOpen ? ' active' : ''}`}
                 disabled={!data}
               >
-                {pp5TunerOpen ? 'ปิดปรับ layout' : mode === 'pp6' ? 'ปรับ layout ปพ.6' : 'ปรับ layout ปพ.5'}
+                {pp5TunerOpen ? 'ปิดปรับ layout' : 'ปรับ layout ปพ.6'}
               </button>
               )}
               <button type="button" onClick={savePdf} disabled={!data || printing} className="btn btn-secondary">
@@ -4659,6 +4660,16 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               previewSection={pp5TunerSectionToPreview(pp5TunerSection)}
             />
           )}
+          {!embedMode && !printMode && mode === 'pp5-class' && data && (
+            <Pp5ClassJsPdfLivePreview
+              open={pp5PdfPreviewOpen}
+              data={data}
+              term={reportTerm}
+              sections={sections as Pp5ClassPdfSection[]}
+              layouts={pp5PrintLayouts}
+              previewSection={pp5ClassTunerSectionToPreview(pp5TunerSection)}
+            />
+          )}
           {!embedMode && !printMode && (mode === 'pp6' ? (
             <Pp5PrintLayoutTuner
               variant="pp6"
@@ -4686,7 +4697,9 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               panelSubtitle={
                 pp5TunerMode === 'pdf'
                   ? 'ปรับค่าแล้วดูผลในพรีวิว PDF (jsPDF)'
-                  : 'ปรับค่าแล้วดูผลในพรีวิว HTML ที่ /reports/pp5'
+                  : mode === 'pp5-class'
+                    ? 'ปรับค่าแล้วดูผลในพรีวิว HTML ที่ /reports/pp5-class'
+                    : 'ปรับค่าแล้วดูผลในพรีวิว HTML ที่ /reports/pp5'
               }
             />
           ))}

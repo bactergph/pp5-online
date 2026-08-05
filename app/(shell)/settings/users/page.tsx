@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import SignatureUploadBox from '@/components/SignatureUploadBox'
-import { fetchSchoolUsers, updateUser, toggleUserActive, resetTeacherPassword } from '../actions'
+import { fetchSchoolUsers, updateUser, toggleUserActive, resetTeacherPassword, deleteSchoolUser } from '../actions'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { ROLE_LABELS } from '@/lib/roles'
 
@@ -54,6 +54,7 @@ export default function UsersPage() {
   const [schoolId, setSchoolId] = useState<string | null>(null)
   const [schoolCode, setSchoolCode] = useState<string | null>(null)
   const [canManage, setCanManage] = useState(false)
+  const [viewerRole, setViewerRole] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null)
   const [selectedRole, setSelectedRole] = useState('teacher')
@@ -64,16 +65,27 @@ export default function UsersPage() {
   const [resetting, setResetting] = useState(false)
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  // delete user state
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
   useEffect(() => { loadUsers() }, [])
 
   async function loadUsers() {
     setLoading(true)
-    const { schoolId: sid, code, users: data, canManage: manage } = await fetchSchoolUsers()
+    const { schoolId: sid, code, users: data, canManage: manage, viewerRole: role } = await fetchSchoolUsers()
     setSchoolId(sid)
     setSchoolCode(code)
     setCanManage(manage)
+    setViewerRole(role)
     setUsers(data)
     setLoading(false)
+  }
+
+  function canDeleteUser(user: User) {
+    if (user.role === 'district') return false
+    if (viewerRole === 'district') return true
+    return ['teacher', 'academic_head', 'deputy_principal', 'principal'].includes(user.role)
   }
 
   function openAdd() {
@@ -166,6 +178,21 @@ export default function UsersPage() {
     }
   }
 
+  async function handleDeleteUser() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    clearAlert()
+    const { error } = await deleteSchoolUser(deleteTarget.id)
+    setDeleting(false)
+    if (error) {
+      notify('error', error)
+      return
+    }
+    notify('success', `ลบ ${deleteTarget.name} เรียบร้อย`)
+    setDeleteTarget(null)
+    loadUsers()
+  }
+
   const filtered = users.filter(u =>
     u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
     u.username?.toLowerCase().includes(search.toLowerCase())
@@ -207,6 +234,31 @@ export default function UsersPage() {
                 <button onClick={() => { setResetTarget(null); setResetMsg(null) }} className="btn btn-primary">ปิด</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteTarget && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '420px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#991B1B' }}>ยืนยันการลบ</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '8px' }}>{deleteTarget.name}</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-2)', marginBottom: '20px', lineHeight: 1.7 }}>
+              ลบบุคลากรคนนี้ออกจากระบบ<br />
+              <span style={{ color: '#DC2626', fontSize: '12px' }}>ไม่สามารถย้อนกลับได้ — คะแนนและข้อมูลนักเรียนยังคงอยู่</span>
+            </p>
+            <div className="form-actions">
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="btn btn-ghost">ยกเลิก</button>
+              <LoadingButton
+                loading={deleting}
+                loadingText="กำลังลบ..."
+                onClick={handleDeleteUser}
+                style={{ background: '#DC2626', borderColor: '#DC2626', color: '#fff' }}
+              >
+                ลบบุคลากร
+              </LoadingButton>
+            </div>
           </div>
         </div>
       )}
@@ -396,7 +448,7 @@ export default function UsersPage() {
                     </span>
                   </td>
                   {canManage && <td>
-                    <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                       <button onClick={() => openEdit(user)} style={{ fontSize: '13px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>แก้ไข</button>
                       <button onClick={() => { setResetTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` }); setResetMsg(null) }}
                         style={{ fontSize: '13px', color: '#C49212', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -405,6 +457,14 @@ export default function UsersPage() {
                       <button onClick={() => handleToggleActive(user)} style={{ fontSize: '13px', color: user.is_active ? '#D97706' : '#059669', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         {user.is_active ? 'ระงับ' : 'อนุมัติ'}
                       </button>
+                      {canDeleteUser(user) && (
+                        <button
+                          onClick={() => setDeleteTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` })}
+                          style={{ fontSize: '13px', color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          ลบ
+                        </button>
+                      )}
                     </div>
                   </td>}
                 </tr>

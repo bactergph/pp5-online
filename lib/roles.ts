@@ -11,8 +11,43 @@ export const ROLE_LABELS: Record<string, string> = {
   teacher: 'ครูผู้สอน',
 }
 
+/** คำนำหน้าไทยที่พบบ่อย — เรียงยาวก่อนเพื่อไม่ให้ "นาง" ชน "นางสาว" */
+const THAI_NAME_PREFIXES = [
+  'เด็กชาย',
+  'เด็กหญิง',
+  'นางสาว',
+  'นาย',
+  'นาง',
+  'ด.ช.',
+  'ด.ญ.',
+  'น.ส.',
+] as const
+
+/**
+ * ติดคำนำหน้ากับชื่อแบบไม่มีช่องว่าง
+ * เช่น "นางสาว ศิวาพร" / "นางสาวศิวาพร" → "นางสาวศิวาพร"
+ */
+export function ensureThaiNamePrefixJoined(name?: string | null) {
+  const trimmed = (name || '').trim()
+  if (!trimmed) return ''
+  for (const prefix of THAI_NAME_PREFIXES) {
+    if (!trimmed.startsWith(prefix)) continue
+    const rest = trimmed.slice(prefix.length).trimStart()
+    if (!rest) return prefix
+    return `${prefix}${rest}`
+  }
+  return trimmed
+}
+
+/** @deprecated ใช้ ensureThaiNamePrefixJoined — คงชื่อเดิมเพื่อไม่พัง import เก่า */
+export const ensureThaiNamePrefixSpace = ensureThaiNamePrefixJoined
+
 export function formatStaffName(prefix?: string | null, fullName?: string | null) {
-  return `${prefix || ''} ${fullName || ''}`.trim()
+  const p = (prefix || '').trim()
+  const n = (fullName || '').trim()
+  if (!p) return ensureThaiNamePrefixJoined(n)
+  if (!n) return p
+  return ensureThaiNamePrefixJoined(`${p}${n}`)
 }
 
 export function isAcademicHeadRole(role: string) {

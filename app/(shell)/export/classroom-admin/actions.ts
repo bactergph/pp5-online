@@ -11,6 +11,7 @@ import {
 import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
 import { fetchAllRows } from '@/lib/supabase-paginate'
+import { ensureThaiNamePrefixJoined, formatStaffName } from '@/lib/roles'
 
 type RoleSession = {
   userId: string
@@ -108,13 +109,15 @@ export async function fetchClassroomAdminExportContext() {
       .filter(Boolean) as string[],
   )]
   const teachersRes = teacherIds.length
-    ? await db.from('users').select('id, full_name').in('id', teacherIds)
-    : { data: [] as { id: string; full_name: string | null }[] }
+    ? await db.from('users').select('id, prefix, full_name').in('id', teacherIds)
+    : { data: [] as { id: string; prefix?: string | null; full_name: string | null }[] }
   const teacherNameById = Object.fromEntries(
-    (teachersRes.data || []).map(u => [u.id, u.full_name || 'ยังไม่กำหนด']),
+    (teachersRes.data || []).map(u => [u.id, formatStaffName(u.prefix, u.full_name) || 'ยังไม่กำหนด']),
   )
 
-  const directorName = school?.acting_director || school?.director_name || 'ยังไม่กำหนด'
+  const directorName = ensureThaiNamePrefixJoined(
+    school?.acting_director || school?.director_name || '',
+  ) || 'ยังไม่กำหนด'
 
   return {
     school,

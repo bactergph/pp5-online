@@ -324,7 +324,7 @@ function schoolDayKeysInRange(start: string | null, end: string | null, holidayS
   return keys
 }
 
-/** Sparse: ไม่มีแถว = มา — นับจากวันเปิดสอนทั้งหมด ไม่ใช่แค่แถวที่มีอยู่ */
+/** Sparse: ไม่มีแถว = มา; '-' = ช่องว่างที่เก็บแล้ว (ไม่นับมา) */
 function summarizeDaily(rows: DbRow[], studentIds: string[], schoolDayKeys: string[]) {
   const out: ReportPayload['dailyAttendance'] = {}
   const byStudent = new Map<string, Map<string, string>>()
@@ -338,6 +338,7 @@ function summarizeDaily(rows: DbRow[], studentIds: string[], schoolDayKeys: stri
     const dateMap = byStudent.get(id)
     for (const key of schoolDayKeys) {
       const status = dateMap?.get(key)
+      if (status === '-') continue
       if (status === 'ป') summary.sick += 1
       else if (status === 'ล') summary.leave += 1
       else if (status === 'ข') summary.absent += 1

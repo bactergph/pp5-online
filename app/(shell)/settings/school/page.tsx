@@ -3,7 +3,8 @@ import Image from 'next/image'
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import LoadingButton from '@/components/LoadingButton'
-import StaffPicker, { type StaffOption } from '@/components/StaffPicker'
+import { type StaffOption } from '@/components/StaffPicker'
+import SchoolLeadersPanel from '@/components/settings/SchoolLeadersPanel'
 import { fetchMySchool, saveSchool, searchSchools, setMySchool, updateSchoolActingDirector, fetchSubjectGroupHeads, saveSubjectGroupHeads, fetchSchoolStaff, saveSchoolLeaders } from '../actions'
 import GoogleDriveIntegrationPanel from '@/components/settings/GoogleDriveIntegrationPanel'
 import DmcImportTool, { type DmcImportAction } from '@/components/settings/DmcImportTool'
@@ -419,6 +420,44 @@ export default function SchoolSettingsPage() {
     notify('success', 'ตั้งรองผู้อำนวยการเป็นผู้รักษาการและบันทึกแล้ว')
   }
 
+  function renderLeadersPanel(opts?: { showSaveCta?: boolean }) {
+    return (
+      <SchoolLeadersPanel
+        staff={staff}
+        directorUserId={directorUserId}
+        directorName={directorName}
+        onDirectorChange={(userId, name) => { setDirectorUserId(userId); setDirectorName(name) }}
+        onDirectorManual={setDirectorName}
+        viceDirectorUserId={viceDirectorUserId}
+        viceDirectorName={viceDirectorName}
+        onViceDirectorChange={(userId, name) => { setViceDirectorUserId(userId); setViceDirectorName(name) }}
+        onViceDirectorManual={setViceDirectorName}
+        isViceDirectorActing={isViceDirectorActing}
+        actingToggleBusy={actingToggleBusy}
+        onToggleViceAsActing={toggleViceDirectorAsActing}
+        actingDirectorUserId={actingDirectorUserId}
+        actingDirector={actingDirector}
+        onActingDirectorChange={(userId, name) => { setActingDirectorUserId(userId); setActingDirector(name) }}
+        onActingDirectorManual={setActingDirector}
+        actingDirectorPosition={actingDirectorPosition}
+        onActingDirectorPositionChange={setActingDirectorPosition}
+        academicHeadUserId={academicHeadUserId}
+        academicHeadName={academicHeadName}
+        onAcademicHeadChange={(userId, name) => { setAcademicHeadUserId(userId); setAcademicHeadName(name) }}
+        onAcademicHeadManual={setAcademicHeadName}
+        measurementHeadUserId={measurementHeadUserId}
+        measurementHeadName={measurementHeadName}
+        onMeasurementHeadChange={(userId, name) => { setMeasurementHeadUserId(userId); setMeasurementHeadName(name) }}
+        onMeasurementHeadManual={setMeasurementHeadName}
+        subjectGroupHeads={subjectGroupHeads}
+        onSubjectGroupHeadChange={(group, slot) => setSubjectGroupHeads(prev => ({ ...prev, [group]: slot }))}
+        showSaveCta={opts?.showSaveCta}
+        saving={saving}
+        onSaveClick={opts?.showSaveCta ? () => formRef.current?.requestSubmit() : undefined}
+      />
+    )
+  }
+
   if (loading) {
     // ระหว่างโหลดหลังเลือกโรงเรียน ให้ค้างบน onboarding เต็มจอ ไม่เด้งไปเมนูตั้งค่า
     if (inOnboarding) {
@@ -628,53 +667,8 @@ export default function SchoolSettingsPage() {
               )}
 
               {step === 2 && (
-                <div className="card-padded school-settings-card">
-                  <div className="school-form-grid">
-                    <div>
-                      <StaffPicker label="ผู้อำนวยการ" staff={staff} value={directorUserId} manualValue={directorName} allowManual onManualChange={setDirectorName} onChange={(userId, name) => { setDirectorUserId(userId); setDirectorName(name) }} />
-                    </div>
-                    <div>
-                      <label className="form-label">รองผู้อำนวยการ</label>
-                      <div className="wizard-inline-field">
-                        <div className="wizard-inline-field__grow">
-                          <StaffPicker staff={staff} value={viceDirectorUserId} manualValue={viceDirectorName} allowManual onManualChange={setViceDirectorName} onChange={(userId, name) => { setViceDirectorUserId(userId); setViceDirectorName(name) }} />
-                        </div>
-                        <button
-                          type="button"
-                          className={`${isViceDirectorActing ? 'btn btn-primary' : 'btn btn-secondary'} wizard-inline-field__action`}
-                          onClick={toggleViceDirectorAsActing}
-                          disabled={actingToggleBusy}
-                          aria-pressed={isViceDirectorActing}
-                        >
-                          {actingToggleBusy ? 'กำลังบันทึก...' : isViceDirectorActing ? 'ยกเลิกรักษาการ' : 'ตั้งเป็นรักษาการ ผอ.'}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <StaffPicker label="ผู้รักษาการ (ถ้ามี)" staff={staff} value={actingDirectorUserId} manualValue={actingDirector} allowManual onManualChange={setActingDirector} onChange={(userId, name) => { setActingDirectorUserId(userId); setActingDirector(name) }} />
-                    </div>
-                    <div>
-                      <label className="form-label">ตำแหน่งผู้รักษาการ</label>
-                      <input value={actingDirectorPosition} onChange={e => setActingDirectorPosition(e.target.value)} className="form-input" placeholder="เช่น ครู, ครูชำนาญการ, รองผู้อำนวยการ" />
-                    </div>
-                    <div>
-                      <StaffPicker label="หัวหน้าฝ่ายวิชาการ" staff={staff} value={academicHeadUserId} manualValue={academicHeadName} allowManual onManualChange={setAcademicHeadName} onChange={(userId, name) => { setAcademicHeadUserId(userId); setAcademicHeadName(name) }} />
-                    </div>
-                    <div>
-                      <StaffPicker label="หัวหน้างานวัดผล" staff={staff} value={measurementHeadUserId} manualValue={measurementHeadName} allowManual onManualChange={setMeasurementHeadName} onChange={(userId, name) => { setMeasurementHeadUserId(userId); setMeasurementHeadName(name) }} />
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
-                    <div className="section-title" style={{ marginBottom: 6 }}>หัวหน้ากลุ่มสาระการเรียนรู้</div>
-                    <p style={{ margin: '0 0 16px', color: 'var(--text-3)', fontSize: 13 }}>ใช้ลงนามหน้าปก ปพ.5 รายวิชา — กำหนดชื่อตามกลุ่มสาระ 8 กลุ่ม</p>
-                    <div className="school-form-grid">
-                      {SUBJECT_GROUPS.map(group => (
-                        <div key={group}>
-                          <StaffPicker label={group} staff={staff} value={subjectGroupHeads[group]?.userId ?? null} manualValue={subjectGroupHeads[group]?.name || ''} allowManual placeholder="ค้นหาชื่อบุคลากร..." onManualChange={name => setSubjectGroupHeads(prev => ({ ...prev, [group]: { name, userId: null } }))} onChange={(userId, name) => setSubjectGroupHeads(prev => ({ ...prev, [group]: { name, userId } }))} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                <div className="card-padded school-settings-card school-settings-card--leaders">
+                  {renderLeadersPanel()}
                 </div>
               )}
 
@@ -922,7 +916,7 @@ export default function SchoolSettingsPage() {
               {school.code && <span className="badge badge-success school-settings-code">/{school.code}</span>}
               <button
                 type="button"
-                onClick={() => { setReselect(true); setCreateMode(false); setQ(''); setResults([]) }}
+                onClick={() => { setReselect(true); setQ(''); setResults([]) }}
                 className="btn btn-secondary school-settings-reselect"
               >
                 เปลี่ยนโรงเรียน
@@ -1003,163 +997,17 @@ export default function SchoolSettingsPage() {
           </section>
 
           <section
-            className="card-padded school-settings-card"
+            className="card-padded school-settings-card school-settings-card--leaders"
             style={{ display: activeTab === 'leaders' ? 'block' : 'none' }}
             role="tabpanel"
           >
-              <div className="school-card-head">
-                <div>
-                  <div className="section-title">ผู้บริหารและผู้รับผิดชอบ</div>
-                  <p>เลือกจากรายชื่อในระบบ หรือพิมพ์ชื่อเอง — ใช้ลงนามเอกสารและรายงาน</p>
-                </div>
+            <div className="school-card-head">
+              <div>
+                <div className="section-title">ผู้บริหารและผู้รับผิดชอบ</div>
+                <p>เลือกจากรายชื่อในระบบเพื่อลงนามดิจิทัลได้ — หรือพิมพ์ชื่อเองสำหรับเอกสาร</p>
               </div>
-
-              <div className="school-leaders-sections">
-                <div className="school-leaders-block">
-                  <div className="school-leaders-block__head">
-                    <h3>ผู้บริหาร</h3>
-                    <p>ผู้อำนวยการ รองผู้อำนวยการ และผู้รักษาการ</p>
-                  </div>
-                  <div className="school-form-grid">
-                    <div>
-                      <StaffPicker
-                        label="ผู้อำนวยการ"
-                        staff={staff}
-                        value={directorUserId}
-                        manualValue={directorName}
-                        allowManual
-                        onManualChange={setDirectorName}
-                        onChange={(userId, name) => {
-                          setDirectorUserId(userId)
-                          setDirectorName(name)
-                        }}
-                      />
-                    </div>
-                    <div className="school-leaders-vice">
-                      <label className="form-label">รองผู้อำนวยการ</label>
-                      <StaffPicker
-                        staff={staff}
-                        value={viceDirectorUserId}
-                        manualValue={viceDirectorName}
-                        allowManual
-                        onManualChange={setViceDirectorName}
-                        onChange={(userId, name) => {
-                          setViceDirectorUserId(userId)
-                          setViceDirectorName(name)
-                        }}
-                      />
-                      <div className="school-leaders-vice__actions">
-                        <button
-                          type="button"
-                          className={isViceDirectorActing ? 'btn btn-primary' : 'btn btn-secondary'}
-                          onClick={toggleViceDirectorAsActing}
-                          disabled={actingToggleBusy}
-                          aria-pressed={isViceDirectorActing}
-                        >
-                          {actingToggleBusy
-                            ? 'กำลังบันทึก...'
-                            : isViceDirectorActing
-                              ? 'ยกเลิกรักษาการ'
-                              : 'ตั้งเป็นรักษาการ ผอ.'}
-                        </button>
-                        {isViceDirectorActing && (
-                          <span className="badge badge-success">ใช้รอง ผอ. ลงนามแทน</span>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <StaffPicker
-                        label="ผู้รักษาการ (ถ้ามี)"
-                        staff={staff}
-                        value={actingDirectorUserId}
-                        manualValue={actingDirector}
-                        allowManual
-                        onManualChange={setActingDirector}
-                        onChange={(userId, name) => {
-                          setActingDirectorUserId(userId)
-                          setActingDirector(name)
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label">ตำแหน่งผู้รักษาการ</label>
-                      <input
-                        name="acting_director_position"
-                        value={actingDirectorPosition}
-                        onChange={e => setActingDirectorPosition(e.target.value)}
-                        className="form-input"
-                        placeholder="เช่น ครู, ครูชำนาญการ, รองผู้อำนวยการ"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="school-leaders-block">
-                  <div className="school-leaders-block__head">
-                    <h3>ฝ่ายวิชาการ / วัดผล</h3>
-                    <p>ชื่อที่ใช้ในรายงานสรุปและเอกสารฝ่ายวิชาการ</p>
-                  </div>
-                  <div className="school-form-grid">
-                    <div>
-                      <StaffPicker
-                        label="หัวหน้าฝ่ายวิชาการ"
-                        staff={staff}
-                        value={academicHeadUserId}
-                        manualValue={academicHeadName}
-                        allowManual
-                        onManualChange={setAcademicHeadName}
-                        onChange={(userId, name) => {
-                          setAcademicHeadUserId(userId)
-                          setAcademicHeadName(name)
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <StaffPicker
-                        label="หัวหน้างานวัดผล"
-                        staff={staff}
-                        value={measurementHeadUserId}
-                        manualValue={measurementHeadName}
-                        allowManual
-                        onManualChange={setMeasurementHeadName}
-                        onChange={(userId, name) => {
-                          setMeasurementHeadUserId(userId)
-                          setMeasurementHeadName(name)
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="school-leaders-block">
-                  <div className="school-leaders-block__head">
-                    <h3>หัวหน้ากลุ่มสาระการเรียนรู้</h3>
-                    <p>ใช้ลงนามหน้าปก ปพ.5 รายวิชา — 8 กลุ่มสาระ</p>
-                  </div>
-                  <div className="school-form-grid">
-                    {SUBJECT_GROUPS.map(group => (
-                      <div key={group}>
-                        <StaffPicker
-                          label={group}
-                          staff={staff}
-                          value={subjectGroupHeads[group]?.userId ?? null}
-                          manualValue={subjectGroupHeads[group]?.name || ''}
-                          allowManual
-                          placeholder="ค้นหาชื่อบุคลากร..."
-                          onManualChange={name => setSubjectGroupHeads(prev => ({
-                            ...prev,
-                            [group]: { name, userId: null },
-                          }))}
-                          onChange={(userId, name) => setSubjectGroupHeads(prev => ({
-                            ...prev,
-                            [group]: { name, userId },
-                          }))}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            </div>
+            {renderLeadersPanel({ showSaveCta: true })}
           </section>
 
           <section

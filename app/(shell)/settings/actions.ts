@@ -2,7 +2,7 @@
 import { randomUUID } from 'crypto'
 import { createServerClient } from '@/lib/supabase'
 import { getSession, createSession } from '@/lib/session'
-import { syncSchoolLeaderSlot, syncUserRoleToSchoolLeaders } from '@/lib/school-leaders'
+import { clearUserFromLeaderSlots, syncSchoolLeaderSlot, syncUserRoleToSchoolLeaders } from '@/lib/school-leaders'
 import { formatStaffName } from '@/lib/roles'
 import { logActivity, resolveClassroomSchoolId, resolveClassSubjectContext } from '@/lib/audit'
 import {
@@ -387,7 +387,13 @@ export async function fetchSchoolUsers() {
     const { data: sc } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()
     code = sc?.code ?? null
   }
-  return { schoolId: session.schoolId, code, users: data || [], canManage: hasRole(session, ADMIN_ROLES) }
+  return {
+    schoolId: session.schoolId,
+    code,
+    users: data || [],
+    canManage: hasRole(session, ADMIN_ROLES),
+    viewerRole: session.role,
+  }
 }
 
 export async function fetchSchoolStaff() {
@@ -499,6 +505,62 @@ export async function toggleUserActive(id: string, isActive: boolean) {
       metadata: { targetRole: target?.role ?? null },
     })
   }
+}
+
+/** ลบบุคลากรออกจากระบบ (auth + users) — ใช้ได้เฉพาะ admin/district */
+export async function deleteSchoolUser(id: string) {
+  const session = await requireSchoolSession()
+  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
+  if (session.userId === id) return { error: 'ไม่สามารถลบบัญชีของตนเองได้' }
+
+  const db = createServerClient()
+  const { data: target } = await db.from('users')
+    .select('id, full_name, prefix, role, school_id')
+    .eq('id', id)
+    .maybeSingle()
+  if (!target) return { error: 'ไม่พบผู้ใช้' }
+
+  if (session.role === 'admin') {
+    if (!session.schoolId || target.school_id !== session.schoolId) {
+      return { error: 'ไม่มีสิทธิ์ลบผู้ใช้คนนี้' }
+    }
+    if (!['teacher', 'academic_head', 'deputy_principal', 'principal'].includes(target.role)) {
+      return { error: 'ลบได้เฉพาะครูและผู้บริหารโรงเรียน' }
+    }
+  } else if (session.role === 'district') {
+    if (session.schoolId && target.school_id && target.school_id !== session.schoolId) {
+      return { error: 'ไม่มีสิทธิ์ลบผู้ใช้คนนี้' }
+    }
+    if (target.role === 'district') {
+      return { error: 'ไม่สามารถลบบัญชีเขตได้' }
+    }
+  }
+
+  if (target.school_id) {
+    await clearUserFromLeaderSlots(db, target.school_id, id)
+  }
+
+  const { error: authError } = await db.auth.admin.deleteUser(id)
+  if (authError) return { error: authError.message }
+
+  const { error } = await db.from('users').delete().eq('id', id)
+  // แถว users อาจถูกลบแล้วจาก ON DELETE CASCADE ของ auth.users — ไม่ถือเป็น error
+  if (error && !/not found|0 rows|does not exist/i.test(error.message)) {
+    return { error: error.message }
+  }
+
+  await logActivity({
+    actor: session,
+    schoolId: target.school_id ?? session.schoolId,
+    action: 'delete',
+    module: 'users',
+    targetType: 'user',
+    targetId: id,
+    targetLabel: target.full_name ?? 'ผู้ใช้',
+    description: `ลบบุคลากร ${target.full_name || ''}`.trim(),
+    metadata: { targetRole: target.role ?? null },
+  })
+  return { error: null }
 }
 
 // ============================================================

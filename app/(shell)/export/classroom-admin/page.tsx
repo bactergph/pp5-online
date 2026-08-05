@@ -7,7 +7,7 @@ import { useAppAlert } from '@/lib/use-app-alert'
 import ClassroomAdminPrintLayoutTuner, { useClassroomAdminPrintLayoutsState } from '@/components/classroom-admin/ClassroomAdminPrintLayoutTuner'
 import { classroomAdminPrintStyles } from '@/components/classroom-admin/classroom-admin-print-styles'
 import { CLASSROOM_ADMIN_A4_LANDSCAPE_CSS } from '@/lib/classroom-admin-a4-landscape'
-import { toDailyDisplay } from '@/lib/daily-attendance'
+import { dailyCellText, summarizeDailyStatuses } from '@/lib/daily-attendance'
 import {
   classroomAdminPrintSectionForReport,
   classroomAdminSectionLayoutStyle,
@@ -120,7 +120,9 @@ function setMonthInKey(monthKey: string, month: number) {
 }
 
 function studentName(student: Student) {
-  return `${student.prefix || ''}${student.first_name} ${student.last_name}`.trim()
+  const prefix = (student.prefix || '').trim()
+  const name = `${student.first_name} ${student.last_name}`.trim()
+  return prefix ? `${prefix}${name}` : name
 }
 
 function dayLabel(monthKey: string, day: number) {
@@ -136,13 +138,8 @@ function holidayColumnLabel(day: number, name: string) {
 }
 
 function summaryFor(student: Student, data: ExportData) {
-  const out = { 'ม': 0, 'ป': 0, 'ล': 0, 'ข': 0 } as Record<string, number>
-  ;(data.schoolDays || []).forEach(day => {
-    const value = data.attendance?.[student.id]?.[day]
-    if (!value) return
-    out[value] = (out[value] || 0) + 1
-  })
-  return out
+  // sparse: ไม่มีแถว = มา; ช่องว่างที่เก็บ (-) ไม่นับ
+  return summarizeDailyStatuses(data.schoolDays || [], data.attendance?.[student.id])
 }
 
 /** จำนวนวันที่ทำกิจวัตร (เช็ค) หรือยอดรวมเงินออม */
@@ -159,7 +156,8 @@ function isRoutineActivityReport(type: ReportType): type is Exclude<ActivityType
 }
 
 function attendanceExportDisplay(studentId: string, day: number, data: ExportData) {
-  return toDailyDisplay(data.attendance?.[studentId]?.[day] as 'ม' | 'ป' | 'ล' | 'ข' | undefined) || ''
+  // ไม่มีแถว = ม; ช่องว่างที่เก็บ (-) = ว่างเปล่า
+  return dailyCellText(data.attendance?.[studentId]?.[day])
 }
 
 export default function ClassroomAdminExportPage() {

@@ -6,7 +6,7 @@ import {
   DEFAULT_CLASSROOM_ADMIN_MONTHLY_LAYOUT,
   type ClassroomAdminMonthlyLayout,
 } from '@/lib/classroom-admin-print-layout'
-import { resolveDailyStatus } from '@/lib/daily-attendance'
+import { dailyCellText, summarizeDailyStatuses } from '@/lib/daily-attendance'
 import {
   PRINT_STUDENTS_PER_PAGE,
   chunkStudentsForPrintPages,
@@ -116,7 +116,9 @@ function dayLabel(monthKey: string, day: number) {
 }
 
 function studentName(student: DailyAttendancePdfStudent) {
-  return `${student.prefix || ''}${student.first_name} ${student.last_name}`.trim()
+  const prefix = (student.prefix || '').trim()
+  const name = `${student.first_name} ${student.last_name}`.trim()
+  return prefix ? `${prefix} ${name}` : name
 }
 
 function summaryFor(
@@ -124,12 +126,7 @@ function summaryFor(
   schoolDays: number[],
   attendance: Record<string, Record<number, string | undefined>>,
 ) {
-  const out = { ม: 0, ป: 0, ล: 0, ข: 0 }
-  for (const day of schoolDays) {
-    const display = resolveDailyStatus(attendance[studentId]?.[day] as 'ม' | 'ป' | 'ล' | 'ข' | undefined)
-    out[display] += 1
-  }
-  return out
+  return summarizeDailyStatuses(schoolDays, attendance[studentId])
 }
 
 function activityDoneCount(
@@ -156,7 +153,7 @@ function attendanceDisplay(
   day: number,
   attendance: Record<string, Record<number, string | undefined>>,
 ) {
-  return resolveDailyStatus(attendance[studentId]?.[day] as 'ม' | 'ป' | 'ล' | 'ข' | undefined)
+  return dailyCellText(attendance[studentId]?.[day])
 }
 
 function activityDisplay(

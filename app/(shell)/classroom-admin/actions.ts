@@ -2,10 +2,11 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
-import { isDailyPresent } from '@/lib/daily-attendance'
+import { DAILY_BLANK, isDailyPresent } from '@/lib/daily-attendance'
 import { fetchAllRows } from '@/lib/supabase-paginate'
 import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
+import { ensureThaiNamePrefixJoined, formatStaffName } from '@/lib/roles'
 import {
   getHealthInspectionRecordsCached,
   getMonthlyActivityRowsCached,
@@ -22,7 +23,7 @@ type ClassroomAdminSession = {
   fullName: string
 }
 
-type AttendanceStatus = 'ม' | 'ป' | 'ล' | 'ข'
+type AttendanceStatus = 'ม' | 'ป' | 'ล' | 'ข' | typeof DAILY_BLANK
 type ActivityType = 'saving' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
 type InspectionField = 'nails' | 'hair' | 'ears' | 'nose' | 'teeth' | 'skin' | 'clothes'
 type ActivityRecord = { student_id: string; date?: string; value: number | null; is_manual_override?: boolean | null }
@@ -249,7 +250,7 @@ export async function fetchClassroomAdminContext() {
       ? db.from('students').select('classroom_id').in('classroom_id', classroomIds)
       : Promise.resolve({ data: [] }),
     teacherIds.length > 0
-      ? db.from('users').select('id, full_name').in('id', teacherIds)
+      ? db.from('users').select('id, prefix, full_name').in('id', teacherIds)
       : Promise.resolve({ data: [] }),
   ])
   const countMap = (studentsRes.data || []).reduce((acc: Record<string, number>, row: { classroom_id: string }) => {
@@ -257,7 +258,7 @@ export async function fetchClassroomAdminContext() {
       return acc
     }, {})
   const teacherNameMap: Record<string, string> = Object.fromEntries(
-    (teachersRes.data || []).map(t => [t.id, t.full_name]),
+    (teachersRes.data || []).map(t => [t.id, formatStaffName(t.prefix, t.full_name)]),
   )
 
   let school: {
@@ -288,8 +289,8 @@ export async function fetchClassroomAdminContext() {
     layoutTunerEnabled,
     schoolName: school?.name || '',
     schoolLogoUrl: school?.logo_url || '',
-    directorName: school?.director_name || '',
-    actingDirector: school?.acting_director || '',
+    directorName: ensureThaiNamePrefixJoined(school?.director_name || ''),
+    actingDirector: ensureThaiNamePrefixJoined(school?.acting_director || ''),
     actingDirectorPosition: school?.acting_director_position || '',
     years: yearsRes.data || [],
     classrooms: classrooms.map(c => ({
@@ -588,40 +589,47 @@ export async function clearDailyAttendanceMonth(classroomId: string, monthKey: s
   if (access.error || !access.classroom) return { error: access.error, deleted: 0 }
   if (!monthKey) return { error: 'ไม่พบเดือน', deleted: 0 }
 
-  const db = createServerClient()
+  const students = await fetchStudentsForClassroom(classroomId)
+  if (students.length === 0) return { error: null, deleted: 0 }
+
   const range = monthRange(monthKey)
-  const { count, error: countError } = await db.from('daily_attendance')
-    .select('id', { count: 'exact', head: true })
-    .eq('classroom_id', classroomId)
-    .gte('date', range.start)
-    .lte('date', range.end)
+  const dayRows = Array.from({ length: range.days }, (_, i) => ({ day: i + 1 }))
+  const teachingDays = await filterRowsForTeachingDays(access.classroom.academic_year_id, monthKey, dayRows)
+  if (teachingDays.length === 0) return { error: 'ไม่มีวันเปิดสอนให้ลบ', deleted: 0 }
 
-  if (countError) return { error: countError.message, deleted: 0 }
+  // ลบทั้งหมด = บันทึกช่องว่าง (-) ทุกคนทุกวันเปิดสอน (คนละค่ากับไม่มีแถว = มา)
+  const db = createServerClient()
+  const payload = teachingDays.flatMap(({ day }) =>
+    students.map(student => ({
+      student_id: student.id,
+      classroom_id: classroomId,
+      date: isoDateFromMonthDay(monthKey, day),
+      status: DAILY_BLANK as AttendanceStatus,
+      recorded_by: session.userId,
+    })),
+  )
 
-  const deletedCount = count || 0
-  if (deletedCount === 0) return { error: null, deleted: 0 }
+  const chunkSize = 500
+  for (let i = 0; i < payload.length; i += chunkSize) {
+    const chunk = payload.slice(i, i + chunkSize)
+    const { error } = await db.from('daily_attendance').upsert(chunk, { onConflict: 'student_id,date' })
+    if (error) return { error: error.message, deleted: 0 }
+  }
 
-  const { error } = await db.from('daily_attendance')
-    .delete()
-    .eq('classroom_id', classroomId)
-    .gte('date', range.start)
-    .lte('date', range.end)
-
-  if (error) return { error: error.message, deleted: 0 }
-
+  const deleted = payload.length
   await logActivity({
     actor: session,
     schoolId: access.classroom.school_id,
-    action: 'delete',
+    action: 'upsert',
     module: 'classroom_admin',
     targetType: 'daily_attendance',
     targetId: classroomId,
     targetLabel: `${access.classroom.level}/${access.classroom.room}`,
-    description: `ลบข้อมูลเวลาเรียนรายเดือน ${deletedCount} ช่อง · ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey}`,
-    metadata: { classroomId, monthKey, deleted: deletedCount },
+    description: `ลบทั้งหมด → ช่องว่าง ${deleted} ช่อง · ${access.classroom.level}/${access.classroom.room} เดือน ${monthKey}`,
+    metadata: { classroomId, monthKey, deleted, status: DAILY_BLANK },
   })
 
-  return { error: null, deleted: deletedCount }
+  return { error: null, deleted }
 }
 
 async function upsertSyncedActivityTeachingRows(

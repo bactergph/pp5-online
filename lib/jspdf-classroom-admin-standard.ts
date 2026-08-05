@@ -99,7 +99,9 @@ function lineStepMm(fontSizePt: number, gapMm = 1.2) {
 }
 
 function studentName(student: StandardPdfStudent) {
-  return `${student.prefix || ''}${student.first_name} ${student.last_name}`.trim()
+  const prefix = (student.prefix || '').trim()
+  const name = `${student.first_name} ${student.last_name}`.trim()
+  return prefix ? `${prefix} ${name}` : name
 }
 
 function cellText(value: unknown) {

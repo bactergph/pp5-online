@@ -27,8 +27,8 @@ type Props = {
 
 function initialMode(value: string | null, allowManual: boolean, manualValue: string): Mode {
   if (value) return 'pick'
+  // มีชื่อพิมพ์เองอยู่แล้ว → โหมด manual; ค่าว่างเริ่มที่เลือกจากระบบ (ลงนามได้)
   if (allowManual && manualValue.trim()) return 'manual'
-  if (allowManual) return 'manual'
   return 'pick'
 }
 
@@ -239,25 +239,32 @@ export default function StaffPicker({
       )}
 
       {mode === 'manual' && allowManual ? (
-        <div className={`staff-picker__field${showClear ? ' has-clear' : ''}`}>
-          <input
-            className="form-input staff-picker__input staff-picker__input--manual"
-            value={manualValue}
-            placeholder="พิมพ์ชื่อ-นามสกุลที่ใช้ลงนาม"
-            autoComplete="name"
-            enterKeyHint="done"
-            onChange={e => {
-              const next = e.target.value
-              onManualChange?.(next)
-              if (value) onChange(null, next)
-            }}
-          />
-          {showClear && (
-            <button type="button" className="staff-picker__clear" onClick={clear} aria-label="ล้างชื่อ">
-              ×
-            </button>
+        <>
+          <div className={`staff-picker__field${showClear ? ' has-clear' : ''}`}>
+            <input
+              className="form-input staff-picker__input staff-picker__input--manual"
+              value={manualValue}
+              placeholder="พิมพ์ชื่อ-นามสกุลที่ใช้ลงนาม"
+              autoComplete="name"
+              enterKeyHint="done"
+              onChange={e => {
+                const next = e.target.value
+                onManualChange?.(next)
+                if (value) onChange(null, next)
+              }}
+            />
+            {showClear && (
+              <button type="button" className="staff-picker__clear" onClick={clear} aria-label="ล้างชื่อ">
+                ×
+              </button>
+            )}
+          </div>
+          {!value && (
+            <p className="staff-picker__hint staff-picker__hint--warn">
+              มีชื่อบนเอกสาร แต่ลงนามดิจิทัลไม่ได้ — ควรเลือกจากรายชื่อในระบบ
+            </p>
           )}
-        </div>
+        </>
       ) : (
         <div className="staff-picker__pick">
           <div className={`staff-picker__field${showClear ? ' has-clear' : ''}`}>

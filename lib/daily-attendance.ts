@@ -1,50 +1,83 @@
-export type DailyDbStatus = 'ม' | 'ป' | 'ล' | 'ข'
-export type DailyDisplayStatus = 'ม' | 'ข' | 'ล' | 'ป'
+/** ค่าช่องว่างที่เก็บในฐาน — คนละความหมายกับไม่มีแถว (=มา) */
+export const DAILY_BLANK = '-' as const
 
-export const DAILY_STATUS_CYCLE: DailyDisplayStatus[] = ['ม', 'ข', 'ล', 'ป']
+export type DailyDbStatus = 'ม' | 'ป' | 'ล' | 'ข' | typeof DAILY_BLANK
+/** ลำดับวนคลิก: ม → ล → ป → ข → ช่องว่าง → ม */
+export type DailyDisplayStatus = 'ม' | 'ล' | 'ป' | 'ข' | typeof DAILY_BLANK
+
+export const DAILY_STATUS_CYCLE: DailyDisplayStatus[] = ['ม', 'ล', 'ป', 'ข', DAILY_BLANK]
 
 export const DAILY_STATUS_LABELS: Record<DailyDisplayStatus, string> = {
   'ม': 'มา',
-  'ข': 'ขาด',
   'ล': 'ลา',
   'ป': 'ป่วย',
+  'ข': 'ขาด',
+  [DAILY_BLANK]: 'ช่องว่าง',
 }
 
-export function toDailyDisplay(status?: DailyDbStatus | null): DailyDisplayStatus | null {
-  if (!status) return null
+export function isDailyBlank(status?: string | null): status is typeof DAILY_BLANK {
+  return status === DAILY_BLANK
+}
+
+export function toDailyDisplay(status?: DailyDbStatus | string | null): DailyDisplayStatus | null {
+  if (status == null || status === '') return null
+  if (status === DAILY_BLANK) return DAILY_BLANK
   // รองรับค่าเก่าที่เคยแสดงเป็น /
-  if (status === 'ม' || (status as string) === '/') return 'ม'
+  if (status === 'ม' || status === '/') return 'ม'
   if (status === 'ป' || status === 'ล' || status === 'ข') return status
   return null
 }
 
 export function toDailyDb(status: DailyDisplayStatus | '/'): DailyDbStatus {
-  if (status === '/' || status === 'ม') return 'ม'
+  if (status === '/') return 'ม'
   return status
 }
 
-/** Sparse: ช่องว่างแสดงเป็นมา — คลิกแรก → `ข` แล้ววน ข → ล → ป → ม */
-export function nextDailyDisplay(status: DailyDisplayStatus | null): DailyDisplayStatus {
-  if (!status) return 'ข'
+/** Sparse + blank: ไม่มีแถว = มา; มี '-' = ช่องว่าง; นอกนั้นตามค่า */
+export function resolveDailyStatus(saved?: DailyDbStatus | string | null): DailyDisplayStatus {
+  if (isDailyBlank(saved)) return DAILY_BLANK
+  return toDailyDisplay(saved as DailyDbStatus | null) ?? 'ม'
+}
+
+/** ข้อความในช่อง: ช่องว่างที่เก็บแล้ว = ว่างเปล่า; ไม่มีแถว = ม */
+export function dailyCellText(saved?: DailyDbStatus | string | null): string {
+  const status = resolveDailyStatus(saved)
+  return status === DAILY_BLANK ? '' : status
+}
+
+/** วนคลิก ม → ล → ป → ข → ช่องว่าง → ม */
+export function nextDailyDisplay(status: DailyDisplayStatus): DailyDisplayStatus {
   const index = DAILY_STATUS_CYCLE.indexOf(status)
-  return DAILY_STATUS_CYCLE[(index + 1) % DAILY_STATUS_CYCLE.length]
+  return DAILY_STATUS_CYCLE[(index < 0 ? 0 : index + 1) % DAILY_STATUS_CYCLE.length]
 }
 
-/** ไม่มีแถว = มา (`ม`) */
-export function resolveDailyStatus(saved?: DailyDbStatus | null): DailyDisplayStatus {
-  return toDailyDisplay(saved) ?? 'ม'
-}
-
-export function isDailyPresent(status?: DailyDbStatus | null) {
+export function isDailyPresent(status?: DailyDbStatus | string | null) {
   return status === 'ม'
 }
 
-/** ใช้สรุปผล/ส่งออก — sparse: ไม่มีแถวถือว่ามา */
-export function isDailyPresentOrDefault(status?: DailyDbStatus | null) {
-  return status == null || isDailyPresent(status)
+/** ไม่มีแถวหรือ ม ชัดๆ = มา; ช่องว่างที่เก็บแล้ว / ขลป ≠ มา */
+export function isDailyPresentOrDefault(status?: DailyDbStatus | string | null) {
+  return status == null || status === 'ม'
 }
 
-export function dailyDisplayLabel(status?: DailyDbStatus | null) {
-  const display = toDailyDisplay(status)
-  return display ? DAILY_STATUS_LABELS[display] : ''
+/** สรุป ม/ป/ล/ข — ข้ามช่องว่างที่เก็บแล้ว (ไม่นับ) */
+export function summarizeDailyStatuses(
+  schoolDays: number[],
+  byDay: Record<number, string | undefined> | undefined,
+) {
+  const out = { 'ม': 0, 'ป': 0, 'ล': 0, 'ข': 0 } as Record<'ม' | 'ป' | 'ล' | 'ข', number>
+  for (const day of schoolDays) {
+    const saved = byDay?.[day]
+    if (isDailyBlank(saved)) continue
+    const display = resolveDailyStatus(saved)
+    if (display === DAILY_BLANK) continue
+    out[display] += 1
+  }
+  return out
+}
+
+export function dailyDisplayLabel(status?: DailyDbStatus | string | null) {
+  const display = status == null ? null : resolveDailyStatus(status)
+  if (display == null) return ''
+  return DAILY_STATUS_LABELS[display]
 }

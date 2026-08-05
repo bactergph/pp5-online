@@ -54,7 +54,16 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scopeDocumentPreviewPath } from '@/lib/document-preview-popup'
 import { resolveClassroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
-import { DAILY_STATUS_LABELS, nextDailyDisplay, resolveDailyStatus, toDailyDb, toDailyDisplay } from '@/lib/daily-attendance'
+import {
+  DAILY_BLANK,
+  DAILY_STATUS_LABELS,
+  dailyCellText,
+  isDailyBlank,
+  nextDailyDisplay,
+  resolveDailyStatus,
+  summarizeDailyStatuses,
+  toDailyDb,
+} from '@/lib/daily-attendance'
 import {
   PRINT_STUDENTS_PER_PAGE,
   chunkStudentsForPrintPages,
@@ -94,7 +103,7 @@ type Student = {
   status: string
 }
 type Mode = 'attendance' | 'activity' | 'weightHeight' | 'healthInspection'
-type AttendanceStatus = 'ม' | 'ป' | 'ล' | 'ข'
+type AttendanceStatus = 'ม' | 'ป' | 'ล' | 'ข' | typeof DAILY_BLANK
 type ActivityType = 'saving' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
 type InspectionField = 'nails' | 'hair' | 'ears' | 'nose' | 'teeth' | 'skin' | 'clothes'
 type Holiday = { date: string; name: string }
@@ -113,9 +122,10 @@ type AttendanceConfirmPhase = 'idle' | 'countdown' | 'armed'
 
 const ATTENDANCE_OPTIONS = [
   { value: 'ม', label: 'มา (ม)' },
-  { value: 'ป', label: 'ลาป่วย' },
   { value: 'ล', label: 'ลากิจ' },
+  { value: 'ป', label: 'ลาป่วย' },
   { value: 'ข', label: 'ขาด' },
+  { value: DAILY_BLANK, label: 'ช่องว่าง' },
 ]
 const MONTHS = [
   { value: 1, label: 'มกราคม' }, { value: 2, label: 'กุมภาพันธ์' }, { value: 3, label: 'มีนาคม' },
@@ -166,7 +176,9 @@ function currentMonth() {
 }
 
 function studentName(student: Student) {
-  return `${student.prefix || ''}${student.first_name} ${student.last_name}`.trim()
+  const prefix = (student.prefix || '').trim()
+  const name = `${student.first_name} ${student.last_name}`.trim()
+  return prefix ? `${prefix}${name}` : name
 }
 
 function currentClassLabel(classrooms: Classroom[], classroomId: string) {
@@ -787,7 +799,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     return students.some(student => (monthlyActivityValues[student.id]?.[day] ?? 0) === 1)
   }
 
-  /** attendance เป็น sparse (ว่าง = มา) — มีแถวบันทึกแล้ว = มีคนขาด/ลา/ป่วย จึงคลิกแล้วทำให้มาแทน */
+  /** attendance: มีแถว (ข/ล/ป/ช่องว่าง/ม) → ลบแถวให้เป็นมา; ไม่มีแถว → ตั้งขทุกคน */
   function dayColumnClearing(day: number) {
     const saved = dayHasSavedData(day)
     return mode === 'attendance' ? !saved : saved
@@ -869,7 +881,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     if (!canEdit || !hasMonthlyBulkTools || attendanceBulkFilling || attendanceClearingAll || !attendanceToolbarConfirmIdle) return
     const ok = window.confirm(
       mode === 'attendance'
-        ? 'ยืนยันบันทึกมา (ม) ให้ทุกช่องที่ยังว่างในเดือนนี้?'
+        ? 'ยืนยันลบแถวทั้งเดือน (ขาด/ลา/ป่วย/ช่องว่าง) ให้เป็นมาทุกคน (ไม่มีแถว)?'
         : `ยืนยันบันทึก ${CLASSROOM_ADMIN_CHECK_MARK} ให้ทุกช่องที่ยังว่างในเดือนนี้?`,
     )
     if (!ok) return
@@ -890,6 +902,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       if (result.error) {
         notify('error', result.error)
         return
+      }
+      if (mode === 'attendance') {
+        setMonthlyAttendanceValues(Object.fromEntries(students.map(student => [student.id, {}])))
       }
       resetAttendanceToolbarConfirm()
       loadRecords()
@@ -923,7 +938,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     if (!canEdit || !hasMonthlyBulkTools || attendanceBulkFilling || attendanceClearingAll || !attendanceToolbarConfirmIdle) return
     const ok = window.confirm(
       mode === 'attendance'
-        ? 'ยืนยันลบข้อมูลเวลาเรียนทั้งหมดในเดือนนี้?\n\nการลบไม่สามารถย้อนกลับได้'
+        ? 'ยืนยันลบทั้งหมด → ใส่ช่องว่างทุกคนทุกวันเปิดสอน?\n(ช่องว่างที่เก็บ ≠ มา)\n\nการลบไม่สามารถย้อนกลับได้'
         : `ยืนยันลบข้อมูล${activityLabel || title}ทั้งหมดในเดือนนี้?\n\nการลบไม่สามารถย้อนกลับได้`,
     )
     if (!ok) return
@@ -946,7 +961,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         return
       }
       if (mode === 'attendance') {
-        setMonthlyAttendanceValues(Object.fromEntries(students.map(student => [student.id, {}])))
+        setMonthlyAttendanceValues(Object.fromEntries(
+          students.map(student => [student.id, Object.fromEntries(activeDays.map(day => [day, DAILY_BLANK as AttendanceStatus]))]),
+        ))
       } else {
         setMonthlyActivityValues(Object.fromEntries(
           students.map(student => [student.id, Object.fromEntries(activeDays.map(day => [day, 0]))]),
@@ -1619,11 +1636,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function attendanceSummary(student: Student) {
-    return activeDays.reduce((acc, day) => {
-      const display = resolveDailyStatus(monthlyAttendanceValues[student.id]?.[day])
-      acc[display] += 1
-      return acc
-    }, { 'ม': 0, 'ป': 0, 'ล': 0, 'ข': 0 } as Record<AttendanceStatus, number>)
+    return summarizeDailyStatuses(activeDays, monthlyAttendanceValues[student.id])
   }
 
   function activityDoneCount(student: Student) {
@@ -1634,12 +1647,13 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function attendanceDisplayValue(studentId: string, day: number) {
-    return resolveDailyStatus(monthlyAttendanceValues[studentId]?.[day])
+    return dailyCellText(monthlyAttendanceValues[studentId]?.[day])
   }
 
   function attendanceCellClass(studentId: string, day: number) {
     if (!isSchoolDay(day)) return 'is-empty'
     const saved = monthlyAttendanceValues[studentId]?.[day]
+    if (isDailyBlank(saved)) return 'is-blank'
     const display = resolveDailyStatus(saved)
     if (display === 'ม') return 'is-present'
     return `attendance-${saved}`
@@ -1663,21 +1677,21 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
     if (mode === 'attendance') {
       const saved = schoolDay ? monthlyAttendanceValues[student.id]?.[day] : undefined
-      const display = toDailyDisplay(saved)
-      const shown = schoolDay ? resolveDailyStatus(saved) : null
+      const cycleStatus = schoolDay ? resolveDailyStatus(saved) : null
+      const shown = schoolDay ? dailyCellText(saved) : ''
       return (
         <button
           type="button"
           className={`${cellClass} ${attendanceCellClass(student.id, day)}`}
           disabled={disabled}
-          title={holiday || (shown ? DAILY_STATUS_LABELS[shown] : 'คลิกเพื่อบันทึก')}
+          title={holiday || (cycleStatus ? DAILY_STATUS_LABELS[cycleStatus] : 'คลิกเพื่อบันทึก')}
           onClick={() => {
-            if (!schoolDay) return
-            const next = toDailyDb(nextDailyDisplay(display))
+            if (!schoolDay || !cycleStatus) return
+            const next = toDailyDb(nextDailyDisplay(cycleStatus))
             void autoSaveAttendance(student.id, day, next)
           }}
         >
-          {shown || ''}
+          {shown}
         </button>
       )
     }
@@ -2223,7 +2237,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <div className="classroom-admin-attendance-toolbar">
               <span className="classroom-admin-attendance-toolbar-note">
                 {mode === 'attendance'
-                  ? 'ช่องว่าง = มา (ม) · คลิกเพื่อวน ข → ล → ป → ม'
+                  ? 'ไม่มีแถว = มา (ม) · คลิกวน ม → ล → ป → ข → ช่องว่าง · ช่องว่างที่เก็บ ≠ มา'
                   : `ช่องว่าง = ยังไม่ทำ · คลิกเพื่อสลับ ${CLASSROOM_ADMIN_CHECK_MARK}`}
               </span>
               {canEdit ? (
@@ -2517,10 +2531,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         <div className="classroom-admin-page-legend">
           {mode === 'attendance' && (
             <>
-              <span className="legend-pill legend-green">ม มาเรียน</span>
-              <span className="legend-pill legend-amber">ป ป่วย</span>
+              <span className="legend-pill legend-green">ม มา (ไม่มีแถว)</span>
               <span className="legend-pill legend-blue">ล ลา</span>
+              <span className="legend-pill legend-amber">ป ป่วย</span>
               <span className="legend-pill legend-red">ข ขาด</span>
+              <span className="legend-pill legend-gray">ช่องว่าง = เก็บแล้ว ไม่นับมา</span>
               <span className="legend-pill legend-gray">เทา = เสาร์/อาทิตย์</span>
               <span className="legend-pill legend-sky">ฟ้า = เปิดสอนพิเศษ</span>
             </>

@@ -1,3 +1,5 @@
+import { ensureThaiNamePrefixJoined } from '@/lib/roles'
+
 export type SchoolDirectorInfo = {
   name?: string | null
   director_name?: string | null
@@ -9,7 +11,8 @@ export function directorDisplayName(
   school: SchoolDirectorInfo | null | undefined,
   fallback = '-',
 ) {
-  return school?.acting_director?.trim() || school?.director_name?.trim() || fallback
+  const raw = school?.acting_director?.trim() || school?.director_name?.trim() || ''
+  return ensureThaiNamePrefixJoined(raw) || fallback
 }
 
 export function directorActingPositionLine(

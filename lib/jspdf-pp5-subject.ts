@@ -53,6 +53,7 @@ import {
   buildSubjectCalendarWeeks,
   displaySlotsPerWeek,
   holidayNameMap,
+  primaryGlobalSlotNumber,
   primaryHourlyPages,
   secondaryHourlyPages,
   subjectHourlyHpw,
@@ -506,12 +507,57 @@ function drawCell(
   })
 }
 
+/** หัวตารางแนวตั้ง — เทียบ writing-mode: vertical-rl + rotate(180deg) ของพรีวิว HTML */
+function drawVerticalHeaderCell(
+  doc: jsPDF,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  text: string,
+  opts?: {
+    bold?: boolean
+    fontSize?: number
+    fill?: [number, number, number]
+    borderWidthMm?: number
+  },
+) {
+  if (opts?.fill) {
+    setFill(doc, opts.fill)
+    doc.rect(x, y, w, h, 'F')
+  }
+  setStroke(doc, BORDER, opts?.borderWidthMm ?? 0.3)
+  doc.rect(x, y, w, h, 'S')
+  if (!text) return
+
+  doc.setFont('THSarabunNew', opts?.bold === false ? 'normal' : 'bold')
+  setText(doc)
+  let size = Math.max(5, opts?.fontSize ?? 10)
+  const maxLen = Math.max(5, h - 2)
+  doc.setFontSize(size)
+  let textLen = doc.getTextWidth(text)
+  while (textLen > maxLen && size > 4) {
+    size -= 0.35
+    doc.setFontSize(size)
+    textLen = doc.getTextWidth(text)
+  }
+  const fontH = size * 0.352777778
+  const anchorX = x + w / 2 + fontH * 0.35
+  const anchorY = y + (h + textLen) / 2
+  doc.text(text, anchorX, anchorY, { angle: 90 })
+}
+
 function drawPageMark(doc: jsPDF, pageNumber: number) {
   doc.setFont('THSarabunNew', 'normal')
   doc.setFontSize(9)
   setText(doc)
-  const mark = `${pageNumber} ${PP5_SUBJECT_PAGE_MARK}`
-  doc.text(mark, PAGE_W - 12, 8, { align: 'right' })
+  doc.text(`หน้า ${pageNumber}`, PAGE_W - 12, 6.5, { align: 'right' })
+  doc.text(PP5_SUBJECT_PAGE_MARK, PAGE_W - 12, 10, { align: 'right' })
+}
+
+function pp5ScoreHeadLabel(label: string, max?: number | null) {
+  const fullScore = max && max > 0 ? `(${max}) ` : ''
+  return `${fullScore}${label}`
 }
 
 function contentBox(layout: Pp5CoverLayout | Pp5SectionLayout) {
@@ -534,8 +580,10 @@ function drawSubjectHead(
   title: string,
   activeTerm: 0 | 1 | 2,
   y: number,
+  opts?: { includeSubjectLine?: boolean },
 ) {
   const box = contentBox(layout)
+  const includeSubjectLine = opts?.includeSubjectLine !== false
   doc.setFont('THSarabunNew', 'bold')
   doc.setFontSize(ptFromCssPx(layout.fontH1Px))
   setText(doc)
@@ -545,6 +593,7 @@ function drawSubjectHead(
   doc.setFontSize(ptFromCssPx(layout.fontSubPx))
   doc.text(subjectReportSubhead(ctx.data, activeTerm), box.left + box.width / 2, y, { align: 'center' })
   y += pxToMm96(layout.fontSubPx) * 0.45 + 1.2
+  if (!includeSubjectLine) return y + 2
   const sub = `รายวิชา ${ctx.subject.subject.name} รหัสวิชา ${ctx.subject.subject.code}   ครูผู้สอน ${ctx.subject.teacher_name || '-'}   ครูที่ปรึกษา ${homeroomTeacherLine(ctx.data.classroom)}`
   doc.setFontSize(ptFromCssPx(layout.fontSubPx) - 1)
   doc.text(fitText(doc, sub, box.width), box.left + box.width / 2, y, { align: 'center' })
@@ -557,7 +606,13 @@ function drawTableGrid(
   y: number,
   colWidths: number[],
   rows: string[][],
-  opts: { rowH: number; fontSize: number; headerRows?: number; nameCol?: number },
+  opts: {
+    rowH: number
+    fontSize: number
+    headerRows?: number
+    nameCol?: number
+    headerFill?: [number, number, number]
+  },
 ) {
   const totalW = colWidths.reduce((a, b) => a + b, 0)
   let cy = y
@@ -569,6 +624,7 @@ function drawTableGrid(
         fontSize: opts.fontSize,
         bold: isHeader,
         align: ci === opts.nameCol ? 'left' : 'center',
+        fill: isHeader ? opts.headerFill : undefined,
       })
       cx += colWidths[ci]
     })
@@ -704,10 +760,24 @@ async function drawCoverPage(ctx: DrawCtx) {
     try {
       doc.addImage(logoData, 'JPEG', logoX, y, logoSize, logoSize)
     } catch {
-      drawCell(doc, logoX, y, logoSize, logoSize, data.school?.name?.slice(0, 2) || 'รร', { fontSize: 14, bold: true, ...cellOpts })
+      const cx = logoX + logoSize / 2
+      const cy = y + logoSize / 2
+      setStroke(doc, BORDER, borderW)
+      doc.circle(cx, cy, logoSize / 2, 'S')
+      doc.setFont('THSarabunNew', 'bold')
+      doc.setFontSize(14)
+      setText(doc)
+      doc.text(data.school?.name?.slice(0, 2) || 'รร', cx, cy, { align: 'center', baseline: 'middle' })
     }
   } else {
-    drawCell(doc, logoX, y, logoSize, logoSize, data.school?.name?.slice(0, 2) || 'รร', { fontSize: 14, bold: true, ...cellOpts })
+    const cx = logoX + logoSize / 2
+    const cy = y + logoSize / 2
+    setStroke(doc, BORDER, borderW)
+    doc.circle(cx, cy, logoSize / 2, 'S')
+    doc.setFont('THSarabunNew', 'bold')
+    doc.setFontSize(14)
+    setText(doc)
+    doc.text(data.school?.name?.slice(0, 2) || 'รร', cx, cy, { align: 'center', baseline: 'middle' })
   }
   y += logoSize + px(layout.logoGapPx)
 
@@ -922,7 +992,7 @@ async function drawCoverPage(ctx: DrawCtx) {
   const sigFont = ptFromCssPx(layout.fontSignaturePx)
   const sigLineFont = ptFromCssPx(Math.max(layout.fontSignaturePx, 18))
   const sigImgH = layout.sigImageHeightMm
-  const SIGN_DOTS = '...........................................'
+  const SIGN_DOTS = '............................................................'
   const lineH = pxToMm96(layout.fontSignaturePx) * 1.25
 
   doc.setFont('THSarabunNew', 'bold')
@@ -1167,8 +1237,8 @@ function drawCriteriaPages(ctx: DrawCtx, pageNumberStart: number) {
   const charTopics = characterCriteriaTopics(data.characterSettings)
   let pageNum = pageNumberStart
   drawPageMark(doc, pageNum)
-  let y = drawSubjectHead(doc, ctx, layout, 'คุณลักษณะอันพึงประสงค์', term, box.top)
-  const topicW = box.width * 0.32
+  let y = drawSubjectHead(doc, ctx, layout, 'คุณลักษณะอันพึงประสงค์', term, box.top, { includeSubjectLine: false })
+  const topicW = box.width * 0.38
   const behaviorW = box.width - topicW
   drawCell(doc, box.left, y, topicW, rowH, 'คุณลักษณะอันพึงประสงค์', { fontSize: font, bold: true })
   drawCell(doc, box.left + topicW, y, behaviorW, rowH, 'พฤติกรรมบ่งชี้', { fontSize: font, bold: true })
@@ -1197,7 +1267,7 @@ function drawCriteriaPages(ctx: DrawCtx, pageNumberStart: number) {
   doc.addPage()
   pageNum += 1
   drawPageMark(doc, pageNum)
-  y = drawSubjectHead(doc, ctx, layout, 'อ่าน คิด วิเคราะห์ และเขียนสื่อความหมาย', term, box.top)
+  y = drawSubjectHead(doc, ctx, layout, 'อ่าน คิด วิเคราะห์ และเขียนสื่อความหมาย', term, box.top, { includeSubjectLine: false })
 
   // โครงหัว 2 แถวแบบพรีวิว HTML: มาตรฐาน | ตัวชี้วัด | ระดับคุณภาพ (colspan 4)
   const stdW = box.width * 0.16
@@ -1294,6 +1364,7 @@ function drawCriteriaPages(ctx: DrawCtx, pageNumberStart: number) {
     })
     y = rowY
   }
+  return pageNum
 }
 
 function drawHourlySummaryPage(
@@ -1389,6 +1460,7 @@ function drawPrimaryWeeklyPage(
   let y = box.top
   doc.setFont('THSarabunNew', 'bold')
   doc.setFontSize(ptFromCssPx(layout.fontH1Px))
+  setText(doc)
   doc.text(`แบบบันทึกเวลาเรียนรายวิชา ${subjectHourlyClassLine(data.classroom)} ภาคเรียนที่ ${activeTerm}`, box.left + box.width / 2, y, { align: 'center' })
   y += 5
   doc.setFont('THSarabunNew', 'normal')
@@ -1397,39 +1469,77 @@ function drawPrimaryWeeklyPage(
   y += 5
 
   const rowH = rowHeightMm(layout)
+  const headH = Math.max(4, rowH * 0.75)
   const rowCount = pp5AttendanceBodyRows(students.length, layout, 3)
-  const fixedCols = [7, 14, 38]
-  const slotW = Math.max(3.2, (box.width - fixedCols.reduce((a, b) => a + b, 0) - (showSummary ? 28 : 0)) / (pageWeeks.length * slotsPerWeek))
-  const summaryCols = showSummary ? [7, 7, 7, 7] : []
-  const colWidths = [...fixedCols, ...pageWeeks.flatMap(() => Array.from({ length: slotsPerWeek }, () => slotW)), ...summaryCols]
+  const fixedCols = [7, 14, 36]
+  const summaryCols = showSummary ? [7, 7, 7, 8] : []
+  const summaryW = summaryCols.reduce((a, b) => a + b, 0)
+  const fixedW = fixedCols.reduce((a, b) => a + b, 0)
+  const slotW = Math.max(3.2, (box.width - fixedW - summaryW) / Math.max(1, pageWeeks.length * slotsPerWeek))
+  const font = Math.max(5.5, ptFromCssPx(layout.fontNumberPx) - 1)
+  const headFont = Math.max(6, font)
+  const headerTop = y
+  const headerTotalH = headH * 3
 
-  const header1 = ['เลขที่', 'เลข\nประจำตัว', 'ชื่อ - สกุล', ...pageWeeks.flatMap(w => Array(slotsPerWeek).fill(`W${w.weekNumber}`)), ...(showSummary ? ['มา', 'ขาด', 'ลา', '%'] : [])]
-  const header2 = ['', '', '', ...pageWeeks.flatMap(w => Array.from({ length: slotsPerWeek }, (_, i) => String(i + 1))), ...(showSummary ? ['', '', '', ''] : [])]
-  const body: string[][] = [header1, header2]
+  drawCell(doc, box.left, headerTop, fixedCols[0], headerTotalH, 'เลขที่', { bold: true, fontSize: headFont })
+  drawCell(doc, box.left + fixedCols[0], headerTop, fixedCols[1], headerTotalH, 'เลข\nประจำตัว', { bold: true, fontSize: headFont - 0.5 })
+  drawCell(doc, box.left + fixedCols[0] + fixedCols[1], headerTop, fixedCols[2], headerTotalH, 'ชื่อ - สกุล', { bold: true, fontSize: headFont })
 
+  let cx = box.left + fixedW
+  for (const week of pageWeeks) {
+    const w = slotW * slotsPerWeek
+    drawCell(doc, cx, headerTop, w, headH, `สัปดาห์ที่ ${week.weekNumber}`, { bold: true, fontSize: headFont - 0.5 })
+    drawCell(doc, cx, headerTop + headH, w, headH, week.dateLabel || '', { bold: true, fontSize: Math.max(5, headFont - 1.5) })
+    for (let i = 0; i < slotsPerWeek; i += 1) {
+      drawCell(doc, cx + i * slotW, headerTop + headH * 2, slotW, headH, String(primaryGlobalSlotNumber(week.weekNumber, i + 1)), {
+        bold: true, fontSize: Math.max(5, headFont - 1),
+      })
+    }
+    cx += w
+  }
+
+  if (showSummary) {
+    const sx = box.left + fixedW + pageWeeks.length * slotsPerWeek * slotW
+    const sumW = summaryCols.reduce((a, b) => a + b, 0)
+    drawCell(doc, sx, headerTop, sumW, headH, 'สรุป (รวมทั้งภาค)', { bold: true, fontSize: Math.max(5.5, headFont - 1) })
+    const labels = ['มา', 'ขาด', 'ลา', 'ร้อยละ']
+    labels.forEach((label, i) => {
+      const ox = sx + summaryCols.slice(0, i).reduce((a, b) => a + b, 0)
+      drawCell(doc, ox, headerTop + headH, summaryCols[i], headH * 2, label, { bold: true, fontSize: headFont })
+    })
+  }
+
+  y = headerTop + headerTotalH
   for (let i = 0; i < rowCount; i += 1) {
     const student = students[i]
-    if (!student) {
-      body.push(Array(colWidths.length).fill(''))
-      continue
-    }
-    const cells: string[] = [
-      String(student.student_number || i + 1),
-      student.student_code || '',
-      studentName(student),
-    ]
+    const cy = y + i * rowH
+    drawCell(doc, box.left, cy, fixedCols[0], rowH, student ? String(student.student_number || i + 1) : '', { fontSize: font })
+    drawCell(doc, box.left + fixedCols[0], cy, fixedCols[1], rowH, student?.student_code || '', { fontSize: font - 0.5 })
+    drawCell(doc, box.left + fixedCols[0] + fixedCols[1], cy, fixedCols[2], rowH, student ? studentName(student) : '', {
+      fontSize: font, align: 'left',
+    })
+    let dx = box.left + fixedW
     for (const week of pageWeeks) {
       for (let slot = 1; slot <= slotsPerWeek; slot += 1) {
-        cells.push(resolveHourlyStatus(recordMap.get(hourlyCellKey(student.id, week.weekNumber, slot))))
+        const status = student
+          ? resolveHourlyStatus(recordMap.get(hourlyCellKey(student.id, week.weekNumber, slot)))
+          : undefined
+        drawCell(doc, dx, cy, slotW, rowH, student ? hourlyStatusCellContent(status) : '', { fontSize: font })
+        dx += slotW
       }
     }
     if (showSummary) {
-      const summary = studentHourlySummary(allWeeks, hpw, recordMap, student.id)
-      cells.push(String(summary.present), String(summary.absent), String(summary.leave + summary.sick), summary.percent.toFixed(1))
+      const summary = student ? studentHourlySummary(allWeeks, hpw, recordMap, student.id) : null
+      const sx = box.left + fixedW + pageWeeks.length * slotsPerWeek * slotW
+      const values = summary
+        ? [String(summary.present), String(summary.absent), String(summary.leave + summary.sick), summary.percent.toFixed(1)]
+        : ['', '', '', '']
+      values.forEach((value, vi) => {
+        const ox = sx + summaryCols.slice(0, vi).reduce((a, b) => a + b, 0)
+        drawCell(doc, ox, cy, summaryCols[vi], rowH, value, { fontSize: font })
+      })
     }
-    body.push(cells)
   }
-  drawTableGrid(doc, box.left, y, colWidths, body, { rowH, fontSize: ptFromCssPx(layout.fontNumberPx), headerRows: 2, nameCol: 2 })
 }
 
 function drawSecondaryWeeklyPage(
@@ -1472,14 +1582,14 @@ function drawSecondaryWeeklyPage(
   const headH = 3.6
   const rowH = Math.min(rowHeightMm(layout), 4.8)
   const fixedCols = [6.5, 12, 26, 7]
-  const summaryCols = showSummary ? [10, 8, 8] : []
+  // HTML: รวมชม. colspan 2 + มาเรียน + ร้อยละ
+  const summaryCols = showSummary ? [7, 7, 8, 8] : []
   const summaryW = summaryCols.reduce((a, b) => a + b, 0)
   const fixedW = fixedCols.reduce((a, b) => a + b, 0)
   const dayW = Math.max(2.6, (box.width - fixedW - summaryW) / Math.max(1, columns.length))
   const font = Math.max(5.5, ptFromCssPx(layout.fontNumberPx) - 2)
   const headFont = Math.max(5.5, font)
 
-  // Draw 5 header rows with shared left fixed cells spanning all 5
   const headerTop = y
   const headerTotalH = headH * 5
   drawCell(doc, box.left, headerTop, fixedCols[0], headerTotalH, 'เลขที่', { bold: true, fontSize: headFont })
@@ -1494,7 +1604,6 @@ function drawSecondaryWeeklyPage(
     drawCell(doc, labelX, headerTop + ri * headH, fixedCols[3], headH, label, { bold: true, fontSize: headFont - 0.5 })
   })
 
-  // week numbers + months
   let cx = dayStartX
   for (const week of pageWeeks) {
     const w = dayW * week.days.length
@@ -1503,7 +1612,6 @@ function drawSecondaryWeeklyPage(
     cx += w
   }
 
-  // day / date / hour rows
   columns.forEach((day, index) => {
     const x = dayStartX + index * dayW
     const muted = day.isWeekend || (day.isHoliday && !day.slotInWeek)
@@ -1520,14 +1628,34 @@ function drawSecondaryWeeklyPage(
 
   if (showSummary) {
     const sx = dayStartX + columns.length * dayW
-    drawCell(doc, sx, headerTop, summaryCols[0], headerTotalH, `รวม ${totalHours} ชม.`, {
+    drawCell(doc, sx, headerTop, summaryCols[0] + summaryCols[1], headerTotalH, `เวลาเรียนทั้งหมด\n${totalHours} ชั่วโมง`, {
       bold: true, fontSize: headFont - 1,
     })
-    drawCell(doc, sx + summaryCols[0], headerTop, summaryCols[1], headerTotalH, 'มาเรียน', { bold: true, fontSize: headFont })
-    drawCell(doc, sx + summaryCols[0] + summaryCols[1], headerTop, summaryCols[2], headerTotalH, 'ร้อยละ', { bold: true, fontSize: headFont })
+    drawCell(doc, sx + summaryCols[0] + summaryCols[1], headerTop, summaryCols[2], headerTotalH, 'มาเรียน', { bold: true, fontSize: headFont })
+    drawCell(doc, sx + summaryCols[0] + summaryCols[1] + summaryCols[2], headerTop, summaryCols[3], headerTotalH, 'ร้อยละ', { bold: true, fontSize: headFont })
   }
 
   y = headerTop + headerTotalH
+  const bodyH = rowCount * rowH
+
+  // วันหยุด/วันหยุดนักขัตฤกษ์ — ช่องเดียวสูงทั้งตารางแบบพรีวิว
+  columns.forEach((day, di) => {
+    const x = dayStartX + di * dayW
+    if (day.isWeekend) {
+      drawCell(doc, x, y, dayW, bodyH, 'วันหยุด\nเสาร์-\nอาทิตย์', {
+        fontSize: Math.max(4.5, font - 1), muted: true, noFit: true,
+      })
+      return
+    }
+    if (day.isHoliday && !day.slotInWeek) {
+      doc.setFont('THSarabunNew', 'normal')
+      doc.setFontSize(Math.max(4.5, font - 1.5))
+      const label = wrapLines(doc, day.holidayLabel || 'วันหยุด', Math.max(1.5, dayW - 0.6)).slice(0, 4).join('\n')
+      drawCell(doc, x, y, dayW, bodyH, label, {
+        fontSize: Math.max(4.5, font - 1.5), muted: true, noFit: true,
+      })
+    }
+  })
 
   for (let i = 0; i < rowCount; i += 1) {
     const student = students[i]
@@ -1541,15 +1669,7 @@ function drawSecondaryWeeklyPage(
 
     columns.forEach((day, di) => {
       const x = dayStartX + di * dayW
-      if (day.isWeekend) {
-        drawCell(doc, x, cy, dayW, rowH, i === 0 ? 'ส-อา' : '', { fontSize: Math.max(4.5, font - 1), muted: true })
-        return
-      }
-      if (day.isHoliday && !day.slotInWeek) {
-        const label = i === 0 ? fitText(doc, day.holidayLabel || 'หยุด', dayW - 0.4) : ''
-        drawCell(doc, x, cy, dayW, rowH, label, { fontSize: Math.max(4.5, font - 1.5), muted: true })
-        return
-      }
+      if (day.isWeekend || (day.isHoliday && !day.slotInWeek)) return
       if (!day.slotInWeek || !student) {
         drawCell(doc, x, cy, dayW, rowH, '', { fontSize: font, muted: day.isHoliday })
         return
@@ -1563,9 +1683,9 @@ function drawSecondaryWeeklyPage(
       const summary = student
         ? studentSecondaryHourlySummary(allWeeks, recordMap, student.id)
         : null
-      drawCell(doc, sx, cy, summaryCols[0], rowH, '', { fontSize: font })
-      drawCell(doc, sx + summaryCols[0], cy, summaryCols[1], rowH, summary ? String(summary.present) : '', { fontSize: font })
-      drawCell(doc, sx + summaryCols[0] + summaryCols[1], cy, summaryCols[2], rowH, summary ? String(Math.round(summary.percent)) : '', { fontSize: font })
+      drawCell(doc, sx, cy, summaryCols[0] + summaryCols[1], rowH, '', { fontSize: font })
+      drawCell(doc, sx + summaryCols[0] + summaryCols[1], cy, summaryCols[2], rowH, summary ? String(summary.present) : '', { fontSize: font })
+      drawCell(doc, sx + summaryCols[0] + summaryCols[1] + summaryCols[2], cy, summaryCols[3], rowH, summary ? String(Math.round(summary.percent)) : '', { fontSize: font })
     }
   }
 }
@@ -1651,6 +1771,7 @@ function drawAttendanceSection(ctx: DrawCtx, pageNumberStart: number) {
       pageNum += 1
     }
   }
+  return pageNum - 1
 }
 
 function drawBetweenScorePage(
@@ -1670,26 +1791,83 @@ function drawBetweenScorePage(
   const beforeCols = Math.max(SUBJECT_UNIT_DISPLAY_COLS, split.beforeCount)
   const afterCols = Math.max(SUBJECT_UNIT_DISPLAY_COLS, split.afterCount)
   const finalCols = SUBJECT_FINAL_DISPLAY_COLS
-  const rowH = rowHeightMm(layout)
-  const font = ptFromCssPx(layout.fontScorePx) - 2
+  const rowH = Math.min(rowHeightMm(layout), 5.4)
+  const headH = Math.max(4.2, rowH * 0.8)
+  const font = Math.max(6, ptFromCssPx(layout.fontScorePx) - 2)
+  const headFont = Math.max(6, font)
 
-  const fixed = [7, 14, 34]
+  // ชื่อกว้างขึ้นใกล้พรีวิว; คอลัมน์คะแนนแบ่งที่เหลือเท่า ๆ กัน
+  const fixed = [7, 13, 36]
   const unitCount = beforeCols + 1 + 1 + afterCols + 1 + finalCols + 1
-  const unitW = Math.max(3.5, (box.width - fixed.reduce((a, b) => a + b, 0)) / unitCount)
-  const colWidths = [...fixed, ...Array.from({ length: unitCount }, () => unitW)]
+  const unitW = Math.max(3.4, (box.width - fixed.reduce((a, b) => a + b, 0)) / unitCount)
+  const fixedW = fixed.reduce((a, b) => a + b, 0)
+  const HEADER_BG: [number, number, number] = [248, 250, 252]
+  const BANNER_BG: [number, number, number] = [224, 242, 254]
+  const headerTop = y
+  const headerTotalH = headH * 3
 
-  const h1: string[] = ['เลขที่', 'เลขประจำตัว', 'ชื่อ - สกุล']
-  h1.push(...Array.from({ length: beforeCols }, (_, i) => String(i + 1)), 'รวม', 'กลางภาค')
-  h1.push(...Array.from({ length: afterCols }, (_, i) => String(i + 1)), 'รวม')
-  h1.push(...Array.from({ length: finalCols }, (_, i) => String(i + 1)), 'รวม')
+  drawCell(doc, box.left, headerTop, fixed[0], headerTotalH, 'เลขที่', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawCell(doc, box.left + fixed[0], headerTop, fixed[1], headerTotalH, 'เลข\nประจำตัว', { bold: true, fontSize: headFont - 0.5, fill: HEADER_BG, noFit: true })
+  drawCell(doc, box.left + fixed[0] + fixed[1], headerTop, fixed[2], headerTotalH, 'ชื่อ - สกุล', { bold: true, fontSize: headFont, fill: HEADER_BG })
 
-  const body: string[][] = [h1]
-  for (const student of students) {
+  let cx = box.left + fixedW
+  const groups: Array<{ label: string; cols: number }> = [
+    { label: `ก่อนกลางภาค (${split.beforeMax})`, cols: beforeCols + 1 },
+    { label: `กลางภาค\n(${split.midtermMax})`, cols: 1 },
+    { label: `หลังกลางภาค (${split.afterMax})`, cols: afterCols + 1 },
+    { label: `ปลายภาค (${split.finalMax})`, cols: finalCols + 1 },
+  ]
+  for (const group of groups) {
+    drawCell(doc, cx, headerTop, unitW * group.cols, headH, group.label, {
+      bold: true,
+      fontSize: Math.max(5, headFont - 1.5),
+      fill: BANNER_BG,
+      noFit: true,
+    })
+    cx += unitW * group.cols
+  }
+
+  cx = box.left + fixedW
+  for (let i = 0; i < beforeCols; i += 1) {
+    drawCell(doc, cx, headerTop + headH, unitW, headH, String(i + 1), { bold: true, fontSize: headFont, fill: HEADER_BG })
+    cx += unitW
+  }
+  drawCell(doc, cx, headerTop + headH, unitW, headH, 'รวม', { bold: true, fontSize: headFont, fill: HEADER_BG }); cx += unitW
+  drawCell(doc, cx, headerTop + headH, unitW, headH, 'รวม', { bold: true, fontSize: headFont, fill: HEADER_BG }); cx += unitW
+  for (let i = 0; i < afterCols; i += 1) {
+    drawCell(doc, cx, headerTop + headH, unitW, headH, String(i + 1), { bold: true, fontSize: headFont, fill: HEADER_BG })
+    cx += unitW
+  }
+  drawCell(doc, cx, headerTop + headH, unitW, headH, 'รวม', { bold: true, fontSize: headFont, fill: HEADER_BG }); cx += unitW
+  for (let i = 0; i < finalCols; i += 1) {
+    drawCell(doc, cx, headerTop + headH, unitW, headH, String(i + 1), { bold: true, fontSize: headFont, fill: HEADER_BG })
+    cx += unitW
+  }
+  drawCell(doc, cx, headerTop + headH, unitW, headH, 'รวม', { bold: true, fontSize: headFont, fill: HEADER_BG })
+
+  cx = box.left + fixedW
+  const maxRow = [
+    ...padScoreCells(split.beforeMaxes, beforeCols).map(String),
+    String(split.beforeMax),
+    String(split.midtermMax),
+    ...padScoreCells(split.afterMaxes, afterCols).map(String),
+    String(split.afterMax),
+    ...Array.from({ length: finalCols }, () => ''),
+    String(split.finalMax),
+  ]
+  maxRow.forEach(value => {
+    drawCell(doc, cx, headerTop + headH * 2, unitW, headH, value, { bold: true, fontSize: headFont - 0.5, fill: HEADER_BG })
+    cx += unitW
+  })
+
+  y = headerTop + headerTotalH
+  students.forEach((student, index) => {
     const score = scoreForTerm(data, student.id, subject.class_subject_id, activeTerm)
     const beforeValues = unitScoreValues(score, 0, split.beforeCount)
     const afterValues = unitScoreValues(score, split.beforeCount, split.afterCount)
-    const row: string[] = [
-      String(student.student_number || ''),
+    const cy = y + index * rowH
+    const cells = [
+      String(student.student_number || index + 1),
       student.student_code || '',
       studentName(student),
       ...padScoreCells(beforeValues, beforeCols).map(String),
@@ -1700,9 +1878,16 @@ function drawBetweenScorePage(
       ...Array.from({ length: finalCols }, () => ''),
       score?.final_score != null ? String(score.final_score) : '',
     ]
-    body.push(row)
-  }
-  drawTableGrid(doc, box.left, y, colWidths, body, { rowH, fontSize: font, headerRows: 1, nameCol: 2 })
+    let ox = box.left
+    const widths = [...fixed, ...Array.from({ length: unitCount }, () => unitW)]
+    cells.forEach((cell, ci) => {
+      drawCell(doc, ox, cy, widths[ci], rowH, cell, {
+        fontSize: font,
+        align: ci === 2 ? 'left' : 'center',
+      })
+      ox += widths[ci]
+    })
+  })
 }
 
 function drawAchievementPage(
@@ -1721,27 +1906,77 @@ function drawAchievementPage(
   const split = splitScoreUnits(config)
   const beforeCols = Math.max(5, split.beforeCount)
   const afterCols = Math.max(5, split.afterCount)
-  const rowH = rowHeightMm(layout)
-  const font = ptFromCssPx(layout.fontScorePx) - 2
+  const rowH = Math.min(rowHeightMm(layout), 5.4)
+  const headH = Math.max(4.2, rowH * 0.8)
+  const font = Math.max(6, ptFromCssPx(layout.fontScorePx) - 2)
+  const headFont = Math.max(5.5, font - 0.5)
 
+  const fixed = [7, 13, 36]
   const tailCols = 6
-  const fixed = [7, 14, 30]
-  const scoreCols = beforeCols + afterCols + tailCols
-  const scoreW = Math.max(4, (box.width - fixed.reduce((a, b) => a + b, 0)) / scoreCols)
-  const colWidths = [...fixed, ...Array.from({ length: scoreCols }, () => scoreW)]
+  const unitCols = beforeCols + afterCols
+  const fixedW = fixed.reduce((a, b) => a + b, 0)
+  // คอลัมน์ท้ายแคบกว่า (แนวตั้ง) — หน่วยคะแนนกว้างกว่าเล็กน้อย
+  const unitW = Math.max(4.2, (box.width - fixedW) / (unitCols + tailCols * 0.85))
+  const tailW = Math.max(4, (box.width - fixedW - unitW * unitCols) / tailCols)
+  const HEADER_BG: [number, number, number] = [248, 250, 252]
+  const BANNER_BG: [number, number, number] = [224, 242, 254]
+  const headerTop = y
+  const headerTotalH = headH * 3
 
-  const h1 = ['เลขที่', 'เลขประจำตัว', 'ชื่อ - สกุล']
-  h1.push(...Array.from({ length: beforeCols }, (_, i) => String(i + 1)))
-  h1.push(...Array.from({ length: afterCols }, (_, i) => String(i + 1)))
-  h1.push('รวม', 'กลางภาค', 'ปลายภาค', `รวมภ.${activeTerm}`, 'ระดับ', 'หมายเหตุ')
+  drawCell(doc, box.left, headerTop, fixed[0], headerTotalH, 'เลขที่', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawCell(doc, box.left + fixed[0], headerTop, fixed[1], headerTotalH, 'เลข\nประจำตัว', { bold: true, fontSize: headFont - 0.5, fill: HEADER_BG, noFit: true })
+  drawCell(doc, box.left + fixed[0] + fixed[1], headerTop, fixed[2], headerTotalH, 'ชื่อ - สกุล', { bold: true, fontSize: headFont, fill: HEADER_BG })
 
-  const body: string[][] = [h1]
-  for (const student of students) {
+  let cx = box.left + fixedW
+  drawCell(doc, cx, headerTop, unitW * beforeCols, headH, 'คะแนนก่อนกลางภาค', { bold: true, fontSize: headFont, fill: BANNER_BG })
+  cx += unitW * beforeCols
+  drawCell(doc, cx, headerTop, unitW * afterCols, headH, 'คะแนนหลังกลางภาค', { bold: true, fontSize: headFont, fill: BANNER_BG })
+  cx += unitW * afterCols
+
+  const tallLabels = [
+    'รวม',
+    pp5ScoreHeadLabel('คะแนนกลางภาค', config?.midterm_max),
+    pp5ScoreHeadLabel('คะแนนปลายภาค', config?.final_max),
+    pp5ScoreHeadLabel(`รวมภาคเรียนที่ ${activeTerm}`, config?.total_max),
+    'ระดับผลการเรียน',
+    'หมายเหตุ',
+  ]
+  tallLabels.forEach(label => {
+    drawVerticalHeaderCell(doc, cx, headerTop, tailW, headerTotalH, label, {
+      bold: true,
+      fontSize: Math.max(5, headFont - 0.5),
+      fill: HEADER_BG,
+    })
+    cx += tailW
+  })
+
+  cx = box.left + fixedW
+  for (let i = 0; i < beforeCols; i += 1) {
+    drawCell(doc, cx, headerTop + headH, unitW, headH, String(i + 1), { bold: true, fontSize: headFont, fill: HEADER_BG })
+    cx += unitW
+  }
+  for (let i = 0; i < afterCols; i += 1) {
+    drawCell(doc, cx, headerTop + headH, unitW, headH, String(i + 1), { bold: true, fontSize: headFont, fill: HEADER_BG })
+    cx += unitW
+  }
+
+  cx = box.left + fixedW
+  ;[
+    ...padScoreCells(split.beforeMaxes, beforeCols).map(String),
+    ...padScoreCells(split.afterMaxes, afterCols).map(String),
+  ].forEach(value => {
+    drawCell(doc, cx, headerTop + headH * 2, unitW, headH, value, { bold: true, fontSize: headFont - 0.5, fill: HEADER_BG })
+    cx += unitW
+  })
+
+  y = headerTop + headerTotalH
+  students.forEach((student, index) => {
     const score = scoreForTerm(data, student.id, subject.class_subject_id, activeTerm)
     const beforeValues = unitScoreValues(score, 0, split.beforeCount)
     const afterValues = unitScoreValues(score, split.beforeCount, split.afterCount)
-    body.push([
-      String(student.student_number || ''),
+    const cy = y + index * rowH
+    const cells = [
+      String(student.student_number || index + 1),
       student.student_code || '',
       studentName(student),
       ...padScoreCells(beforeValues, beforeCols).map(String),
@@ -1752,9 +1987,21 @@ function drawAchievementPage(
       score?.term_total != null ? String(score.term_total) : '',
       scoreText(score),
       score?.result && score.result !== 'เรียน' ? score.result : '',
-    ])
-  }
-  drawTableGrid(doc, box.left, y, colWidths, body, { rowH, fontSize: font, headerRows: 1, nameCol: 2 })
+    ]
+    let ox = box.left
+    const widths = [
+      ...fixed,
+      ...Array.from({ length: unitCols }, () => unitW),
+      ...Array.from({ length: tailCols }, () => tailW),
+    ]
+    cells.forEach((cell, ci) => {
+      drawCell(doc, ox, cy, widths[ci], rowH, cell, {
+        fontSize: font,
+        align: ci === 2 ? 'left' : 'center',
+      })
+      ox += widths[ci]
+    })
+  })
 }
 
 function drawExamNoticePage(
@@ -1769,14 +2016,53 @@ function drawExamNoticePage(
   drawPageMark(doc, pageNumber)
   let y = drawSubjectHead(doc, ctx, layout, `แบบประกาศผลสอบโรงเรียน${data.school?.name || ''}`, activeTerm, box.top)
 
-  const rowH = Math.min(rowHeightMm(layout), 5.2)
-  const font = ptFromCssPx(layout.fontScorePx) - 1
-  const cols = [7, 14, 38, 14, 14, 18, 18]
-  const headers = ['เลขที่', 'เลขประจำตัว', 'ชื่อ - สกุล', 'คะแนน', 'ระดับ', 'อ่านคิดวิเคราะห์', 'คุณลักษณะ']
-  const body: string[][] = [headers]
+  const termRange = termDateRange(data.academicYear, activeTerm)
+  const teachingWeeks = buildTeachingWeeks(termRange.start, termRange.end, reportSchoolCalendar(data))
+  const hoursWeek = hoursPerWeek(subject.subject.hours_per_year || 0, teachingWeeks.length)
+  doc.setFont('THSarabunNew', 'normal')
+  doc.setFontSize(ptFromCssPx(layout.fontSubPx) - 1)
+  setText(doc)
+  doc.text(
+    `กลุ่มสาระฯ ${subject.subject.subject_group || '-'}    เวลาเรียน ${hoursWeek || '-'} ชม./สัปดาห์    จำนวน ${subject.subject.credits || '-'} หน่วยกิต`,
+    box.left + box.width / 2,
+    y,
+    { align: 'center' },
+  )
+  y += 4.5
+
+  const rowH = Math.min(rowHeightMm(layout), 5.0)
+  const headH = Math.max(8.5, rowH * 1.7)
+  const font = Math.max(7, ptFromCssPx(layout.fontScorePx) - 1.5)
+  const headFont = Math.max(6.5, font - 0.5)
+  // คอลัมน์: เลขที่ / รหัส / ชื่อ / คะแนน / ระดับ / อ่านคิด / คุณลักษณะ
+  const cols = [8, 16, 52, (box.width - 8 - 16 - 52) / 4]
+  cols.push(cols[3], cols[3], cols[3])
+  const HEADER_BG: [number, number, number] = [248, 250, 252]
+  const headers = [
+    'เลขที่',
+    'เลขประจำตัว',
+    'ชื่อ - สกุล',
+    'ผลการเรียน\nคะแนน',
+    'ผลการเรียน\nระดับผลการเรียน',
+    'การประเมิน\nอ่าน คิด วิเคราะห์',
+    'การประเมิน\nคุณลักษณะ',
+  ]
+  let cx = box.left
+  headers.forEach((header, i) => {
+    drawCell(doc, cx, y, cols[i], headH, header, {
+      bold: true,
+      fontSize: headFont,
+      fill: HEADER_BG,
+      noFit: true,
+    })
+    cx += cols[i]
+  })
+  y += headH
+
   const readingSummary = { excellent: 0, good: 0, pass: 0, fail: 0 }
   const characterSummary = { excellent: 0, good: 0, pass: 0, fail: 0 }
-  for (const student of students) {
+  for (let index = 0; index < students.length; index += 1) {
+    const student = students[index]
     const score = scoreForTerm(data, student.id, subject.class_subject_id, activeTerm)
     const readingRow = rowForTerm(data.evaluations.reading, student.id, activeTerm)
     const characterRow = rowForTerm(data.evaluations.character, student.id, activeTerm)
@@ -1790,61 +2076,125 @@ function drawExamNoticePage(
     else if (characterLevel === 'ดี') characterSummary.good += 1
     else if (characterLevel === 'ผ่าน') characterSummary.pass += 1
     else characterSummary.fail += 1
-    body.push([
-      String(student.student_number || ''),
+    const cells = [
+      String(student.student_number || index + 1),
       student.student_code || '',
       studentName(student),
       score?.term_total != null ? String(score.term_total) : '',
       scoreText(score),
       resultLevelNumber(readingLevel),
       resultLevelNumber(characterLevel),
-    ])
+    ]
+    cx = box.left
+    cells.forEach((cell, ci) => {
+      drawCell(doc, cx, y, cols[ci], rowH, cell, {
+        fontSize: font,
+        align: ci === 2 ? 'left' : 'center',
+      })
+      cx += cols[ci]
+    })
+    y += rowH
   }
-  y = drawTableGrid(doc, box.left, y, cols, body, { rowH, fontSize: font, headerRows: 1, nameCol: 2 }).bottom
 
   const gradeCounts = subjectGradeSummaryForTerm(data, subject, activeTerm)
   const studentsTotal = students.length
   y += 3
-  const miniFont = ptFromCssPx(layout.fontTablePx) - 1
-  const gradeRows: string[][] = [['สรุปผลการเรียน', '']]
-  for (const column of SUBJECT_COVER_GRADE_LEVEL_COLUMNS) {
-    gradeRows.push([`จำนวนนักเรียนที่ได้ผลการเรียน ${column.label}`, `${gradeCounts[column.key] || 0} คน`])
-  }
-  gradeRows.push(['รวมทั้งสิ้น', `${studentsTotal} คน`])
-  const leftW = box.width * 0.38
-  drawTableGrid(doc, box.left, y, [leftW * 0.72, leftW * 0.28], gradeRows, {
-    rowH: 4.2,
+  const miniFont = Math.max(6.5, ptFromCssPx(layout.fontTablePx) - 2)
+  const miniRowH = 3.6
+  const gap = 2.5
+  const colW = (box.width - gap * 2) / 3
+
+  // ซ้าย — สรุปผลการเรียน (หัว colspan 2)
+  const gradeLabelW = colW * 0.72
+  const gradeValueW = colW - gradeLabelW
+  drawCell(doc, box.left, y, colW, miniRowH, 'สรุปผลการเรียน', {
+    bold: true,
     fontSize: miniFont,
-    headerRows: 1,
+    fill: HEADER_BG,
   })
+  let gy = y + miniRowH
+  for (const column of SUBJECT_COVER_GRADE_LEVEL_COLUMNS) {
+    drawCell(doc, box.left, gy, gradeLabelW, miniRowH, `จำนวนนักเรียนที่ได้ผลการเรียน ${column.label}`, {
+      fontSize: miniFont - 0.5,
+      align: 'left',
+      noFit: true,
+    })
+    drawCell(doc, box.left + gradeLabelW, gy, gradeValueW, miniRowH, `${gradeCounts[column.key] || 0} คน`, {
+      fontSize: miniFont,
+    })
+    gy += miniRowH
+  }
+  drawCell(doc, box.left, gy, gradeLabelW, miniRowH, 'รวมทั้งเรียนทั้งสิ้น', {
+    fontSize: miniFont - 0.5,
+    align: 'left',
+  })
+  drawCell(doc, box.left + gradeLabelW, gy, gradeValueW, miniRowH, `${studentsTotal} คน`, {
+    fontSize: miniFont,
+  })
+  const gradeBottom = gy + miniRowH
 
-  const rightX = box.left + leftW + 3
-  const rightW = box.width - leftW - 3
-  const evalCols = [rightW / 5, rightW / 5, rightW / 5, rightW / 5, rightW / 5]
-  drawTableGrid(doc, rightX, y, evalCols, [
-    ['สรุปอ่าน คิด วิเคราะห์', '', '', '', ''],
-    ['3 ดีเยี่ยม', '2 ดี', '1 ผ่าน', '0 ไม่ผ่าน', 'จำนวน'],
-    [
-      String(readingSummary.excellent),
-      String(readingSummary.good),
-      String(readingSummary.pass),
-      String(readingSummary.fail),
+  const drawEvalSummary = (
+    left: number,
+    title: string,
+    summary: { excellent: number; good: number; pass: number; fail: number },
+  ) => {
+    const subLabels = ['3 (ดีเยี่ยม)', '2 (ดี)', '1 (ผ่าน)', '0 (ไม่ผ่าน)', 'จำนวนนักเรียน']
+    const values = [
+      String(summary.excellent),
+      String(summary.good),
+      String(summary.pass),
+      String(summary.fail),
       String(studentsTotal),
-    ],
-  ], { rowH: 4.2, fontSize: miniFont - 0.5, headerRows: 2 })
+    ]
+    const subW = colW / 5
+    drawCell(doc, left, y, colW, miniRowH, title, {
+      bold: true,
+      fontSize: Math.max(5.5, miniFont - 1),
+      fill: HEADER_BG,
+      noFit: true,
+    })
+    let ox = left
+    subLabels.forEach((label, i) => {
+      drawCell(doc, ox, y + miniRowH, subW, miniRowH, label, {
+        bold: true,
+        fontSize: Math.max(5, miniFont - 1.5),
+        fill: HEADER_BG,
+        noFit: true,
+      })
+      ox += subW
+    })
+    ox = left
+    values.forEach((value, i) => {
+      drawCell(doc, ox, y + miniRowH * 2, subW, miniRowH, value, { fontSize: miniFont })
+      ox += subW
+    })
+  }
 
-  const y2 = y + 4.2 * 3 + 2
-  drawTableGrid(doc, rightX, y2, evalCols, [
-    ['สรุปคุณลักษณะที่พึงประสงค์', '', '', '', ''],
-    ['3 ดีเยี่ยม', '2 ดี', '1 ผ่าน', '0 ไม่ผ่าน', 'จำนวน'],
-    [
-      String(characterSummary.excellent),
-      String(characterSummary.good),
-      String(characterSummary.pass),
-      String(characterSummary.fail),
-      String(studentsTotal),
-    ],
-  ], { rowH: 4.2, fontSize: miniFont - 0.5, headerRows: 2 })
+  drawEvalSummary(box.left + colW + gap, 'สรุปผลการประเมินการอ่าน คิด วิเคราะห์', readingSummary)
+  drawEvalSummary(box.left + (colW + gap) * 2, 'สรุปผลการประเมินคุณลักษณะที่พึงประสงค์', characterSummary)
+
+  const sigY = Math.min(PAGE_H - layout.padBottomMm - 8, Math.max(gradeBottom, y + miniRowH * 3) + 7)
+  const sigLabels = [
+    'ลงชื่อ ครูผู้สอน',
+    'ลงชื่อ หัวหน้ากลุ่มสาระ\nการเรียนรู้',
+    'ลงชื่อ หัวหน้าฝ่ายวิชาการ',
+    'ลงชื่อ รองผู้อำนวยการ\nสถานศึกษา',
+    'ลงชื่อ ผู้อำนวยการ\nสถานศึกษา',
+  ]
+  const sigW = box.width / sigLabels.length
+  const sigFont = Math.max(6, miniFont - 0.5)
+  doc.setFont('THSarabunNew', 'normal')
+  doc.setFontSize(sigFont)
+  setText(doc)
+  const lineGap = sigFont * (25.4 / 72) * 1.05
+  sigLabels.forEach((label, i) => {
+    const lines = label.split('\n')
+    const blockH = lines.length * lineGap
+    const startY = sigY - (blockH - lineGap) / 2
+    lines.forEach((line, li) => {
+      doc.text(line, box.left + i * sigW + sigW / 2, startY + li * lineGap, { align: 'center' })
+    })
+  })
 }
 
 function drawScoresSection(ctx: DrawCtx, pageNumberStart: number) {
@@ -1867,6 +2217,7 @@ function drawScoresSection(ctx: DrawCtx, pageNumberStart: number) {
       pageNum += 1
     }
   }
+  return pageNum - 1
 }
 
 function drawCharacterPage(ctx: DrawCtx, students: ReportStudent[], pageNumber: number) {
@@ -1874,38 +2225,82 @@ function drawCharacterPage(ctx: DrawCtx, students: ReportStudent[], pageNumber: 
   const layout = layouts.character
   const box = contentBox(layout)
   drawPageMark(doc, pageNumber)
-  let y = drawSubjectHead(doc, ctx, layout, 'ผลการประเมินคุณลักษณะอันพึงประสงค์', term, box.top)
+  let y = drawSubjectHead(doc, ctx, layout, 'ผลการประเมินคุณลักษณะอันพึงประสงค์', term, box.top, { includeSubjectLine: false })
 
+  const scoreColumns = 10
   const rowH = rowHeightMm(layout)
+  const headH = Math.max(4.2, rowH * 0.8)
   const font = ptFromCssPx(layout.fontTablePx) - 1
-  const scoreCols = 10
-  const fixed = [7, 14, 36]
-  const tail = [10, 14, 12]
-  const scoreW = Math.max(4, (box.width - fixed.reduce((a, b) => a + b, 0) - tail.reduce((a, b) => a + b, 0)) / scoreCols)
-  const colWidths = [...fixed, ...Array.from({ length: scoreCols }, () => scoreW), ...tail]
-  const headers = ['เลขที่', 'เลขประจำตัว', 'ชื่อ - สกุล', ...Array.from({ length: scoreCols }, (_, i) => String(i + 1)), 'ระดับ', 'ผล', 'หมายเหตุ']
-  const body: string[][] = [headers]
+  const headFont = Math.max(6, font)
+
+  // คอลัมน์ตรง CSS พรีวิว: 7 / 13 / 50 / 5.5×10 / 18 / 18 / 23
+  const fixed = [7, 13, 50]
+  const tail = { level: 18, result: 18, note: 23 }
+  const fixedW = fixed.reduce((a, b) => a + b, 0)
+  const tailW = tail.level + tail.result + tail.note
+  const scoreW = Math.max(4, (box.width - fixedW - tailW) / scoreColumns)
+
+  const headerTop = y
+  const headerTotalH = headH * 4
+  const scoreX = box.left + fixedW
+  const scoreGroupW = scoreW * scoreColumns
+  const levelX = scoreX + scoreGroupW
+  const resultX = levelX + tail.level
+  const noteX = resultX + tail.result
+
+  const HEADER_BG: [number, number, number] = [248, 250, 252]
+  const BANNER_BG: [number, number, number] = [224, 242, 254]
+
+  // Row 1 — fixed cols rowspan 4, score group colspan 10, ผลการประเมิน colspan 2, หมายเหตุ rowspan 4
+  drawVerticalHeaderCell(doc, box.left, headerTop, fixed[0], headerTotalH, 'เลขที่', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawVerticalHeaderCell(doc, box.left + fixed[0], headerTop, fixed[1], headerTotalH, 'เลขประจำตัว', { bold: true, fontSize: headFont - 0.5, fill: HEADER_BG })
+  drawCell(doc, box.left + fixed[0] + fixed[1], headerTop, fixed[2], headerTotalH, 'ชื่อ - สกุล', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawCell(doc, scoreX, headerTop, scoreGroupW, headH, 'ผลประเมินคุณลักษณะอันพึงประสงค์', { bold: true, fontSize: Math.max(5.5, headFont - 1), fill: BANNER_BG })
+  drawCell(doc, levelX, headerTop, tail.level + tail.result, headH, 'ผลการประเมิน', { bold: true, fontSize: headFont, fill: BANNER_BG })
+  drawCell(doc, noteX, headerTop, tail.note, headerTotalH, 'หมายเหตุ', { bold: true, fontSize: headFont, fill: HEADER_BG })
+
+  // Row 2 — ข้อ/คะแนน colspan 10, ระดับ/ผล rowspan 3
+  const row2Y = headerTop + headH
+  drawCell(doc, scoreX, row2Y, scoreGroupW, headH, 'ข้อ/คะแนน', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawCell(doc, levelX, row2Y, tail.level, headH * 3, 'ระดับ', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawCell(doc, resultX, row2Y, tail.result, headH * 3, 'ผล', { bold: true, fontSize: headFont, fill: HEADER_BG })
+
+  // Row 3 — item numbers 1..8, empty for the 2 spare columns
+  const row3Y = row2Y + headH
+  for (let i = 0; i < scoreColumns; i += 1) {
+    drawCell(doc, scoreX + i * scoreW, row3Y, scoreW, headH, i < CHARACTER_KEYS.length ? String(i + 1) : '', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  }
+
+  // Row 4 — max score (3) for the 8 real columns
+  const row4Y = row3Y + headH
+  for (let i = 0; i < scoreColumns; i += 1) {
+    drawCell(doc, scoreX + i * scoreW, row4Y, scoreW, headH, i < CHARACTER_KEYS.length ? '3' : '', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  }
+
+  y = headerTop + headerTotalH
+  const widths = [...fixed, ...Array.from({ length: scoreColumns }, () => scoreW), tail.level, tail.result, tail.note]
   const rowCount = pp5StudentTableRows(students.length, layout)
   for (let i = 0; i < rowCount; i += 1) {
     const student = students[i]
-    if (!student) {
-      body.push(Array(colWidths.length).fill(''))
-      continue
-    }
-    const row = term !== 0 ? rowForTerm(data.evaluations.character, student.id, term) : rowFor(data.evaluations.character, student.id)
-    const fallbackResult = levelFromAverage(averageScore(row, CHARACTER_KEYS))
-    const result = (row?.result_level as string | null) || (fallbackResult === '-' ? '' : fallbackResult)
-    body.push([
-      String(student.student_number || i + 1),
-      student.student_code || '',
-      studentName(student),
-      ...Array.from({ length: scoreCols }, (_, si) => (si < CHARACTER_KEYS.length ? String(row?.[CHARACTER_KEYS[si]] ?? '') : '')),
-      resultLevelNumber(result),
+    const cy = y + i * rowH
+    const row = student ? (term !== 0 ? rowForTerm(data.evaluations.character, student.id, term) : rowFor(data.evaluations.character, student.id)) : null
+    const fallbackResult = student ? levelFromAverage(averageScore(row, CHARACTER_KEYS)) : '-'
+    const result = student ? ((row?.result_level as string | null) || (fallbackResult === '-' ? '' : fallbackResult)) : ''
+    const cells = [
+      student ? String(student.student_number || i + 1) : '',
+      student?.student_code || '',
+      student ? studentName(student) : '',
+      ...Array.from({ length: scoreColumns }, (_, si) => (student && si < CHARACTER_KEYS.length ? String(row?.[CHARACTER_KEYS[si]] ?? '') : '')),
+      student ? resultLevelNumber(result) : '',
       result,
       '',
-    ])
+    ]
+    let cx = box.left
+    cells.forEach((cell, ci) => {
+      drawCell(doc, cx, cy, widths[ci], rowH, cell, { fontSize: font, align: ci === 2 ? 'left' : 'center' })
+      cx += widths[ci]
+    })
   }
-  drawTableGrid(doc, box.left, y, colWidths, body, { rowH, fontSize: font, headerRows: 1, nameCol: 2 })
 }
 
 function drawReadingPage(ctx: DrawCtx, students: ReportStudent[], pageNumber: number) {
@@ -1913,46 +2308,92 @@ function drawReadingPage(ctx: DrawCtx, students: ReportStudent[], pageNumber: nu
   const layout = layouts.reading
   const box = contentBox(layout)
   drawPageMark(doc, pageNumber)
-  let y = drawSubjectHead(doc, ctx, layout, 'ผลการประเมินอ่าน คิดวิเคราะห์ และเขียนสื่อความหมาย', term, box.top)
+  let y = drawSubjectHead(doc, ctx, layout, 'ผลการประเมินอ่าน คิดวิเคราะห์ และเขียนสื่อความหมาย', term, box.top, { includeSubjectLine: false })
 
   const readingGroups = defaultReadingTableGroups()
   const readingColumns = readingTableFlatColumns(readingGroups)
-  const columnKey = (column: ReadingTableColumn, index: number) =>
-    column.kind === 'score' ? column.key : column.kind === 'total' ? `total-${index}` : `spacer-${index}`
   const columnLabel = (column: ReadingTableColumn) =>
     column.kind === 'score' || column.kind === 'total' ? column.label : ''
 
   const rowH = rowHeightMm(layout)
+  const headH = Math.max(4.2, rowH * 0.8)
   const font = ptFromCssPx(layout.fontTablePx) - 1
-  const fixed = [7, 14, 30]
-  const tail = [12, 10, 14]
-  const midW = Math.max(4, (box.width - fixed.reduce((a, b) => a + b, 0) - tail.reduce((a, b) => a + b, 0)) / readingColumns.length)
-  const colWidths = [...fixed, ...readingColumns.map(() => midW), ...tail]
-  const headers = ['เลขที่', 'เลขประจำตัว', 'ชื่อ - สกุล', ...readingColumns.map(columnLabel), 'รวม', 'ระดับ', 'ผล']
-  const maxRow = ['', '', '', ...readingColumns.map(c => String(readingTableColumnMax(c))), '', '', '']
-  const body: string[][] = [headers, maxRow]
+  const headFont = Math.max(6, font)
+
+  // คอลัมน์ตรง CSS: 7 / 13 / 50 / 8×N / 10 / 14 / 19
+  const fixed = [7, 13, 50]
+  const tail = { total: 10, level: 14, result: 19 }
+  const fixedW = fixed.reduce((a, b) => a + b, 0)
+  const tailW = tail.total + tail.level + tail.result
+  const midW = Math.max(4, (box.width - fixedW - tailW) / readingColumns.length)
+
+  const headerTop = y
+  const headerTotalH = headH * 4
+  const midX = box.left + fixedW
+  const midGroupW = midW * readingColumns.length
+  const totalX = midX + midGroupW
+  const levelX = totalX + tail.total
+  const resultX = levelX + tail.level
+
+  const HEADER_BG: [number, number, number] = [248, 250, 252]
+  const BANNER_BG: [number, number, number] = [224, 242, 254]
+
+  // Row 1 — fixed cols rowspan 4, reading score group colspan N, รวมทั้งหมด rowspan 4, ผลการประเมิน colspan 2
+  drawVerticalHeaderCell(doc, box.left, headerTop, fixed[0], headerTotalH, 'เลขที่', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawVerticalHeaderCell(doc, box.left + fixed[0], headerTop, fixed[1], headerTotalH, 'เลขประจำตัว', { bold: true, fontSize: headFont - 0.5, fill: HEADER_BG })
+  drawCell(doc, box.left + fixed[0] + fixed[1], headerTop, fixed[2], headerTotalH, 'ชื่อ - สกุล', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawCell(doc, midX, headerTop, midGroupW, headH, 'ผลประเมินอ่าน คิด วิเคราะห์ และเขียนสื่อความหมาย', { bold: true, fontSize: Math.max(5, headFont - 1.5), fill: BANNER_BG })
+  drawVerticalHeaderCell(doc, totalX, headerTop, tail.total, headerTotalH, 'รวมทั้งหมด', { bold: true, fontSize: headFont - 0.5, fill: HEADER_BG })
+  drawCell(doc, levelX, headerTop, tail.level + tail.result, headH, 'ผลการประเมิน', { bold: true, fontSize: headFont, fill: BANNER_BG })
+
+  // Row 2 — 3 sub-groups colspan 3 each, ระดับ/ผล rowspan 3
+  const row2Y = headerTop + headH
+  let gx = midX
+  readingGroups.forEach(group => {
+    const gw = midW * group.columns.length
+    drawCell(doc, gx, row2Y, gw, headH, group.label, { bold: true, fontSize: Math.max(5.5, headFont - 1), fill: HEADER_BG })
+    gx += gw
+  })
+  drawCell(doc, levelX, row2Y, tail.level, headH * 3, 'ระดับ', { bold: true, fontSize: headFont, fill: HEADER_BG })
+  drawCell(doc, resultX, row2Y, tail.result, headH * 3, 'ผล', { bold: true, fontSize: headFont, fill: HEADER_BG })
+
+  // Row 3 — column labels (empty for spacer columns)
+  const row3Y = row2Y + headH
+  readingColumns.forEach((column, index) => {
+    drawCell(doc, midX + index * midW, row3Y, midW, headH, columnLabel(column), { bold: true, fontSize: headFont, fill: HEADER_BG })
+  })
+
+  // Row 4 — max score per column
+  const row4Y = row3Y + headH
+  readingColumns.forEach((column, index) => {
+    drawCell(doc, midX + index * midW, row4Y, midW, headH, String(readingTableColumnMax(column)), { bold: true, fontSize: headFont, fill: HEADER_BG })
+  })
+
+  y = headerTop + headerTotalH
+  const widths = [...fixed, ...readingColumns.map(() => midW), tail.total, tail.level, tail.result]
   const rowCount = pp5StudentTableRows(students.length, layout)
   for (let i = 0; i < rowCount; i += 1) {
     const student = students[i]
-    if (!student) {
-      body.push(Array(colWidths.length).fill(''))
-      continue
-    }
-    const row = term !== 0 ? rowForTerm(data.evaluations.reading, student.id, term) : rowFor(data.evaluations.reading, student.id)
+    const cy = y + i * rowH
+    const row = student ? (term !== 0 ? rowForTerm(data.evaluations.reading, student.id, term) : rowFor(data.evaluations.reading, student.id)) : null
     const total = row ? String(row.total_score ?? READING_KEYS.reduce((sum, key) => sum + Number(row[key] ?? 0), 0)) : ''
-    const fallbackResult = levelFromAverage(averageScore(row, READING_KEYS))
-    const result = (row?.result_level as string | null) || (fallbackResult === '-' ? '' : fallbackResult)
-    body.push([
-      String(student.student_number || i + 1),
-      student.student_code || '',
-      studentName(student),
-      ...readingColumns.map(col => String(readingTableColumnValue(row, col))),
-      total,
-      resultLevelNumber(result),
+    const fallbackResult = student ? levelFromAverage(averageScore(row, READING_KEYS)) : '-'
+    const result = student ? ((row?.result_level as string | null) || (fallbackResult === '-' ? '' : fallbackResult)) : ''
+    const cells = [
+      student ? String(student.student_number || i + 1) : '',
+      student?.student_code || '',
+      student ? studentName(student) : '',
+      ...readingColumns.map(col => (student ? String(readingTableColumnValue(row, col)) : '')),
+      student ? total : '',
+      student ? resultLevelNumber(result) : '',
       result,
-    ])
+    ]
+    let cx = box.left
+    cells.forEach((cell, ci) => {
+      drawCell(doc, cx, cy, widths[ci], rowH, cell, { fontSize: font, align: ci === 2 ? 'left' : 'center' })
+      cx += widths[ci]
+    })
   }
-  drawTableGrid(doc, box.left, y, colWidths, body, { rowH, fontSize: font, headerRows: 2, nameCol: 2 })
 }
 
 function drawCompetencyPage(ctx: DrawCtx, students: ReportStudent[], pageNumber: number) {
@@ -1960,13 +2401,15 @@ function drawCompetencyPage(ctx: DrawCtx, students: ReportStudent[], pageNumber:
   const layout = layouts.competency
   const box = contentBox(layout)
   drawPageMark(doc, pageNumber)
-  let y = drawSubjectHead(doc, ctx, layout, 'ผลการประเมินสมรรถนะสำคัญของผู้เรียน', term, box.top)
+  const y = drawSubjectHead(doc, ctx, layout, 'ผลการประเมินสมรรถนะสำคัญของผู้เรียน', term, box.top, { includeSubjectLine: false })
 
   const rowH = rowHeightMm(layout)
   const font = ptFromCssPx(layout.fontTablePx) - 1
-  const fixed = [8, 52]
-  const scoreW = Math.max(12, (box.width - fixed.reduce((a, b) => a + b, 0) - 18) / COMPETENCY_KEYS.length)
-  const colWidths = [...fixed, ...COMPETENCY_KEYS.map(() => scoreW), 18]
+  // คอลัมน์ตรง CSS: 7 / 70 / 16×5 / 24
+  const fixed = [7, 70]
+  const resultW = 24
+  const scoreW = Math.max(12, (box.width - fixed.reduce((a, b) => a + b, 0) - resultW) / COMPETENCY_KEYS.length)
+  const colWidths = [...fixed, ...COMPETENCY_KEYS.map(() => scoreW), resultW]
   const headers = ['ที่', 'ชื่อ - สกุล', ...COMPETENCY_LABELS, 'สรุป']
   const body: string[][] = [headers]
   const rowCount = pp5StudentTableRows(students.length, layout)
@@ -1986,7 +2429,13 @@ function drawCompetencyPage(ctx: DrawCtx, students: ReportStudent[], pageNumber:
       result,
     ])
   }
-  drawTableGrid(doc, box.left, y, colWidths, body, { rowH, fontSize: font, headerRows: 1, nameCol: 1 })
+  drawTableGrid(doc, box.left, y, colWidths, body, {
+    rowH,
+    fontSize: font,
+    headerRows: 1,
+    nameCol: 1,
+    headerFill: [224, 242, 254],
+  })
 }
 
 function drawStudentChunkSection(
@@ -2001,6 +2450,7 @@ function drawStudentChunkSection(
     drawPage(ctx, chunk, pageNum)
     pageNum += 1
   })
+  return Math.max(pageNumberStart, pageNum - 1)
 }
 
 function includeSection(
@@ -2047,55 +2497,59 @@ export async function buildPp5SubjectPdfBlob(
   let pageNum = 0
   let started = false
 
-  const nextPage = () => {
-    if (pageNum > 0) doc.addPage()
+  const ensurePage = () => {
+    if (!started) {
+      started = true
+      pageNum = 1
+      return
+    }
+    doc.addPage()
     pageNum += 1
-    started = true
   }
 
   for (const section of SECTION_ORDER) {
     if (!includeSection(sections, previewSection, section)) continue
 
     if (section === 'cover') {
-      nextPage()
+      ensurePage()
       // หน้าปกวาดปพ.5 เอง — ห้าม drawPageMark จะซ้อนกับ "(รายวิชา)"
       await drawCoverPage(ctx)
       continue
     }
 
     if (section === 'criteria') {
-      nextPage()
-      drawCriteriaPages(ctx, pageNum)
+      ensurePage()
+      pageNum = drawCriteriaPages(ctx, pageNum)
       continue
     }
 
     if (section === 'attendance') {
-      nextPage()
-      drawAttendanceSection(ctx, pageNum)
+      ensurePage()
+      pageNum = drawAttendanceSection(ctx, pageNum)
       continue
     }
 
     if (section === 'scores') {
-      nextPage()
-      drawScoresSection(ctx, pageNum)
+      ensurePage()
+      pageNum = drawScoresSection(ctx, pageNum)
       continue
     }
 
     if (section === 'character') {
-      nextPage()
-      drawStudentChunkSection(ctx, drawCharacterPage, pageNum)
+      ensurePage()
+      pageNum = drawStudentChunkSection(ctx, drawCharacterPage, pageNum)
       continue
     }
 
     if (section === 'reading') {
-      nextPage()
-      drawStudentChunkSection(ctx, drawReadingPage, pageNum)
+      ensurePage()
+      pageNum = drawStudentChunkSection(ctx, drawReadingPage, pageNum)
       continue
     }
 
     if (section === 'competency') {
-      nextPage()
-      drawStudentChunkSection(ctx, drawCompetencyPage, pageNum)
+      ensurePage()
+      pageNum = drawStudentChunkSection(ctx, drawCompetencyPage, pageNum)
     }
   }
 
