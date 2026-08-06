@@ -61,6 +61,11 @@ export async function fetchPeriodTimes() {
     .eq('school_id', session.schoolId)
     .order('sort_order')
   if (!data?.length) return { times: DEFAULT_PERIOD_TIMES, isDefault: true }
+  const teachingCount = (data as PeriodTimeRow[]).filter(t => !t.is_break).length
+  // ค่าเก่า (เช่น 8 คาบ) ไม่ตรงโครงประถม 6 คาบ → ใช้ค่าเริ่มต้นใหม่
+  if (teachingCount !== SCHEDULE_PERIOD_COUNT) {
+    return { times: DEFAULT_PERIOD_TIMES, isDefault: true }
+  }
   return { times: data as PeriodTimeRow[], isDefault: false }
 }
 

@@ -9,7 +9,7 @@ import {
   fetchTeachingScheduleGrid,
   fetchScheduleExportContext,
 } from '@/app/schedules/actions'
-import { SCHEDULE_DAYS } from '@/lib/schedules'
+import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
@@ -232,7 +232,8 @@ export default function ScheduleExportPage() {
     })
   }
 
-  const periods = [1, 2, 3, 4, 5, 6, 7, 8]
+  const periods = SCHEDULE_PERIODS
+  const morning = SCHEDULE_MORNING_PERIODS
 
   if (loading) return <div style={{ padding: 28, textAlign: 'center', fontWeight: 700, color: '#64748B' }}>กำลังโหลด...</div>
 
@@ -310,7 +311,7 @@ export default function ScheduleExportPage() {
             <thead>
               <tr>
                 <th>วัน</th>
-                {periods.slice(0, 4).map(p => (
+                {periods.slice(0, morning).map(p => (
                   <th key={p}>
                     คาบ {p}
                     {periodTimes.length ? (
@@ -321,7 +322,7 @@ export default function ScheduleExportPage() {
                   </th>
                 ))}
                 <th className="break-col">พักเที่ยง</th>
-                {periods.slice(4).map(p => (
+                {periods.slice(morning).map(p => (
                   <th key={p}>
                     คาบ {p}
                     {periodTimes.length ? (
@@ -337,7 +338,7 @@ export default function ScheduleExportPage() {
               {SCHEDULE_DAYS.map(day => (
                 <tr key={day.value}>
                   <td className="day-col">{day.label}</td>
-                  {periods.slice(0, 4).map(p => {
+                  {periods.slice(0, morning).map(p => {
                     const cell = gridData[`${day.value}-${p}`]
                     return (
                       <td key={p}>
@@ -349,7 +350,7 @@ export default function ScheduleExportPage() {
                     )
                   })}
                   <td className="break-col">พัก</td>
-                  {periods.slice(4).map(p => {
+                  {periods.slice(morning).map(p => {
                     const cell = gridData[`${day.value}-${p}`]
                     return (
                       <td key={p}>

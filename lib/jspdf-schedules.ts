@@ -1,12 +1,13 @@
 import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
-import { SCHEDULE_DAYS } from '@/lib/schedules'
+import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
 
 const PAGE_W = 297
 const MARGIN_X = 12
 const LOGO_SIZE = 18
-const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8]
+const PERIODS = SCHEDULE_PERIODS
+const MORNING = SCHEDULE_MORNING_PERIODS
 
 const BORDER: [number, number, number] = [203, 213, 225]
 const HEADER_BG: [number, number, number] = [241, 245, 249]
@@ -39,7 +40,7 @@ function scheduleFileName(title: string) {
   return `${safe}.pdf`
 }
 
-/** ความกว้างคอลัมน์: วัน + คาบ 1-4 + พักเที่ยง + คาบ 5-8 */
+/** ความกว้างคอลัมน์: วัน + คาบเช้า + พักเที่ยง + คาบบ่าย */
 function columnWidths() {
   const contentW = PAGE_W - MARGIN_X * 2
   const dayW = 26
@@ -134,7 +135,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   let x = MARGIN_X
   drawCell(doc, x, y, dayW, headerH, 'วัน', '', { fill: HEADER_BG, line1Size: 9 })
   x += dayW
-  for (const p of PERIODS.slice(0, 4)) {
+  for (const p of PERIODS.slice(0, MORNING)) {
     drawCell(doc, x, y, periodW, headerH, `คาบ ${p}`, periodTimeLabel(input.periodTimes, p), {
       fill: HEADER_BG, line1Size: 9, line2Size: 7,
     })
@@ -142,7 +143,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   }
   drawCell(doc, x, y, breakW, headerH, 'พักเที่ยง', '', { fill: BREAK_BG, line1Size: 8, line1Bold: true })
   x += breakW
-  for (const p of PERIODS.slice(4)) {
+  for (const p of PERIODS.slice(MORNING)) {
     drawCell(doc, x, y, periodW, headerH, `คาบ ${p}`, periodTimeLabel(input.periodTimes, p), {
       fill: HEADER_BG, line1Size: 9, line2Size: 7,
     })
@@ -154,14 +155,14 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
     x = MARGIN_X
     drawCell(doc, x, y, dayW, rowH, day.label, '', { fill: DAY_BG, line1Size: 11 })
     x += dayW
-    for (const p of PERIODS.slice(0, 4)) {
+    for (const p of PERIODS.slice(0, MORNING)) {
       const cell = input.gridData[`${day.value}-${p}`]
       drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '')
       x += periodW
     }
     drawCell(doc, x, y, breakW, rowH, 'พัก', '', { fill: BREAK_BG, line2Color: BREAK_TEXT, line1Size: 9 })
     x += breakW
-    for (const p of PERIODS.slice(4)) {
+    for (const p of PERIODS.slice(MORNING)) {
       const cell = input.gridData[`${day.value}-${p}`]
       drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '')
       x += periodW

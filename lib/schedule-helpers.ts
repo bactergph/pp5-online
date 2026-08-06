@@ -13,16 +13,15 @@ export type PeriodTimeRow = {
   sort_order: number
 }
 
+/** ค่าเริ่มต้นระดับประถม: 6 วิชา/วัน · วิชาละ 1 ชม. · เริ่ม 08:30 · พักเที่ยง 11:30–12:30 · เลิก 15:30 */
 export const DEFAULT_PERIOD_TIMES: PeriodTimeRow[] = [
-  { period: 1, label: 'คาบที่ 1', start_time: '08:30', end_time: '09:20', is_break: false, sort_order: 1 },
-  { period: 2, label: 'คาบที่ 2', start_time: '09:20', end_time: '10:10', is_break: false, sort_order: 2 },
-  { period: 3, label: 'คาบที่ 3', start_time: '10:10', end_time: '11:00', is_break: false, sort_order: 3 },
-  { period: 4, label: 'คาบที่ 4', start_time: '11:00', end_time: '11:50', is_break: false, sort_order: 4 },
-  { period: 5, label: 'พักเที่ยง', start_time: '11:50', end_time: '12:40', is_break: true, sort_order: 5 },
-  { period: 5, label: 'คาบที่ 5', start_time: '12:40', end_time: '13:30', is_break: false, sort_order: 6 },
-  { period: 6, label: 'คาบที่ 6', start_time: '13:30', end_time: '14:20', is_break: false, sort_order: 7 },
-  { period: 7, label: 'คาบที่ 7', start_time: '14:20', end_time: '15:10', is_break: false, sort_order: 8 },
-  { period: 8, label: 'คาบที่ 8', start_time: '15:10', end_time: '16:00', is_break: false, sort_order: 9 },
+  { period: 1, label: 'คาบที่ 1', start_time: '08:30', end_time: '09:30', is_break: false, sort_order: 1 },
+  { period: 2, label: 'คาบที่ 2', start_time: '09:30', end_time: '10:30', is_break: false, sort_order: 2 },
+  { period: 3, label: 'คาบที่ 3', start_time: '10:30', end_time: '11:30', is_break: false, sort_order: 3 },
+  { period: 0, label: 'พักเที่ยง', start_time: '11:30', end_time: '12:30', is_break: true, sort_order: 4 },
+  { period: 4, label: 'คาบที่ 4', start_time: '12:30', end_time: '13:30', is_break: false, sort_order: 5 },
+  { period: 5, label: 'คาบที่ 5', start_time: '13:30', end_time: '14:30', is_break: false, sort_order: 6 },
+  { period: 6, label: 'คาบที่ 6', start_time: '14:30', end_time: '15:30', is_break: false, sort_order: 7 },
 ]
 
 export function weeklyHoursFromYear(hoursPerYear: number | null | undefined) {
