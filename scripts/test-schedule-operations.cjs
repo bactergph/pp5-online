@@ -39,6 +39,16 @@ const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'
   reset();data.slots=[slot('a','l1',1)];data.lessons[1].subjectId='different'
   await assert.rejects(api.copyRoom('a','b','y'),/ไม่มี/);assert.equal(writes,0)
   reset();await assert.rejects(api.saveCell('foreign','y',1,1,'l1',null));assert.equal(writes,0)
+  reset();data.lessons.push({id:'activity:manual',classroomId:'a',teacherId:null,count:0,label:'แนะแนว',subjectId:'guide',name:'แนะแนว',activity:true,teacherOptional:true})
+  data.slots=[{...slot('a',null,1),activity_id:'manual'}]
+  const manual=await api.autoSchedule('y','a',true)
+  assert.equal(manual.assigned,2)
+  assert.equal(data.slots.filter(s=>s.activity_id==='manual').length,1)
+  assert.equal(data.slots.find(s=>s.activity_id==='manual').period,1)
+  assert.ok(!data.slots.some(s=>s.class_subject_id && s.day_of_week===1 && s.period===1))
+  reset();data.lessons.push({id:'activity:manual',classroomId:'a',teacherId:null,count:0,label:'แนะแนว',activity:true,teacherOptional:true})
+  await api.autoSchedule('y',null,true)
+  assert.ok(data.slots.every(s=>!s.activity_id),'automatic scheduling must never add an activity')
   reset();role='teacher';await assert.rejects(api.autoSchedule('y',null,true),/สิทธิ์/);assert.equal(writes,0)
   console.log('PASS: rebuild quota regression, school scope/empty rooms, lock preservation, copy matching, school/role authorization')
 })().catch(e=>{console.error(e);process.exitCode=1})

@@ -99,7 +99,7 @@ export async function fetchClassScheduleSubjects(classroomId: string) {
   const { data: room, error } = await createServerClient().from('classrooms').select('academic_year_id').eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
   if (error || !room) throw new Error('ไม่พบห้องเรียน')
   const data = await loadSchedule(session.schoolId, room.academic_year_id)
-  return data.lessons.filter(l => l.classroomId === classroomId).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,label:(l.code+' '+l.name).trim(),activity:l.activity }))
+  return data.lessons.filter(l => l.classroomId === classroomId && l.selectable !== false).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,label:(l.code+' '+l.name).trim(),activity:l.activity }))
 }
 
 export async function fetchClassScheduleGrid(classroomId: string, yearId: string) {
@@ -128,12 +128,12 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
     const busy = data.slots.filter(other => other.classroom_id !== classroomId && other.day_of_week === s.day_of_week && other.period === s.period && data.lessons.find(l => l.id === lessonKey(other))?.teacherId === lesson.teacherId)
     if (busy.length) warnings[key] = busy.map(s => { const c = data.classrooms.find(c => c.id === s.classroom_id)!; return `${c.level}/${c.room}` })
   }
-  const items = lessons.map(l => {
+  const items = lessons.filter(l => !l.activity).map(l => {
     const used = data.slots.filter(s => lessonKey(s) === l.id).length
     return { class_subject_id: l.id, code: l.code, name: l.name, target: l.count, used, remaining: l.count - used }
   })
   return { grid, warnings,
-    subjects: lessons.map(l => ({ id:l.id, teacher_id:l.teacherId, subject_code:l.code, subject_name:l.name, teacher_name:l.teacherName, label:`${l.code} ${l.name}`.trim() })),
+    subjects: lessons.filter(l => l.selectable !== false || data.slots.some(s => lessonKey(s) === l.id)).map(l => ({ id:l.id, teacher_id:l.teacherId, subject_code:l.code, subject_name:l.name, teacher_name:l.teacherName, label:`${l.code} ${l.name}`.trim() })),
     quotas: { items, filled: items.reduce((n,l) => n+l.used,0), totalTarget: items.reduce((n,l) => n+l.target,0) },
   }
 }

@@ -9,7 +9,7 @@ export type ScheduleSlot = {
 }
 export type ScheduleLesson = {
   id: string; classroomId: string; teacherId: string | null; count: number; label: string
-  subjectId: string; code: string; name: string; teacherName: string; activity: boolean; teacherOptional?: boolean
+  subjectId: string; code: string; name: string; teacherName: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean
 }
 export const slotFields = 'classroom_id,academic_year_id,day_of_week,period,class_subject_id,activity_id,note,locked'
 export const lessonKey = (row: ScheduleSlot) => row.activity_id ? `activity:${row.activity_id}` : row.class_subject_id
@@ -38,7 +38,7 @@ export async function loadSchedule(schoolId: string | null, yearId: string) {
   const ids = classrooms.map(c => c.id)
   const [subjects, activities, slots, teachers] = await Promise.all([
     readAll(db.from('class_subjects').select('id,classroom_id,subject_id,teacher_id,subjects(code,name,short_name,hours_per_year)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
-    readAll(db.from('class_schedule_activities').select('id,classroom_id,evaluation_setting_id,teacher_id,weekly_periods,evaluation_settings(label,short_label)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
+    readAll(db.from('class_schedule_activities').select('id,classroom_id,evaluation_setting_id,teacher_id,weekly_periods,evaluation_settings(label,short_label,is_active,sort_order)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
     readAll(db.from('class_schedule_slots').select(slotFields).in('classroom_id', ids).eq('academic_year_id', yearId).order('classroom_id').order('day_of_week').order('period')),
     readAll(db.from('users').select('id,prefix,full_name').eq('school_id', schoolId).order('id')),
   ])
@@ -56,10 +56,10 @@ export async function loadSchedule(schoolId: string | null, yearId: string) {
   })
   for (const row of activities.data || []) {
     const a = Array.isArray(row.evaluation_settings) ? row.evaluation_settings[0] : row.evaluation_settings
-    const name = row.evaluation_setting_id ? a?.short_label || a?.label || '' : LEARNER_DEVELOPMENT_NAME
-    lessons.push({ id: `activity:${row.id}`, classroomId: row.classroom_id, teacherId: row.teacher_id, count: row.weekly_periods,
+    const name = row.evaluation_setting_id ? a?.label || a?.short_label || '' : LEARNER_DEVELOPMENT_NAME
+    lessons.push({ id: `activity:${row.id}`, classroomId: row.classroom_id, teacherId: row.teacher_id, count: 0,
       label: `${labels.get(row.classroom_id)} · ${name}`, subjectId: row.evaluation_setting_id || LEARNER_DEVELOPMENT_KEY, code: '',
-      teacherOptional: !row.evaluation_setting_id, name, teacherName: names.get(row.teacher_id) || '', activity: true })
+      teacherOptional: true, selectable: !!row.evaluation_setting_id && !!a?.is_active, name, teacherName: names.get(row.teacher_id) || '', activity: true })
   }
   return { classrooms, lessons, slots: (slots.data || []) as ScheduleSlot[] }
 }

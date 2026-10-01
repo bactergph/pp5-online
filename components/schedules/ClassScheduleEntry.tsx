@@ -1,5 +1,7 @@
 'use client'
 
+import { SCHEDULE_PRESENTATION } from './schedule-presentation'
+
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -309,7 +311,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   }
 
   async function handleAutoSchedule(wholeSchool = false) {
-    if (!window.confirm(`${wholeSchool ? 'จัดตารางทั้งโรงเรียน' : 'จัดตารางห้องนี้'}: ${rebuild ? 'จัดคาบที่ไม่ล็อกใหม่ทั้งหมด' : 'เติมเฉพาะช่องว่าง'} โดยตรวจครูไม่ชนกัน?`)) return
+    if (!window.confirm(`${wholeSchool ? 'จัดตารางทั้งโรงเรียน' : 'จัดตารางห้องนี้'}: ${rebuild ? 'จัดรายวิชาที่ไม่ล็อกใหม่ (เก็บกิจกรรม)ทั้งหมด' : 'เติมเฉพาะช่องว่าง'} โดยตรวจครูไม่ชนกัน?`)) return
     setBusyAction('auto')
     try {
       const response = wholeSchool
@@ -391,8 +393,8 @@ export default function ClassScheduleEntry({ mode }: Props) {
 
   return (
     <>
-      <style>{STYLES}</style>
-      <div className="schedule-page">
+      <style>{STYLES + SCHEDULE_PRESENTATION}</style>
+      <div className="schedule-page schedule-workspace">
         <div className="schedule-head">
           <div>
             <h1>{isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
@@ -473,7 +475,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <div className="schedule-info">
             เลือกรายวิชาที่เปิดสอนในห้องนี้ (จาก{' '}
             <Link href="/settings/class-subjects">จัดครูเข้าสอน</Link>
-            ) และ “กิจกรรมพัฒนาผู้เรียน” 1 คาบต่อสัปดาห์ โดยกิจกรรมนี้ไม่ต้องกำหนดครู
+            ) และกิจกรรมที่เปิดใช้ในเมนูกิจกรรมพัฒนาผู้เรียน เลือกลงคาบเองได้โดยไม่ต้องกำหนดครู ระบบจัดอัตโนมัติจะจัดเฉพาะรายวิชาและเก็บคาบกิจกรรมที่ลงไว้
             {' · '}<Link href="/schedules/conflicts">ตรวจความขัดแย้ง</Link>
           </div>
         )}

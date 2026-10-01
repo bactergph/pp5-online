@@ -1,5 +1,7 @@
 'use client'
 
+import { SCHEDULE_PRESENTATION } from './schedule-presentation'
+
 import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   fetchScheduleInit,
@@ -10,6 +12,7 @@ import {
   fetchSubstitutePdfContext,
 } from '@/app/schedules/actions'
 import { availableSubstitutes } from '@/lib/substitute-availability'
+import { directorDisplayName } from '@/lib/school-director'
 import { buildSubstitutePdf } from '@/lib/jspdf-substitute'
 import AppAlertModal from '@/components/AppAlertModal'
 
@@ -185,7 +188,7 @@ export default function SubstituteScheduleEntry() {
     setSaving(true)
     try {
       const context = await fetchSubstitutePdfContext()
-      const result = await buildSubstitutePdf({schoolName:context.school?.name || 'โรงเรียน',logoUrl:context.school?.logo_url,date,year:years.find(y=>y.id===selectedYear)?.year_be || 0,term,academicHead:context.academicHead,director:context.school?.director_name || '',times:context.periodTimes,teachers,entries})
+      const result = await buildSubstitutePdf({schoolName:context.school?.name || 'โรงเรียน',logoUrl:context.school?.logo_url,date,year:years.find(y=>y.id===selectedYear)?.year_be || 0,term,academicHead:context.academicHead,director:directorDisplayName(context.school, ''),times:context.periodTimes,teachers,entries})
       const url = URL.createObjectURL(result.blob)
       const a = document.createElement('a'); a.href=url; a.download=result.fileName; a.click()
       setTimeout(()=>URL.revokeObjectURL(url),30000)
@@ -220,8 +223,8 @@ export default function SubstituteScheduleEntry() {
 
   return (
     <>
-      <style>{STYLES}</style>
-      <div className="schedule-page">
+      <style>{STYLES + SCHEDULE_PRESENTATION}</style>
+      <div className="schedule-page schedule-workspace">
         <div className="schedule-head">
           <h1>ตารางสอนแทน</h1>
           <p>1. เลือกครูที่ลา → 2. เลือกครูที่ว่างแต่ละคาบ → 3. บันทึกและออกเอกสาร</p>

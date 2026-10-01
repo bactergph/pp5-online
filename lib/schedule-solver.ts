@@ -48,9 +48,21 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
   let nodes = 0
   let timedOut = false
   const minimumSlot = lessons.map(() => 0)
+  let lastPeriodLimit = 0
+  let lastPeriodsUsed = 0
+  const rooms = [...new Set(lessons.map(l => l.classroomId))]
+  function requiredLastPeriods() {
+    return rooms.reduce((total, room) => {
+      const need = lessons.reduce((n,l,i) => n + (l.classroomId === room ? remaining[i] : 0),0)
+      let free = 0
+      for (let s=0;s<30;s++) if(s%6!==5 && !occupied.has(roomKey(room,s))) free++
+      return total + Math.max(0,need-free)
+    },0)
+  }
   function search(): boolean {
     if (++nodes > maxNodes) return false
     if (nodes % 256 === 0 && Date.now() > deadline) { timedOut = true; return false }
+    if (lastPeriodsUsed + requiredLastPeriods() > lastPeriodLimit) return false
     let best = -1
     let candidates: number[] = []
     let slack = Infinity
@@ -59,7 +71,7 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
       const l = lessons[i]
       const slots: number[] = []
       for (let s = minimumSlot[i]; s < 30; s++) {
-        if (!occupied.has(roomKey(l.classroomId, s)) && !busy.has(roomKey(l.teacherId || `activity:${l.id}`, s))) slots.push(s)
+        if ((s % 6 !== 5 || lastPeriodsUsed < lastPeriodLimit) && !occupied.has(roomKey(l.classroomId, s)) && !busy.has(roomKey(l.teacherId || `activity:${l.id}`, s))) slots.push(s)
       }
       if (slots.length < remaining[i]) return false
       const diff = slots.length - remaining[i]
@@ -70,7 +82,7 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
     if (best < 0) return true
     const l = lessons[best]
     // Prefer different weekdays; minimumSlot removes permutations of identical lessons.
-    candidates.sort((a, b) => (daily.get(`${l.id}:${Math.floor(a / 6) + 1}`) || 0) - (daily.get(`${l.id}:${Math.floor(b / 6) + 1}`) || 0) || a % 6 - b % 6 || a - b)
+    candidates.sort((a, b) => Number(a % 6 === 5) - Number(b % 6 === 5) || (daily.get(`${l.id}:${Math.floor(a / 6) + 1}`) || 0) - (daily.get(`${l.id}:${Math.floor(b / 6) + 1}`) || 0) || a % 6 - b % 6 || a - b)
     for (const slot of candidates) {
       const day = Math.floor(slot / 6) + 1
       const dk = `${l.id}:${day}`
@@ -78,8 +90,10 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
       minimumSlot[best] = slot + 1
       occupied.add(roomKey(l.classroomId, slot)); busy.add(roomKey(l.teacherId || `activity:${l.id}`, slot))
       daily.set(dk, (daily.get(dk) || 0) + 1); remaining[best]--
+      if (slot % 6 === 5) lastPeriodsUsed++
       result.push({ classroomId: l.classroomId, lessonId: l.id, day, period: slot % 6 + 1 })
       if (search()) return true
+      if (slot % 6 === 5) lastPeriodsUsed--
       result.pop(); remaining[best]++; minimumSlot[best] = oldMin
       daily.set(dk, daily.get(dk)! - 1)
       occupied.delete(roomKey(l.classroomId, slot)); busy.delete(roomKey(l.teacherId || `activity:${l.id}`, slot))
@@ -87,6 +101,12 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
     }
     return false
   }
-  if (!search()) return { error: nodes > maxNodes || timedOut ? 'ค้นหาตารางครบตามเงื่อนไขไม่ทัน กรุณาลดคาบที่ล็อกแล้วลองใหม่ (ยังไม่เปลี่ยนตารางเดิม)' : 'จัดตารางครบโดยครูไม่ชนกันไม่ได้ กรุณาตรวจครูผู้สอนและคาบที่ล็อก (ยังไม่เปลี่ยนตารางเดิม)', assignments: [] }
+  let solved = false
+  const maximumLastPeriods = rooms.length * 5
+  for (lastPeriodLimit = requiredLastPeriods(); lastPeriodLimit <= maximumLastPeriods; lastPeriodLimit++) {
+    if (search()) { solved = true; break }
+    if (nodes > maxNodes || timedOut) break
+  }
+  if (!solved) return { error: nodes > maxNodes || timedOut ? 'ค้นหาตารางครบตามเงื่อนไขไม่ทัน กรุณาลดคาบที่ล็อกแล้วลองใหม่ (ยังไม่เปลี่ยนตารางเดิม)' : 'จัดตารางครบโดยครูไม่ชนกันไม่ได้ กรุณาตรวจครูผู้สอนและคาบที่ล็อก (ยังไม่เปลี่ยนตารางเดิม)', assignments: [] }
   return { error: undefined, assignments: result }
 }

@@ -25,8 +25,7 @@ export async function saveCell(roomId: string, year: string, day: number, period
   requireScheduleClass(ctx.data, roomId)
   const current = ctx.data.slots.find(s => s.classroom_id === roomId && s.day_of_week === day && s.period === period)
   if (current?.locked) throw new Error('กรุณาปลดล็อกคาบก่อนแก้ไข')
-  if (lesson && !ctx.data.lessons.some(l => l.id === lesson && l.classroomId === roomId)) throw new Error('ไม่พบรายวิชาหรือกิจกรรมในห้องนี้')
-  if (lesson && ctx.data.lessons.find(l => l.id === lesson)?.teacherOptional && ctx.data.slots.some(s => s !== current && lessonKey(s) === lesson)) throw new Error('กิจกรรมพัฒนาผู้เรียนจัดได้ 1 คาบต่อสัปดาห์')
+  if (lesson && !ctx.data.lessons.some(l => l.id === lesson && l.classroomId === roomId && l.selectable !== false)) throw new Error('ไม่พบรายวิชาหรือกิจกรรมในห้องนี้')
   const rows = ctx.data.slots.filter(s => s !== current)
   if (lesson || note?.trim()) rows.push({ classroom_id: roomId, academic_year_id: year, day_of_week: day, period, ...lessonColumns(lesson), note: lesson ? null : note?.trim() || null, locked: false })
   await commit(ctx, year, rows, `แก้ไขตารางเรียน วัน ${day} คาบ ${period}`)
@@ -71,18 +70,18 @@ export async function copyRoom(from: string, to: string, year: string) {
 export async function autoSchedule(year: string, roomId: string | null, clearFirst: boolean) {
   const ctx = await context(year)
   if (roomId) requireScheduleClass(ctx.data, roomId)
-  const scope = new Set(roomId ? [roomId] : ctx.data.classrooms.filter(c => ctx.data.lessons.some(l => l.classroomId === c.id && !l.teacherOptional)).map(c => c.id))
+  const scope = new Set(roomId ? [roomId] : ctx.data.classrooms.filter(c => ctx.data.lessons.some(l => l.classroomId === c.id && !l.activity)).map(c => c.id))
   if (!scope.size) throw new Error('ยังไม่มีห้องเรียนที่กำหนดรายวิชาหรือกิจกรรมในปีนี้')
   const skipped = roomId ? [] : ctx.data.classrooms.filter(c => !scope.has(c.id)).map(c => `${c.level}/${c.room}`)
   for (const room of ctx.data.classrooms.filter(c => scope.has(c.id))) {
-    if (!ctx.data.lessons.some(l => l.classroomId === room.id)) throw new Error(`${room.level}/${room.room}: ยังไม่กำหนดรายวิชาและครูผู้สอน`)
+    if (!ctx.data.lessons.some(l => l.classroomId === room.id && !l.activity)) throw new Error(`${room.level}/${room.room}: ยังไม่กำหนดรายวิชาและครูผู้สอน`)
   }
-  const retained = ctx.data.slots.filter(s => !scope.has(s.classroom_id) || s.locked || !clearFirst)
+  const retained = ctx.data.slots.filter(s => !scope.has(s.classroom_id) || s.locked || !!s.activity_id || !clearFirst)
   const outsideCounts = new Map<string, number>()
-  for (const s of retained.filter(s => !scope.has(s.classroom_id))) {
+  for (const s of retained.filter(s => !scope.has(s.classroom_id) || !!s.activity_id)) {
     const id = lessonKey(s); if (id) outsideCounts.set(id, (outsideCounts.get(id) || 0) + 1)
   }
-  const lessons = ctx.data.lessons.map(l => ({ ...l, count: scope.has(l.classroomId) ? l.count : outsideCounts.get(l.id) || 0 }))
+  const lessons = ctx.data.lessons.map(l => ({ ...l, count: !l.activity && scope.has(l.classroomId) ? l.count : outsideCounts.get(l.id) || 0 }))
   const result = solveSchoolSchedule(lessons, retained.filter(s => s.locked || lessonKey(s) || s.note).map(s => ({ classroomId: s.classroom_id, lessonId: lessonKey(s), day: s.day_of_week, period: s.period })))
   if (result.error) throw new Error(result.error)
   const rows = retained.filter(s => s.locked || lessonKey(s) || s.note)

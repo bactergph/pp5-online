@@ -83,7 +83,7 @@ export async function fetchScheduleQuotas(classroomId:string,yearId:string) {
   const data=await loadSchedule(session.schoolId,yearId)
   requireScheduleClass(data,classroomId)
   const slots=data.slots.filter(s=>s.classroom_id===classroomId)
-  const items=data.lessons.filter(l=>l.classroomId===classroomId).map(l=>{ const used=slots.filter(s=>lessonKey(s)===l.id).length; return {class_subject_id:l.id,code:l.code,name:l.name,target:l.count,used,remaining:l.count-used} })
+  const items=data.lessons.filter(l=>l.classroomId===classroomId && !l.activity).map(l=>{ const used=slots.filter(s=>lessonKey(s)===l.id).length; return {class_subject_id:l.id,code:l.code,name:l.name,target:l.count,used,remaining:l.count-used} })
   return {items,filled:slots.filter(s=>lessonKey(s)).length,totalTarget:items.reduce((n,i)=>n+i.target,0)}
 }
 
@@ -206,10 +206,11 @@ export async function fetchScheduleExportContext() {
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
   const db = createServerClient()
-  const { data: school } = await db.from('schools')
-    .select('name, logo_url, director_name, director_position')
+  const { data: school, error: schoolError } = await db.from('schools')
+    .select('name, logo_url, director_name, director_position, academic_head_name, acting_director, acting_director_position')
     .eq('id', session.schoolId)
     .maybeSingle()
+  if (schoolError) throw new Error('โหลดข้อมูลโรงเรียนไม่สำเร็จ')
   const periodTimes = await fetchPeriodTimes()
   return { school, periodTimes: periodTimes.times }
 }
@@ -402,6 +403,5 @@ export async function fetchSubstitutePdfContext() {
   const session = await requireScheduleSession()
   if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
   const context = await fetchScheduleExportContext()
-  const { data } = await createServerClient().from('users').select('prefix,full_name').eq('school_id',session.schoolId).eq('role','academic_head').eq('is_active',true).order('full_name').limit(1)
-  return { ...context, academicHead: data?.[0] ? [data[0].prefix,data[0].full_name].filter(Boolean).join(' ') : '' }
+  return { ...context, academicHead: context.school?.academic_head_name || '' }
 }

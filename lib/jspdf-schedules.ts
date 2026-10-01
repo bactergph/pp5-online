@@ -18,6 +18,9 @@ const TEXT: [number, number, number] = [17, 24, 39]
 const MUTED: [number, number, number] = [100, 116, 139]
 
 export type SchedulePdfInput = {
+  academicHeadName?: string
+  directorName?: string
+  directorPosition?: string
   schoolName: string
   schoolLogoUrl?: string | null
   title: string
@@ -102,24 +105,25 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   let y = 14
   if (logo) {
     try {
-      doc.addImage(logo, 'JPEG', MARGIN_X, y, LOGO_SIZE, LOGO_SIZE)
+      doc.addImage(logo, 'JPEG', (PAGE_W - LOGO_SIZE) / 2, y, LOGO_SIZE, LOGO_SIZE)
     } catch { /* ignore */ }
   } else {
     doc.setDrawColor(...BORDER)
     doc.setLineWidth(0.3)
-    doc.rect(MARGIN_X, y, LOGO_SIZE, LOGO_SIZE)
+    doc.rect((PAGE_W - LOGO_SIZE) / 2, y, LOGO_SIZE, LOGO_SIZE)
   }
 
-  const textX = MARGIN_X + LOGO_SIZE + 6
+  y += LOGO_SIZE + 2
+  const textX = PAGE_W / 2
   doc.setFont('THSarabunNew', 'bold')
   doc.setFontSize(18)
   doc.setTextColor(...TEXT)
-  doc.text(input.schoolName || 'โรงเรียน', textX, y + 7)
+  doc.text(input.schoolName || 'โรงเรียน', textX, y + 7, { align: 'center' })
 
   doc.setFont('THSarabunNew', 'normal')
   doc.setFontSize(13)
   doc.setTextColor(...MUTED)
-  doc.text(input.title || '', textX, y + 14)
+  doc.text(input.title || '', textX, y + 14, { align: 'center' })
   doc.setTextColor(...TEXT)
 
   y += LOGO_SIZE + 4
@@ -170,6 +174,18 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
     y += rowH
   }
 
+  y += 16
+  for (const signer of [
+    { x: 82, name: input.academicHeadName, role: 'หัวหน้าวิชาการ' },
+    { x: 215, name: input.directorName, role: input.directorPosition || 'ผู้อำนวยการสถานศึกษา' },
+  ]) {
+    doc.setFont('THSarabunNew', 'normal'); doc.setFontSize(14)
+    doc.setTextColor(...TEXT)
+    doc.text('ลงชื่อ ........................................................', signer.x, y, { align: 'center' })
+    doc.text('(' + (signer.name || '........................................................') + ')', signer.x, y + 7, { align: 'center' })
+    doc.text(signer.role, signer.x, y + 14, { align: 'center' })
+    doc.text('วันที่ ........../........../..........', signer.x, y + 21, { align: 'center' })
+  }
   const fileName = (input.fileName || scheduleFileName(input.title)).replace(/[\\/:*?"<>|]/g, '-')
   return { blob: doc.output('blob'), fileName }
 }

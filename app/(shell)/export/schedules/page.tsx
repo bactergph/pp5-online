@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchClassScheduleGrid,
   fetchClassScheduleSubjects,
@@ -12,6 +12,7 @@ import {
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
+import { directorDisplayName } from '@/lib/school-director'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 
 type Year = { id: string; year_be: number; is_active: boolean }
@@ -43,7 +44,7 @@ const STYLES = `
     border: 1px solid #E5E7EB; border-radius: 14px; background: #fff; padding: 20px;
     overflow: auto;
   }
-  .sched-print-head {
+  .sched-print-head { flex-direction: column; text-align: center; justify-content: center;
     display: flex; align-items: center; gap: 16px; margin-bottom: 16px;
     padding-bottom: 12px; border-bottom: 2px solid #1E293B;
   }
@@ -75,6 +76,9 @@ export default function ScheduleExportPage() {
   const [years, setYears] = useState<Year[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [academicHeadName, setAcademicHeadName] = useState('')
+  const [directorName, setDirectorName] = useState('')
+  const [directorPosition, setDirectorPosition] = useState('ผู้อำนวยการสถานศึกษา')
   const [schoolName, setSchoolName] = useState('')
   const [schoolLogoUrl, setSchoolLogoUrl] = useState('')
   const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
@@ -96,42 +100,7 @@ export default function ScheduleExportPage() {
     printMode.current = isPrintMode
   }, [isPrintMode])
 
-  useEffect(() => { init() }, [])
-
-  useEffect(() => {
-    if (!yearId) return
-    fetchScheduleClassrooms(yearId).then(list => {
-      setClassrooms(list as Classroom[])
-      if (!classroomId && list[0]) setClassroomId(list[0].id)
-    })
-  }, [yearId])
-
-  useEffect(() => {
-    if (!yearId) return
-    if (exportType === 'class' && classroomId) loadClassGrid()
-    else if (exportType === 'teaching' && teacherId) loadTeachingGrid()
-  }, [yearId, exportType, classroomId, teacherId])
-
-  useEffect(() => {
-    if (!printMode.current || !previewReady) return
-    let cancelled = false
-    const markReady = async () => {
-      try {
-        if ('fonts' in document) await (document as { fonts: { ready: Promise<unknown> } }).fonts.ready
-      } catch {}
-      const images = Array.from(document.querySelectorAll<HTMLImageElement>('.sched-print-logo img'))
-      await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise<void>(resolve => {
-        img.addEventListener('load', () => resolve(), { once: true })
-        img.addEventListener('error', () => resolve(), { once: true })
-      })))
-      await new Promise(requestAnimationFrame)
-      if (!cancelled) (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = true
-    }
-    void markReady()
-    return () => { cancelled = true }
-  }, [previewReady])
-
-  async function init() {
+  const init = useCallback(async () => {
     try {
       const [initData, ctx] = await Promise.all([
         fetchScheduleInit(),
@@ -139,6 +108,9 @@ export default function ScheduleExportPage() {
       ])
       setYears(initData.years as Year[])
       setTeachers(initData.teachers as Teacher[])
+      setAcademicHeadName(ctx.school?.academic_head_name || '')
+      setDirectorName(directorDisplayName(ctx.school, ''))
+      setDirectorPosition(ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา')
       setSchoolName(ctx.school?.name || '')
       setSchoolLogoUrl(ctx.school?.logo_url || '')
       setPeriodTimes(ctx.periodTimes as PeriodTimeRow[])
@@ -163,9 +135,9 @@ export default function ScheduleExportPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  async function loadClassGrid() {
+  const loadClassGrid = useCallback(async () => {
     const [grid, subs] = await Promise.all([
       fetchClassScheduleGrid(classroomId, yearId),
       fetchClassScheduleSubjects(classroomId),
@@ -191,9 +163,9 @@ export default function ScheduleExportPage() {
     }
     setGridData(data)
     setPreviewReady(true)
-  }
+  }, [classroomId, yearId, classrooms, years])
 
-  async function loadTeachingGrid() {
+  const loadTeachingGrid = useCallback(async () => {
     const grid = await fetchTeachingScheduleGrid(teacherId, yearId)
     const teacher = teachers.find(t => t.id === teacherId)
     const year = years.find(y => y.id === yearId)
@@ -208,7 +180,42 @@ export default function ScheduleExportPage() {
     }
     setGridData(data)
     setPreviewReady(true)
-  }
+  }, [teacherId, yearId, teachers, years])
+
+  useEffect(() => { void Promise.resolve().then(init) }, [init])
+
+  useEffect(() => {
+    if (!yearId) return
+    fetchScheduleClassrooms(yearId).then(list => {
+      setClassrooms(list as Classroom[])
+      setClassroomId(current => list.some(c => c.id === current) ? current : list[0]?.id || '')
+    })
+  }, [yearId])
+
+  useEffect(() => {
+    if (!yearId) return
+    if (exportType === 'class' && classroomId) void Promise.resolve().then(loadClassGrid).catch(() => setError('โหลดตารางไม่สำเร็จ'))
+    else if (exportType === 'teaching' && teacherId) void Promise.resolve().then(loadTeachingGrid).catch(() => setError('โหลดตารางไม่สำเร็จ'))
+  }, [yearId, exportType, classroomId, teacherId, loadClassGrid, loadTeachingGrid])
+
+  useEffect(() => {
+    if (!printMode.current || !previewReady) return
+    let cancelled = false
+    const markReady = async () => {
+      try {
+        if ('fonts' in document) await (document as { fonts: { ready: Promise<unknown> } }).fonts.ready
+      } catch {}
+      const images = Array.from(document.querySelectorAll<HTMLImageElement>('.sched-print-logo img'))
+      await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise<void>(resolve => {
+        img.addEventListener('load', () => resolve(), { once: true })
+        img.addEventListener('error', () => resolve(), { once: true })
+      })))
+      await new Promise(requestAnimationFrame)
+      if (!cancelled) (window as unknown as { __REPORT_READY__?: boolean }).__REPORT_READY__ = true
+    }
+    void markReady()
+    return () => { cancelled = true }
+  }, [previewReady])
 
   function exportPdf() {
     setError('')
@@ -222,6 +229,7 @@ export default function ScheduleExportPage() {
       fileName,
       label: `ตารางเรียน · ${label}`,
       run: () => buildSchedulePdfBlob({
+        academicHeadName, directorName, directorPosition,
         schoolName,
         schoolLogoUrl,
         title,
@@ -365,6 +373,11 @@ export default function ScheduleExportPage() {
               ))}
             </tbody>
           </table>
+          <div style={{display:'flex',justifyContent:'space-around',textAlign:'center',marginTop:28,fontSize:14,breakInside:'avoid'}}>
+            {[{name:academicHeadName,role:'หัวหน้าวิชาการ'},{name:directorName,role:directorPosition}].map(s=><div key={s.role}>
+              <p>ลงชื่อ ........................................................</p><p>({s.name || '........................................................'})</p><p>{s.role}</p><p>วันที่ ........../........../..........</p>
+            </div>)}
+          </div>
         </div>
       </div>
     </>
