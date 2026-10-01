@@ -1,4 +1,4 @@
-export type Lesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string }
+export type Lesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; teacherOptional?: boolean }
 export type Placement = { classroomId: string; lessonId: string | null; day: number; period: number }
 
 /** Bounded backtracking across all rooms. Never returns a partial timetable as success. */
@@ -21,8 +21,8 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
     if (p.lessonId && !l) return { error: 'ไม่พบรายวิชาหรือกิจกรรมของคาบเดิม', assignments: [] }
     if (l) {
       if (l.classroomId !== p.classroomId) return { error: 'รายวิชาของคาบเดิมไม่ตรงกับห้องเรียน', assignments: [] }
-      if (!l.teacherId) return { error: `${l.label}: ยังไม่กำหนดครูผู้สอน`, assignments: [] }
-      const t = roomKey(l.teacherId, slot)
+      if (!l.teacherId && !l.teacherOptional) return { error: `${l.label}: ยังไม่กำหนดครูผู้สอน`, assignments: [] }
+      const t = roomKey(l.teacherId || `activity:${l.id}`, slot)
       if (busy.has(t)) return { error: 'คาบเดิมที่เก็บไว้มีครูสอนชนกัน กรุณาปลดล็อกหรือแก้คาบที่ชนก่อน', assignments: [] }
       busy.add(t)
       used.set(l.id, (used.get(l.id) || 0) + 1)
@@ -32,7 +32,7 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
   const remaining = lessons.map(l => Math.max(0, l.count - (used.get(l.id) || 0)))
   for (const [i, l] of lessons.entries()) {
     if (!Number.isInteger(l.count) || l.count < 0 || l.count > 30) return { error: `${l.label}: จำนวนคาบไม่ถูกต้อง`, assignments: [] }
-    if (remaining[i] && !l.teacherId) return { error: `${l.label}: ยังไม่กำหนดครูผู้สอน`, assignments: [] }
+    if (remaining[i] && !l.teacherId && !l.teacherOptional) return { error: `${l.label}: ยังไม่กำหนดครูผู้สอน`, assignments: [] }
     if ((used.get(l.id) || 0) > l.count) return { error: `${l.label}: คาบเดิมเกินโควต้า กรุณาจัดใหม่หรือปรับโควต้า`, assignments: [] }
   }
   for (const room of new Set(lessons.map(l => l.classroomId))) {
@@ -59,7 +59,7 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
       const l = lessons[i]
       const slots: number[] = []
       for (let s = minimumSlot[i]; s < 30; s++) {
-        if (!occupied.has(roomKey(l.classroomId, s)) && !busy.has(roomKey(l.teacherId!, s))) slots.push(s)
+        if (!occupied.has(roomKey(l.classroomId, s)) && !busy.has(roomKey(l.teacherId || `activity:${l.id}`, s))) slots.push(s)
       }
       if (slots.length < remaining[i]) return false
       const diff = slots.length - remaining[i]
@@ -76,13 +76,13 @@ export function solveSchoolSchedule(lessons: Lesson[], fixed: Placement[], maxNo
       const dk = `${l.id}:${day}`
       const oldMin = minimumSlot[best]
       minimumSlot[best] = slot + 1
-      occupied.add(roomKey(l.classroomId, slot)); busy.add(roomKey(l.teacherId!, slot))
+      occupied.add(roomKey(l.classroomId, slot)); busy.add(roomKey(l.teacherId || `activity:${l.id}`, slot))
       daily.set(dk, (daily.get(dk) || 0) + 1); remaining[best]--
       result.push({ classroomId: l.classroomId, lessonId: l.id, day, period: slot % 6 + 1 })
       if (search()) return true
       result.pop(); remaining[best]++; minimumSlot[best] = oldMin
       daily.set(dk, daily.get(dk)! - 1)
-      occupied.delete(roomKey(l.classroomId, slot)); busy.delete(roomKey(l.teacherId!, slot))
+      occupied.delete(roomKey(l.classroomId, slot)); busy.delete(roomKey(l.teacherId || `activity:${l.id}`, slot))
       if (nodes > maxNodes || timedOut) break
     }
     return false

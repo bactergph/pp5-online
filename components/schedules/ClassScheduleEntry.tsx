@@ -22,7 +22,6 @@ import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
-import ScheduleActivities from '@/components/schedules/ScheduleActivities'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; label: string }
@@ -46,6 +45,9 @@ type Props = {
 }
 
 const STYLES = `
+  .schedule-toolbar-btn:disabled{opacity:.5;cursor:not-allowed}
+  .schedule-toolbar label{font-size:13px;color:#475569}
+  @media(max-width:700px){.schedule-toolbar{align-items:stretch}.schedule-toolbar-btn{flex:1 1 45%;min-height:42px}}
   .schedule-page { display: grid; gap: 14px; }
   .schedule-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
@@ -73,6 +75,7 @@ const STYLES = `
   }
   .schedule-info a { color: #8B6B45; font-weight: 800; }
   .schedule-toolbar {
+    padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;
     display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
     padding: 12px 14px; border: 1px solid #E5E7EB; border-radius: 14px; background: #FAFBFC;
   }
@@ -80,7 +83,7 @@ const STYLES = `
     min-height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid #CBD5E1;
     background: #fff; color: #334155; font-size: 11.5px; font-weight: 800; cursor: pointer;
   }
-  .schedule-toolbar-btn.primary { border-color: #C49212; background: #C49212; color: #fff; }
+  .schedule-toolbar-btn.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
   .schedule-toolbar-btn.danger { border-color: #FECACA; background: #FEF2F2; color: #991B1B; }
   .schedule-grid-card {
     overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
@@ -235,7 +238,8 @@ export default function ClassScheduleEntry({ mode }: Props) {
     }))
     setSavingKey(key)
     try {
-      await saveClassScheduleCell(selectedClass, selectedYear, day, period, classSubjectId)
+      const saved = await saveClassScheduleCell(selectedClass, selectedYear, day, period, classSubjectId)
+      if (saved.error) throw new Error(saved.error)
       if (isManage) {
         const quotaData = await fetchScheduleQuotas(selectedClass, selectedYear)
         setQuotas(quotaData as QuotaData)
@@ -282,7 +286,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
     const key = `${day}-${period}`
     setSavingKey(key)
     try {
-      const result = await toggleScheduleCellLock(selectedClass, selectedYear, day, period)
+      const response = await toggleScheduleCellLock(selectedClass, selectedYear, day, period)
+      if (response.error || !response.data) throw new Error(response.error || 'บันทึกไม่สำเร็จ')
+      const result = response.data
       setCells(current => ({
         ...current,
         [key]: {
@@ -306,9 +312,11 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (!window.confirm(`${wholeSchool ? 'จัดตารางทั้งโรงเรียน' : 'จัดตารางห้องนี้'}: ${rebuild ? 'จัดคาบที่ไม่ล็อกใหม่ทั้งหมด' : 'เติมเฉพาะช่องว่าง'} โดยตรวจครูไม่ชนกัน?`)) return
     setBusyAction('auto')
     try {
-      const result = wholeSchool
+      const response = wholeSchool
         ? await runAutoScheduleSchool(selectedYear, rebuild)
         : await runAutoScheduleClass(selectedClass, selectedYear, 'spread', rebuild)
+      if (response.error || !response.data) throw new Error(response.error || 'จัดตารางไม่สำเร็จ')
+      const result = response.data
       await loadGrid()
       setAlert({ type: 'success', title: 'จัดตารางครบตามโควต้า', message: `${wholeSchool ? `${result.classrooms} ห้องเรียน` : 'ห้องนี้'} · เพิ่ม ${result.assigned} คาบ · ตรวจครูไม่ชนกันแล้ว${result.skipped.length ? `\nข้ามห้องที่ยังไม่กำหนดรายวิชา/กิจกรรม: ${result.skipped.join(', ')}` : ''}` })
     } catch (e) {
@@ -322,7 +330,8 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (!window.confirm('ล้างตารางห้องนี้? (คาบที่ล็อกจะไม่ถูกลบ)')) return
     setBusyAction('clear')
     try {
-      await clearClassSchedule(selectedClass, selectedYear)
+      const result = await clearClassSchedule(selectedClass, selectedYear)
+      if (result.error) throw new Error(result.error)
       await loadGrid()
       setAlert({ type: 'success', title: 'ล้างตารางสำเร็จ' })
     } catch (e) {
@@ -336,7 +345,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (!copyFromClass) return
     setBusyAction('copy')
     try {
-      const result = await copyClassSchedule(copyFromClass, selectedClass, selectedYear)
+      const response = await copyClassSchedule(copyFromClass, selectedClass, selectedYear)
+      if (response.error || !response.data) throw new Error(response.error || 'คัดลอกไม่สำเร็จ')
+      const result = response.data
       setCopyOpen(false)
       await loadGrid()
       setAlert({ type: 'success', title: 'คัดลอกสำเร็จ', message: `คัดลอก ${result.copied} คาบ` })
@@ -456,14 +467,13 @@ export default function ClassScheduleEntry({ mode }: Props) {
         )}
 
         {isManage && quotas && <ScheduleQuotaPanel {...quotas} />}
-        {isManage && canEdit && selectedClass && <ScheduleActivities key={`${selectedYear}:${selectedClass}`} yearId={selectedYear} classroomId={selectedClass} onSaved={loadGrid} disabled={blocked} onBusy={busy => setBusyAction(busy ? 'activity' : null)} />}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
         {isManage && (
           <div className="schedule-info">
             เลือกรายวิชาที่เปิดสอนในห้องนี้ (จาก{' '}
             <Link href="/settings/class-subjects">จัดครูเข้าสอน</Link>
-            ) หรือกิจกรรมที่กำหนดไว้ด้านบน ตารางสอนครูและภาระงานจะรวมทั้งรายวิชาและกิจกรรม
+            ) และ “กิจกรรมพัฒนาผู้เรียน” 1 คาบต่อสัปดาห์ โดยกิจกรรมนี้ไม่ต้องกำหนดครู
             {' · '}<Link href="/schedules/conflicts">ตรวจความขัดแย้ง</Link>
           </div>
         )}

@@ -33,3 +33,10 @@ assert.ok(solve(activity,[],0).error)
 assert.equal(solve([lesson('none','a','t',0)],[]).assignments.length,0)
 console.log('PASS: dense 6-room/180-period school, activities, locked slots, teacher capacity, classroom capacity, missing teacher, fixed conflicts, bounded search, zero quota')
 
+
+const activityLessons=[{...lesson('act1','r1',null,1),teacherOptional:true},{...lesson('act2','r2',null,1),teacherOptional:true}]
+const activityResult=solve(activityLessons,[])
+assert.equal(activityResult.error,undefined)
+assert.equal(activityResult.assignments.length,2)
+assert.equal(activityResult.assignments[0].day,activityResult.assignments[1].day)
+assert.equal(activityResult.assignments[0].period,activityResult.assignments[1].period)

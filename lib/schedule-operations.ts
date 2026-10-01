@@ -5,6 +5,7 @@ import { logActivity } from '@/lib/audit'
 import { SCHEDULE_EDIT_ROLES } from '@/lib/schedules'
 import { lessonColumns, lessonKey, loadSchedule, persistSchedule, requireScheduleClass, type ScheduleSlot } from '@/lib/schedule-store'
 import { solveSchoolSchedule } from '@/lib/schedule-solver'
+import { LEARNER_DEVELOPMENT_KEY } from '@/lib/schedule-activity'
 
 async function context(yearId: string) {
   const session = await getSession()
@@ -25,6 +26,7 @@ export async function saveCell(roomId: string, year: string, day: number, period
   const current = ctx.data.slots.find(s => s.classroom_id === roomId && s.day_of_week === day && s.period === period)
   if (current?.locked) throw new Error('กรุณาปลดล็อกคาบก่อนแก้ไข')
   if (lesson && !ctx.data.lessons.some(l => l.id === lesson && l.classroomId === roomId)) throw new Error('ไม่พบรายวิชาหรือกิจกรรมในห้องนี้')
+  if (lesson && ctx.data.lessons.find(l => l.id === lesson)?.teacherOptional && ctx.data.slots.some(s => s !== current && lessonKey(s) === lesson)) throw new Error('กิจกรรมพัฒนาผู้เรียนจัดได้ 1 คาบต่อสัปดาห์')
   const rows = ctx.data.slots.filter(s => s !== current)
   if (lesson || note?.trim()) rows.push({ classroom_id: roomId, academic_year_id: year, day_of_week: day, period, ...lessonColumns(lesson), note: lesson ? null : note?.trim() || null, locked: false })
   await commit(ctx, year, rows, `แก้ไขตารางเรียน วัน ${day} คาบ ${period}`)
@@ -69,7 +71,7 @@ export async function copyRoom(from: string, to: string, year: string) {
 export async function autoSchedule(year: string, roomId: string | null, clearFirst: boolean) {
   const ctx = await context(year)
   if (roomId) requireScheduleClass(ctx.data, roomId)
-  const scope = new Set(roomId ? [roomId] : ctx.data.classrooms.filter(c => ctx.data.lessons.some(l => l.classroomId === c.id)).map(c => c.id))
+  const scope = new Set(roomId ? [roomId] : ctx.data.classrooms.filter(c => ctx.data.lessons.some(l => l.classroomId === c.id && !l.teacherOptional)).map(c => c.id))
   if (!scope.size) throw new Error('ยังไม่มีห้องเรียนที่กำหนดรายวิชาหรือกิจกรรมในปีนี้')
   const skipped = roomId ? [] : ctx.data.classrooms.filter(c => !scope.has(c.id)).map(c => `${c.level}/${c.room}`)
   for (const room of ctx.data.classrooms.filter(c => scope.has(c.id))) {
@@ -105,10 +107,13 @@ export async function saveActivity(year: string, roomId: string, settingId: stri
   const ctx = await context(year)
   requireScheduleClass(ctx.data, roomId)
   const opts = await activityOptions(year, roomId)
-  if (!opts.settings.some(s => s.id === settingId) || !opts.teachers.some(t => t.id === teacherId) || !Number.isInteger(count) || count < 0 || count > 30) throw new Error('กิจกรรม ครู หรือจำนวนคาบไม่ถูกต้อง')
-  const existing = opts.offerings.find(a => a.evaluation_setting_id === settingId)
+  const combined = settingId === LEARNER_DEVELOPMENT_KEY
+  if ((!combined && !opts.settings.some(s => s.id === settingId)) || !opts.teachers.some(t => t.id === teacherId) || !Number.isInteger(count) || count < 0 || count > 30) throw new Error('กิจกรรม ครู หรือจำนวนคาบไม่ถูกต้อง')
+  const existing = opts.offerings.find(a => a.evaluation_setting_id === (combined ? null : settingId))
+  if (existing?.teacher_id === teacherId && existing.weekly_periods === count) return { ok: true }
   if (existing && ctx.data.slots.some(s => s.activity_id === existing.id)) throw new Error('กิจกรรมนี้มีในตารางแล้ว กรุณานำคาบกิจกรรมออกจากตารางก่อนเปลี่ยนครูหรือจำนวนคาบ')
-  const { error } = await createServerClient().from('class_schedule_activities').upsert({ classroom_id: roomId, academic_year_id: year, evaluation_setting_id: settingId, teacher_id: teacherId, weekly_periods: count }, { onConflict: 'classroom_id,academic_year_id,evaluation_setting_id' })
+  const { error } = await createServerClient().from('class_schedule_activities').upsert({ classroom_id: roomId, academic_year_id: year, evaluation_setting_id: combined ? null : settingId, teacher_id: teacherId, weekly_periods: count }, { onConflict: combined ? 'classroom_id,academic_year_id,activity_key' : 'classroom_id,academic_year_id,evaluation_setting_id' })
+  if (combined && error && ['42703','42P10','23502','PGRST204'].includes(error.code)) throw new Error('กรุณารันไฟล์ฐานข้อมูล 054_learner_development_subject.sql ก่อนเพิ่มวิชากิจกรรมพัฒนาผู้เรียน')
   if (error) throw new Error(error.message)
   return { ok: true }
 }

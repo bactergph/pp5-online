@@ -1,6 +1,7 @@
 'use server'
 
 import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
+import { scheduleResult } from '@/lib/schedule-action-result'
 import * as scheduleOps from '@/lib/schedule-operations'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
@@ -56,6 +57,7 @@ export async function fetchScheduleInit() {
 
   const { data: teachers } = await db.from('users')
     .select('id, prefix, full_name')
+    .eq('is_active', true)
     .eq('school_id', session.schoolId)
     .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin', 'principal'])
     .order('full_name')
@@ -97,7 +99,7 @@ export async function fetchClassScheduleSubjects(classroomId: string) {
   const { data: room, error } = await createServerClient().from('classrooms').select('academic_year_id').eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
   if (error || !room) throw new Error('ไม่พบห้องเรียน')
   const data = await loadSchedule(session.schoolId, room.academic_year_id)
-  return data.lessons.filter(l => l.classroomId === classroomId).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,label:l.activity ? 'กิจกรรม · '+l.name : (l.code+' '+l.name).trim(),activity:l.activity }))
+  return data.lessons.filter(l => l.classroomId === classroomId).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,label:(l.code+' '+l.name).trim(),activity:l.activity }))
 }
 
 export async function fetchClassScheduleGrid(classroomId: string, yearId: string) {
@@ -131,13 +133,13 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
     return { class_subject_id: l.id, code: l.code, name: l.name, target: l.count, used, remaining: l.count - used }
   })
   return { grid, warnings,
-    subjects: lessons.map(l => ({ id:l.id, teacher_id:l.teacherId, subject_code:l.code, subject_name:l.name, teacher_name:l.teacherName, label:l.activity ? `กิจกรรม · ${l.name}` : `${l.code} ${l.name}`.trim() })),
+    subjects: lessons.map(l => ({ id:l.id, teacher_id:l.teacherId, subject_code:l.code, subject_name:l.name, teacher_name:l.teacherName, label:`${l.code} ${l.name}`.trim() })),
     quotas: { items, filled: items.reduce((n,l) => n+l.used,0), totalTarget: items.reduce((n,l) => n+l.target,0) },
   }
 }
 
 export async function saveClassScheduleCell(classroomId: string, yearId: string, day: number, period: number, lesson: string | null, note: string | null = null) {
-  return scheduleOps.saveCell(classroomId, yearId, day, period, lesson, note)
+  return scheduleResult(() => scheduleOps.saveCell(classroomId, yearId, day, period, lesson, note))
 }
 
 export async function fetchTeachingScheduleGrid(teacherId: string, yearId: string) {
@@ -195,17 +197,17 @@ export async function toggleScheduleCellLock(
   period: number,
 ) {
   const mod = await import('./extended-actions')
-  return mod.toggleScheduleCellLock(classroomId, yearId, dayOfWeek, period)
+  return scheduleResult(() => mod.toggleScheduleCellLock(classroomId, yearId, dayOfWeek, period))
 }
 
 export async function copyClassSchedule(fromClassroomId: string, toClassroomId: string, yearId: string) {
   const mod = await import('./extended-actions')
-  return mod.copyClassSchedule(fromClassroomId, toClassroomId, yearId)
+  return scheduleResult(() => mod.copyClassSchedule(fromClassroomId, toClassroomId, yearId))
 }
 
 export async function clearClassSchedule(classroomId: string, yearId: string) {
   const mod = await import('./extended-actions')
-  return mod.clearClassSchedule(classroomId, yearId)
+  return scheduleResult(() => mod.clearClassSchedule(classroomId, yearId))
 }
 
 export async function runAutoScheduleClass(
@@ -215,7 +217,7 @@ export async function runAutoScheduleClass(
   clearFirst = false,
 ) {
   const mod = await import('./extended-actions')
-  return mod.runAutoScheduleClass(classroomId, yearId, mode, clearFirst)
+  return scheduleResult(() => mod.runAutoScheduleClass(classroomId, yearId, mode, clearFirst))
 }
 
 export async function fetchScheduleExportContext() {
@@ -264,7 +266,7 @@ export async function importSubstituteFromSchedule(
   leaveType: string,
 ) {
   const mod = await import('./extended-actions')
-  return mod.importSubstituteFromSchedule(substituteDayId, date, yearId, absentTeacherId, leaveType)
+  return scheduleResult(() => mod.importSubstituteFromSchedule(substituteDayId, date, yearId, absentTeacherId, leaveType))
 }
 
 export async function getTeacherConflictAt(
@@ -278,6 +280,15 @@ export async function getTeacherConflictAt(
   return mod.getTeacherConflictAt(yearId, teacherId, day, period, ignoreClassroomId)
 }
 
-export async function runAutoScheduleSchool(yearId: string, clearFirst = true) { return scheduleOps.autoSchedule(yearId, null, clearFirst) }
+export async function runAutoScheduleSchool(yearId: string, clearFirst = true) { return scheduleResult(() => scheduleOps.autoSchedule(yearId, null, clearFirst)) }
 export async function fetchScheduleActivities(yearId: string, classroomId: string) { return scheduleOps.activityOptions(yearId, classroomId) }
 export async function saveScheduleActivity(yearId: string, classroomId: string, settingId: string, teacherId: string, count: number) { return scheduleOps.saveActivity(yearId, classroomId, settingId, teacherId, count) }
+
+export async function saveSubstituteDay(dayId: string, expected: import('./extended-actions').SubstituteChange[], rows: import('./extended-actions').SubstituteChange[]) {
+  const mod = await import('./extended-actions')
+  return scheduleResult(() => mod.saveSubstituteDay(dayId, expected, rows))
+}
+export async function fetchSubstitutePdfContext() {
+  const mod = await import('./extended-actions')
+  return mod.fetchSubstitutePdfContext()
+}

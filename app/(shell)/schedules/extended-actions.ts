@@ -217,7 +217,7 @@ export async function fetchScheduleExportContext() {
 export async function fetchSubstituteDay(date: string, yearId: string) {
   const session = await requireScheduleSession()
   if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  await loadSchedule(session.schoolId, yearId)
+  const schedule = await loadSchedule(session.schoolId, yearId)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new Error('วันที่ไม่ถูกต้อง')
   const db = createServerClient()
 
@@ -268,6 +268,10 @@ export async function fetchSubstituteDay(date: string, yearId: string) {
   return {
     day: dayRow,
     day_label: SCHEDULE_DAYS.find(d => d.value === dayRow!.day_of_week)?.label || '',
+    busy: schedule.slots.filter(s => s.day_of_week === dayOfWeek).flatMap(s => {
+      const teacherId = schedule.lessons.find(l => l.id === lessonKey(s))?.teacherId
+      return teacherId ? [{ teacherId, period: s.period }] : []
+    }),
     entries: entries || [],
   }
 }
@@ -384,4 +388,20 @@ export async function getTeacherConflictAt(
     if (classroom) rooms.push(`${classroom.level}/${classroom.room}`)
   }
   return { busy: rooms.length > 0, rooms }
+}
+
+export type SubstituteChange = { id: string; substitute_teacher_id: string | null; leave_type: string; note: string | null }
+export async function saveSubstituteDay(substituteDayId: string, expected: SubstituteChange[], rows: SubstituteChange[]) {
+  const session = await requireScheduleSession()
+  if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
+  const { error } = await createServerClient().rpc('save_substitute_day', { p_school_id: session.schoolId, p_day_id: substituteDayId, p_expected: expected, p_rows: rows })
+  if (error) throw new Error(error.code === 'PGRST202' ? 'กรุณารันไฟล์ฐานข้อมูล 055_substitute_batch_save.sql ก่อนบันทึก' : error.message)
+  return { ok: true }
+}
+export async function fetchSubstitutePdfContext() {
+  const session = await requireScheduleSession()
+  if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
+  const context = await fetchScheduleExportContext()
+  const { data } = await createServerClient().from('users').select('prefix,full_name').eq('school_id',session.schoolId).eq('role','academic_head').eq('is_active',true).order('full_name').limit(1)
+  return { ...context, academicHead: data?.[0] ? [data[0].prefix,data[0].full_name].filter(Boolean).join(' ') : '' }
 }

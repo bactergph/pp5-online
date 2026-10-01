@@ -6,8 +6,11 @@ import {
   fetchSubstituteDay,
   importSubstituteFromSchedule,
   loadSubstituteSlotsForTeacher,
-  saveSubstituteTeacher,
+  saveSubstituteDay,
+  fetchSubstitutePdfContext,
 } from '@/app/schedules/actions'
+import { availableSubstitutes } from '@/lib/substitute-availability'
+import { buildSubstitutePdf } from '@/lib/jspdf-substitute'
 import AppAlertModal from '@/components/AppAlertModal'
 
 type Year = { id: string; year_be: number; is_active: boolean }
@@ -28,6 +31,10 @@ type SubstituteEntry = {
 const LEAVE_TYPES = ['ลาป่วย', 'ลากิจ', 'ลาคลอด', 'ไปราชการ', 'อื่นๆ']
 
 const STYLES = `
+  .sub-footer {position:sticky;bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #dbe3ef;border-radius:16px;box-shadow:0 6px 24px #0f172a12}
+  .sub-footer span {flex:1;font-size:13px;color:#475569}
+  .sub-btn:disabled {opacity:.5;cursor:not-allowed}
+  @media(max-width:700px){.schedule-filters{grid-template-columns:1fr!important}.sub-table{min-width:850px}.sub-footer{position:static}}
   .schedule-page { display: grid; gap: 14px; }
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
   .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
@@ -85,6 +92,10 @@ export default function SubstituteScheduleEntry() {
   const blocked = saving || loadingDay || loadedDay !== `${selectedYear}:${date}`
   const [dayLabel, setDayLabel] = useState('')
   const [substituteDayId, setSubstituteDayId] = useState('')
+  const [busy, setBusy] = useState<{teacherId:string;period:number}[]>([])
+  const [original, setOriginal] = useState<SubstituteEntry[]>([])
+  const [dirty, setDirty] = useState(false)
+  const [term, setTerm] = useState('1')
   const [entries, setEntries] = useState<SubstituteEntry[]>([])
   const [absentTeacherId, setAbsentTeacherId] = useState('')
   const [leaveType, setLeaveType] = useState('ลาป่วย')
@@ -114,6 +125,9 @@ export default function SubstituteScheduleEntry() {
       setSubstituteDayId(data.day?.id || '')
       setDayLabel(data.day_label || '')
       setEntries(data.entries as SubstituteEntry[])
+      setOriginal(data.entries as SubstituteEntry[])
+      setBusy(data.busy)
+      setDirty(false)
       setLoadedDay(`${selectedYear}:${date}`)
     } catch (e) {
       if (request !== dayRequest.current) return
@@ -130,12 +144,15 @@ export default function SubstituteScheduleEntry() {
 
   async function handleImport() {
     if (blocked || !absentTeacherId || !substituteDayId) return
+    if (dirty) { setAlert({type:'error',title:'กรุณาบันทึกการแก้ไขก่อนนำเข้าคาบเพิ่มเติม'}); return }
     if (entries.some(e => e.absent_teacher_id === absentTeacherId) && !window.confirm('นำเข้าคาบใหม่แทนคาบเดิมของครูที่เลือก? ต้องกำหนดครูสอนแทนของคาบเหล่านี้ใหม่')) return
     setSaving(true)
     try {
-      const result = await importSubstituteFromSchedule(
+      const response = await importSubstituteFromSchedule(
         substituteDayId, date, selectedYear, absentTeacherId, leaveType,
       )
+      if (response.error || !response.data) throw new Error(response.error || 'นำเข้าไม่สำเร็จ')
+      const result = response.data
       await loadDay()
       setAlert({
         type: 'success',
@@ -149,27 +166,31 @@ export default function SubstituteScheduleEntry() {
     }
   }
 
-  async function handleSaveEntry(entry: SubstituteEntry) {
+  const changes = (rows: SubstituteEntry[]) => rows.map(({id,substitute_teacher_id,leave_type,note}) => ({id,substitute_teacher_id,leave_type,note}))
+  async function handleSaveAll() {
     if (blocked || !substituteDayId) return
     setSaving(true)
     try {
-      await saveSubstituteTeacher(substituteDayId, entry.id, {
-        absent_teacher_id: entry.absent_teacher_id,
-        period: entry.period,
-        class_subject_id: entry.class_subject_id,
-        classroom_id: entry.classroom_id,
-        subject_label: entry.subject_label || '',
-        room_label: entry.room_label || '',
-        substitute_teacher_id: entry.substitute_teacher_id,
-        leave_type: entry.leave_type,
-        note: entry.note,
-      })
-      setAlert({ type: 'success', title: 'บันทึกสำเร็จ' })
-    } catch (e) {
-      setAlert({ type: 'error', title: 'บันทึกไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
-    } finally {
-      setSaving(false)
-    }
+      const invalid = entries.find(e => e.substitute_teacher_id && !availableSubstitutes(teachers,busy,entries,e).some(t => t.id === e.substitute_teacher_id))
+      if (invalid) throw new Error('ครูสอนแทนมีคาบชนกันหรือเป็นครูที่ลา กรุณาเลือกใหม่')
+      const result = await saveSubstituteDay(substituteDayId, changes(original), changes(entries))
+      if (result.error) throw new Error(result.error)
+      await loadDay()
+      setAlert({type:'success',title:'บันทึกตารางสอนแทนทั้งหมดแล้ว'})
+    } catch(e) { setAlert({type:'error',title:'บันทึกไม่สำเร็จ',message:e instanceof Error ? e.message : 'กรุณาลองใหม่'}) }
+    finally {setSaving(false)}
+  }
+  async function downloadPdf() {
+    if (blocked || dirty || !entries.length) return
+    setSaving(true)
+    try {
+      const context = await fetchSubstitutePdfContext()
+      const result = await buildSubstitutePdf({schoolName:context.school?.name || 'โรงเรียน',logoUrl:context.school?.logo_url,date,year:years.find(y=>y.id===selectedYear)?.year_be || 0,term,academicHead:context.academicHead,director:context.school?.director_name || '',times:context.periodTimes,teachers,entries})
+      const url = URL.createObjectURL(result.blob)
+      const a = document.createElement('a'); a.href=url; a.download=result.fileName; a.click()
+      setTimeout(()=>URL.revokeObjectURL(url),30000)
+    } catch(e) {setAlert({type:'error',title:'สร้าง PDF ไม่สำเร็จ',message:e instanceof Error ? e.message : 'กรุณาลองใหม่'})}
+    finally {setSaving(false)}
   }
 
   async function previewSlots() {
@@ -191,6 +212,7 @@ export default function SubstituteScheduleEntry() {
   }
 
   function updateEntry(id: string, field: keyof SubstituteEntry, value: string | null) {
+    setDirty(true)
     setEntries(current => current.map(e => e.id === id ? { ...e, [field]: value } : e))
   }
 
@@ -202,13 +224,13 @@ export default function SubstituteScheduleEntry() {
       <div className="schedule-page">
         <div className="schedule-head">
           <h1>ตารางสอนแทน</h1>
-          <p>บันทึกครูลาและครูสอนแทนรายคาบ</p>
+          <p>1. เลือกครูที่ลา → 2. เลือกครูที่ว่างแต่ละคาบ → 3. บันทึกและออกเอกสาร</p>
         </div>
 
         <div className="schedule-filters">
           <div className="schedule-field">
             <label>ปีการศึกษา</label>
-            <select disabled={saving} value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>
+            <select disabled={saving || dirty} value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>
               {years.map(y => (
                 <option key={y.id} value={y.id}>พ.ศ. {y.year_be}{y.is_active ? ' (ปัจจุบัน)' : ''}</option>
               ))}
@@ -216,7 +238,7 @@ export default function SubstituteScheduleEntry() {
           </div>
           <div className="schedule-field">
             <label>วันที่</label>
-            <input type="date" disabled={saving} value={date} onChange={e => setDate(e.target.value)} />
+            <input type="date" disabled={saving || dirty} value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div className="schedule-field">
             <label>ครูที่ลา</label>
@@ -238,7 +260,7 @@ export default function SubstituteScheduleEntry() {
           >
             {LEAVE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button type="button" className="sub-btn" onClick={previewSlots}>ดูคาบจากตารางเรียน</button>
+          <button type="button" className="sub-btn" disabled={blocked} onClick={previewSlots}>ดูคาบจากตารางเรียน</button>
           <button type="button" className="sub-btn primary" onClick={handleImport} disabled={blocked || !absentTeacherId}>
             {saving ? 'กำลังนำเข้า...' : 'นำเข้าจากตารางเรียน'}
           </button>
@@ -254,18 +276,19 @@ export default function SubstituteScheduleEntry() {
               <thead>
                 <tr>
                   <th style={{ width: 56 }}>คาบ</th>
-                  <th>ห้อง</th>
+                  <th>ครูที่ลา</th><th>ห้อง</th>
                   <th>วิชา</th>
                   <th>ประเภทการลา</th>
                   <th>ครูสอนแทน</th>
                   <th>หมายเหตุ</th>
-                  <th style={{ width: 80 }} />
+
                 </tr>
               </thead>
               <tbody>
                 {entries.map(entry => (
                   <tr key={entry.id}>
                     <td>คาบ {entry.period}</td>
+                    <td>{teachers.find(t=>t.id===entry.absent_teacher_id)?.full_name || '—'}</td>
                     <td>{entry.room_label || '—'}</td>
                     <td>{entry.subject_label || '—'}</td>
                     <td>
@@ -283,8 +306,9 @@ export default function SubstituteScheduleEntry() {
                         value={entry.substitute_teacher_id || ''}
                         onChange={e => updateEntry(entry.id, 'substitute_teacher_id', e.target.value || null)}
                       >
-                        <option value="">— เลือกครูสอนแทน —</option>
-                        {teachers.filter(t => t.id !== entry.absent_teacher_id).map(t => (
+                        <option value="">— เลือกครูที่ว่าง —</option>
+                        {entry.substitute_teacher_id && !availableSubstitutes(teachers,busy,entries,entry).some(t=>t.id===entry.substitute_teacher_id) && <option disabled value={entry.substitute_teacher_id}>ครูเดิมไม่ว่าง กรุณาเลือกใหม่</option>}
+                        {availableSubstitutes(teachers,busy,entries,entry).map(t => (
                           <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>
                         ))}
                       </select>
@@ -297,22 +321,19 @@ export default function SubstituteScheduleEntry() {
                         placeholder="หมายเหตุ"
                       />
                     </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="sub-btn"
-                        onClick={() => handleSaveEntry(entry)}
-                        disabled={blocked}
-                      >
-                        บันทึก
-                      </button>
-                    </td>
+
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+        {entries.length > 0 && <div className="sub-footer">
+          <span>{entries.length} คาบ · ยังไม่กำหนดครู {entries.filter(e=>!e.substitute_teacher_id).length} คาบ{dirty ? ' · มีการแก้ไขที่ยังไม่บันทึก' : ''}</span>
+          <label>ภาคเรียนในเอกสาร <select value={term} onChange={e=>setTerm(e.target.value)}><option>1</option><option>2</option></select></label>
+          <button className="sub-btn" disabled={blocked || dirty} onClick={downloadPdf}>ดาวน์โหลด PDF</button>
+          <button className="sub-btn primary" disabled={blocked} onClick={handleSaveAll}>{saving ? 'กำลังดำเนินการ...' : 'บันทึกทั้งหมด'}</button>
+        </div>}
       </div>
 
       {alert && (

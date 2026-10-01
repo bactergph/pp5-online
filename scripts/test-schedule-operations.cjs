@@ -21,6 +21,7 @@ const api=moduleFrom('lib/schedule-operations.ts',name=>({
   '@/lib/supabase':{createServerClient:()=>{throw Error('Unexpected DB call')}},
   '@/lib/audit':{logActivity:async()=>{}},'@/lib/schedules':{SCHEDULE_EDIT_ROLES:['admin']},
   '@/lib/schedule-store':store,'@/lib/schedule-solver':solver,
+  '@/lib/schedule-activity':{LEARNER_DEVELOPMENT_KEY:'learner-development'},
 }[name]))
 function reset(){writes=0;data={classrooms:[{id:'a',level:'ป.1',room:1},{id:'b',level:'ป.2',room:1},{id:'empty',level:'อ.2',room:1}],lessons:[{id:'l1',classroomId:'a',teacherId:'t',count:2,label:'a · math',subjectId:'math',name:'math',activity:false},{id:'l2',classroomId:'b',teacherId:'t',count:2,label:'b · math',subjectId:'math',name:'math',activity:false}],slots:[]}}
 const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'y',day_of_week:1,period,class_subject_id:id,activity_id:null,note:null,locked})

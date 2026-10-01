@@ -17,7 +17,7 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
     create table class_schedule_slots(id uuid primary key default gen_random_uuid(),classroom_id uuid,academic_year_id uuid,day_of_week smallint,period smallint,class_subject_id uuid,note text,locked boolean not null default false,updated_at timestamptz default now(),unique(classroom_id,academic_year_id,day_of_week,period));
     create table school_period_times(id uuid primary key default gen_random_uuid(),school_id uuid,period smallint constraint school_period_times_period_check check(period between 1 and 12),label text,start_time text,end_time text,is_break boolean,sort_order smallint,unique(school_id,period,is_break));
     create table schedule_substitute_days(id uuid primary key,school_id uuid,academic_year_id uuid,day_of_week int);
-    create table schedule_substitute_entries(id uuid primary key default gen_random_uuid(),substitute_day_id uuid,absent_teacher_id uuid,substitute_teacher_id uuid,period int,class_subject_id uuid,classroom_id uuid,subject_label text,room_label text,leave_type text);
+    create table schedule_substitute_entries(id uuid primary key default gen_random_uuid(),substitute_day_id uuid,absent_teacher_id uuid,substitute_teacher_id uuid,period int,class_subject_id uuid,classroom_id uuid,subject_label text,room_label text,leave_type text,note text);
     insert into schools values('${id(1)}'),('${id(2)}');
     insert into academic_years values('${id(10)}','${id(1)}');
     insert into classrooms values('${id(20)}','${id(1)}','${id(10)}'),('${id(21)}','${id(1)}','${id(10)}'),('${id(22)}','${id(2)}','${id(10)}');
@@ -29,6 +29,10 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   const migration=fs.readFileSync('supabase/migrations/053_school_schedule_solver.sql','utf8')
   await db.exec(migration)
   await db.exec(migration) // Safe to reapply.
+  const combinedMigration=fs.readFileSync('supabase/migrations/054_learner_development_subject.sql','utf8')
+  await db.exec(combinedMigration)
+  await db.exec(combinedMigration)
+  await db.exec(fs.readFileSync('supabase/migrations/055_substitute_batch_save.sql','utf8'))
   await db.exec(`insert into class_schedule_activities(id,classroom_id,academic_year_id,evaluation_setting_id,teacher_id,weekly_periods) values('${id(70)}','${id(21)}','${id(10)}','${id(60)}','${id(30)}',1)`)
   const save=(before,after,unlock=false)=>db.query('select save_school_schedule($1,$2,$3::jsonb,$4::jsonb,$5)',[id(1),id(10),JSON.stringify(before),JSON.stringify(after),unlock])
   const slot=(room,subject,period,extra={})=>({classroom_id:id(room),academic_year_id:id(10),day_of_week:1,period,class_subject_id:subject?id(subject):null,activity_id:null,note:null,locked:false,...extra})
@@ -64,6 +68,30 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   const moved={...b,period:1}
   await save([a,b,act],[a,moved,act])
   await assert.rejects(db.exec(`update class_subjects set teacher_id='${id(30)}' where id='${id(51)}'`),/ชน/)
+
+  const combinedId=(await db.query('select id from class_schedule_activities where classroom_id=$1 and evaluation_setting_id is null',[id(20)])).rows[0].id
+  const combined=slot(20,null,2,{activity_id:combinedId})
+  await save([a,moved,act],[a,moved,act,combined])
+  await assert.rejects(save([a,moved,act,combined],[a,moved,act,combined,{...combined,period:4}]),/1 คาบ/)
+  await assert.rejects(db.exec(`update class_schedule_activities set weekly_periods=2 where id='${combinedId}'`),/กิจกรรม/)
+  const expected=(await db.query('select id,substitute_teacher_id,leave_type,note from schedule_substitute_entries')).rows
+  const batch=rows=>db.query('select save_substitute_day($1,$2,$3::jsonb,$4::jsonb)',[id(1),id(80),JSON.stringify(expected),JSON.stringify(rows)])
+  await assert.rejects(batch(expected.map(e=>({...e,substitute_teacher_id:id(30)}))),/ครูสอนแทน/)
+  assert.deepEqual((await db.query('select id,substitute_teacher_id,leave_type,note from schedule_substitute_entries')).rows,expected)
+  await batch(expected.map(e=>({...e,substitute_teacher_id:null})))
+  await assert.rejects(batch(expected),/โหลดใหม่/)
+  await db.exec(`insert into users values('${id(32)}','${id(1)}'),('${id(33)}','${id(1)}');
+    insert into schedule_substitute_entries(substitute_day_id,absent_teacher_id,period,classroom_id,leave_type) values('${id(80)}','${id(30)}',1,'${id(21)}','ลา');`)
+  const read=async()=>(await db.query('select id,substitute_teacher_id,leave_type,note from schedule_substitute_entries order by id')).rows
+  const saveBatch=async(before,after)=>db.query('select save_substitute_day($1,$2,$3::jsonb,$4::jsonb)',[id(1),id(80),JSON.stringify(before),JSON.stringify(after)])
+  const empty=await read()
+  await saveBatch(empty,empty.map((e,i)=>({...e,substitute_teacher_id:id(32+i)})))
+  const assigned=await read()
+  await saveBatch(assigned,assigned.map((e,i)=>({...e,substitute_teacher_id:id(33-i)})))
+  const swapped=await read()
+  await assert.rejects(saveBatch(swapped,swapped.map(e=>({...e,substitute_teacher_id:id(32)}))),/ชน/)
+  await assert.rejects(saveBatch(swapped,swapped.map((e,i)=>({...e,substitute_teacher_id:i===0?id(31):e.substitute_teacher_id}))),/ชน/)
+  assert.deepEqual(await read(),swapped)
   await db.close()
-  console.log('PASS: migration/reapply, atomic save, stale edits, subject/activity teacher conflicts, school scope, locked cells, unlock, activity edits, lunch period, overlapping times rollback, RPC permissions')
+  console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

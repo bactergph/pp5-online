@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs"
+    "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs && node scripts/test-substitute-availability.cjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "^149.0.0",

@@ -1,6 +1,7 @@
 import 'server-only'
 import { createServerClient } from '@/lib/supabase'
 import { weeklyHoursFromYear } from '@/lib/schedule-helpers'
+import { LEARNER_DEVELOPMENT_KEY, LEARNER_DEVELOPMENT_NAME } from '@/lib/schedule-activity'
 
 export type ScheduleSlot = {
   classroom_id: string; academic_year_id: string; day_of_week: number; period: number
@@ -8,7 +9,7 @@ export type ScheduleSlot = {
 }
 export type ScheduleLesson = {
   id: string; classroomId: string; teacherId: string | null; count: number; label: string
-  subjectId: string; code: string; name: string; teacherName: string; activity: boolean
+  subjectId: string; code: string; name: string; teacherName: string; activity: boolean; teacherOptional?: boolean
 }
 export const slotFields = 'classroom_id,academic_year_id,day_of_week,period,class_subject_id,activity_id,note,locked'
 export const lessonKey = (row: ScheduleSlot) => row.activity_id ? `activity:${row.activity_id}` : row.class_subject_id
@@ -55,9 +56,10 @@ export async function loadSchedule(schoolId: string | null, yearId: string) {
   })
   for (const row of activities.data || []) {
     const a = Array.isArray(row.evaluation_settings) ? row.evaluation_settings[0] : row.evaluation_settings
+    const name = row.evaluation_setting_id ? a?.short_label || a?.label || '' : LEARNER_DEVELOPMENT_NAME
     lessons.push({ id: `activity:${row.id}`, classroomId: row.classroom_id, teacherId: row.teacher_id, count: row.weekly_periods,
-      label: `${labels.get(row.classroom_id)} · ${a?.label || ''}`, subjectId: row.evaluation_setting_id, code: '',
-      name: a?.short_label || a?.label || '', teacherName: names.get(row.teacher_id) || '', activity: true })
+      label: `${labels.get(row.classroom_id)} · ${name}`, subjectId: row.evaluation_setting_id || LEARNER_DEVELOPMENT_KEY, code: '',
+      teacherOptional: !row.evaluation_setting_id, name, teacherName: names.get(row.teacher_id) || '', activity: true })
   }
   return { classrooms, lessons, slots: (slots.data || []) as ScheduleSlot[] }
 }
