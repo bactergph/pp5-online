@@ -22,6 +22,8 @@ import {
 import type { PeriodTimeRow } from '@/lib/schedule-helpers'
 import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
+import ScheduleLessonPicker from './ScheduleLessonPicker'
+import { SCHEDULE_DAYS } from '@/lib/schedules'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
 
@@ -136,6 +138,7 @@ const STYLES = `
 export default function ClassScheduleEntry({ mode }: Props) {
   const pathname = usePathname()
   const isManage = mode === 'manage'
+  const [picker, setPicker] = useState<{day:number;period:number} | null>(null)
   const [loading, setLoading] = useState(true)
   const [years, setYears] = useState<Year[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
@@ -367,7 +370,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     return (
       <>
         <span className="cell-subj">{subj.label}</span>
-        <span className="cell-tchr">{subj.teacher_name || 'ยังไม่กำหนดครูผู้สอน'}</span>
+        <span className="cell-tchr">{cell.class_subject_id.startsWith('activity:') ? 'กิจกรรม · ไม่ต้องระบุครู' : subj.teacher_name || 'ยังไม่กำหนดครูผู้สอน'}</span>
       </>
     )
   }
@@ -376,6 +379,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (!classSubjectId) return null
     const subj = subjectMap[classSubjectId]
     if (!subj) return null
+    if (classSubjectId.startsWith('activity:')) return <div className="schedule-teacher-line">กิจกรรม · ไม่ต้องระบุครู</div>
     const missing = !subj.teacher_name
     return (
       <div className={`schedule-teacher-line${missing ? ' is-missing' : ''}`}>
@@ -455,7 +459,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
             >
               {busyAction === 'auto' ? 'กำลังจัด...' : 'จัดอัตโนมัติห้องนี้'}
             </button>
-            <button type="button" className="schedule-toolbar-btn primary" disabled={blocked} onClick={() => handleAutoSchedule(true)}>จัดอัตโนมัติทั้งโรงเรียน</button>
+            <details className="school-auto-actions"><summary>เครื่องมือทั้งโรงเรียน</summary><p>จัดทุกห้องในปีการศึกษาที่เลือก โดยเก็บคาบกิจกรรมไว้</p><button type="button" className="schedule-toolbar-btn primary" disabled={blocked} onClick={() => handleAutoSchedule(true)}>จัดอัตโนมัติทั้งโรงเรียน</button></details>
             <label><input type="checkbox" checked={rebuild} disabled={blocked} onChange={e => setRebuild(e.target.checked)} /> จัดคาบที่ไม่ล็อกใหม่</label>
             <button
               type="button"
@@ -468,7 +472,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </div>
         )}
 
-        {isManage && quotas && <ScheduleQuotaPanel {...quotas} />}
+        {isManage && quotas && <details className="schedule-quota-details"><summary>คาบรายวิชา {quotas.filled} / {quotas.totalTarget} คาบ <span>ดูรายละเอียดโควต้า</span></summary><ScheduleQuotaPanel {...quotas} /></details>}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
         {isManage && (
@@ -500,16 +504,12 @@ export default function ClassScheduleEntry({ mode }: Props) {
                   return (
                     <div className={`schedule-cell-edit${locked ? ' is-locked' : ''}${conflictRooms?.length ? ' is-conflict' : ''}`}>
                       <div className="schedule-cell-top">
-                        <select
-                          value={cell?.class_subject_id || ''}
-                          disabled={blocked || locked}
-                          onChange={e => handleCellChange(day, period, e.target.value)}
-                        >
-                          <option value="">— ว่าง —</option>
-                          {subjects.map(s => (
-                            <option key={s.id} value={s.id}>{s.label}</option>
-                          ))}
-                        </select>
+                        <button type="button" className={`schedule-cell-choice${cell?.class_subject_id?.startsWith('activity:')?' activity':''}${locked?' locked':''}`}
+                          disabled={blocked || locked} onClick={()=>setPicker({day,period})}
+                          aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`}>
+                          {cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label || 'รายวิชา' : cell?.note || '+ เลือกวิชา'}
+                          <small>{locked?'ล็อกคาบแล้ว':cell?.class_subject_id?'คลิกเพื่อเปลี่ยน':'คาบว่าง'}</small>
+                        </button>
                         <button
                           type="button"
                           className={`schedule-lock-btn${locked ? ' is-locked' : ''}`}
@@ -538,12 +538,13 @@ export default function ClassScheduleEntry({ mode }: Props) {
 
         {isManage && canEdit && selectedClass && subjects.length > 0 && (
           <div style={{ color: '#64748B', fontSize: 12, fontWeight: 700 }}>
-            เปลี่ยนรายวิชาในแต่ละช่องแล้วบันทึกอัตโนมัติ · กด 🔒 เพื่อล็อกคาบ
+            คลิกคาบเพื่อเลือกวิชาและบันทึกทันที · กด 🔒 เพื่อล็อกคาบ
             {savingKey && <LoadingButton loading loadingText="กำลังบันทึก..." />}
           </div>
         )}
       </div>
 
+      {picker && <ScheduleLessonPicker title={`วัน${SCHEDULE_DAYS.find(d=>d.value===picker.day)?.label} · คาบ ${picker.period}`} options={subjects} selected={cells[`${picker.day}-${picker.period}`]?.class_subject_id || null} onClose={()=>setPicker(null)} onChoose={id=>{const {day,period}=picker;setPicker(null);void handleCellChange(day,period,id)}} />}
       {copyOpen && (
         <div className="copy-modal-backdrop" onClick={() => setCopyOpen(false)}>
           <div className="copy-modal" onClick={e => e.stopPropagation()}>

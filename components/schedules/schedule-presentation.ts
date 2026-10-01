@@ -1,5 +1,31 @@
 /** Shared, scoped presentation for the two scheduling workspaces. */
 export const SCHEDULE_PRESENTATION = `
+  .schedule-workspace .schedule-cell-choice {width:100%;min-height:68px;display:flex;flex-direction:column;gap:8px;text-align:left;padding:12px;border:1px solid #d5e2ee;border-left:3px solid #477896;border-radius:8px;background:#f5f9fd;color:#203e56;font:inherit;font-size:13px;cursor:pointer;}
+  .schedule-workspace .schedule-cell-choice small {font-size:10px;color:#698091;font-weight:400;}
+  .schedule-workspace .schedule-cell-choice.activity {background:#edf8f2;border-color:#b7dac7;border-left-color:#398563;color:#246345;}
+  .schedule-workspace .schedule-cell-choice.locked {background:#f0f1f3;border-color:#d0d4db;border-left-color:#8b96a5;}
+  .schedule-workspace .schedule-cell-edit.is-conflict .schedule-cell-choice {border-color:#c55b5b;background:#fff4f4;}
+  .schedule-workspace .schedule-quota-details,.schedule-workspace .school-auto-actions {border:1px solid #dce5ec;border-radius:10px;background:#fff;padding:14px 18px;}
+  .schedule-workspace summary {cursor:pointer;color:#294960;font-size:13px;font-weight:600;}
+  .schedule-workspace .schedule-quota-details summary span {font-weight:400;color:#64788a;margin-left:12px;}
+  .schedule-workspace .schedule-quota-details[open] summary {margin-bottom:16px;}
+  .schedule-workspace .school-auto-actions p {font-size:12px;color:#5f7382;}
+  .schedule-workspace .sub-group-head td {background:#eaf1f6!important;padding:15px 18px;font-weight:600;color:#26465e;}
+  .schedule-workspace .sub-status {display:inline-block;border-radius:20px;padding:3px 10px;background:#e8f5ed;color:#246344;font-size:12px;white-space:nowrap;}
+  .schedule-workspace .sub-status.pending {background:#fff3db;color:#805e17;}
+  .schedule-workspace .sub-group-summary {display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .schedule-workspace .sub-period-time {display:block;font-size:11px;color:#6b7d8c;white-space:nowrap;}
+  .lesson-picker {width:min(560px,calc(100vw - 32px));max-height:85dvh;padding:22px;border:1px solid #d3dfe8;border-radius:16px;box-shadow:0 24px 80px #102a4340;color:#234158;font-family:inherit;}
+  .lesson-picker::backdrop {background:#122b4266;}
+  .lesson-picker header {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+  .lesson-picker h2 {font-size:19px;margin:0;}.lesson-picker p {font-size:13px;color:#657b8b;}
+  .lesson-picker header button {border:0;border-radius:8px;background:#edf2f6;width:36px;height:36px;cursor:pointer;}
+  .lesson-picker input {width:100%;padding:12px;border:1px solid #bfd0df;border-radius:8px;font:inherit;margin:8px 0 16px;}
+  .lesson-picker :is(button,input):focus-visible {outline:3px solid #86b9d2;outline-offset:2px;}
+  .lesson-picker h3 {font-size:12px;color:#5b7385;margin:18px 0 8px;}
+  .lesson-picker .lesson-option {display:block;width:100%;text-align:left;border:1px solid #dbe5ed;border-radius:8px;background:#fff;padding:12px;margin:6px 0;font:inherit;color:#234158;cursor:pointer;}
+  .lesson-picker .lesson-option span {display:block;font-size:12px;color:#617889;margin-top:5px;}
+  .lesson-picker .lesson-option:hover,.lesson-picker .lesson-option.selected {background:#edf5fb;border-color:#729db8;}
   .schedule-workspace { --ink:#18344c; --accent:#245c76; --edge:#dce5ec; gap:20px; color:#233849; min-width:0; }
   .schedule-workspace .schedule-head {padding:22px 24px;background:#fff;border:1px solid var(--edge);border-left:4px solid var(--accent);border-radius:12px;}
   .schedule-workspace .schedule-head h1 {font-size:24px;font-weight:700;color:var(--ink);letter-spacing:-.3px;}

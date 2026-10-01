@@ -2,15 +2,17 @@
 
 import { SCHEDULE_PRESENTATION } from './schedule-presentation'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { Fragment, useEffect, useState, useRef, useCallback } from 'react'
 import {
   fetchScheduleInit,
+  fetchPeriodTimes,
   fetchSubstituteDay,
   importSubstituteFromSchedule,
   loadSubstituteSlotsForTeacher,
   saveSubstituteDay,
   fetchSubstitutePdfContext,
 } from '@/app/schedules/actions'
+import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { availableSubstitutes } from '@/lib/substitute-availability'
 import { directorDisplayName } from '@/lib/school-director'
 import { buildSubstitutePdf } from '@/lib/jspdf-substitute'
@@ -83,6 +85,7 @@ function todayIso() {
 }
 
 export default function SubstituteScheduleEntry() {
+  const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [loadingDay, setLoadingDay] = useState(false)
@@ -106,7 +109,8 @@ export default function SubstituteScheduleEntry() {
 
   async function init() {
     try {
-      const data = await fetchScheduleInit()
+      const [data, periods] = await Promise.all([fetchScheduleInit(), fetchPeriodTimes()])
+      setPeriodTimes(periods.times)
       setYears(data.years as Year[])
       setTeachers(data.teachers as Teacher[])
       const active = (data.years as Year[]).find(y => y.is_active) || (data.years as Year[])[0]
@@ -219,6 +223,9 @@ export default function SubstituteScheduleEntry() {
     setEntries(current => current.map(e => e.id === id ? { ...e, [field]: value } : e))
   }
 
+  const entryReady = (entry: SubstituteEntry) => !!entry.substitute_teacher_id && availableSubstitutes(teachers,busy,entries,entry).some(t=>t.id===entry.substitute_teacher_id)
+  const pendingCount = entries.filter(e=>!entryReady(e)).length
+
   if (loading) return <div className="schedule-empty">กำลังโหลด...</div>
 
   return (
@@ -279,7 +286,7 @@ export default function SubstituteScheduleEntry() {
               <thead>
                 <tr>
                   <th style={{ width: 56 }}>คาบ</th>
-                  <th>ครูที่ลา</th><th>ห้อง</th>
+                  <th>สถานะ</th><th>ห้อง</th>
                   <th>วิชา</th>
                   <th>ประเภทการลา</th>
                   <th>ครูสอนแทน</th>
@@ -288,10 +295,12 @@ export default function SubstituteScheduleEntry() {
                 </tr>
               </thead>
               <tbody>
-                {entries.map(entry => (
+                {Array.from(new Set(entries.map(e=>e.absent_teacher_id))).map(absentId => <Fragment key={absentId}>
+                  <tr className="sub-group-head"><td colSpan={7}><div className="sub-group-summary"><span>ครูที่ลา: {teachers.find(t=>t.id===absentId)?.full_name || '—'} · {entries.filter(e=>e.absent_teacher_id===absentId).length} คาบ</span><span className={`sub-status${entries.some(e=>e.absent_teacher_id===absentId && !entryReady(e))?' pending':''}`}>{entries.some(e=>e.absent_teacher_id===absentId && !entryReady(e))?'ยังขาดครูสอนแทน':'กำหนดครบแล้ว'}</span></div></td></tr>
+                  {entries.filter(e=>e.absent_teacher_id===absentId).sort((a,b)=>a.period-b.period).map(entry => (
                   <tr key={entry.id}>
-                    <td>คาบ {entry.period}</td>
-                    <td>{teachers.find(t=>t.id===entry.absent_teacher_id)?.full_name || '—'}</td>
+                    <td>คาบ {entry.period}<span className="sub-period-time">{periodTimeLabel(periodTimes,entry.period)}</span></td>
+                    <td><span className={`sub-status${entryReady(entry)?'':' pending'}`}>{entryReady(entry)?'พร้อม':'รอเลือกครู'}</span></td>
                     <td>{entry.room_label || '—'}</td>
                     <td>{entry.subject_label || '—'}</td>
                     <td>
@@ -312,7 +321,7 @@ export default function SubstituteScheduleEntry() {
                         <option value="">— เลือกครูที่ว่าง —</option>
                         {entry.substitute_teacher_id && !availableSubstitutes(teachers,busy,entries,entry).some(t=>t.id===entry.substitute_teacher_id) && <option disabled value={entry.substitute_teacher_id}>ครูเดิมไม่ว่าง กรุณาเลือกใหม่</option>}
                         {availableSubstitutes(teachers,busy,entries,entry).map(t => (
-                          <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>
+                          <option key={t.id} value={t.id}>{t.prefix} {t.full_name} · สอนแทน {entries.filter(e=>e.substitute_teacher_id===t.id).length} คาบวันนี้</option>
                         ))}
                       </select>
                     </td>
@@ -327,14 +336,15 @@ export default function SubstituteScheduleEntry() {
 
                   </tr>
                 ))}
+                </Fragment>)}
               </tbody>
             </table>
           </div>
         )}
         {entries.length > 0 && <div className="sub-footer">
-          <span>{entries.length} คาบ · ยังไม่กำหนดครู {entries.filter(e=>!e.substitute_teacher_id).length} คาบ{dirty ? ' · มีการแก้ไขที่ยังไม่บันทึก' : ''}</span>
+          <span>{entries.length} คาบ · พร้อม {entries.length-pendingCount} คาบ · ยังขาด/ต้องแก้ {pendingCount} คาบ{dirty ? ' · มีการแก้ไขที่ยังไม่บันทึก' : ''}</span>
           <label>ภาคเรียนในเอกสาร <select value={term} onChange={e=>setTerm(e.target.value)}><option>1</option><option>2</option></select></label>
-          <button className="sub-btn" disabled={blocked || dirty} onClick={downloadPdf}>ดาวน์โหลด PDF</button>
+          <button className="sub-btn" disabled={blocked || dirty} title={dirty ? 'บันทึกการแก้ไขก่อนออก PDF' : 'ดาวน์โหลดเอกสารจากรายการที่บันทึกแล้ว'} onClick={downloadPdf}>ดาวน์โหลด PDF</button>
           <button className="sub-btn primary" disabled={blocked} onClick={handleSaveAll}>{saving ? 'กำลังดำเนินการ...' : 'บันทึกทั้งหมด'}</button>
         </div>}
       </div>
