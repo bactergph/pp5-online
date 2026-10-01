@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import {
   fetchAcademicYears,
+  setScoreEntryOpen,
   fetchGlobalTermCalendarsForSchoolYears,
   saveAcademicYear,
   setActiveAcademicYear,
@@ -21,6 +22,8 @@ type AcademicYear = {
   term2_end_date: string
   is_active: boolean
   school_id: string
+  term1_scores_open?: boolean
+  term2_scores_open?: boolean
 }
 type GlobalTermCalendar = {
   id: string
@@ -39,6 +42,7 @@ export default function AcademicYearPage() {
   const [editItem, setEditItem] = useState<Partial<AcademicYear> | null>(null)
   const [saving, setSaving] = useState(false)
   const [syncingId, setSyncingId] = useState<string | null>(null)
+  const [togglingPeriod, setTogglingPeriod] = useState<string | null>(null)
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const [schoolId, setSchoolId] = useState<string | null>(null)
 
@@ -87,6 +91,37 @@ export default function AcademicYearPage() {
     if (!schoolId) return
     await setActiveAcademicYear(id, schoolId)
     loadData()
+  }
+
+  async function handleToggleScoreEntry(year: AcademicYear, term: 1 | 2) {
+    const field = term === 1 ? 'term1_scores_open' : 'term2_scores_open'
+    const open = !year[field]
+    setTogglingPeriod(`${year.id}-${term}`)
+    try {
+      const { error } = await setScoreEntryOpen(year.id, term, open)
+      if (error) { notify('error', error); return }
+      setYears(previous => previous.map(item => item.id === year.id ? { ...item, [field]: open } : item))
+      notify('success', `${open ? 'เปิด' : 'ปิด'}การบันทึกคะแนน ปี ${year.year_be} ภาคเรียนที่ ${term} แล้ว`)
+    } catch {
+      notify('error', 'เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setTogglingPeriod(null)
+    }
+  }
+
+  function scoreEntryControl(year: AcademicYear, term: 1 | 2) {
+    const open = term === 1 ? year.term1_scores_open : year.term2_scores_open
+    return (
+      <div style={{ marginTop: 8 }}>
+        <div>{open === undefined ? 'ยังไม่พร้อมตั้งค่าการบันทึกคะแนน' : open ? 'เปิดบันทึกคะแนน' : 'ปิดบันทึกคะแนน'}</div>
+        <button type="button" className="btn btn-secondary" style={{ marginTop: 4, fontSize: 12 }}
+          disabled={togglingPeriod !== null || open === undefined}
+          aria-label={`${open ? 'ปิด' : 'เปิด'}บันทึกคะแนน ปี ${year.year_be} ภาคเรียนที่ ${term}`}
+          onClick={() => handleToggleScoreEntry(year, term)}>
+          {togglingPeriod === `${year.id}-${term}` ? 'กำลังบันทึก...' : open ? 'ปิดการบันทึก' : 'เปิดการบันทึก'}
+        </button>
+      </div>
+    )
   }
 
   async function handleSync(year: AcademicYear) {
@@ -264,9 +299,11 @@ export default function AcademicYearPage() {
                 </td>
                 <td className="text-sm">
                   {year.term1_start_date ? `${formatThaiDate(year.term1_start_date)} – ${formatThaiDate(year.term1_end_date)}` : '-'}
+                  {scoreEntryControl(year, 1)}
                 </td>
                 <td className="text-sm">
                   {year.term2_start_date ? `${formatThaiDate(year.term2_start_date)} – ${formatThaiDate(year.term2_end_date)}` : '-'}
+                  {scoreEntryControl(year, 2)}
                 </td>
                 <td>
                   {year.is_active ? (

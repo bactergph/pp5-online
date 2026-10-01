@@ -1,14 +1,13 @@
 import 'server-only'
+import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
+import * as scheduleOps from '@/lib/schedule-operations'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
 import {
-  buildAutoAssignments,
   DEFAULT_PERIOD_TIMES,
-  emptyScheduleCells,
   type PeriodTimeRow,
-  weeklyHoursFromYear,
   workloadStatus,
   workloadLabel,
 } from '@/lib/schedule-helpers'
@@ -39,27 +38,20 @@ function canEdit(session: ScheduleSession) {
   return SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])
 }
 
-async function loadAllSlotsForYear(schoolId: string, yearId: string) {
-  const db = createServerClient()
-  const { data } = await db.from('class_schedule_slots')
-    .select(`
-      id, classroom_id, day_of_week, period, class_subject_id, locked,
-      classrooms!inner(id, level, room, school_id, academic_year_id),
-      class_subjects(id, teacher_id, subject_id, subjects(code, name, short_name, hours_per_year))
-    `)
-    .eq('classrooms.school_id', schoolId)
-    .eq('classrooms.academic_year_id', yearId)
-  return data || []
+async function loadAllSlotsForYear(schoolId:string,yearId:string) {
+ const data=await loadSchedule(schoolId,yearId)
+ return data.slots.map(row=>{const l=data.lessons.find(l=>l.id===lessonKey(row));const room=data.classrooms.find(c=>c.id===row.classroom_id)!;return {...row,class_subject_id:lessonKey(row),classrooms:room,class_subjects:l?{id:l.id,teacher_id:l.teacherId,subject_id:l.subjectId,subjects:{code:l.code,name:l.name,short_name:l.name,hours_per_year:l.count*40}}:null}})
 }
 
 export async function fetchPeriodTimes() {
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
   const db = createServerClient()
-  const { data } = await db.from('school_period_times')
+  const { data, error } = await db.from('school_period_times')
     .select('period, label, start_time, end_time, is_break, sort_order')
     .eq('school_id', session.schoolId)
     .order('sort_order')
+  if (error) throw new Error(error.message)
   if (!data?.length) return { times: DEFAULT_PERIOD_TIMES, isDefault: true }
   const teachingCount = (data as PeriodTimeRow[]).filter(t => !t.is_break).length
   // ค่าเก่า (เช่น 8 คาบ) ไม่ตรงโครงประถม 6 คาบ → ใช้ค่าเริ่มต้นใหม่
@@ -73,17 +65,7 @@ export async function savePeriodTimes(times: PeriodTimeRow[]) {
   const session = await requireScheduleSession()
   if (!canEdit(session) || !session.schoolId) throw new Error('ไม่มีสิทธิ์')
   const db = createServerClient()
-  await db.from('school_period_times').delete().eq('school_id', session.schoolId)
-  const rows = times.map((t, i) => ({
-    school_id: session.schoolId,
-    period: t.period,
-    label: t.label,
-    start_time: t.start_time,
-    end_time: t.end_time,
-    is_break: t.is_break,
-    sort_order: t.sort_order ?? i + 1,
-  }))
-  const { error } = await db.from('school_period_times').insert(rows)
+  const { error } = await db.rpc('save_school_period_times', { p_school_id: session.schoolId, p_rows: times })
   if (error) throw new Error(error.message)
   await logActivity({
     actor: session,
@@ -96,45 +78,13 @@ export async function savePeriodTimes(times: PeriodTimeRow[]) {
   return { ok: true }
 }
 
-export async function fetchScheduleQuotas(classroomId: string, yearId: string) {
-  await requireScheduleSession()
-  const db = createServerClient()
-  const { data: classSubjects } = await db.from('class_subjects')
-    .select('id, subject_id, subjects(code, name, short_name, hours_per_year)')
-    .eq('classroom_id', classroomId)
-    .eq('academic_year_id', yearId)
-    .order('order_number')
-
-  const { data: slots } = await db.from('class_schedule_slots')
-    .select('class_subject_id')
-    .eq('classroom_id', classroomId)
-    .eq('academic_year_id', yearId)
-    .not('class_subject_id', 'is', null)
-
-  const usedMap: Record<string, number> = {}
-  for (const s of slots || []) {
-    if (s.class_subject_id) {
-      usedMap[s.class_subject_id] = (usedMap[s.class_subject_id] || 0) + 1
-    }
-  }
-
-  const items = (classSubjects || []).map(row => {
-    const subject = Array.isArray(row.subjects) ? row.subjects[0] : row.subjects
-    const target = weeklyHoursFromYear(subject?.hours_per_year)
-    const used = usedMap[row.id] || 0
-    return {
-      class_subject_id: row.id,
-      code: subject?.code ?? '',
-      name: subject?.short_name || subject?.name || '',
-      target,
-      used,
-      remaining: target - used,
-    }
-  })
-
-  const filled = (slots || []).length
-  const totalTarget = items.reduce((a, i) => a + i.target, 0)
-  return { items, filled, totalTarget }
+export async function fetchScheduleQuotas(classroomId:string,yearId:string) {
+  const session=await requireScheduleSession()
+  const data=await loadSchedule(session.schoolId,yearId)
+  requireScheduleClass(data,classroomId)
+  const slots=data.slots.filter(s=>s.classroom_id===classroomId)
+  const items=data.lessons.filter(l=>l.classroomId===classroomId).map(l=>{ const used=slots.filter(s=>lessonKey(s)===l.id).length; return {class_subject_id:l.id,code:l.code,name:l.name,target:l.count,used,remaining:l.count-used} })
+  return {items,filled:slots.filter(s=>lessonKey(s)).length,totalTarget:items.reduce((n,i)=>n+i.target,0)}
 }
 
 export async function fetchScheduleConflicts(yearId: string) {
@@ -244,181 +194,13 @@ export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: 
   }))
 }
 
-export async function toggleScheduleCellLock(
-  classroomId: string,
-  yearId: string,
-  dayOfWeek: number,
-  period: number,
-) {
-  const session = await requireScheduleSession()
-  if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
+export async function toggleScheduleCellLock(classroomId:string,yearId:string,day:number,period:number) { return scheduleOps.toggleLock(classroomId,yearId,day,period) }
 
-  const db = createServerClient()
-  const { data: existing } = await db.from('class_schedule_slots')
-    .select('id, locked')
-    .eq('classroom_id', classroomId)
-    .eq('academic_year_id', yearId)
-    .eq('day_of_week', dayOfWeek)
-    .eq('period', period)
-    .maybeSingle()
+export async function copyClassSchedule(from:string,to:string,yearId:string) { return scheduleOps.copyRoom(from,to,yearId) }
 
-  if (!existing) {
-    await db.from('class_schedule_slots').insert({
-      classroom_id: classroomId,
-      academic_year_id: yearId,
-      day_of_week: dayOfWeek,
-      period,
-      locked: true,
-    })
-    return { locked: true }
-  }
+export async function clearClassSchedule(classroomId:string,yearId:string) { return scheduleOps.clearRoom(classroomId,yearId) }
 
-  const locked = !existing.locked
-  await db.from('class_schedule_slots').update({ locked, updated_at: new Date().toISOString() }).eq('id', existing.id)
-  return { locked }
-}
-
-export async function copyClassSchedule(fromClassroomId: string, toClassroomId: string, yearId: string) {
-  const session = await requireScheduleSession()
-  if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-
-  const db = createServerClient()
-
-  const { data: targetSubjects } = await db.from('class_subjects')
-    .select('id, subject_id')
-    .eq('classroom_id', toClassroomId)
-    .eq('academic_year_id', yearId)
-
-  await db.from('class_schedule_slots')
-    .delete()
-    .eq('classroom_id', toClassroomId)
-    .eq('academic_year_id', yearId)
-
-  const { data: sourceSlots } = await db.from('class_schedule_slots')
-    .select('day_of_week, period, class_subject_id, note, locked, class_subjects(subject_id)')
-    .eq('classroom_id', fromClassroomId)
-    .eq('academic_year_id', yearId)
-
-  const subjectIdToCs = Object.fromEntries((targetSubjects || []).map(cs => [cs.subject_id, cs.id]))
-
-  const inserts = []
-  for (const row of sourceSlots || []) {
-    const cs = Array.isArray(row.class_subjects) ? row.class_subjects[0] : row.class_subjects
-    let classSubjectId: string | null = null
-    if (cs?.subject_id && subjectIdToCs[cs.subject_id]) {
-      classSubjectId = subjectIdToCs[cs.subject_id]
-    }
-    inserts.push({
-      classroom_id: toClassroomId,
-      academic_year_id: yearId,
-      day_of_week: row.day_of_week,
-      period: row.period,
-      class_subject_id: classSubjectId,
-      note: classSubjectId ? null : row.note,
-      locked: row.locked,
-    })
-  }
-
-  if (inserts.length) {
-    await db.from('class_schedule_slots').insert(inserts)
-  }
-
-  await logActivity({
-    actor: session,
-    schoolId: session.schoolId,
-    action: 'copy',
-    module: 'schedules',
-    targetType: 'class_schedule',
-    targetId: toClassroomId,
-    description: `คัดลอกตารางเรียนจากห้องอื่น`,
-  })
-
-  return { ok: true, copied: inserts.length }
-}
-
-export async function clearClassSchedule(classroomId: string, yearId: string) {
-  const session = await requireScheduleSession()
-  if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  const db = createServerClient()
-  await db.from('class_schedule_slots')
-    .delete()
-    .eq('classroom_id', classroomId)
-    .eq('academic_year_id', yearId)
-    .eq('locked', false)
-  return { ok: true }
-}
-
-export async function runAutoScheduleClass(
-  classroomId: string,
-  yearId: string,
-  mode: 'spread' | 'random' = 'spread',
-  clearFirst = false,
-) {
-  const session = await requireScheduleSession()
-  if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-
-  const quotasData = await fetchScheduleQuotas(classroomId, yearId)
-  const quotas = quotasData.items
-    .map(i => ({
-      classSubjectId: i.class_subject_id,
-      count: Math.max(0, i.remaining),
-    }))
-    .filter(q => q.count > 0)
-
-  const db = createServerClient()
-  if (clearFirst) {
-    await db.from('class_schedule_slots')
-      .delete()
-      .eq('classroom_id', classroomId)
-      .eq('academic_year_id', yearId)
-      .eq('locked', false)
-  }
-
-  const { data: existing } = await db.from('class_schedule_slots')
-    .select('day_of_week, period, locked, class_subject_id')
-    .eq('classroom_id', classroomId)
-    .eq('academic_year_id', yearId)
-
-  const occupied = new Set(
-    (existing || [])
-      .filter(r => r.locked || r.class_subject_id)
-      .map(r => `${r.day_of_week}-${r.period}`),
-  )
-
-  const emptySlots: { day: number; period: number }[] = []
-  for (const day of SCHEDULE_DAYS) {
-    for (let period = 1; period <= SCHEDULE_PERIOD_COUNT; period++) {
-      const key = `${day.value}-${period}`
-      if (!occupied.has(key)) emptySlots.push({ day: day.value, period })
-    }
-  }
-
-  const assignments = buildAutoAssignments(quotas, emptySlots, mode)
-  for (const a of assignments) {
-    await db.from('class_schedule_slots').upsert({
-      classroom_id: classroomId,
-      academic_year_id: yearId,
-      day_of_week: a.day,
-      period: a.period,
-      class_subject_id: a.classSubjectId,
-      note: null,
-      locked: false,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'classroom_id,academic_year_id,day_of_week,period' })
-  }
-
-  await logActivity({
-    actor: session,
-    schoolId: session.schoolId,
-    action: 'auto',
-    module: 'schedules',
-    targetType: 'class_schedule',
-    targetId: classroomId,
-    description: `จัดตารางอัตโนมัติ ${assignments.length} คาบ`,
-  })
-
-  return { ok: true, assigned: assignments.length }
-}
+export async function runAutoScheduleClass(classroomId:string,yearId:string,mode:'spread'|'random'='spread',clearFirst=false) { if (!['spread','random'].includes(mode)) throw new Error('รูปแบบไม่ถูกต้อง'); return scheduleOps.autoSchedule(yearId,classroomId,clearFirst) }
 
 export async function fetchScheduleExportContext() {
   const session = await requireScheduleSession()
@@ -434,39 +216,54 @@ export async function fetchScheduleExportContext() {
 
 export async function fetchSubstituteDay(date: string, yearId: string) {
   const session = await requireScheduleSession()
-  if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
+  if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
+  await loadSchedule(session.schoolId, yearId)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new Error('วันที่ไม่ถูกต้อง')
   const db = createServerClient()
 
   const d = new Date(date + 'T12:00:00')
   const jsDay = d.getDay()
   const dayOfWeek = jsDay === 0 ? 7 : jsDay
 
-  let { data: dayRow } = await db.from('schedule_substitute_days')
+  const dayResult = await db.from('schedule_substitute_days')
     .select('id, date, day_of_week, note')
     .eq('school_id', session.schoolId)
     .eq('date', date)
     .maybeSingle()
+  if (dayResult.error) throw new Error(dayResult.error.message)
+  let dayRow = dayResult.data
+  if (dayRow) {
+    const { data: owner } = await db.from('schedule_substitute_days').select('academic_year_id').eq('id', dayRow.id).single()
+    if (owner?.academic_year_id !== yearId) throw new Error('วันที่นี้มีตารางสอนแทนอยู่ในปีการศึกษาอื่น')
+  }
 
   if (!dayRow) {
-    const { data: created } = await db.from('schedule_substitute_days')
-      .insert({
+    const { data: created, error } = await db.from('schedule_substitute_days')
+      .upsert({
         school_id: session.schoolId,
         academic_year_id: yearId,
         date,
         day_of_week: dayOfWeek,
-      })
+      }, { onConflict: 'school_id,date', ignoreDuplicates: true })
       .select('id, date, day_of_week, note')
-      .single()
+      .maybeSingle()
+    if (error) throw new Error(error.message)
     dayRow = created
+    if (!dayRow) {
+      const retry = await db.from('schedule_substitute_days').select('id,date,day_of_week,note,academic_year_id').eq('school_id', session.schoolId).eq('date', date).single()
+      if (retry.error || retry.data.academic_year_id !== yearId) throw new Error('โหลดวันที่ไม่สำเร็จ กรุณาลองใหม่')
+      dayRow = retry.data
+    }
   }
 
-  const { data: entries } = await db.from('schedule_substitute_entries')
+  const { data: entries, error: entriesError } = await db.from('schedule_substitute_entries')
     .select(`
       id, absent_teacher_id, period, class_subject_id, classroom_id,
       subject_label, room_label, substitute_teacher_id, leave_type, note
     `)
     .eq('substitute_day_id', dayRow!.id)
     .order('period')
+  if (entriesError) throw new Error(entriesError.message)
 
   return {
     day: dayRow,
@@ -501,7 +298,7 @@ export async function loadSubstituteSlotsForTeacher(
       const subject = cs && (Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects)
       return {
         period: row.period,
-        class_subject_id: row.class_subject_id,
+        class_subject_id: row.activity_id ? null : row.class_subject_id,
         classroom_id: row.classroom_id,
         room_label: classroom ? `${classroom.level}/${classroom.room}` : '',
         subject_label: subject
@@ -532,16 +329,17 @@ export async function saveSubstituteTeacher(
   const db = createServerClient()
 
   if (entryId) {
-    await db.from('schedule_substitute_entries').update({
+    const { data: day } = await db.from('schedule_substitute_days').select('id').eq('id', substituteDayId).eq('school_id', session.schoolId || '').maybeSingle()
+    if (!day) throw new Error('ไม่พบตารางสอนแทนของโรงเรียนนี้')
+    const { data, error } = await db.from('schedule_substitute_entries').update({
       substitute_teacher_id: payload.substitute_teacher_id,
       leave_type: payload.leave_type,
       note: payload.note,
-    }).eq('id', entryId)
+    }).eq('id', entryId).eq('substitute_day_id', substituteDayId).select('id').maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('ไม่พบคาบสอนแทน')
   } else {
-    await db.from('schedule_substitute_entries').insert({
-      substitute_day_id: substituteDayId,
-      ...payload,
-    })
+    throw new Error('กรุณานำเข้าคาบจากตารางเรียนก่อนกำหนดครูสอนแทน')
   }
   return { ok: true }
 }
@@ -557,26 +355,11 @@ export async function importSubstituteFromSchedule(
   if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
   const slots = await loadSubstituteSlotsForTeacher(date, yearId, absentTeacherId)
   const db = createServerClient()
-
-  await db.from('schedule_substitute_entries')
-    .delete()
-    .eq('substitute_day_id', substituteDayId)
-    .eq('absent_teacher_id', absentTeacherId)
-
-  if (slots.length) {
-    await db.from('schedule_substitute_entries').insert(
-      slots.map(s => ({
-        substitute_day_id: substituteDayId,
-        absent_teacher_id: absentTeacherId,
-        period: s.period,
-        class_subject_id: s.class_subject_id,
-        classroom_id: s.classroom_id,
-        subject_label: s.subject_label,
-        room_label: s.room_label,
-        leave_type: leaveType,
-      })),
-    )
-  }
+  if (!slots.length) throw new Error('ครูท่านนี้ไม่มีคาบสอนในวันที่เลือก')
+  const { data: day } = await db.from('schedule_substitute_days').select('id').eq('id', substituteDayId).eq('school_id', session.schoolId || '').eq('academic_year_id', yearId).eq('date', date).maybeSingle()
+  if (!day) throw new Error('วันหรือปีการศึกษาของตารางสอนแทนไม่ตรงกัน')
+  const { error } = await db.rpc('replace_substitute_slots', { p_school_id: session.schoolId, p_day_id: substituteDayId, p_teacher_id: absentTeacherId, p_leave_type: leaveType, p_rows: slots })
+  if (error) throw new Error(error.message)
   return { ok: true, count: slots.length }
 }
 

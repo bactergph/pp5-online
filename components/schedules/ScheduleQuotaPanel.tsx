@@ -56,11 +56,12 @@ export default function ScheduleQuotaPanel({ items, filled, totalTarget }: Props
       <style>{STYLES}</style>
       <div className="quota-panel">
         <div className="quota-panel-head">
-          <h3>โควต้าคาบรายวิชา (เป้าหมายจากชั่วโมง/ปี ÷ 40)</h3>
+          <h3>คาบรายวิชาและกิจกรรมต่อสัปดาห์</h3>
           <span className="quota-panel-summary">
             จัดแล้ว {filled} / {totalTarget} คาบ
           </span>
         </div>
+        {totalTarget > 30 && <p role="alert" style={{ color: '#B91C1C', padding: '0 14px' }}>ต้องการ {totalTarget} คาบ แต่ตารางมี 30 ช่อง กรุณาปรับชั่วโมงรายวิชาหรือคาบกิจกรรมก่อนจัดอัตโนมัติ</p>}
         <table className="quota-table">
           <thead>
             <tr>

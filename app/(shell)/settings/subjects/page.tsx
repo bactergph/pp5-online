@@ -527,11 +527,16 @@ export default function SubjectsPage() {
       credits: Number(fd.get('credits') || 0),
       max_score: Number(fd.get('max_score') || 100),
     }
-    const { error } = await saveSubject(editing.id || null, payload)
-    setSaving(false)
-    if (error) { notify('error', error); return }
-    notify('success', editing.id ? 'แก้ไขรายวิชาเรียบร้อย' : 'เพิ่มรายวิชาเรียบร้อย')
-    setShowForm(false); load()
+    try {
+      const { error } = await saveSubject(editing.id || null, payload)
+      if (error) { notify('error', error); return }
+      notify('success', editing.id ? 'แก้ไขรายวิชาเรียบร้อย' : 'เพิ่มรายวิชาเรียบร้อย')
+      setShowForm(false); load()
+    } catch {
+      notify('error', 'บันทึกรายวิชาไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDelete(s: Subject) {

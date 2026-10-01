@@ -2,6 +2,7 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassSubjectContext } from '@/lib/audit'
+import { getScoreEntryPeriod } from '@/lib/score-entry-period'
 
 async function requireSession() {
   const session = await getSession()
@@ -91,7 +92,9 @@ export async function fetchScoreSubjects(classroomId: string) {
 
 // โหลดนักเรียน + config + คะแนนเดิม สำหรับ 1 วิชา × ภาคเรียน
 export async function fetchScoreEntryData(classroomId: string, classSubjectId: string, term: number) {
-  await requireSession()
+  const session = await requireSession()
+  const period = await getScoreEntryPeriod(session, classSubjectId, term, classroomId)
+  if (!period.classroomId) throw new Error(period.error)
   const db = createServerClient()
   const [studentsR, configR] = await Promise.all([
     db.from('students').select('id, student_number, prefix, first_name, last_name, status')
@@ -120,7 +123,7 @@ export async function fetchScoreEntryData(classroomId: string, classSubjectId: s
     term1Config = term1ConfigR.data
   }
 
-  return { students, config: configR.data, scores, term1Scores, term1Config }
+  return { students, config: configR.data, scores, term1Scores, term1Config, entryOpen: period.open === true, entryMessage: period.error }
 }
 
 export async function saveScores(
@@ -144,6 +147,13 @@ export async function saveScores(
   const db = createServerClient()
 
   // ครู: บันทึกได้เฉพาะวิชาที่ตนสอน
+  const period = await getScoreEntryPeriod(session, classSubjectId, term)
+  if (period.error) return { error: period.error }
+  const { data: students, error: studentsError } = await db.from('students').select('id')
+    .eq('classroom_id', period.classroomId).in('id', rows.map(row => row.student_id))
+  if (studentsError || new Set(students?.map(student => student.id)).size !== new Set(rows.map(row => row.student_id)).size) {
+    return { error: 'ข้อมูลนักเรียนไม่ตรงกับห้องเรียน' }
+  }
   if (session.role === 'teacher') {
     const { data: cs } = await db.from('class_subjects')
       .select('id').eq('id', classSubjectId).eq('teacher_id', session.userId).maybeSingle()

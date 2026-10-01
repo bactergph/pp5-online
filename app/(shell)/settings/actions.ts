@@ -567,6 +567,24 @@ export async function deleteSchoolUser(id: string) {
 // Academic Years
 // ============================================================
 
+export async function setScoreEntryOpen(yearId: string, term: number, open: boolean) {
+  const session = await requireSchoolSession()
+  if (!hasRole(session, ADMIN_ROLES) || !session.schoolId) return { error: 'ไม่มีสิทธิ์' }
+  if (![1, 2].includes(term) || typeof open !== 'boolean') return { error: 'ข้อมูลไม่ถูกต้อง' }
+  const db = createServerClient()
+  const field = term === 1 ? 'term1_scores_open' : 'term2_scores_open'
+  const { data, error } = await db.from('academic_years').update({ [field]: open })
+    .eq('id', yearId).eq('school_id', session.schoolId).select('year_be').maybeSingle()
+  if (error || !data) return { error: error?.message || 'ไม่พบปีการศึกษาในโรงเรียนนี้' }
+  await logActivity({
+    actor: session, schoolId: session.schoolId, action: 'update', module: 'academic_years',
+    targetType: 'academic_year', targetId: yearId, targetLabel: String(data.year_be),
+    description: `${open ? 'เปิด' : 'ปิด'}การบันทึกคะแนน ปีการศึกษา ${data.year_be} ภาคเรียนที่ ${term}`,
+    metadata: { term, open },
+  })
+  return { error: undefined }
+}
+
 export async function fetchAcademicYears() {
   const session = await requireSchoolSession()
   const db = createServerClient()
@@ -1452,9 +1470,36 @@ export async function fetchSubjects() {
 export async function saveSubject(id: string | null, payload: Record<string, unknown>) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
+  if (!session.schoolId) return { error: 'กรุณาเลือกโรงเรียน' }
+  const code = typeof payload.code === 'string' ? payload.code.trim() : ''
+  const name = typeof payload.name === 'string' ? payload.name.trim() : ''
+  if (!code || !name) return { error: 'กรุณาระบุรหัสวิชาและชื่อวิชา' }
+  payload = {
+    code, name, short_name: payload.short_name, subject_group: payload.subject_group,
+    type: payload.type, hours_per_year: payload.hours_per_year,
+    credits: payload.credits, max_score: payload.max_score,
+  }
   const db = createServerClient()
   if (id) {
-    const { error } = await db.from('subjects').update(payload).eq('id', id)
+    const { data: existing, error } = await db.from('subjects').select('id')
+      .eq('id', id).eq('school_id', session.schoolId).maybeSingle()
+    if (error) return { error: 'ตรวจสอบรายวิชาไม่สำเร็จ กรุณาลองใหม่' }
+    if (!existing) return { error: 'ไม่พบรายวิชาที่ต้องการแก้ไขในโรงเรียนนี้ กรุณาโหลดหน้าใหม่' }
+  }
+  const { data: duplicate, error: lookupError } = await db.from('subjects').select('id, code, name')
+    .eq('school_id', session.schoolId).eq('code', code).maybeSingle()
+  if (lookupError) return { error: 'ตรวจสอบรหัสวิชาไม่สำเร็จ กรุณาลองใหม่' }
+  if (duplicate && duplicate.id !== id) {
+    return { error: `รหัสวิชา ${code} ถูกใช้โดยรายวิชา “${duplicate.name}” แล้ว กรุณาแก้ไขรายวิชาเดิมหรือใช้รหัสวิชาอื่น` }
+  }
+  const saveError = (error: { code?: string; message: string } | null) =>
+    error?.code === '23505'
+      ? `รหัสวิชา ${code} มีอยู่ในโรงเรียนแล้ว กรุณาโหลดรายการใหม่และแก้ไขรายวิชาเดิม หรือใช้รหัสวิชาอื่น`
+      : error?.message
+  if (id) {
+    const { data: updated, error } = await db.from('subjects').update(payload).eq('id', id)
+      .eq('school_id', session.schoolId).select('id').maybeSingle()
+    if (!error && !updated) return { error: 'ไม่พบรายวิชาที่ต้องการแก้ไข กรุณาโหลดหน้าใหม่' }
     if (!error) {
       await logActivity({
         actor: session,
@@ -1468,7 +1513,7 @@ export async function saveSubject(id: string | null, payload: Record<string, unk
         metadata: { fields: Object.keys(payload) },
       })
     }
-    return { error: error?.message }
+    return { error: saveError(error) }
   }
   const { data, error } = await db.from('subjects').insert({ ...payload, school_id: session.schoolId }).select('id').single()
   if (!error) {
@@ -1484,7 +1529,7 @@ export async function saveSubject(id: string | null, payload: Record<string, unk
       metadata: { code: typeof payload.code === 'string' ? payload.code : null },
     })
   }
-  return { error: error?.message }
+  return { error: saveError(error) }
 }
 
 export async function deleteSubject(id: string) {

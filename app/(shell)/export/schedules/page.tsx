@@ -178,9 +178,9 @@ export default function ScheduleExportPage() {
     setTitle(`ตารางเรียน ห้อง ${classroom?.label || ''} ปีการศึกษา พ.ศ. ${year?.year_be || ''}`)
 
     const data: Record<string, { line1: string; line2: string }> = {}
-    for (const [key, cell] of Object.entries(grid as Record<string, { class_subject_id: string | null }>)) {
+    for (const [key, cell] of Object.entries(grid as Record<string, { class_subject_id: string | null; note: string | null }>)) {
       if (!cell.class_subject_id) {
-        data[key] = { line1: '—', line2: '' }
+        data[key] = { line1: cell.note || '—', line2: '' }
         continue
       }
       const subj = subjMap[cell.class_subject_id]

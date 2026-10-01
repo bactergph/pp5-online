@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   fetchScheduleInit,
   fetchSubstituteDay,
@@ -69,29 +69,26 @@ const STYLES = `
 `
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 }
 
 export default function SubstituteScheduleEntry() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [loadingDay, setLoadingDay] = useState(false)
+  const [loadedDay, setLoadedDay] = useState('')
+  const dayRequest = useRef(0)
   const [years, setYears] = useState<Year[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [selectedYear, setSelectedYear] = useState('')
   const [date, setDate] = useState(todayIso())
+  const blocked = saving || loadingDay || loadedDay !== `${selectedYear}:${date}`
   const [dayLabel, setDayLabel] = useState('')
   const [substituteDayId, setSubstituteDayId] = useState('')
   const [entries, setEntries] = useState<SubstituteEntry[]>([])
   const [absentTeacherId, setAbsentTeacherId] = useState('')
   const [leaveType, setLeaveType] = useState('ลาป่วย')
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
-
-  useEffect(() => { init() }, [])
-
-  useEffect(() => {
-    if (!selectedYear || !date) return
-    loadDay()
-  }, [selectedYear, date])
 
   async function init() {
     try {
@@ -108,19 +105,32 @@ export default function SubstituteScheduleEntry() {
     }
   }
 
-  async function loadDay() {
+  const loadDay = useCallback(async () => {
+    const request = ++dayRequest.current
+    setLoadingDay(true)
     try {
       const data = await fetchSubstituteDay(date, selectedYear)
+      if (request !== dayRequest.current) return
       setSubstituteDayId(data.day?.id || '')
       setDayLabel(data.day_label || '')
       setEntries(data.entries as SubstituteEntry[])
+      setLoadedDay(`${selectedYear}:${date}`)
     } catch (e) {
+      if (request !== dayRequest.current) return
+      setLoadedDay(''); setEntries([]); setSubstituteDayId('')
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
-    }
-  }
+    } finally { if (request === dayRequest.current) setLoadingDay(false) }
+  }, [date, selectedYear])
+
+  useEffect(() => { void Promise.resolve().then(init) }, [])
+  useEffect(() => {
+    if (!selectedYear || !date) return
+    void Promise.resolve().then(loadDay)
+  }, [date, selectedYear, loadDay])
 
   async function handleImport() {
-    if (!absentTeacherId || !substituteDayId) return
+    if (blocked || !absentTeacherId || !substituteDayId) return
+    if (entries.some(e => e.absent_teacher_id === absentTeacherId) && !window.confirm('นำเข้าคาบใหม่แทนคาบเดิมของครูที่เลือก? ต้องกำหนดครูสอนแทนของคาบเหล่านี้ใหม่')) return
     setSaving(true)
     try {
       const result = await importSubstituteFromSchedule(
@@ -140,7 +150,7 @@ export default function SubstituteScheduleEntry() {
   }
 
   async function handleSaveEntry(entry: SubstituteEntry) {
-    if (!substituteDayId) return
+    if (blocked || !substituteDayId) return
     setSaving(true)
     try {
       await saveSubstituteTeacher(substituteDayId, entry.id, {
@@ -198,7 +208,7 @@ export default function SubstituteScheduleEntry() {
         <div className="schedule-filters">
           <div className="schedule-field">
             <label>ปีการศึกษา</label>
-            <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>
+            <select disabled={saving} value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>
               {years.map(y => (
                 <option key={y.id} value={y.id}>พ.ศ. {y.year_be}{y.is_active ? ' (ปัจจุบัน)' : ''}</option>
               ))}
@@ -206,11 +216,11 @@ export default function SubstituteScheduleEntry() {
           </div>
           <div className="schedule-field">
             <label>วันที่</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+            <input type="date" disabled={saving} value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div className="schedule-field">
             <label>ครูที่ลา</label>
-            <select value={absentTeacherId} onChange={e => setAbsentTeacherId(e.target.value)}>
+            <select disabled={saving} value={absentTeacherId} onChange={e => setAbsentTeacherId(e.target.value)}>
               {teachers.map(t => (
                 <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>
               ))}
@@ -229,7 +239,7 @@ export default function SubstituteScheduleEntry() {
             {LEAVE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <button type="button" className="sub-btn" onClick={previewSlots}>ดูคาบจากตารางเรียน</button>
-          <button type="button" className="sub-btn primary" onClick={handleImport} disabled={saving || !absentTeacherId}>
+          <button type="button" className="sub-btn primary" onClick={handleImport} disabled={blocked || !absentTeacherId}>
             {saving ? 'กำลังนำเข้า...' : 'นำเข้าจากตารางเรียน'}
           </button>
         </div>
@@ -260,6 +270,7 @@ export default function SubstituteScheduleEntry() {
                     <td>{entry.subject_label || '—'}</td>
                     <td>
                       <select
+                        disabled={blocked}
                         value={entry.leave_type}
                         onChange={e => updateEntry(entry.id, 'leave_type', e.target.value)}
                       >
@@ -268,6 +279,7 @@ export default function SubstituteScheduleEntry() {
                     </td>
                     <td>
                       <select
+                        disabled={blocked}
                         value={entry.substitute_teacher_id || ''}
                         onChange={e => updateEntry(entry.id, 'substitute_teacher_id', e.target.value || null)}
                       >
@@ -279,6 +291,7 @@ export default function SubstituteScheduleEntry() {
                     </td>
                     <td>
                       <input
+                        disabled={blocked}
                         value={entry.note || ''}
                         onChange={e => updateEntry(entry.id, 'note', e.target.value || null)}
                         placeholder="หมายเหตุ"
@@ -289,7 +302,7 @@ export default function SubstituteScheduleEntry() {
                         type="button"
                         className="sub-btn"
                         onClick={() => handleSaveEntry(entry)}
-                        disabled={saving}
+                        disabled={blocked}
                       >
                         บันทึก
                       </button>

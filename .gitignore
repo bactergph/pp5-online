@@ -43,6 +43,8 @@ next-env.d.ts
 
 # local temp / data files
 .tmp-*
+/tmp/schedule-db-test/
+/tmp/schedule-types.txt
 *.xlsx
 
 .vercel

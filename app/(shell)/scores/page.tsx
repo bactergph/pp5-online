@@ -147,7 +147,10 @@ const SCORE_ENTRY_STYLES = `
 
 export default function ScoreEntryPage() {
   const pathname = usePathname()
-  const [canEdit, setCanEdit] = useState(false)
+  const [roleCanEdit, setCanEdit] = useState(false)
+  const [entryOpen, setEntryOpen] = useState(false)
+  const [entryMessage, setEntryMessage] = useState<string | undefined>()
+  const [loadedEntry, setLoadedEntry] = useState('')
   const [userRole, setUserRole] = useState('')
   const [years, setYears] = useState<Year[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
@@ -165,6 +168,7 @@ export default function ScoreEntryPage() {
   const [loadingGrid, setLoadingGrid] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const canEdit = roleCanEdit && entryOpen && !loadingGrid && loadedEntry === `${selectedClass}:${selectedCS}:${term}`
   const [term1TermTotals, setTerm1TermTotals] = useState<Record<string, number>>({})
   const [yearTotalMax, setYearTotalMax] = useState(0)
 
@@ -251,6 +255,9 @@ export default function ScoreEntryPage() {
 
     void fetchScoreEntryData(selectedClass, selectedCS, term).then(d => {
       if (cancelled) return
+      setEntryOpen(d.entryOpen)
+      setEntryMessage(d.entryMessage)
+      setLoadedEntry(`${selectedClass}:${selectedCS}:${term}`)
       const cfg = d.config as Config | null
       setConfig(cfg && Array.isArray(cfg.between_scores) ? cfg : null)
       setStudents(d.students as Student[])
@@ -281,6 +288,11 @@ export default function ScoreEntryPage() {
         setTerm1TermTotals({})
         setYearTotalMax(0)
       }
+      setLoadingGrid(false)
+    }).catch(() => {
+      if (cancelled) return
+      setEntryOpen(false)
+      setEntryMessage('โหลดสถานะการบันทึกคะแนนไม่สำเร็จ กรุณาลองใหม่')
       setLoadingGrid(false)
     })
 
@@ -355,7 +367,7 @@ export default function ScoreEntryPage() {
   }
 
   async function handleSave() {
-    if (!config) return
+    if (!config || !canEdit) return
     const showMidtermOnSave = (config.midterm_max ?? 0) > 0
     for (const st of students) {
       const r = rows[st.id]
@@ -425,6 +437,11 @@ export default function ScoreEntryPage() {
       />
     <div className="page-stack score-entry-page">
       <style>{SCORE_ENTRY_STYLES}</style>
+      {entryMessage && !loadingGrid && (
+        <div className="control-card" role="status" style={{ color: '#92400E', background: '#FFFBEB' }}>
+          {entryMessage} · ดูคะแนนเดิมได้ แต่ไม่สามารถแก้ไขหรือบันทึกคะแนน
+        </div>
+      )}
       <div className="score-entry-head">
         <div className="score-entry-title">
           <div className="score-entry-title-mark">

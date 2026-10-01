@@ -1,8 +1,9 @@
 'use server'
 
+import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
+import * as scheduleOps from '@/lib/schedule-operations'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
-import { logActivity } from '@/lib/audit'
 import {
   SCHEDULE_DAYS,
   SCHEDULE_EDIT_ROLES,
@@ -81,7 +82,7 @@ export async function fetchScheduleClassrooms(yearId: string) {
     .order('level')
     .order('room')
 
-  let classrooms = data || []
+  const classrooms = data || []
 
   return classrooms.map(c => ({
     id: c.id,
@@ -93,205 +94,67 @@ export async function fetchScheduleClassrooms(yearId: string) {
 
 export async function fetchClassScheduleSubjects(classroomId: string) {
   const session = await requireScheduleSession()
-  const db = createServerClient()
-
-  const { data: classroom } = await db.from('classrooms')
-    .select('id, school_id, academic_year_id')
-    .eq('id', classroomId)
-    .maybeSingle()
-  if (!classroom) throw new Error('ไม่พบห้องเรียน')
-  if (session.role !== 'district' && classroom.school_id !== session.schoolId) {
-    throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
-  }
-
-  const { data } = await db.from('class_subjects')
-    .select('id, subject_id, teacher_id, subjects(code, name, short_name)')
-    .eq('classroom_id', classroomId)
-    .eq('academic_year_id', classroom.academic_year_id)
-    .order('order_number')
-
-  const teacherIds = [...new Set((data || []).map(row => row.teacher_id).filter(Boolean))] as string[]
-  let teacherMap: Record<string, string> = {}
-  if (teacherIds.length > 0) {
-    const { data: teachers } = await db.from('users')
-      .select('id, prefix, full_name')
-      .in('id', teacherIds)
-    teacherMap = Object.fromEntries(
-      (teachers || []).map(t => [t.id, `${t.prefix} ${t.full_name}`.trim()]),
-    )
-  }
-
-  return (data || []).map(row => {
-    const subject = Array.isArray(row.subjects) ? row.subjects[0] : row.subjects
-    const code = subject?.code ?? ''
-    const name = subject?.short_name || subject?.name || ''
-    const teacherName = row.teacher_id ? (teacherMap[row.teacher_id] || '') : ''
-    return {
-      id: row.id,
-      teacher_id: row.teacher_id,
-      subject_code: code,
-      subject_name: name,
-      teacher_name: teacherName,
-      label: code ? `${code} ${name}`.trim() : name,
-    }
-  })
+  const { data: room, error } = await createServerClient().from('classrooms').select('academic_year_id').eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
+  if (error || !room) throw new Error('ไม่พบห้องเรียน')
+  const data = await loadSchedule(session.schoolId, room.academic_year_id)
+  return data.lessons.filter(l => l.classroomId === classroomId).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,label:l.activity ? 'กิจกรรม · '+l.name : (l.code+' '+l.name).trim(),activity:l.activity }))
 }
 
 export async function fetchClassScheduleGrid(classroomId: string, yearId: string) {
-  await requireScheduleSession()
-  const db = createServerClient()
-
-  const { data } = await db.from('class_schedule_slots')
-    .select('day_of_week, period, class_subject_id, note, locked')
-    .eq('classroom_id', classroomId)
-    .eq('academic_year_id', yearId)
-
+  const session = await requireScheduleSession()
+  const data = await loadSchedule(session.schoolId, yearId)
+  requireScheduleClass(data, classroomId)
   const cells: Record<string, { class_subject_id: string | null; note: string | null; locked: boolean }> = {}
-  for (const day of SCHEDULE_DAYS) {
-    for (let period = 1; period <= SCHEDULE_PERIOD_COUNT; period++) {
-      cells[`${day.value}-${period}`] = { class_subject_id: null, note: null, locked: false }
-    }
-  }
-  for (const row of data || []) {
-    cells[`${row.day_of_week}-${row.period}`] = {
-      class_subject_id: row.class_subject_id,
-      note: row.note,
-      locked: row.locked ?? false,
-    }
-  }
+  for (const day of SCHEDULE_DAYS) for (let period=1; period<=SCHEDULE_PERIOD_COUNT; period++) cells[day.value+'-'+period]={class_subject_id:null,note:null,locked:false}
+  for (const row of data.slots.filter(s=>s.classroom_id===classroomId)) cells[row.day_of_week+'-'+row.period]={class_subject_id:lessonKey(row),note:row.note,locked:row.locked}
   return cells
 }
 
-export async function saveClassScheduleCell(
-  classroomId: string,
-  yearId: string,
-  dayOfWeek: number,
-  period: number,
-  classSubjectId: string | null,
-  note: string | null = null,
-) {
+export async function fetchClassScheduleBundle(classroomId: string, yearId: string) {
   const session = await requireScheduleSession()
-  if (!canEditSchedule(session)) throw new Error('ไม่มีสิทธิ์แก้ไข')
-
-  const db = createServerClient()
-  const { data: classroom } = await db.from('classrooms')
-    .select('id, school_id, level, room')
-    .eq('id', classroomId)
-    .maybeSingle()
-  if (!classroom || classroom.school_id !== session.schoolId) {
-    throw new Error('ไม่พบห้องเรียน')
+  const data = await loadSchedule(session.schoolId, yearId)
+  requireScheduleClass(data, classroomId)
+  const lessons = data.lessons.filter(l => l.classroomId === classroomId)
+  const grid: Record<string, { class_subject_id: string | null; note: string | null; locked: boolean }> = {}
+  for (const day of SCHEDULE_DAYS) for (let p = 1; p <= SCHEDULE_PERIOD_COUNT; p++) grid[`${day.value}-${p}`] = { class_subject_id: null, note: null, locked: false }
+  const warnings: Record<string, string[]> = {}
+  for (const s of data.slots.filter(s => s.classroom_id === classroomId)) {
+    const key = `${s.day_of_week}-${s.period}`
+    grid[key] = { class_subject_id: lessonKey(s), note: s.note, locked: s.locked }
+    const lesson = lessons.find(l => l.id === lessonKey(s))
+    if (!lesson?.teacherId) continue
+    const busy = data.slots.filter(other => other.classroom_id !== classroomId && other.day_of_week === s.day_of_week && other.period === s.period && data.lessons.find(l => l.id === lessonKey(other))?.teacherId === lesson.teacherId)
+    if (busy.length) warnings[key] = busy.map(s => { const c = data.classrooms.find(c => c.id === s.classroom_id)!; return `${c.level}/${c.room}` })
   }
-
-  if (classSubjectId) {
-    const { data: cs } = await db.from('class_subjects')
-      .select('id, classroom_id')
-      .eq('id', classSubjectId)
-      .maybeSingle()
-    if (!cs || cs.classroom_id !== classroomId) {
-      throw new Error('รายวิชานี้ไม่ได้เปิดสอนในห้องเรียนนี้')
-    }
-  }
-
-  if (!classSubjectId && !note?.trim()) {
-    await db.from('class_schedule_slots')
-      .delete()
-      .eq('classroom_id', classroomId)
-      .eq('academic_year_id', yearId)
-      .eq('day_of_week', dayOfWeek)
-      .eq('period', period)
-  } else if (classSubjectId) {
-    await db.from('class_schedule_slots').upsert({
-      classroom_id: classroomId,
-      academic_year_id: yearId,
-      day_of_week: dayOfWeek,
-      period,
-      class_subject_id: classSubjectId,
-      note: null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'classroom_id,academic_year_id,day_of_week,period' })
-  } else {
-    await db.from('class_schedule_slots').upsert({
-      classroom_id: classroomId,
-      academic_year_id: yearId,
-      day_of_week: dayOfWeek,
-      period,
-      class_subject_id: null,
-      note: note?.trim() || null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'classroom_id,academic_year_id,day_of_week,period' })
-  }
-
-  await logActivity({
-    actor: session,
-    schoolId: session.schoolId,
-    action: 'update',
-    module: 'schedules',
-    targetType: 'class_schedule',
-    targetId: classroomId,
-    targetLabel: `${classroom.level}/${classroom.room}`,
-    description: `แก้ไขตารางเรียน ${classroom.level}/${classroom.room} วัน${dayOfWeek} คาบ${period}`,
+  const items = lessons.map(l => {
+    const used = data.slots.filter(s => lessonKey(s) === l.id).length
+    return { class_subject_id: l.id, code: l.code, name: l.name, target: l.count, used, remaining: l.count - used }
   })
+  return { grid, warnings,
+    subjects: lessons.map(l => ({ id:l.id, teacher_id:l.teacherId, subject_code:l.code, subject_name:l.name, teacher_name:l.teacherName, label:l.activity ? `กิจกรรม · ${l.name}` : `${l.code} ${l.name}`.trim() })),
+    quotas: { items, filled: items.reduce((n,l) => n+l.used,0), totalTarget: items.reduce((n,l) => n+l.target,0) },
+  }
+}
 
-  return { ok: true }
+export async function saveClassScheduleCell(classroomId: string, yearId: string, day: number, period: number, lesson: string | null, note: string | null = null) {
+  return scheduleOps.saveCell(classroomId, yearId, day, period, lesson, note)
 }
 
 export async function fetchTeachingScheduleGrid(teacherId: string, yearId: string) {
   const session = await requireScheduleSession()
-  if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
-  if (session.role === 'teacher' && teacherId !== session.userId) {
-    throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
+  if (session.role === 'teacher' && teacherId !== session.userId) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
+  const data = await loadSchedule(session.schoolId, yearId)
+  const cells: Record<string,{label:string;subject_line:string;room_line:string}> = {}
+  for (const d of SCHEDULE_DAYS) for(let p=1;p<=SCHEDULE_PERIOD_COUNT;p++) cells[d.value+'-'+p]={label:'',subject_line:'',room_line:''}
+  for(const row of data.slots) {
+    const lesson=data.lessons.find(l=>l.id===lessonKey(row))
+    if(!lesson || lesson.teacherId!==teacherId) continue
+    const room=data.classrooms.find(c=>c.id===row.classroom_id)!
+    const roomLine=room.level+'/'+room.room
+    const subjectLine=(lesson.code+' '+lesson.name).trim()
+    const key=row.day_of_week+'-'+row.period
+    cells[key]={label:[cells[key]?.label,roomLine+'\n'+subjectLine].filter(Boolean).join('\n'),subject_line:subjectLine,room_line:roomLine}
   }
-
-  const db = createServerClient()
-  const { data: slots } = await db.from('class_schedule_slots')
-    .select(`
-      day_of_week, period, class_subject_id, note,
-      classrooms!inner(id, level, room, school_id, academic_year_id),
-      class_subjects(id, teacher_id, subjects(code, name, short_name))
-    `)
-    .eq('classrooms.school_id', session.schoolId)
-    .eq('classrooms.academic_year_id', yearId)
-
-  const cells: Record<string, { label: string; subject_line: string; room_line: string }> = {}
-  for (const day of SCHEDULE_DAYS) {
-    for (let period = 1; period <= SCHEDULE_PERIOD_COUNT; period++) {
-      cells[`${day.value}-${period}`] = { label: '', subject_line: '', room_line: '' }
-    }
-  }
-
-  for (const row of slots || []) {
-    const cs = Array.isArray(row.class_subjects) ? row.class_subjects[0] : row.class_subjects
-    if (row.class_subject_id && (!cs || cs.teacher_id !== teacherId)) continue
-    const classroom = Array.isArray(row.classrooms) ? row.classrooms[0] : row.classrooms
-    if (!classroom) continue
-
-    const roomLine = `${classroom.level}/${classroom.room}`
-    let subjectLine = row.note || ''
-    if (cs) {
-      const subject = Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects
-      const code = subject?.code ?? ''
-      const name = subject?.short_name || subject?.name || ''
-      subjectLine = code ? `${code} ${name}`.trim() : name
-    }
-
-    const key = `${row.day_of_week}-${row.period}`
-    const line = subjectLine ? `${roomLine}\n${subjectLine}` : roomLine
-    const existing = cells[key]
-    if (existing?.label) {
-      cells[key] = {
-        label: `${existing.label}\n${line}`,
-        subject_line: existing.subject_line,
-        room_line: existing.room_line,
-      }
-    } else {
-      cells[key] = {
-        label: line,
-        subject_line: subjectLine,
-        room_line: roomLine,
-      }
-    }
-  }
-
   return cells
 }
 
@@ -414,3 +277,7 @@ export async function getTeacherConflictAt(
   const mod = await import('./extended-actions')
   return mod.getTeacherConflictAt(yearId, teacherId, day, period, ignoreClassroomId)
 }
+
+export async function runAutoScheduleSchool(yearId: string, clearFirst = true) { return scheduleOps.autoSchedule(yearId, null, clearFirst) }
+export async function fetchScheduleActivities(yearId: string, classroomId: string) { return scheduleOps.activityOptions(yearId, classroomId) }
+export async function saveScheduleActivity(yearId: string, classroomId: string, settingId: string, teacherId: string, count: number) { return scheduleOps.saveActivity(yearId, classroomId, settingId, teacherId, count) }

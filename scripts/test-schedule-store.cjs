@@ -1,0 +1,10 @@
+const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), assert = require('node:assert/strict')
+const tables = {
+  classrooms: Array.from({length:40},(_,i)=>({id:`room${i}`,level:`ป.${i}`,room:1})),
+  class_subjects: [], class_schedule_activities: [], users: [],
+  class_schedule_slots: Array.from({length:1200},(_,i)=>({classroom_id:`room${Math.floor(i/30)}`,academic_year_id:'year',day_of_week:Math.floor(i%30/6)+1,period:i%6+1,class_subject_id:null,activity_id:null,note:'reserved',locked:true})),
+}
+const db={from(table){const query={select(){return query},eq(){return query},in(){return query},order(){return query},async maybeSingle(){return {data:{id:'year'},error:null}},async range(from,to){return {data:tables[table].slice(from,to+1),error:null}}};return query}}
+const exportsObject={}
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-store.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='@/lib/supabase'?{createServerClient:()=>db}:name==='@/lib/schedule-helpers'?{weeklyHoursFromYear:n=>Math.max(1,Math.round(n/40))}:{}})
+exportsObject.loadSchedule('school','year').then(result=>{assert.equal(result.slots.length,1200);assert.equal(result.classrooms.length,40);console.log('PASS: whole-school pagination retains all 1,200 slots')}).catch(e=>{console.error(e);process.exitCode=1})

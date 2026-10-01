@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  fetchClassScheduleGrid,
-  fetchClassScheduleSubjects,
+  fetchClassScheduleBundle,
   fetchScheduleClassrooms,
   fetchScheduleInit,
   saveClassScheduleCell,
@@ -15,6 +14,7 @@ import {
   fetchScheduleQuotas,
   getTeacherConflictAt,
   runAutoScheduleClass,
+  runAutoScheduleSchool,
   toggleScheduleCellLock,
 } from '@/app/schedules/actions'
 import type { PeriodTimeRow } from '@/lib/schedule-helpers'
@@ -22,6 +22,7 @@ import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
+import ScheduleActivities from '@/components/schedules/ScheduleActivities'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; label: string }
@@ -143,6 +144,12 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const [canEdit, setCanEdit] = useState(false)
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [gridLoading, setGridLoading] = useState(false)
+  const [loadedContext, setLoadedContext] = useState('')
+  const [rebuild, setRebuild] = useState(false)
+  const gridRequest = useRef(0)
+  const roomRequest = useRef(0)
+  const blocked = !!busyAction || !!savingKey || gridLoading || loadedContext !== `${selectedYear}:${selectedClass}`
   const [copyOpen, setCopyOpen] = useState(false)
   const [copyFromClass, setCopyFromClass] = useState('')
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
@@ -155,18 +162,6 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const selectedClassroom = classrooms.find(c => c.id === selectedClass)
   const selectedYearObj = years.find(y => y.id === selectedYear)
   const copySourceClassrooms = classrooms.filter(c => c.id !== selectedClass)
-
-  useEffect(() => { init() }, [])
-
-  useEffect(() => {
-    if (!selectedYear) return
-    loadClassrooms(selectedYear)
-  }, [selectedYear])
-
-  useEffect(() => {
-    if (!selectedClass || !selectedYear) return
-    loadGrid()
-  }, [selectedClass, selectedYear])
 
   async function init() {
     try {
@@ -187,39 +182,45 @@ export default function ClassScheduleEntry({ mode }: Props) {
   }
 
   async function loadClassrooms(yearId: string) {
-    const list = await fetchScheduleClassrooms(yearId) as Classroom[]
-    setClassrooms(list)
-    setSelectedClass(list[0]?.id || '')
+    const request = ++roomRequest.current
+    ++gridRequest.current
+    setSelectedClass(''); setCells({}); setSubjects([]); setQuotas(null)
+    try {
+      const list = await fetchScheduleClassrooms(yearId) as Classroom[]
+      if (request !== roomRequest.current) return
+      setClassrooms(list)
+      setSelectedClass(list[0]?.id || '')
+    } catch (e) { setAlert({ type: 'error', title: 'โหลดห้องเรียนไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' }) }
   }
 
-  async function loadGrid() {
-    const [grid, subs, quotaData] = await Promise.all([
-      fetchClassScheduleGrid(selectedClass, selectedYear),
-      fetchClassScheduleSubjects(selectedClass),
-      isManage ? fetchScheduleQuotas(selectedClass, selectedYear) : Promise.resolve(null),
-    ])
-    const gridCells = grid as Record<string, Cell>
-    setCells(gridCells)
-    setSubjects(subs as SubjectOption[])
-    if (quotaData) setQuotas(quotaData as QuotaData)
-    if (isManage) {
-      const subjMap = Object.fromEntries((subs as SubjectOption[]).map(s => [s.id, s]))
-      const warnings: Record<string, string[]> = {}
-      const checks: Promise<void>[] = []
-      for (const [key, cell] of Object.entries(gridCells)) {
-        if (!cell.class_subject_id) continue
-        const subj = subjMap[cell.class_subject_id]
-        if (!subj?.teacher_id) continue
-        const [day, period] = key.split('-').map(Number)
-        checks.push(
-          getTeacherConflictAt(selectedYear, subj.teacher_id, day, period, selectedClass)
-            .then(result => { if (result.busy) warnings[key] = result.rooms }),
-        )
+  const loadGrid = useCallback(async () => {
+    const request = ++gridRequest.current
+    setGridLoading(true)
+    try {
+    const bundle = await fetchClassScheduleBundle(selectedClass, selectedYear)
+    if (request !== gridRequest.current) return
+    setCells(bundle.grid)
+    setSubjects(bundle.subjects)
+    setQuotas(bundle.quotas)
+    setConflicts(bundle.warnings)
+    setLoadedContext(`${selectedYear}:${selectedClass}`)
+    } catch (e) {
+      if (request === gridRequest.current) {
+        setLoadedContext('')
+        setAlert({ type: 'error', title: 'โหลดตารางไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
       }
-      await Promise.all(checks)
-      setConflicts(warnings)
-    }
-  }
+    } finally { if (request === gridRequest.current) setGridLoading(false) }
+  }, [selectedClass, selectedYear])
+
+  useEffect(() => { void Promise.resolve().then(init) }, [])
+  useEffect(() => {
+    if (!selectedYear) return
+    void Promise.resolve().then(() => loadClassrooms(selectedYear))
+  }, [selectedYear])
+  useEffect(() => {
+    if (!selectedClass || !selectedYear) return
+    void Promise.resolve().then(loadGrid)
+  }, [loadGrid, selectedClass, selectedYear])
 
   async function handleCellChange(day: number, period: number, value: string) {
     const key = `${day}-${period}`
@@ -301,13 +302,15 @@ export default function ClassScheduleEntry({ mode }: Props) {
     }
   }
 
-  async function handleAutoSchedule() {
-    if (!window.confirm('จัดตารางอัตโนมัติตามโควต้าที่เหลือ? (ไม่แตะคาบที่ล็อก)')) return
+  async function handleAutoSchedule(wholeSchool = false) {
+    if (!window.confirm(`${wholeSchool ? 'จัดตารางทั้งโรงเรียน' : 'จัดตารางห้องนี้'}: ${rebuild ? 'จัดคาบที่ไม่ล็อกใหม่ทั้งหมด' : 'เติมเฉพาะช่องว่าง'} โดยตรวจครูไม่ชนกัน?`)) return
     setBusyAction('auto')
     try {
-      const result = await runAutoScheduleClass(selectedClass, selectedYear, 'spread', false)
+      const result = wholeSchool
+        ? await runAutoScheduleSchool(selectedYear, rebuild)
+        : await runAutoScheduleClass(selectedClass, selectedYear, 'spread', rebuild)
       await loadGrid()
-      setAlert({ type: 'success', title: 'จัดตารางสำเร็จ', message: `จัด ${result.assigned} คาบ` })
+      setAlert({ type: 'success', title: 'จัดตารางครบตามโควต้า', message: `${wholeSchool ? `${result.classrooms} ห้องเรียน` : 'ห้องนี้'} · เพิ่ม ${result.assigned} คาบ · ตรวจครูไม่ชนกันแล้ว${result.skipped.length ? `\nข้ามห้องที่ยังไม่กำหนดรายวิชา/กิจกรรม: ${result.skipped.join(', ')}` : ''}` })
     } catch (e) {
       setAlert({ type: 'error', title: 'จัดตารางไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     } finally {
@@ -345,7 +348,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   }
 
   function renderCellView(cell: Cell | undefined) {
-    if (!cell?.class_subject_id) return <span>—</span>
+    if (!cell?.class_subject_id) return <span>{cell?.note || '—'}</span>
     const subj = subjectMap[cell.class_subject_id]
     if (!subj) return <span>—</span>
     return (
@@ -405,7 +408,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
         <div className="schedule-filters">
           <div className="schedule-field">
             <label>ปีการศึกษา</label>
-            <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>
+            <select disabled={!!busyAction || !!savingKey} value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>
               {years.map(y => (
                 <option key={y.id} value={y.id}>พ.ศ. {y.year_be}{y.is_active ? ' (ปัจจุบัน)' : ''}</option>
               ))}
@@ -413,7 +416,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </div>
           <div className="schedule-field">
             <label>ห้องเรียน</label>
-            <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
+            <select disabled={!!busyAction || !!savingKey} value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
               {classrooms.map(c => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
@@ -427,23 +430,25 @@ export default function ClassScheduleEntry({ mode }: Props) {
               type="button"
               className="schedule-toolbar-btn"
               onClick={() => { setCopyFromClass(copySourceClassrooms[0]?.id || ''); setCopyOpen(true) }}
-              disabled={!!busyAction || copySourceClassrooms.length === 0}
+              disabled={blocked || copySourceClassrooms.length === 0}
             >
               คัดลอกจากห้องอื่น
             </button>
             <button
               type="button"
               className="schedule-toolbar-btn primary"
-              onClick={handleAutoSchedule}
-              disabled={!!busyAction}
+              onClick={() => handleAutoSchedule(false)}
+              disabled={blocked}
             >
-              {busyAction === 'auto' ? 'กำลังจัด...' : 'จัดตารางอัตโนมัติ'}
+              {busyAction === 'auto' ? 'กำลังจัด...' : 'จัดอัตโนมัติห้องนี้'}
             </button>
+            <button type="button" className="schedule-toolbar-btn primary" disabled={blocked} onClick={() => handleAutoSchedule(true)}>จัดอัตโนมัติทั้งโรงเรียน</button>
+            <label><input type="checkbox" checked={rebuild} disabled={blocked} onChange={e => setRebuild(e.target.checked)} /> จัดคาบที่ไม่ล็อกใหม่</label>
             <button
               type="button"
               className="schedule-toolbar-btn danger"
               onClick={handleClear}
-              disabled={!!busyAction}
+              disabled={blocked}
             >
               {busyAction === 'clear' ? 'กำลังล้าง...' : 'ล้างห้องนี้'}
             </button>
@@ -451,12 +456,14 @@ export default function ClassScheduleEntry({ mode }: Props) {
         )}
 
         {isManage && quotas && <ScheduleQuotaPanel {...quotas} />}
+        {isManage && canEdit && selectedClass && <ScheduleActivities key={`${selectedYear}:${selectedClass}`} yearId={selectedYear} classroomId={selectedClass} onSaved={loadGrid} disabled={blocked} onBusy={busy => setBusyAction(busy ? 'activity' : null)} />}
+        {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
         {isManage && (
           <div className="schedule-info">
-            เลือกได้เฉพาะรายวิชาที่เปิดสอนในห้องนี้ (จาก{' '}
+            เลือกรายวิชาที่เปิดสอนในห้องนี้ (จาก{' '}
             <Link href="/settings/class-subjects">จัดครูเข้าสอน</Link>
-            ) ครูผู้สอนแสดงอัตโนมัติจากข้อมูลเดิม — ตารางสอนจะอัปเดตตามตารางเรียนนี้
+            ) หรือกิจกรรมที่กำหนดไว้ด้านบน ตารางสอนครูและภาระงานจะรวมทั้งรายวิชาและกิจกรรม
             {' · '}<Link href="/schedules/conflicts">ตรวจความขัดแย้ง</Link>
           </div>
         )}
@@ -483,7 +490,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
                       <div className="schedule-cell-top">
                         <select
                           value={cell?.class_subject_id || ''}
-                          disabled={savingKey === key || locked}
+                          disabled={blocked || locked}
                           onChange={e => handleCellChange(day, period, e.target.value)}
                         >
                           <option value="">— ว่าง —</option>
@@ -496,12 +503,13 @@ export default function ClassScheduleEntry({ mode }: Props) {
                           className={`schedule-lock-btn${locked ? ' is-locked' : ''}`}
                           title={locked ? 'ปลดล็อก' : 'ล็อกคาบนี้'}
                           onClick={() => handleToggleLock(day, period)}
-                          disabled={savingKey === key}
+                          disabled={blocked}
                         >
                           {locked ? '🔒' : '🔓'}
                         </button>
                       </div>
                       {teacherLine(cell?.class_subject_id)}
+                      {cell?.note && !cell.class_subject_id && <div className="schedule-teacher-line">{cell.note}</div>}
                       {conflictRooms?.length ? (
                         <div className="schedule-conflict-warn">
                           ซ้ำ: {conflictRooms.join(', ')}
@@ -537,7 +545,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
               </select>
             </div>
             <p style={{ fontSize: 12, color: '#64748B', fontWeight: 700, margin: '12px 0 0' }}>
-              จะลบตารางปัจจุบันของห้องนี้แล้วคัดลอกจากห้องต้นทาง (จับคู่รายวิชาตาม subject_id)
+              แทนคาบที่ไม่ล็อกของห้องนี้ด้วยคาบต้นทาง โดยจับคู่รายวิชาและกิจกรรม หากครูชนกันหรือไม่มีวิชาตรงกันจะไม่เปลี่ยนตารางเดิม
             </p>
             <div className="copy-modal-actions">
               <button type="button" className="schedule-toolbar-btn" onClick={() => setCopyOpen(false)}>
