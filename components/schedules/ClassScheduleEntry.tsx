@@ -379,7 +379,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (!classSubjectId) return null
     const subj = subjectMap[classSubjectId]
     if (!subj) return null
-    if (classSubjectId.startsWith('activity:')) return <div className="schedule-teacher-line">กิจกรรม · ไม่ต้องระบุครู</div>
+    if (classSubjectId.startsWith('activity:')) return null
     const missing = !subj.teacher_name
     return (
       <div className={`schedule-teacher-line${missing ? ' is-missing' : ''}`}>
@@ -477,10 +477,8 @@ export default function ClassScheduleEntry({ mode }: Props) {
 
         {isManage && (
           <div className="schedule-info">
-            เลือกรายวิชาที่เปิดสอนในห้องนี้ (จาก{' '}
-            <Link href="/settings/class-subjects">จัดครูเข้าสอน</Link>
-            ) และกิจกรรมที่เปิดใช้ในเมนูกิจกรรมพัฒนาผู้เรียน เลือกลงคาบเองได้โดยไม่ต้องกำหนดครู ระบบจัดอัตโนมัติจะจัดเฉพาะรายวิชาและเก็บคาบกิจกรรมที่ลงไว้
-            {' · '}<Link href="/schedules/conflicts">ตรวจความขัดแย้ง</Link>
+            คลิกคาบเพื่อเลือกวิชา · สีเขียวคือกิจกรรมที่เลือกลงเอง
+            {' · '}<Link href="/schedules/conflicts">ตรวจคาบชน</Link>
           </div>
         )}
 
@@ -507,17 +505,19 @@ export default function ClassScheduleEntry({ mode }: Props) {
                         <button type="button" className={`schedule-cell-choice${cell?.class_subject_id?.startsWith('activity:')?' activity':''}${locked?' locked':''}`}
                           disabled={blocked || locked} onClick={()=>setPicker({day,period})}
                           aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`}>
-                          {cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label || 'รายวิชา' : cell?.note || '+ เลือกวิชา'}
-                          <small>{locked?'ล็อกคาบแล้ว':cell?.class_subject_id?'คลิกเพื่อเปลี่ยน':'คาบว่าง'}</small>
+                          {cell?.class_subject_id ? <><span className="schedule-subject-code">{subjectMap[cell.class_subject_id]?.subject_code || 'กิจกรรม'}</span><span className="schedule-subject-name">{subjectMap[cell.class_subject_id]?.subject_name || 'รายวิชา'}</span></> : <span className="schedule-empty-label">{cell?.note || '+ เพิ่มวิชา'}</span>}
+
                         </button>
                         <button
                           type="button"
                           className={`schedule-lock-btn${locked ? ' is-locked' : ''}`}
                           title={locked ? 'ปลดล็อก' : 'ล็อกคาบนี้'}
+                          aria-label={locked ? 'ปลดล็อกคาบ' : 'ล็อกคาบ'}
+                          aria-pressed={locked}
                           onClick={() => handleToggleLock(day, period)}
                           disabled={blocked}
                         >
-                          {locked ? '🔒' : '🔓'}
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d={locked?'M8 10V6a4 4 0 018 0v4':'M8 10V6a4 4 0 018 0'}/></svg>
                         </button>
                       </div>
                       {teacherLine(cell?.class_subject_id)}

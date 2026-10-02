@@ -80,6 +80,23 @@ export const SCHEDULE_PRESENTATION = `
   .schedule-workspace .quota-table td {padding:10px 16px;}
   .schedule-workspace .quota-table th {font-size:11px;font-weight:600;}
   .schedule-workspace .schedule-empty {border:1px dashed #cbd8e2;border-radius:12px;background:#fafcfd;padding:40px 24px;font-weight:400;line-height:1.8;}
+  .schedule-workspace .schedule-grid-table {table-layout:fixed;min-width:1080px;}
+  .schedule-workspace .schedule-grid-table th.col-day {width:76px;min-width:76px;}
+  .schedule-workspace .schedule-grid-table th.col-break {width:38px;min-width:38px;}
+  .schedule-workspace .schedule-grid-table th {padding:12px 6px;}
+  .schedule-workspace .schedule-grid-table td.cell {padding:6px;min-width:0;height:104px;}
+  .schedule-workspace .schedule-cell-edit {gap:0;min-height:90px;}
+  .schedule-workspace .schedule-cell-top {position:relative;display:block;}
+  .schedule-workspace .schedule-cell-choice {box-sizing:border-box;min-height:66px;padding:9px 30px 9px 9px;gap:3px;border:1px solid transparent;border-radius:6px;background:transparent;font-size:13px;line-height:1.45;}
+  .schedule-workspace .schedule-cell-choice:hover:not(:disabled) {background:#edf4fa;border-color:#c8dce9;}
+  .schedule-workspace .schedule-cell-choice.activity {background:#edf7f1;border:1px solid #d6eadf;}
+  .schedule-workspace .schedule-cell-choice.locked {background:#f1f3f5;border:1px solid #e0e5e9;opacity:1;}
+  .schedule-workspace .schedule-subject-code {font-size:10px;color:#788a99;font-weight:400;}
+  .schedule-workspace .schedule-subject-name {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:600;overflow-wrap:anywhere;}
+  .schedule-workspace .schedule-empty-label {font-size:12px;color:#8b9ba8;white-space:nowrap;font-weight:400;}
+  .schedule-workspace .schedule-lock-btn {position:absolute;top:5px;right:3px;width:25px;height:25px;border:0;background:transparent;color:#8498a7;}
+  .schedule-workspace .schedule-lock-btn.is-locked {background:#e5ecf1;color:#405d72;border:0;}
+  .schedule-workspace .schedule-teacher-line {padding:3px 9px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
   @media(max-width:700px) {
     .schedule-workspace {gap:14px;}
     .schedule-workspace .schedule-head {padding:18px;}
