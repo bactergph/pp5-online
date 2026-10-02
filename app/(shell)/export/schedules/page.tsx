@@ -292,7 +292,7 @@ export default function ScheduleExportPage() {
         </div>
 
         <div className="sched-export-actions">
-          <button type="button" className="sched-export-btn" onClick={exportPdf}>
+          <button type="button" className="sched-export-btn" disabled={loading || !previewReady || !!error} onClick={exportPdf}>
             บันทึก PDF
           </button>
         </div>
