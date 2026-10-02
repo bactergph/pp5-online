@@ -10,13 +10,13 @@ const LOGO_SIZE = 18
 const PERIODS = SCHEDULE_PERIODS
 const MORNING = SCHEDULE_MORNING_PERIODS
 
-const BORDER: [number, number, number] = [145, 163, 180]
-const HEADER_BG: [number, number, number] = [210, 224, 235]
-const DAY_BG: [number, number, number] = [227, 214, 195]
-const BREAK_BG: [number, number, number] = [247, 234, 196]
-const BREAK_TEXT: [number, number, number] = [180, 83, 9]
+const BORDER: [number, number, number] = [0, 0, 0]
+const HEADER_BG: [number, number, number] = [255, 255, 255]
+const DAY_BG: [number, number, number] = [255, 255, 255]
+const BREAK_BG: [number, number, number] = [229, 229, 229]
+const BREAK_TEXT: [number, number, number] = [0, 0, 0]
 const TEXT: [number, number, number] = [0, 0, 0]
-const MUTED: [number, number, number] = [100, 116, 139]
+const MUTED: [number, number, number] = [0, 0, 0]
 
 export type SchedulePdfInput = {
   academicHeadName?: string
@@ -74,12 +74,12 @@ function drawCell(
     doc.rect(x, y, w, h, 'F')
   }
   doc.setDrawColor(...BORDER)
-  doc.setLineWidth(0.2)
+  doc.setLineWidth(0.3)
   doc.rect(x, y, w, h, 'S')
 
   const maxW = w - 2
   const hasLine2 = !!line2
-  const line1Size = opts?.line1Size ?? 10
+  const line1Size = opts?.line1Size ?? 12
 
   doc.setFont('THSarabunNew', opts?.line1Bold === false ? 'normal' : 'bold')
   doc.setFontSize(line1Size)
@@ -89,7 +89,7 @@ function drawCell(
 
   if (hasLine2) {
     doc.setFont('THSarabunNew', 'normal')
-    doc.setFontSize(opts?.line2Size ?? 8)
+    doc.setFontSize(opts?.line2Size ?? 10)
     doc.setTextColor(...(opts?.line2Color ?? MUTED))
     doc.text(fitText(doc, line2, maxW), x + w / 2, y + h / 2 + 3.2, { align: 'center', baseline: 'middle' })
   }
@@ -128,7 +128,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   doc.setTextColor(...TEXT)
 
   y += LOGO_SIZE + 4
-  doc.setDrawColor(30, 41, 59)
+  doc.setDrawColor(0, 0, 0)
   doc.setLineWidth(0.5)
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y)
   y += 6
@@ -150,7 +150,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   x += breakW
   for (const p of PERIODS.slice(MORNING)) {
     drawCell(doc, x, y, periodW, headerH, `คาบ ${p}`, periodTimeLabel(input.periodTimes, p), {
-      fill: HEADER_BG, line1Size: 9, line2Size: 7,
+      fill: HEADER_BG, line1Size: 12, line2Size: 9, line2Color: TEXT,
     })
     x += periodW
   }

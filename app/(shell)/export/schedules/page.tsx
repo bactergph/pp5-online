@@ -56,16 +56,16 @@ const STYLES = `
   }
   .sched-print-logo img { width: 100%; height: 100%; object-fit: contain; }
   .sched-print-head h2 { margin: 0; font-size: 18px; font-weight: 900; }
-  .sched-print-head p { margin: 4px 0 0; font-size: 12px; font-weight: 700; color: #64748B; }
-  .sched-print-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .sched-print-head p { margin: 4px 0 0; font-size: 15px; font-weight: 700; color: #000; }
+  .sched-print-table { width: 100%; border-collapse: collapse; font-size: 12px; color: #000; }
   .sched-print-table th, .sched-print-table td {
-    border: 1px solid #CBD5E1; padding: 6px 4px; text-align: center; vertical-align: middle;
+    border: 1px solid #000; padding: 6px 4px; text-align: center; vertical-align: middle;
   }
-  .sched-print-table th { background: #D2E0EB; color: #000; font-weight: 700; font-size: 12px; }
-  .sched-print-table td.day-col { background: #E3D6C3; font-weight: 900; }
-  .sched-print-table td.break-col { background: #F7EAC4; color: #B45309; font-size: 8px; }
+  .sched-print-table th { background: #fff; color: #000; font-weight: 700; font-size: 12px; }
+  .sched-print-table td.day-col { background: #fff; color: #000; font-weight: 700; }
+  .sched-print-table td.break-col { background: #E5E5E5; color: #000; font-size: 12px; }
   .sched-print-cell { min-height: 32px; font-weight: 700; line-height: 1.3; }
-  .sched-print-cell .sub { font-size: 8px; color: #64748B; font-weight: 600; }
+  .sched-print-cell .sub { font-size: 11px; color: #000; font-weight: 400; }
   @media print {
     .sched-export-filters, .sched-export-actions, .sched-export-head { display: none !important; }
     .sched-export-preview { border: none; padding: 0; }
@@ -88,7 +88,14 @@ export default function ScheduleExportPage() {
   const [classroomId, setClassroomId] = useState('')
   const [teacherId, setTeacherId] = useState('')
   const [gridData, setGridData] = useState<Record<string, { line1: string; line2: string }>>({})
-  const [title, setTitle] = useState('')
+  const [semester, setSemester] = useState('1')
+  const selectedClass = classrooms.find(c => c.id === classroomId)
+  const classLabel = (selectedClass?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
+  const selectedTeacher = teachers.find(t => t.id === teacherId)
+  const yearLabel = years.find(y => y.id === yearId)?.year_be || ''
+  const title = exportType === 'class'
+    ? `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${classLabel}`
+    : `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${selectedTeacher ? `${selectedTeacher.prefix} ${selectedTeacher.full_name}` : ''}`
   const [error, setError] = useState('')
   const [previewReady, setPreviewReady] = useState(false)
   const printMode = useRef(false)
@@ -118,6 +125,7 @@ export default function ScheduleExportPage() {
 
       const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
       const isPrint = params?.get('print') === '1'
+      if (params?.get('semester') === '2') setSemester('2')
       const active = (initData.years as Year[]).find(y => y.is_active) || (initData.years as Year[])[0]
 
       if (isPrint && params) {
@@ -146,9 +154,6 @@ export default function ScheduleExportPage() {
     const subjMap = Object.fromEntries(
       (subs as { id: string; label: string; teacher_name: string }[]).map(s => [s.id, s]),
     )
-    const classroom = classrooms.find(c => c.id === classroomId)
-    const year = years.find(y => y.id === yearId)
-    setTitle(`ตารางเรียน ห้อง ${classroom?.label || ''} ปีการศึกษา พ.ศ. ${year?.year_be || ''}`)
 
     const data: Record<string, { line1: string; line2: string }> = {}
     for (const [key, cell] of Object.entries(grid as Record<string, { class_subject_id: string | null; note: string | null }>)) {
@@ -164,13 +169,10 @@ export default function ScheduleExportPage() {
     }
     setGridData(data)
     setPreviewReady(true)
-  }, [classroomId, yearId, classrooms, years])
+  }, [classroomId, yearId])
 
   const loadTeachingGrid = useCallback(async () => {
     const grid = await fetchTeachingScheduleGrid(teacherId, yearId)
-    const teacher = teachers.find(t => t.id === teacherId)
-    const year = years.find(y => y.id === yearId)
-    setTitle(`ตารางสอน ${teacher ? `${teacher.prefix} ${teacher.full_name}` : ''} ปีการศึกษา พ.ศ. ${year?.year_be || ''}`)
 
     const data: Record<string, { line1: string; line2: string }> = {}
     for (const [key, cell] of Object.entries(grid as Record<string, { room_line: string; subject_line: string }>)) {
@@ -181,7 +183,7 @@ export default function ScheduleExportPage() {
     }
     setGridData(data)
     setPreviewReady(true)
-  }, [teacherId, yearId, teachers, years])
+  }, [teacherId, yearId])
 
   useEffect(() => { void Promise.resolve().then(init) }, [init])
 
@@ -271,6 +273,13 @@ export default function ScheduleExportPage() {
               ))}
             </select>
           </div>
+          <div className="sched-export-field">
+            <label htmlFor="schedule-semester">ภาคเรียน</label>
+            <select id="schedule-semester" value={semester} onChange={e => setSemester(e.target.value)}>
+              <option value="1">ภาคเรียนที่ 1</option>
+              <option value="2">ภาคเรียนที่ 2</option>
+            </select>
+          </div>
           {exportType === 'class' ? (
             <div className="sched-export-field">
               <label>ห้องเรียน</label>
@@ -335,7 +344,7 @@ export default function ScheduleExportPage() {
                   <th key={p}>
                     คาบ {p}
                     {periodTimes.length ? (
-                      <div style={{ fontSize: 8, fontWeight: 600, color: '#94A3B8' }}>
+                      <div style={{ fontSize: 10, fontWeight: 500, color: '#000' }}>
                         {periodTimeLabel(periodTimes, p)}
                       </div>
                     ) : null}
