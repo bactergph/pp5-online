@@ -38,9 +38,10 @@ const GRID_STYLES = `
 type Props = {
   renderCell: (day: number, period: number) => ReactNode
   periodTimes?: PeriodTimeRow[]
+  compactBreak?: boolean
 }
 
-export default function ScheduleGridTable({ renderCell, periodTimes }: Props) {
+export default function ScheduleGridTable({ renderCell, periodTimes, compactBreak = false }: Props) {
   return (
     <>
       <style>{GRID_STYLES}</style>
@@ -71,8 +72,9 @@ export default function ScheduleGridTable({ renderCell, periodTimes }: Props) {
               <td className="day-col">{day.label}</td>
               {SCHEDULE_COLUMNS.map(col => {
                 if (col.kind === 'break') {
+                  if (compactBreak && day.value !== SCHEDULE_DAYS[0].value) return null
                   return (
-                    <td key={`${day.value}-break`} className="break-col">
+                    <td key={`${day.value}-break`} className="break-col" rowSpan={compactBreak ? SCHEDULE_DAYS.length : undefined}>
                       พักเที่ยง
                     </td>
                   )
