@@ -64,7 +64,7 @@ const STYLES = `
   }
   .schedule-tab.is-active { border-color: #C49212; background: #F3E8FF; color: #6D28D9; }
   .schedule-filters {
-    display: grid; grid-template-columns: 140px minmax(200px, 1fr); gap: 12px; align-items: end;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end;
     padding: 14px; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
   }
   .schedule-field { display: grid; gap: 5px; }
@@ -148,6 +148,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [conflicts, setConflicts] = useState<Record<string, string[]>>({})
   const [selectedYear, setSelectedYear] = useState('')
+  const [semester, setSemester] = useState(1)
   const [selectedClass, setSelectedClass] = useState('')
   const [canEdit, setCanEdit] = useState(false)
   const [savingKey, setSavingKey] = useState<string | null>(null)
@@ -157,7 +158,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const [rebuild, setRebuild] = useState(false)
   const gridRequest = useRef(0)
   const roomRequest = useRef(0)
-  const blocked = !!busyAction || !!savingKey || gridLoading || loadedContext !== `${selectedYear}:${selectedClass}`
+  const blocked = !!busyAction || !!savingKey || gridLoading || loadedContext !== `${selectedYear}:${semester}:${selectedClass}`
   const [copyOpen, setCopyOpen] = useState(false)
   const [copyFromClass, setCopyFromClass] = useState('')
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
@@ -205,20 +206,20 @@ export default function ClassScheduleEntry({ mode }: Props) {
     const request = ++gridRequest.current
     setGridLoading(true)
     try {
-    const bundle = await fetchClassScheduleBundle(selectedClass, selectedYear)
+    const bundle = await fetchClassScheduleBundle(selectedClass, selectedYear, semester)
     if (request !== gridRequest.current) return
     setCells(bundle.grid)
     setSubjects(bundle.subjects)
     setQuotas(bundle.quotas)
     setConflicts(bundle.warnings)
-    setLoadedContext(`${selectedYear}:${selectedClass}`)
+    setLoadedContext(`${selectedYear}:${semester}:${selectedClass}`)
     } catch (e) {
       if (request === gridRequest.current) {
         setLoadedContext('')
         setAlert({ type: 'error', title: 'โหลดตารางไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
       }
     } finally { if (request === gridRequest.current) setGridLoading(false) }
-  }, [selectedClass, selectedYear])
+  }, [selectedClass, selectedYear, semester])
 
   useEffect(() => { void Promise.resolve().then(init) }, [])
   useEffect(() => {
@@ -243,17 +244,17 @@ export default function ClassScheduleEntry({ mode }: Props) {
     }))
     setSavingKey(key)
     try {
-      const saved = await saveClassScheduleCell(selectedClass, selectedYear, day, period, classSubjectId)
+      const saved = await saveClassScheduleCell(selectedClass, selectedYear, day, period, classSubjectId, null, semester)
       if (saved.error) throw new Error(saved.error)
       if (isManage) {
-        const quotaData = await fetchScheduleQuotas(selectedClass, selectedYear)
+        const quotaData = await fetchScheduleQuotas(selectedClass, selectedYear, semester)
         setQuotas(quotaData as QuotaData)
       }
       if (classSubjectId) {
         const subj = subjectMap[classSubjectId]
         if (subj?.teacher_id) {
           const result = await getTeacherConflictAt(
-            selectedYear, subj.teacher_id, day, period, selectedClass,
+            selectedYear, subj.teacher_id, day, period, selectedClass, semester,
           )
           setConflicts(current => {
             const next = { ...current }
@@ -291,7 +292,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     const key = `${day}-${period}`
     setSavingKey(key)
     try {
-      const response = await toggleScheduleCellLock(selectedClass, selectedYear, day, period)
+      const response = await toggleScheduleCellLock(selectedClass, selectedYear, day, period, semester)
       if (response.error || !response.data) throw new Error(response.error || 'บันทึกไม่สำเร็จ')
       const result = response.data
       setCells(current => ({
@@ -318,8 +319,8 @@ export default function ClassScheduleEntry({ mode }: Props) {
     setBusyAction('auto')
     try {
       const response = wholeSchool
-        ? await runAutoScheduleSchool(selectedYear, rebuild)
-        : await runAutoScheduleClass(selectedClass, selectedYear, 'spread', rebuild)
+        ? await runAutoScheduleSchool(selectedYear, rebuild, semester)
+        : await runAutoScheduleClass(selectedClass, selectedYear, 'spread', rebuild, semester)
       if (response.error || !response.data) throw new Error(response.error || 'จัดตารางไม่สำเร็จ')
       const result = response.data
       await loadGrid()
@@ -335,7 +336,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (!window.confirm('ล้างตารางห้องนี้? (คาบที่ล็อกจะไม่ถูกลบ)')) return
     setBusyAction('clear')
     try {
-      const result = await clearClassSchedule(selectedClass, selectedYear)
+      const result = await clearClassSchedule(selectedClass, selectedYear, semester)
       if (result.error) throw new Error(result.error)
       await loadGrid()
       setAlert({ type: 'success', title: 'ล้างตารางสำเร็จ' })
@@ -350,7 +351,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (!copyFromClass) return
     setBusyAction('copy')
     try {
-      const response = await copyClassSchedule(copyFromClass, selectedClass, selectedYear)
+      const response = await copyClassSchedule(copyFromClass, selectedClass, selectedYear, semester)
       if (response.error || !response.data) throw new Error(response.error || 'คัดลอกไม่สำเร็จ')
       const result = response.data
       setCopyOpen(false)
@@ -404,7 +405,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
             <h1>{isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
             <p>
               {selectedClassroom && selectedYearObj
-                ? `ห้อง ${selectedClassroom.label} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
+                ? `ห้อง ${selectedClassroom.label} · ภาคเรียนที่ ${semester} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
                 : isManage
                   ? 'กำหนดวิชาในแต่ละคาบ — ครูผู้สอนดึงจากข้อมูลจัดครูเข้าสอน'
                   : 'ดูตารางเรียนรายห้อง'}
@@ -431,6 +432,14 @@ export default function ClassScheduleEntry({ mode }: Props) {
               ))}
             </select>
           </div>
+          <div className="schedule-field">
+            <label>ภาคเรียน</label>
+            <select disabled={!!busyAction || !!savingKey} value={semester} onChange={e => setSemester(Number(e.target.value))}>
+              <option value={1}>ภาคเรียนที่ 1</option>
+              <option value={2}>ภาคเรียนที่ 2</option>
+            </select>
+          </div>
+
           <div className="schedule-field">
             <label>ห้องเรียน</label>
             <select disabled={!!busyAction || !!savingKey} value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
@@ -459,7 +468,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
             >
               {busyAction === 'auto' ? 'กำลังจัด...' : 'จัดอัตโนมัติห้องนี้'}
             </button>
-            <details className="school-auto-actions"><summary>เครื่องมือทั้งโรงเรียน</summary><p>จัดทุกห้องในปีการศึกษาที่เลือก โดยเก็บคาบกิจกรรมไว้</p><button type="button" className="schedule-toolbar-btn primary" disabled={blocked} onClick={() => handleAutoSchedule(true)}>จัดอัตโนมัติทั้งโรงเรียน</button></details>
+            <details className="school-auto-actions"><summary>เครื่องมือทั้งโรงเรียน</summary><p>จัดทุกห้องในปีการศึกษาและภาคเรียนที่เลือก โดยเก็บคาบกิจกรรมไว้</p><button type="button" className="schedule-toolbar-btn primary" disabled={blocked} onClick={() => handleAutoSchedule(true)}>จัดอัตโนมัติทั้งโรงเรียน</button></details>
             <label><input type="checkbox" checked={rebuild} disabled={blocked} onChange={e => setRebuild(e.target.checked)} /> จัดคาบที่ไม่ล็อกใหม่</label>
             <button
               type="button"

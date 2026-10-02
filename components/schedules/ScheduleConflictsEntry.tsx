@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useRef, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { fetchScheduleConflicts, fetchScheduleInit } from '@/app/schedules/actions'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -67,16 +67,11 @@ export default function ScheduleConflictsEntry() {
   const [loading, setLoading] = useState(true)
   const [years, setYears] = useState<Year[]>([])
   const [selectedYear, setSelectedYear] = useState('')
+  const [semester, setSemester] = useState(1)
+  const requestId = useRef(0)
   const [conflicts, setConflicts] = useState<Conflict[]>([])
   const [count, setCount] = useState(0)
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
-
-  useEffect(() => { init() }, [])
-
-  useEffect(() => {
-    if (!selectedYear) return
-    loadConflicts()
-  }, [selectedYear])
 
   async function init() {
     try {
@@ -91,15 +86,24 @@ export default function ScheduleConflictsEntry() {
     }
   }
 
-  async function loadConflicts() {
+  const loadConflicts = useCallback(async () => {
+    const request = ++requestId.current
     try {
-      const data = await fetchScheduleConflicts(selectedYear)
+      const data = await fetchScheduleConflicts(selectedYear, semester)
+      if (request !== requestId.current) return
       setConflicts(data.conflicts as Conflict[])
       setCount(data.count)
     } catch (e) {
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     }
-  }
+  }, [selectedYear, semester])
+
+  useEffect(() => { void Promise.resolve().then(init) }, [])
+
+  useEffect(() => {
+    if (!selectedYear) return
+    void Promise.resolve().then(loadConflicts)
+  }, [selectedYear, semester, loadConflicts])
 
   if (loading) return <div className="schedule-empty">กำลังโหลด...</div>
 
@@ -125,6 +129,14 @@ export default function ScheduleConflictsEntry() {
               ))}
             </select>
           </div>
+          <div className="schedule-field">
+            <label>ภาคเรียน</label>
+            <select value={semester} onChange={e => setSemester(Number(e.target.value))}>
+              <option value={1}>ภาคเรียนที่ 1</option>
+              <option value={2}>ภาคเรียนที่ 2</option>
+            </select>
+          </div>
+
         </div>
 
         <div className={`conflict-summary ${count > 0 ? 'has-conflicts' : 'no-conflicts'}`}>

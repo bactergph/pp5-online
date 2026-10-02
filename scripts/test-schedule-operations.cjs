@@ -7,14 +7,14 @@ function moduleFrom(path, requireFn) {
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:requireFn})
   return exports
 }
-let data, writes, role='admin'
+let data, writes, loadedTerm, writtenTerm, role='admin'
 const solver = moduleFrom('lib/schedule-solver.ts')
 const store = {
-  loadSchedule: async()=>data,
+  loadSchedule: async(s,y,term)=>{loadedTerm=term;return data},
   requireScheduleClass: (d,id)=>{const c=d.classrooms.find(c=>c.id===id);if(!c)throw Error('room');return c},
   lessonKey:s=>s.activity_id?'activity:'+s.activity_id:s.class_subject_id,
   lessonColumns:id=>({class_subject_id:id&&!id.startsWith('activity:')?id:null,activity_id:id?.startsWith('activity:')?id.slice(9):null}),
-  persistSchedule:async(s,y,before,after)=>{writes++;data={...data,slots:after}},
+  persistSchedule:async(s,y,before,after,unlock,term)=>{writtenTerm=term;writes++;data={...data,slots:after}},
 }
 const api=moduleFrom('lib/schedule-operations.ts',name=>({
   'server-only':{},'@/lib/session':{getSession:async()=>({schoolId:'s',role,userId:'u'})},
@@ -26,6 +26,8 @@ const api=moduleFrom('lib/schedule-operations.ts',name=>({
 function reset(){writes=0;data={classrooms:[{id:'a',level:'ป.1',room:1},{id:'b',level:'ป.2',room:1},{id:'empty',level:'อ.2',room:1}],lessons:[{id:'l1',classroomId:'a',teacherId:'t',count:2,label:'a · math',subjectId:'math',name:'math',activity:false},{id:'l2',classroomId:'b',teacherId:'t',count:2,label:'b · math',subjectId:'math',name:'math',activity:false}],slots:[]}}
 const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'y',day_of_week:1,period,class_subject_id:id,activity_id:null,note:null,locked})
 ;(async()=>{
+  reset();await api.autoSchedule('y','a',true,2);assert.equal(loadedTerm,2);assert.equal(writtenTerm,2)
+  reset();await api.saveCell('a','y',1,1,'l1',null,2);assert.equal(loadedTerm,2);assert.equal(writtenTerm,2)
   reset();data.slots=[slot('a','l1',1),slot('a','l1',2)]
   const rebuilt=await api.autoSchedule('y','a',true)
   assert.equal(rebuilt.assigned,2,'clear-first must recompute full quotas')

@@ -26,7 +26,17 @@ async function readAll<T>(query: { range(from: number, to: number): PromiseLike<
     if ((page.data?.length || 0) < 500) return { data, error: null }
   }
 }
-export async function loadSchedule(schoolId: string | null, yearId: string) {
+async function readTermSlots(ids: string[], yearId: string, semester: number) {
+  const query = () => createServerClient().from('class_schedule_slots').select(slotFields).in('classroom_id', ids).eq('academic_year_id', yearId).order('classroom_id').order('day_of_week').order('period')
+  const result = await readAll(query().eq('semester', semester))
+  if (result.error && ['42703', 'PGRST204'].includes(result.error.code || '') && result.error.message.includes('semester')) {
+    if (semester === 1) return { ...await readAll(query()), legacy: true }
+    throw new Error('กรุณารันไฟล์ฐานข้อมูล 057_schedule_semesters.sql เพื่อเปิดใช้ตารางแยกภาคเรียน')
+  }
+  return { ...result, legacy: false }
+}
+export async function loadSchedule(schoolId: string | null, yearId: string, semester = 1) {
+  if (semester !== 1 && semester !== 2) throw new Error('ภาคเรียนไม่ถูกต้อง')
   if (!schoolId) throw new Error('กรุณาเลือกโรงเรียน')
   const db = createServerClient()
   const year = await db.from('academic_years').select('id').eq('id', yearId).eq('school_id', schoolId).maybeSingle()
@@ -39,11 +49,11 @@ export async function loadSchedule(schoolId: string | null, yearId: string) {
   const [subjects, activities, slots, teachers] = await Promise.all([
     readAll(db.from('class_subjects').select('id,classroom_id,subject_id,teacher_id,subjects(code,name,short_name,hours_per_year)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
     readAll(db.from('class_schedule_activities').select('id,classroom_id,evaluation_setting_id,teacher_id,weekly_periods,evaluation_settings(label,short_label,is_active,sort_order)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
-    readAll(db.from('class_schedule_slots').select(slotFields).in('classroom_id', ids).eq('academic_year_id', yearId).order('classroom_id').order('day_of_week').order('period')),
+    readTermSlots(ids, yearId, semester),
     readAll(db.from('users').select('id,prefix,full_name').eq('school_id', schoolId).order('id')),
   ])
   for (const r of [subjects, activities, slots, teachers]) if (r.error) {
-    if (r.error.code === 'PGRST205' || r.error.code === '42703') throw new Error('ระบบตารางเรียนยังไม่พร้อม กรุณาให้ผู้ดูแลรันไฟล์ฐานข้อมูล 053_school_schedule_solver.sql ก่อน')
+    if (r.error.code === 'PGRST205' || r.error.code === '42703') throw new Error('ระบบตารางเรียนยังไม่พร้อม กรุณาให้ผู้ดูแลรันไฟล์ฐานข้อมูล 057_schedule_semesters.sql ก่อน')
     throw new Error(`โหลดตารางเรียนไม่สำเร็จ: ${r.error.message}`)
   }
   const names = new Map((teachers.data || []).map(t => [t.id, `${t.prefix || ''} ${t.full_name}`.trim()]))
@@ -61,14 +71,18 @@ export async function loadSchedule(schoolId: string | null, yearId: string) {
       label: `${labels.get(row.classroom_id)} · ${name}`, subjectId: row.evaluation_setting_id || LEARNER_DEVELOPMENT_KEY, code: '',
       teacherOptional: true, selectable: !!row.evaluation_setting_id && !!a?.is_active, name, teacherName: names.get(row.teacher_id) || '', activity: true })
   }
-  return { classrooms, lessons, slots: (slots.data || []) as ScheduleSlot[] }
+  return { classrooms, lessons, slots: (slots.data || []) as ScheduleSlot[], semesterSupported: !slots.legacy }
 }
 
-export async function persistSchedule(schoolId: string | null, yearId: string, before: ScheduleSlot[], after: ScheduleSlot[], allowUnlock = false) {
-  const { error } = await createServerClient().rpc('save_school_schedule', {
-    p_school_id: schoolId, p_year_id: yearId, p_expected: before, p_rows: after, p_allow_unlock: allowUnlock,
+export async function persistSchedule(schoolId: string | null, yearId: string, before: ScheduleSlot[], after: ScheduleSlot[], allowUnlock = false, semester = 1) {
+  const { error } = await createServerClient().rpc('save_school_schedule_term', {
+    p_school_id: schoolId, p_year_id: yearId, p_expected: before, p_rows: after, p_allow_unlock: allowUnlock, p_semester: semester,
   })
-  if (error) throw new Error(error.message)
+  if (error?.code === 'PGRST202') {
+    if (semester !== 1) throw new Error('กรุณารันไฟล์ฐานข้อมูล 057_schedule_semesters.sql ก่อนบันทึกเทอม 2')
+    const legacy = await createServerClient().rpc('save_school_schedule', { p_school_id: schoolId, p_year_id: yearId, p_expected: before, p_rows: after, p_allow_unlock: allowUnlock })
+    if (legacy.error) throw new Error(legacy.error.message)
+  } else if (error) throw new Error(error.message)
 }
 
 export function requireScheduleClass(data: Awaited<ReturnType<typeof loadSchedule>>, classroomId: string) {

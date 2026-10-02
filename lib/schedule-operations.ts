@@ -7,21 +7,21 @@ import { lessonColumns, lessonKey, loadSchedule, persistSchedule, requireSchedul
 import { solveSchoolSchedule } from '@/lib/schedule-solver'
 import { LEARNER_DEVELOPMENT_KEY } from '@/lib/schedule-activity'
 
-async function context(yearId: string) {
+async function context(yearId: string, semester = 1) {
   const session = await getSession()
   if (!session?.schoolId || !SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])) throw new Error('ไม่มีสิทธิ์แก้ไขตารางเรียน')
-  return { session, data: await loadSchedule(session.schoolId, yearId) }
+  return { session, semester, data: await loadSchedule(session.schoolId, yearId, semester) }
 }
 function cell(day: number, period: number) {
   if (!Number.isInteger(day) || day < 1 || day > 5 || !Number.isInteger(period) || period < 1 || period > 6) throw new Error('วันหรือคาบเรียนไม่ถูกต้อง')
 }
 async function commit(ctx: Awaited<ReturnType<typeof context>>, year: string, rows: ScheduleSlot[], description: string, unlock = false) {
-  await persistSchedule(ctx.session.schoolId, year, ctx.data.slots, rows, unlock)
+  await persistSchedule(ctx.session.schoolId, year, ctx.data.slots, rows, unlock, ctx.semester)
   await logActivity({ actor: ctx.session, schoolId: ctx.session.schoolId, action: 'update', module: 'schedules', targetType: 'class_schedule', description })
 }
-export async function saveCell(roomId: string, year: string, day: number, period: number, lesson: string | null, note: string | null) {
+export async function saveCell(roomId: string, year: string, day: number, period: number, lesson: string | null, note: string | null, semester = 1) {
   cell(day, period)
-  const ctx = await context(year)
+  const ctx = await context(year, semester)
   requireScheduleClass(ctx.data, roomId)
   const current = ctx.data.slots.find(s => s.classroom_id === roomId && s.day_of_week === day && s.period === period)
   if (current?.locked) throw new Error('กรุณาปลดล็อกคาบก่อนแก้ไข')
@@ -31,9 +31,9 @@ export async function saveCell(roomId: string, year: string, day: number, period
   await commit(ctx, year, rows, `แก้ไขตารางเรียน วัน ${day} คาบ ${period}`)
   return { ok: true }
 }
-export async function toggleLock(roomId: string, year: string, day: number, period: number) {
+export async function toggleLock(roomId: string, year: string, day: number, period: number, semester = 1) {
   cell(day, period)
-  const ctx = await context(year)
+  const ctx = await context(year, semester)
   requireScheduleClass(ctx.data, roomId)
   const existing = ctx.data.slots.find(s => s.classroom_id === roomId && s.day_of_week === day && s.period === period)
   const locked = !existing?.locked
@@ -42,15 +42,15 @@ export async function toggleLock(roomId: string, year: string, day: number, peri
   await commit(ctx, year, rows, `${locked ? 'ล็อก' : 'ปลดล็อก'}คาบเรียน`, true)
   return { locked }
 }
-export async function clearRoom(roomId: string, year: string) {
-  const ctx = await context(year)
+export async function clearRoom(roomId: string, year: string, semester = 1) {
+  const ctx = await context(year, semester)
   requireScheduleClass(ctx.data, roomId)
   await commit(ctx, year, ctx.data.slots.filter(s => s.classroom_id !== roomId || s.locked), 'ล้างคาบที่ไม่ล็อกในห้องเรียน')
   return { ok: true }
 }
-export async function copyRoom(from: string, to: string, year: string) {
+export async function copyRoom(from: string, to: string, year: string, semester = 1) {
   if (from === to) throw new Error('กรุณาเลือกห้องต้นทางต่างจากห้องปลายทาง')
-  const ctx = await context(year)
+  const ctx = await context(year, semester)
   requireScheduleClass(ctx.data, from); requireScheduleClass(ctx.data, to)
   const targets = ctx.data.lessons.filter(l => l.classroomId === to)
   const locked = ctx.data.slots.filter(s => s.classroom_id === to && s.locked)
@@ -67,8 +67,8 @@ export async function copyRoom(from: string, to: string, year: string) {
   await commit(ctx, year, rows, `คัดลอกตารางเรียน ${copied} คาบ`)
   return { ok: true, copied }
 }
-export async function autoSchedule(year: string, roomId: string | null, clearFirst: boolean) {
-  const ctx = await context(year)
+export async function autoSchedule(year: string, roomId: string | null, clearFirst: boolean, semester = 1) {
+  const ctx = await context(year, semester)
   if (roomId) requireScheduleClass(ctx.data, roomId)
   const scope = new Set(roomId ? [roomId] : ctx.data.classrooms.filter(c => ctx.data.lessons.some(l => l.classroomId === c.id && !l.activity)).map(c => c.id))
   if (!scope.size) throw new Error('ยังไม่มีห้องเรียนที่กำหนดรายวิชาหรือกิจกรรมในปีนี้')
@@ -90,8 +90,8 @@ export async function autoSchedule(year: string, roomId: string | null, clearFir
   return { ok: true, assigned: result.assignments.length, classrooms: scope.size, skipped }
 }
 
-export async function activityOptions(year: string, roomId: string) {
-  const ctx = await context(year)
+export async function activityOptions(year: string, roomId: string, semester = 1) {
+  const ctx = await context(year, semester)
   requireScheduleClass(ctx.data, roomId)
   const db = createServerClient()
   const [settings, teachers, offerings] = await Promise.all([
@@ -102,8 +102,8 @@ export async function activityOptions(year: string, roomId: string) {
   for (const r of [settings, teachers, offerings]) if (r.error) throw new Error(r.error.message)
   return { settings: settings.data || [], teachers: teachers.data || [], offerings: offerings.data || [] }
 }
-export async function saveActivity(year: string, roomId: string, settingId: string, teacherId: string, count: number) {
-  const ctx = await context(year)
+export async function saveActivity(year: string, roomId: string, settingId: string, teacherId: string, count: number, semester = 1) {
+  const ctx = await context(year, semester)
   requireScheduleClass(ctx.data, roomId)
   const opts = await activityOptions(year, roomId)
   const combined = settingId === LEARNER_DEVELOPMENT_KEY

@@ -94,17 +94,17 @@ export async function fetchScheduleClassrooms(yearId: string) {
   }))
 }
 
-export async function fetchClassScheduleSubjects(classroomId: string) {
+export async function fetchClassScheduleSubjects(classroomId: string, semester = 1) {
   const session = await requireScheduleSession()
   const { data: room, error } = await createServerClient().from('classrooms').select('academic_year_id').eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
   if (error || !room) throw new Error('ไม่พบห้องเรียน')
-  const data = await loadSchedule(session.schoolId, room.academic_year_id)
+  const data = await loadSchedule(session.schoolId, room.academic_year_id, semester)
   return data.lessons.filter(l => l.classroomId === classroomId && l.selectable !== false).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,label:(l.code+' '+l.name).trim(),activity:l.activity }))
 }
 
-export async function fetchClassScheduleGrid(classroomId: string, yearId: string) {
+export async function fetchClassScheduleGrid(classroomId: string, yearId: string, semester = 1) {
   const session = await requireScheduleSession()
-  const data = await loadSchedule(session.schoolId, yearId)
+  const data = await loadSchedule(session.schoolId, yearId, semester)
   requireScheduleClass(data, classroomId)
   const cells: Record<string, { class_subject_id: string | null; note: string | null; locked: boolean }> = {}
   for (const day of SCHEDULE_DAYS) for (let period=1; period<=SCHEDULE_PERIOD_COUNT; period++) cells[day.value+'-'+period]={class_subject_id:null,note:null,locked:false}
@@ -112,9 +112,9 @@ export async function fetchClassScheduleGrid(classroomId: string, yearId: string
   return cells
 }
 
-export async function fetchClassScheduleBundle(classroomId: string, yearId: string) {
+export async function fetchClassScheduleBundle(classroomId: string, yearId: string, semester = 1) {
   const session = await requireScheduleSession()
-  const data = await loadSchedule(session.schoolId, yearId)
+  const data = await loadSchedule(session.schoolId, yearId, semester)
   requireScheduleClass(data, classroomId)
   const lessons = data.lessons.filter(l => l.classroomId === classroomId)
   const grid: Record<string, { class_subject_id: string | null; note: string | null; locked: boolean }> = {}
@@ -138,14 +138,14 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
   }
 }
 
-export async function saveClassScheduleCell(classroomId: string, yearId: string, day: number, period: number, lesson: string | null, note: string | null = null) {
-  return scheduleResult(() => scheduleOps.saveCell(classroomId, yearId, day, period, lesson, note))
+export async function saveClassScheduleCell(classroomId: string, yearId: string, day: number, period: number, lesson: string | null, note: string | null = null, semester = 1) {
+  return scheduleResult(() => scheduleOps.saveCell(classroomId, yearId, day, period, lesson, note, semester))
 }
 
-export async function fetchTeachingScheduleGrid(teacherId: string, yearId: string) {
+export async function fetchTeachingScheduleGrid(teacherId: string, yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   if (session.role === 'teacher' && teacherId !== session.userId) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
-  const data = await loadSchedule(session.schoolId, yearId)
+  const data = await loadSchedule(session.schoolId, yearId, semester)
   const cells: Record<string,{label:string;subject_line:string;room_line:string}> = {}
   for (const d of SCHEDULE_DAYS) for(let p=1;p<=SCHEDULE_PERIOD_COUNT;p++) cells[d.value+'-'+p]={label:'',subject_line:'',room_line:''}
   for(const row of data.slots) {
@@ -170,54 +170,54 @@ export async function savePeriodTimes(times: PeriodTimeRow[]) {
   return mod.savePeriodTimes(times)
 }
 
-export async function fetchScheduleQuotas(classroomId: string, yearId: string) {
+export async function fetchScheduleQuotas(classroomId: string, yearId: string, semester = 1) {
   const mod = await import('./extended-actions')
-  return mod.fetchScheduleQuotas(classroomId, yearId)
+  return mod.fetchScheduleQuotas(classroomId, yearId, semester)
 }
 
-export async function fetchScheduleConflicts(yearId: string) {
+export async function fetchScheduleConflicts(yearId: string, semester = 1) {
   const mod = await import('./extended-actions')
-  return mod.fetchScheduleConflicts(yearId)
+  return mod.fetchScheduleConflicts(yearId, semester)
 }
 
-export async function fetchScheduleWorkload(yearId: string) {
+export async function fetchScheduleWorkload(yearId: string, semester = 1) {
   const mod = await import('./extended-actions')
-  return mod.fetchScheduleWorkload(yearId)
+  return mod.fetchScheduleWorkload(yearId, semester)
 }
 
-export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: string) {
+export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: string, semester = 1) {
   const mod = await import('./extended-actions')
-  return mod.fetchScheduleCurriculumCheck(classroomId, yearId)
+  return mod.fetchScheduleCurriculumCheck(classroomId, yearId, semester)
 }
 
 export async function toggleScheduleCellLock(
   classroomId: string,
   yearId: string,
   dayOfWeek: number,
-  period: number,
+  period: number, semester = 1
 ) {
   const mod = await import('./extended-actions')
-  return scheduleResult(() => mod.toggleScheduleCellLock(classroomId, yearId, dayOfWeek, period))
+  return scheduleResult(() => mod.toggleScheduleCellLock(classroomId, yearId, dayOfWeek, period, semester))
 }
 
-export async function copyClassSchedule(fromClassroomId: string, toClassroomId: string, yearId: string) {
+export async function copyClassSchedule(fromClassroomId: string, toClassroomId: string, yearId: string, semester = 1) {
   const mod = await import('./extended-actions')
-  return scheduleResult(() => mod.copyClassSchedule(fromClassroomId, toClassroomId, yearId))
+  return scheduleResult(() => mod.copyClassSchedule(fromClassroomId, toClassroomId, yearId, semester))
 }
 
-export async function clearClassSchedule(classroomId: string, yearId: string) {
+export async function clearClassSchedule(classroomId: string, yearId: string, semester = 1) {
   const mod = await import('./extended-actions')
-  return scheduleResult(() => mod.clearClassSchedule(classroomId, yearId))
+  return scheduleResult(() => mod.clearClassSchedule(classroomId, yearId, semester))
 }
 
 export async function runAutoScheduleClass(
   classroomId: string,
   yearId: string,
   mode: 'spread' | 'random' = 'spread',
-  clearFirst = false,
+  clearFirst = false, semester = 1
 ) {
   const mod = await import('./extended-actions')
-  return scheduleResult(() => mod.runAutoScheduleClass(classroomId, yearId, mode, clearFirst))
+  return scheduleResult(() => mod.runAutoScheduleClass(classroomId, yearId, mode, clearFirst, semester))
 }
 
 export async function fetchScheduleExportContext() {
@@ -225,18 +225,18 @@ export async function fetchScheduleExportContext() {
   return mod.fetchScheduleExportContext()
 }
 
-export async function fetchSubstituteDay(date: string, yearId: string) {
+export async function fetchSubstituteDay(date: string, yearId: string, semester = 1) {
   const mod = await import('./extended-actions')
-  return mod.fetchSubstituteDay(date, yearId)
+  return mod.fetchSubstituteDay(date, yearId, semester)
 }
 
 export async function loadSubstituteSlotsForTeacher(
   date: string,
   yearId: string,
-  absentTeacherId: string,
+  absentTeacherId: string, semester = 1
 ) {
   const mod = await import('./extended-actions')
-  return mod.loadSubstituteSlotsForTeacher(date, yearId, absentTeacherId)
+  return mod.loadSubstituteSlotsForTeacher(date, yearId, absentTeacherId, semester)
 }
 
 export async function saveSubstituteTeacher(
@@ -263,10 +263,10 @@ export async function importSubstituteFromSchedule(
   date: string,
   yearId: string,
   absentTeacherId: string,
-  leaveType: string,
+  leaveType: string, semester = 1
 ) {
   const mod = await import('./extended-actions')
-  return scheduleResult(() => mod.importSubstituteFromSchedule(substituteDayId, date, yearId, absentTeacherId, leaveType))
+  return scheduleResult(() => mod.importSubstituteFromSchedule(substituteDayId, date, yearId, absentTeacherId, leaveType, semester))
 }
 
 export async function getTeacherConflictAt(
@@ -274,15 +274,15 @@ export async function getTeacherConflictAt(
   teacherId: string,
   day: number,
   period: number,
-  ignoreClassroomId?: string,
+  ignoreClassroomId?: string, semester = 1
 ) {
   const mod = await import('./extended-actions')
-  return mod.getTeacherConflictAt(yearId, teacherId, day, period, ignoreClassroomId)
+  return mod.getTeacherConflictAt(yearId, teacherId, day, period, ignoreClassroomId, semester)
 }
 
-export async function runAutoScheduleSchool(yearId: string, clearFirst = true) { return scheduleResult(() => scheduleOps.autoSchedule(yearId, null, clearFirst)) }
-export async function fetchScheduleActivities(yearId: string, classroomId: string) { return scheduleOps.activityOptions(yearId, classroomId) }
-export async function saveScheduleActivity(yearId: string, classroomId: string, settingId: string, teacherId: string, count: number) { return scheduleOps.saveActivity(yearId, classroomId, settingId, teacherId, count) }
+export async function runAutoScheduleSchool(yearId: string, clearFirst = true, semester = 1) { return scheduleResult(() => scheduleOps.autoSchedule(yearId, null, clearFirst, semester)) }
+export async function fetchScheduleActivities(yearId: string, classroomId: string, semester = 1) { return scheduleOps.activityOptions(yearId, classroomId, semester) }
+export async function saveScheduleActivity(yearId: string, classroomId: string, settingId: string, teacherId: string, count: number, semester = 1) { return scheduleOps.saveActivity(yearId, classroomId, settingId, teacherId, count, semester) }
 
 export async function saveSubstituteDay(dayId: string, expected: import('./extended-actions').SubstituteChange[], rows: import('./extended-actions').SubstituteChange[]) {
   const mod = await import('./extended-actions')

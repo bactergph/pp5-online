@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { fetchPeriodTimes, fetchScheduleInit, fetchTeachingScheduleGrid } from '@/app/schedules/actions'
 import type { PeriodTimeRow } from '@/lib/schedule-helpers'
@@ -17,7 +17,7 @@ const STYLES = `
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
   .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
   .schedule-filters {
-    display: grid; grid-template-columns: 140px minmax(220px, 1fr); gap: 12px; align-items: end;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end;
     padding: 14px; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
   }
   .schedule-field { display: grid; gap: 5px; }
@@ -51,6 +51,8 @@ export default function TeachingScheduleEntry() {
   const [cells, setCells] = useState<Record<string, Cell>>({})
   const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [selectedYear, setSelectedYear] = useState('')
+  const [semester, setSemester] = useState(1)
+  const requestId = useRef(0)
   const [selectedTeacher, setSelectedTeacher] = useState('')
   const [canEdit, setCanEdit] = useState(false)
   const [role, setRole] = useState('')
@@ -62,13 +64,6 @@ export default function TeachingScheduleEntry() {
   }, [teachers, selectedTeacher])
 
   const selectedYearObj = years.find(y => y.id === selectedYear)
-
-  useEffect(() => { init() }, [])
-
-  useEffect(() => {
-    if (!selectedYear || !selectedTeacher) return
-    loadGrid()
-  }, [selectedYear, selectedTeacher])
 
   async function init() {
     try {
@@ -91,10 +86,25 @@ export default function TeachingScheduleEntry() {
     }
   }
 
-  async function loadGrid() {
-    const grid = await fetchTeachingScheduleGrid(selectedTeacher, selectedYear)
+  const loadGrid = useCallback(async () => {
+    const request = ++requestId.current
+    try {
+    const grid = await fetchTeachingScheduleGrid(selectedTeacher, selectedYear, semester)
+    if (request !== requestId.current) return
     setCells(grid as Record<string, Cell>)
-  }
+    } catch (e) {
+      if (request !== requestId.current) return
+      setCells({})
+      setAlert({ type: 'error', title: 'โหลดตารางไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
+    }
+  }, [selectedTeacher, selectedYear, semester])
+
+  useEffect(() => { void Promise.resolve().then(init) }, [])
+
+  useEffect(() => {
+    if (!selectedYear || !selectedTeacher) return
+    void Promise.resolve().then(loadGrid)
+  }, [selectedTeacher, selectedYear, semester, loadGrid])
 
   function renderCell(cell: Cell | undefined) {
     if (!cell?.label) return <span>—</span>
@@ -122,7 +132,7 @@ export default function TeachingScheduleEntry() {
             <h1>ตารางสอน</h1>
             <p>
               {teacherLabel && selectedYearObj
-                ? `${teacherLabel} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
+                ? `${teacherLabel} · ภาคเรียนที่ ${semester} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
                 : 'ดูตารางสอนรายครู'}
             </p>
           </div>
@@ -147,6 +157,14 @@ export default function TeachingScheduleEntry() {
               ))}
             </select>
           </div>
+          <div className="schedule-field">
+            <label>ภาคเรียน</label>
+            <select value={semester} onChange={e => setSemester(Number(e.target.value))}>
+              <option value={1}>ภาคเรียนที่ 1</option>
+              <option value={2}>ภาคเรียนที่ 2</option>
+            </select>
+          </div>
+
           <div className="schedule-field">
             <label>ครูผู้สอน</label>
             <select

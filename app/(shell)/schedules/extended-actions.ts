@@ -38,8 +38,8 @@ function canEdit(session: ScheduleSession) {
   return SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])
 }
 
-async function loadAllSlotsForYear(schoolId:string,yearId:string) {
- const data=await loadSchedule(schoolId,yearId)
+async function loadAllSlotsForYear(schoolId:string,yearId:string, semester = 1) {
+ const data=await loadSchedule(schoolId,yearId, semester)
  return data.slots.map(row=>{const l=data.lessons.find(l=>l.id===lessonKey(row));const room=data.classrooms.find(c=>c.id===row.classroom_id)!;return {...row,class_subject_id:lessonKey(row),classrooms:room,class_subjects:l?{id:l.id,teacher_id:l.teacherId,subject_id:l.subjectId,subjects:{code:l.code,name:l.name,short_name:l.name,hours_per_year:l.count*40}}:null}})
 }
 
@@ -78,20 +78,20 @@ export async function savePeriodTimes(times: PeriodTimeRow[]) {
   return { ok: true }
 }
 
-export async function fetchScheduleQuotas(classroomId:string,yearId:string) {
+export async function fetchScheduleQuotas(classroomId:string,yearId:string, semester = 1) {
   const session=await requireScheduleSession()
-  const data=await loadSchedule(session.schoolId,yearId)
+  const data=await loadSchedule(session.schoolId,yearId, semester)
   requireScheduleClass(data,classroomId)
   const slots=data.slots.filter(s=>s.classroom_id===classroomId)
   const items=data.lessons.filter(l=>l.classroomId===classroomId && !l.activity).map(l=>{ const used=slots.filter(s=>lessonKey(s)===l.id).length; return {class_subject_id:l.id,code:l.code,name:l.name,target:l.count,used,remaining:l.count-used} })
   return {items,filled:slots.filter(s=>lessonKey(s)).length,totalTarget:items.reduce((n,i)=>n+i.target,0)}
 }
 
-export async function fetchScheduleConflicts(yearId: string) {
+export async function fetchScheduleConflicts(yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
 
-  const slots = await loadAllSlotsForYear(session.schoolId, yearId)
+  const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
   const teacherMap: Record<string, Record<string, Record<number, { room: string; subject: string }[]>>> = {}
 
   for (const row of slots) {
@@ -149,11 +149,11 @@ export async function fetchScheduleConflicts(yearId: string) {
   return { conflicts, count: conflicts.length }
 }
 
-export async function fetchScheduleWorkload(yearId: string) {
+export async function fetchScheduleWorkload(yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
 
-  const slots = await loadAllSlotsForYear(session.schoolId, yearId)
+  const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
   const hoursMap: Record<string, number> = {}
 
   for (const row of slots) {
@@ -183,8 +183,8 @@ export async function fetchScheduleWorkload(yearId: string) {
   }).sort((a, b) => b.hours - a.hours)
 }
 
-export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: string) {
-  const quotas = await fetchScheduleQuotas(classroomId, yearId)
+export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: string, semester = 1) {
+  const quotas = await fetchScheduleQuotas(classroomId, yearId, semester)
   return quotas.items.map(item => ({
     ...item,
     label: item.code ? `${item.code} ${item.name}`.trim() : item.name,
@@ -194,13 +194,13 @@ export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: 
   }))
 }
 
-export async function toggleScheduleCellLock(classroomId:string,yearId:string,day:number,period:number) { return scheduleOps.toggleLock(classroomId,yearId,day,period) }
+export async function toggleScheduleCellLock(classroomId:string,yearId:string,day:number,period:number, semester = 1) { return scheduleOps.toggleLock(classroomId,yearId,day,period, semester) }
 
-export async function copyClassSchedule(from:string,to:string,yearId:string) { return scheduleOps.copyRoom(from,to,yearId) }
+export async function copyClassSchedule(from:string,to:string,yearId:string, semester = 1) { return scheduleOps.copyRoom(from,to,yearId, semester) }
 
-export async function clearClassSchedule(classroomId:string,yearId:string) { return scheduleOps.clearRoom(classroomId,yearId) }
+export async function clearClassSchedule(classroomId:string,yearId:string, semester = 1) { return scheduleOps.clearRoom(classroomId,yearId, semester) }
 
-export async function runAutoScheduleClass(classroomId:string,yearId:string,mode:'spread'|'random'='spread',clearFirst=false) { if (!['spread','random'].includes(mode)) throw new Error('รูปแบบไม่ถูกต้อง'); return scheduleOps.autoSchedule(yearId,classroomId,clearFirst) }
+export async function runAutoScheduleClass(classroomId:string,yearId:string,mode:'spread'|'random'='spread',clearFirst=false, semester = 1) { if (!['spread','random'].includes(mode)) throw new Error('รูปแบบไม่ถูกต้อง'); return scheduleOps.autoSchedule(yearId,classroomId,clearFirst, semester) }
 
 export async function fetchScheduleExportContext() {
   const session = await requireScheduleSession()
@@ -215,10 +215,10 @@ export async function fetchScheduleExportContext() {
   return { school: school ? { ...school, director_position: 'ผู้อำนวยการสถานศึกษา' } : null, periodTimes: periodTimes.times }
 }
 
-export async function fetchSubstituteDay(date: string, yearId: string) {
+export async function fetchSubstituteDay(date: string, yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  const schedule = await loadSchedule(session.schoolId, yearId)
+  const schedule = await loadSchedule(session.schoolId, yearId, semester)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new Error('วันที่ไม่ถูกต้อง')
   const db = createServerClient()
 
@@ -226,11 +226,12 @@ export async function fetchSubstituteDay(date: string, yearId: string) {
   const jsDay = d.getDay()
   const dayOfWeek = jsDay === 0 ? 7 : jsDay
 
-  const dayResult = await db.from('schedule_substitute_days')
+  let dayQuery = db.from('schedule_substitute_days')
     .select('id, date, day_of_week, note')
     .eq('school_id', session.schoolId)
     .eq('date', date)
-    .maybeSingle()
+  if (schedule.semesterSupported !== false) dayQuery = dayQuery.eq('semester', semester)
+  const dayResult = await dayQuery.maybeSingle()
   if (dayResult.error) throw new Error(dayResult.error.message)
   let dayRow = dayResult.data
   if (dayRow) {
@@ -243,15 +244,18 @@ export async function fetchSubstituteDay(date: string, yearId: string) {
       .upsert({
         school_id: session.schoolId,
         academic_year_id: yearId,
+        ...(schedule.semesterSupported === false ? {} : { semester }),
         date,
         day_of_week: dayOfWeek,
-      }, { onConflict: 'school_id,date', ignoreDuplicates: true })
+      }, { onConflict: schedule.semesterSupported === false ? 'school_id,date' : 'school_id,date,semester', ignoreDuplicates: true })
       .select('id, date, day_of_week, note')
       .maybeSingle()
     if (error) throw new Error(error.message)
     dayRow = created
     if (!dayRow) {
-      const retry = await db.from('schedule_substitute_days').select('id,date,day_of_week,note,academic_year_id').eq('school_id', session.schoolId).eq('date', date).single()
+      let retryQuery = db.from('schedule_substitute_days').select('id,date,day_of_week,note,academic_year_id').eq('school_id', session.schoolId).eq('date', date)
+      if (schedule.semesterSupported !== false) retryQuery = retryQuery.eq('semester', semester)
+      const retry = await retryQuery.single()
       if (retry.error || retry.data.academic_year_id !== yearId) throw new Error('โหลดวันที่ไม่สำเร็จ กรุณาลองใหม่')
       dayRow = retry.data
     }
@@ -280,7 +284,7 @@ export async function fetchSubstituteDay(date: string, yearId: string) {
 export async function loadSubstituteSlotsForTeacher(
   date: string,
   yearId: string,
-  absentTeacherId: string,
+  absentTeacherId: string, semester = 1
 ) {
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
@@ -289,7 +293,7 @@ export async function loadSubstituteSlotsForTeacher(
   const jsDay = d.getDay()
   const dayOfWeek = jsDay === 0 ? 7 : jsDay
 
-  const slots = await loadAllSlotsForYear(session.schoolId, yearId)
+  const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
   return slots
     .filter(row => {
       const cs = Array.isArray(row.class_subjects) ? row.class_subjects[0] : row.class_subjects
@@ -354,14 +358,15 @@ export async function importSubstituteFromSchedule(
   date: string,
   yearId: string,
   absentTeacherId: string,
-  leaveType: string,
+  leaveType: string, semester = 1
 ) {
   const session = await requireScheduleSession()
   if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  const slots = await loadSubstituteSlotsForTeacher(date, yearId, absentTeacherId)
+  const slots = await loadSubstituteSlotsForTeacher(date, yearId, absentTeacherId, semester)
   const db = createServerClient()
   if (!slots.length) throw new Error('ครูท่านนี้ไม่มีคาบสอนในวันที่เลือก')
-  const { data: day } = await db.from('schedule_substitute_days').select('id').eq('id', substituteDayId).eq('school_id', session.schoolId || '').eq('academic_year_id', yearId).eq('date', date).maybeSingle()
+  const { data: day } = await db.from('schedule_substitute_days').select('*').eq('id', substituteDayId).eq('school_id', session.schoolId || '').eq('academic_year_id', yearId).eq('date', date).maybeSingle()
+  if (day && (day.semester || 1) !== semester) throw new Error('ภาคเรียนของตารางสอนแทนไม่ตรงกัน')
   if (!day) throw new Error('วันหรือปีการศึกษาของตารางสอนแทนไม่ตรงกัน')
   const { error } = await db.rpc('replace_substitute_slots', { p_school_id: session.schoolId, p_day_id: substituteDayId, p_teacher_id: absentTeacherId, p_leave_type: leaveType, p_rows: slots })
   if (error) throw new Error(error.message)
@@ -373,12 +378,12 @@ export async function getTeacherConflictAt(
   teacherId: string,
   day: number,
   period: number,
-  ignoreClassroomId?: string,
+  ignoreClassroomId?: string, semester = 1
 ) {
   const session = await requireScheduleSession()
   if (!session.schoolId) return { busy: false, rooms: [] as string[] }
 
-  const slots = await loadAllSlotsForYear(session.schoolId, yearId)
+  const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
   const rooms: string[] = []
   for (const row of slots) {
     if (row.day_of_week !== day || row.period !== period) continue

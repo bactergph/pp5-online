@@ -44,7 +44,7 @@ const STYLES = `
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
   .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
   .schedule-filters {
-    display: grid; grid-template-columns: 140px 160px 1fr; gap: 12px; align-items: end;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end;
     padding: 14px; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
   }
   .schedule-field { display: grid; gap: 5px; }
@@ -94,14 +94,14 @@ export default function SubstituteScheduleEntry() {
   const [years, setYears] = useState<Year[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [selectedYear, setSelectedYear] = useState('')
+  const [term, setTerm] = useState('1')
   const [date, setDate] = useState(todayIso())
-  const blocked = saving || loadingDay || loadedDay !== `${selectedYear}:${date}`
+  const blocked = saving || loadingDay || loadedDay !== `${selectedYear}:${term}:${date}`
   const [dayLabel, setDayLabel] = useState('')
   const [substituteDayId, setSubstituteDayId] = useState('')
   const [busy, setBusy] = useState<{teacherId:string;period:number}[]>([])
   const [original, setOriginal] = useState<SubstituteEntry[]>([])
   const [dirty, setDirty] = useState(false)
-  const [term, setTerm] = useState('1')
   const [entries, setEntries] = useState<SubstituteEntry[]>([])
   const [absentTeacherId, setAbsentTeacherId] = useState('')
   const [leaveType, setLeaveType] = useState('ลาป่วย')
@@ -127,7 +127,7 @@ export default function SubstituteScheduleEntry() {
     const request = ++dayRequest.current
     setLoadingDay(true)
     try {
-      const data = await fetchSubstituteDay(date, selectedYear)
+      const data = await fetchSubstituteDay(date, selectedYear, Number(term))
       if (request !== dayRequest.current) return
       setSubstituteDayId(data.day?.id || '')
       setDayLabel(data.day_label || '')
@@ -135,13 +135,13 @@ export default function SubstituteScheduleEntry() {
       setOriginal(data.entries as SubstituteEntry[])
       setBusy(data.busy)
       setDirty(false)
-      setLoadedDay(`${selectedYear}:${date}`)
+      setLoadedDay(`${selectedYear}:${term}:${date}`)
     } catch (e) {
       if (request !== dayRequest.current) return
       setLoadedDay(''); setEntries([]); setSubstituteDayId('')
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     } finally { if (request === dayRequest.current) setLoadingDay(false) }
-  }, [date, selectedYear])
+  }, [date, selectedYear, term])
 
   useEffect(() => { void Promise.resolve().then(init) }, [])
   useEffect(() => {
@@ -156,7 +156,7 @@ export default function SubstituteScheduleEntry() {
     setSaving(true)
     try {
       const response = await importSubstituteFromSchedule(
-        substituteDayId, date, selectedYear, absentTeacherId, leaveType,
+        substituteDayId, date, selectedYear, absentTeacherId, leaveType, Number(term),
       )
       if (response.error || !response.data) throw new Error(response.error || 'นำเข้าไม่สำเร็จ')
       const result = response.data
@@ -203,7 +203,7 @@ export default function SubstituteScheduleEntry() {
   async function previewSlots() {
     if (!absentTeacherId) return
     try {
-      const slots = await loadSubstituteSlotsForTeacher(date, selectedYear, absentTeacherId)
+      const slots = await loadSubstituteSlotsForTeacher(date, selectedYear, absentTeacherId, Number(term))
       if (!slots.length) {
         setAlert({ type: 'error', title: 'ไม่พบคาบสอน', message: 'ครูท่านนี้ไม่มีคาบสอนในวันนี้ตามตารางเรียน' })
         return
@@ -246,6 +246,7 @@ export default function SubstituteScheduleEntry() {
               ))}
             </select>
           </div>
+          <div className="schedule-field"><label>ภาคเรียน</label><select disabled={saving || dirty} value={term} onChange={e=>setTerm(e.target.value)}><option value="1">ภาคเรียนที่ 1</option><option value="2">ภาคเรียนที่ 2</option></select></div>
           <div className="schedule-field">
             <label>วันที่</label>
             <input type="date" disabled={saving || dirty} value={date} onChange={e => setDate(e.target.value)} />
@@ -343,7 +344,7 @@ export default function SubstituteScheduleEntry() {
         )}
         {entries.length > 0 && <div className="sub-footer">
           <span>{entries.length} คาบ · พร้อม {entries.length-pendingCount} คาบ · ยังขาด/ต้องแก้ {pendingCount} คาบ{dirty ? ' · มีการแก้ไขที่ยังไม่บันทึก' : ''}</span>
-          <label>ภาคเรียนในเอกสาร <select value={term} onChange={e=>setTerm(e.target.value)}><option>1</option><option>2</option></select></label>
+
           <button className="sub-btn" disabled={blocked || dirty} title={dirty ? 'บันทึกการแก้ไขก่อนออก PDF' : 'ดาวน์โหลดเอกสารจากรายการที่บันทึกแล้ว'} onClick={downloadPdf}>ดาวน์โหลด PDF</button>
           <button className="sub-btn primary" disabled={blocked} onClick={handleSaveAll}>{saving ? 'กำลังดำเนินการ...' : 'บันทึกทั้งหมด'}</button>
         </div>}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useRef, useEffect, useState } from 'react'
 import { fetchScheduleInit, fetchScheduleWorkload } from '@/app/schedules/actions'
 import AppAlertModal from '@/components/AppAlertModal'
 
@@ -65,15 +65,10 @@ export default function ScheduleWorkloadEntry() {
   const [loading, setLoading] = useState(true)
   const [years, setYears] = useState<Year[]>([])
   const [selectedYear, setSelectedYear] = useState('')
+  const [semester, setSemester] = useState(1)
+  const requestId = useRef(0)
   const [rows, setRows] = useState<WorkloadRow[]>([])
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
-
-  useEffect(() => { init() }, [])
-
-  useEffect(() => {
-    if (!selectedYear) return
-    loadWorkload()
-  }, [selectedYear])
 
   async function init() {
     try {
@@ -88,14 +83,23 @@ export default function ScheduleWorkloadEntry() {
     }
   }
 
-  async function loadWorkload() {
+  const loadWorkload = useCallback(async () => {
+    const request = ++requestId.current
     try {
-      const data = await fetchScheduleWorkload(selectedYear)
+      const data = await fetchScheduleWorkload(selectedYear, semester)
+      if (request !== requestId.current) return
       setRows(data as WorkloadRow[])
     } catch (e) {
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     }
-  }
+  }, [selectedYear, semester])
+
+  useEffect(() => { void Promise.resolve().then(init) }, [])
+
+  useEffect(() => {
+    if (!selectedYear) return
+    void Promise.resolve().then(loadWorkload)
+  }, [selectedYear, semester, loadWorkload])
 
   if (loading) return <div className="schedule-empty">กำลังโหลด...</div>
 
@@ -117,6 +121,14 @@ export default function ScheduleWorkloadEntry() {
               ))}
             </select>
           </div>
+          <div className="schedule-field">
+            <label>ภาคเรียน</label>
+            <select value={semester} onChange={e => setSemester(Number(e.target.value))}>
+              <option value={1}>ภาคเรียนที่ 1</option>
+              <option value={2}>ภาคเรียนที่ 2</option>
+            </select>
+          </div>
+
         </div>
 
         <div className="workload-legend">

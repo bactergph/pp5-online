@@ -98,6 +98,9 @@ export default function ScheduleExportPage() {
     : `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${selectedTeacher ? `${selectedTeacher.prefix} ${selectedTeacher.full_name}` : ''}`
   const [error, setError] = useState('')
   const [previewReady, setPreviewReady] = useState(false)
+  const gridRequest = useRef(0)
+  const [loadedContext, setLoadedContext] = useState('')
+  const currentContext = `${exportType}:${yearId}:${semester}:${exportType === 'class' ? classroomId : teacherId}`
   const printMode = useRef(false)
   const [isPrintMode] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -147,9 +150,10 @@ export default function ScheduleExportPage() {
   }, [])
 
   const loadClassGrid = useCallback(async () => {
+    const request = ++gridRequest.current
     const [grid, subs] = await Promise.all([
-      fetchClassScheduleGrid(classroomId, yearId),
-      fetchClassScheduleSubjects(classroomId),
+      fetchClassScheduleGrid(classroomId, yearId, Number(semester)),
+      fetchClassScheduleSubjects(classroomId, Number(semester)),
     ])
     const subjMap = Object.fromEntries(
       (subs as { id: string; label: string; teacher_name: string }[]).map(s => [s.id, s]),
@@ -167,12 +171,16 @@ export default function ScheduleExportPage() {
         line2: subj?.teacher_name || '',
       }
     }
+    if (request !== gridRequest.current) return
+    setError('')
     setGridData(data)
+    setLoadedContext(`class:${yearId}:${semester}:${classroomId}`)
     setPreviewReady(true)
-  }, [classroomId, yearId])
+  }, [classroomId, yearId, semester])
 
   const loadTeachingGrid = useCallback(async () => {
-    const grid = await fetchTeachingScheduleGrid(teacherId, yearId)
+    const request = ++gridRequest.current
+    const grid = await fetchTeachingScheduleGrid(teacherId, yearId, Number(semester))
 
     const data: Record<string, { line1: string; line2: string }> = {}
     for (const [key, cell] of Object.entries(grid as Record<string, { room_line: string; subject_line: string }>)) {
@@ -181,28 +189,36 @@ export default function ScheduleExportPage() {
         line2: cell.subject_line || '',
       }
     }
+    if (request !== gridRequest.current) return
+    setError('')
     setGridData(data)
+    setLoadedContext(`teaching:${yearId}:${semester}:${teacherId}`)
     setPreviewReady(true)
-  }, [teacherId, yearId])
+  }, [teacherId, yearId, semester])
 
+  const invalidateGridRequest = useCallback(() => { ++gridRequest.current }, [])
   useEffect(() => { void Promise.resolve().then(init) }, [init])
 
   useEffect(() => {
     if (!yearId) return
+    let cancelled = false
     fetchScheduleClassrooms(yearId).then(list => {
+      if (cancelled) return
       setClassrooms(list as Classroom[])
       setClassroomId(current => list.some(c => c.id === current) ? current : list[0]?.id || '')
-    })
+    }).catch(() => { if (!cancelled) setError('โหลดห้องเรียนไม่สำเร็จ') })
+    return () => { cancelled = true }
   }, [yearId])
 
   useEffect(() => {
     if (!yearId) return
     if (exportType === 'class' && classroomId) void Promise.resolve().then(loadClassGrid).catch(() => setError('โหลดตารางไม่สำเร็จ'))
     else if (exportType === 'teaching' && teacherId) void Promise.resolve().then(loadTeachingGrid).catch(() => setError('โหลดตารางไม่สำเร็จ'))
-  }, [yearId, exportType, classroomId, teacherId, loadClassGrid, loadTeachingGrid])
+    return invalidateGridRequest
+  }, [yearId, exportType, classroomId, teacherId, loadClassGrid, loadTeachingGrid, invalidateGridRequest])
 
   useEffect(() => {
-    if (!printMode.current || !previewReady) return
+    if (!printMode.current || !previewReady || loadedContext !== currentContext) return
     let cancelled = false
     const markReady = async () => {
       try {
@@ -218,9 +234,10 @@ export default function ScheduleExportPage() {
     }
     void markReady()
     return () => { cancelled = true }
-  }, [previewReady])
+  }, [previewReady, loadedContext, currentContext])
 
   function exportPdf() {
+    if (loadedContext !== currentContext) return
     setError('')
     const label = exportType === 'class'
       ? classrooms.find(c => c.id === classroomId)?.label || 'class'
@@ -302,14 +319,14 @@ export default function ScheduleExportPage() {
         </div>
 
         <div className="sched-export-actions">
-          <button type="button" className="sched-export-btn" disabled={loading || !previewReady || !!error} onClick={exportPdf}>
+          <button type="button" className="sched-export-btn" disabled={loading || !previewReady || loadedContext !== currentContext || !!error} onClick={exportPdf}>
             บันทึก PDF
           </button>
         </div>
 
         {error && <div style={{ color: '#DC2626', fontSize: 12, fontWeight: 700 }}>{error}</div>}
 
-        <div className="sched-export-preview">
+        {loadedContext !== currentContext ? <div>กำลังโหลดตาราง...</div> : <div className="sched-export-preview">
           <header className="sched-print-head">
             <div className="sched-print-logo">
               {schoolLogoUrl ? (
@@ -388,7 +405,7 @@ export default function ScheduleExportPage() {
               <p>ลงชื่อ ........................................................</p><p>({s.name || '........................................................'})</p><p>{s.role}</p><p>วันที่ ........../........../..........</p>
             </div>)}
           </div>
-        </div>
+        </div>}
       </div>
     </>
   )
