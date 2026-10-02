@@ -97,6 +97,12 @@ export const SCHEDULE_PRESENTATION = `
   .schedule-workspace .schedule-lock-btn {position:absolute;top:5px;right:3px;width:25px;height:25px;border:0;background:transparent;color:#8498a7;}
   .schedule-workspace .schedule-lock-btn.is-locked {background:#e5ecf1;color:#405d72;border:0;}
   .schedule-workspace .schedule-teacher-line {padding:3px 9px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+  .schedule-workspace .schedule-grid-table th,.schedule-workspace .sub-table th,.schedule-workspace .quota-table th {color:#000;background:#d2e0eb;font-size:14px;font-weight:600;}
+  .schedule-workspace .schedule-grid-table th .period-time {color:#000;font-size:12px;}
+  .schedule-workspace .schedule-grid-table :is(th,td) {border-color:#a5b7c5;}
+  .schedule-workspace .schedule-grid-table th.col-day,.schedule-workspace .schedule-grid-table td.day-col {background:#dce5ed;color:#000;}
+  .schedule-workspace .schedule-grid-table th.col-break,.schedule-workspace .schedule-grid-table td.break-col {background:#f1e5c7;color:#000;}
+  .schedule-workspace .sub-table td,.schedule-workspace .quota-table td {border-bottom-color:#bac9d5;}
   @media(max-width:700px) {
     .schedule-workspace {gap:14px;}
     .schedule-workspace .schedule-head {padding:18px;}

@@ -1,3 +1,4 @@
+import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
@@ -9,12 +10,12 @@ const LOGO_SIZE = 18
 const PERIODS = SCHEDULE_PERIODS
 const MORNING = SCHEDULE_MORNING_PERIODS
 
-const BORDER: [number, number, number] = [203, 213, 225]
-const HEADER_BG: [number, number, number] = [241, 245, 249]
-const DAY_BG: [number, number, number] = [245, 237, 227]
-const BREAK_BG: [number, number, number] = [255, 251, 235]
+const BORDER: [number, number, number] = [145, 163, 180]
+const HEADER_BG: [number, number, number] = [210, 224, 235]
+const DAY_BG: [number, number, number] = [227, 214, 195]
+const BREAK_BG: [number, number, number] = [247, 234, 196]
 const BREAK_TEXT: [number, number, number] = [180, 83, 9]
-const TEXT: [number, number, number] = [17, 24, 39]
+const TEXT: [number, number, number] = [0, 0, 0]
 const MUTED: [number, number, number] = [100, 116, 139]
 
 export type SchedulePdfInput = {
@@ -118,11 +119,11 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   doc.setFont('THSarabunNew', 'bold')
   doc.setFontSize(18)
   doc.setTextColor(...TEXT)
-  doc.text(input.schoolName || 'โรงเรียน', textX, y + 7, { align: 'center' })
+  doc.text(scheduleSchoolName(input.schoolName), textX, y + 7, { align: 'center' })
 
   doc.setFont('THSarabunNew', 'normal')
-  doc.setFontSize(13)
-  doc.setTextColor(...MUTED)
+  doc.setFontSize(15)
+  doc.setTextColor(...TEXT)
   doc.text(input.title || '', textX, y + 14, { align: 'center' })
   doc.setTextColor(...TEXT)
 
@@ -137,15 +138,15 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   const rowH = 16
 
   let x = MARGIN_X
-  drawCell(doc, x, y, dayW, headerH, 'วัน', '', { fill: HEADER_BG, line1Size: 9 })
+  drawCell(doc, x, y, dayW, headerH, 'วัน', '', { fill: HEADER_BG, line1Size: 12 })
   x += dayW
   for (const p of PERIODS.slice(0, MORNING)) {
     drawCell(doc, x, y, periodW, headerH, `คาบ ${p}`, periodTimeLabel(input.periodTimes, p), {
-      fill: HEADER_BG, line1Size: 9, line2Size: 7,
+      fill: HEADER_BG, line1Size: 12, line2Size: 9, line2Color: TEXT,
     })
     x += periodW
   }
-  drawCell(doc, x, y, breakW, headerH, 'พักเที่ยง', '', { fill: BREAK_BG, line1Size: 8, line1Bold: true })
+  drawCell(doc, x, y, breakW, headerH, 'พักเที่ยง', '', { fill: BREAK_BG, line1Size: 11, line1Bold: true })
   x += breakW
   for (const p of PERIODS.slice(MORNING)) {
     drawCell(doc, x, y, periodW, headerH, `คาบ ${p}`, periodTimeLabel(input.periodTimes, p), {

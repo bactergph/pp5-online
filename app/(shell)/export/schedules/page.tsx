@@ -12,6 +12,7 @@ import {
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
+import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 
@@ -31,7 +32,7 @@ const STYLES = `
   .sched-export-field { display: grid; gap: 5px; }
   .sched-export-field label { font-size: 11px; font-weight: 900; color: #475569; }
   .sched-export-field select {
-    min-height: 36px; border: 1px solid #CBD5E1; border-radius: 8px; padding: 0 10px;
+    min-height: 36px; border: 1px solid #91A3B4; border-radius: 8px; padding: 0 10px;
     background: #fff; font-size: 13px; font-weight: 800;
   }
   .sched-export-actions { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -60,9 +61,9 @@ const STYLES = `
   .sched-print-table th, .sched-print-table td {
     border: 1px solid #CBD5E1; padding: 6px 4px; text-align: center; vertical-align: middle;
   }
-  .sched-print-table th { background: #F1F5F9; font-weight: 900; font-size: 9px; }
-  .sched-print-table td.day-col { background: #F5EDE3; font-weight: 900; }
-  .sched-print-table td.break-col { background: #FFFBEB; color: #B45309; font-size: 8px; }
+  .sched-print-table th { background: #D2E0EB; color: #000; font-weight: 700; font-size: 12px; }
+  .sched-print-table td.day-col { background: #E3D6C3; font-weight: 900; }
+  .sched-print-table td.break-col { background: #F7EAC4; color: #B45309; font-size: 8px; }
   .sched-print-cell { min-height: 32px; font-weight: 700; line-height: 1.3; }
   .sched-print-cell .sub { font-size: 8px; color: #64748B; font-weight: 600; }
   @media print {
@@ -111,7 +112,7 @@ export default function ScheduleExportPage() {
       setAcademicHeadName(ctx.school?.academic_head_name || '')
       setDirectorName(directorDisplayName(ctx.school, ''))
       setDirectorPosition(ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา')
-      setSchoolName(ctx.school?.name || '')
+      setSchoolName(scheduleSchoolName(ctx.school?.name))
       setSchoolLogoUrl(ctx.school?.logo_url || '')
       setPeriodTimes(ctx.periodTimes as PeriodTimeRow[])
 
@@ -323,7 +324,7 @@ export default function ScheduleExportPage() {
                   <th key={p}>
                     คาบ {p}
                     {periodTimes.length ? (
-                      <div style={{ fontSize: 8, fontWeight: 600, color: '#94A3B8' }}>
+                      <div style={{ fontSize: 10, fontWeight: 500, color: '#000' }}>
                         {periodTimeLabel(periodTimes, p)}
                       </div>
                     ) : null}

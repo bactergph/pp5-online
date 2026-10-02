@@ -1,3 +1,4 @@
+import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
@@ -17,13 +18,13 @@ export async function buildSubstitutePdf(input: SubstitutePdfInput) {
   const date = new Intl.DateTimeFormat('th-TH', { dateStyle: 'full', timeZone: 'Asia/Bangkok' }).format(new Date(input.date + 'T12:00:00+07:00'))
   let y = 16
   const text = (value: string, x: number, top: number, size = 14, bold = false) => {
-    doc.setFont('THSarabunNew', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.setTextColor(25, 35, 50)
+    doc.setFont('THSarabunNew', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.setTextColor(0, 0, 0)
     doc.text(value, x, top)
   }
   function header() {
     y = 16
     if (logo) { doc.addImage(logo, 'JPEG', 97, y, 16, 16); y += 22 }
-    for (const line of ['บันทึกการสอนแทน', input.schoolName, `${date} | ปีการศึกษา ${input.year} ภาคเรียนที่ ${input.term}`]) {
+    for (const line of ['บันทึกการสอนแทน', scheduleSchoolName(input.schoolName), `${date} | ปีการศึกษา ${input.year} ภาคเรียนที่ ${input.term}`]) {
       doc.setFont('THSarabunNew', 'bold'); doc.setFontSize(15)
       doc.text(line, 105, y, { align: 'center' }); y += 7
     }
@@ -32,15 +33,15 @@ export async function buildSubstitutePdf(input: SubstitutePdfInput) {
   function space(height: number) { if (y + height > 274) { doc.addPage(); header() } }
   function row(values: string[], heading = false) {
     const widths = [13, 25, 16, 40, 34, 22, 30]
-    doc.setFont('THSarabunNew', heading ? 'bold' : 'normal'); doc.setFontSize(12)
+    doc.setFont('THSarabunNew', heading ? 'bold' : 'normal'); doc.setFontSize(heading ? 14 : 12)
     const lines = values.map((v, i) => doc.splitTextToSize(v || '—', widths[i] - 3) as string[])
     const h = Math.max(heading ? 10 : 14, ...lines.map(l => l.length * 5 + 4))
     space(h)
     let x = 15
     values.forEach((_, i) => {
-      doc.setFillColor(...(heading ? [246, 229, 210] : [247, 249, 252]) as [number, number, number])
-      doc.setDrawColor(160, 172, 190); doc.rect(x, y, widths[i], h, 'FD')
-      text(lines[i].join('\n'), x + 1.5, y + 5, 12, heading); x += widths[i]
+      doc.setFillColor(...(heading ? [225, 205, 180] : [247, 249, 252]) as [number, number, number])
+      doc.setDrawColor(125, 145, 165); doc.rect(x, y, widths[i], h, 'FD')
+      text(lines[i].join('\n'), x + 1.5, y + 5, heading ? 14 : 12, heading); x += widths[i]
     })
     y += h
   }
@@ -48,7 +49,7 @@ export async function buildSubstitutePdf(input: SubstitutePdfInput) {
   for (const teacher of [...new Set(input.entries.map(e => e.absent_teacher_id))]) {
     const entries = input.entries.filter(e => e.absent_teacher_id === teacher).sort((a,b) => a.period - b.period)
     space(45)
-    doc.setFillColor(246, 229, 210); doc.rect(15, y, 180, 10, 'F')
+    doc.setFillColor(225, 205, 180); doc.rect(15, y, 180, 10, 'F')
     text(`ครูที่ลา: ${names.get(teacher) || '—'} | ${[...new Set(entries.map(e => e.leave_type))].join(', ')}`, 18, y + 6, 14, true); y += 10
     row(['คาบ','เวลา','ห้อง','วิชา','ครูสอนแทน','หมายเหตุ','ลงชื่อหลังสอน'], true)
     for (const e of entries) row([String(e.period), periodTimeLabel(input.times,e.period),e.room_label || '',e.subject_label || '',names.get(e.substitute_teacher_id || '') || 'ยังไม่กำหนด',e.note || '', '.....................'])
