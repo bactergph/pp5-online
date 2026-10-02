@@ -119,7 +119,11 @@ const STYLES = `
 .class-schedule-workspace .quota-table th {color:#000;background:#e0e9f0;font-size:13px;}
 .class-schedule-workspace .quota-panel {min-width:560px;border-radius:6px;}
 .class-schedule-workspace .schedule-empty {padding:40px 20px;border:1px dashed var(--edge);border-radius:8px;text-align:center;background:#fff;color:var(--muted);font-size:14px;}
-.class-schedule-workspace .cell-view {display:grid;gap:4px;text-align:left;padding:8px;font-size:13px;}
+.class-schedule-workspace .cell-view {display:flex;flex-direction:column;gap:4px;text-align:left;padding:8px;font-size:13px;min-height:84px;border:1px solid transparent;border-radius:5px;line-height:1.5;}
+.class-schedule-workspace .cell-view.activity {background:#e8f3eb;border-color:#c4ddcc;color:#245b3b;}
+.class-schedule-workspace .cell-view.locked {background:#f0f2f5;border-color:#d7dfe5;}
+.class-schedule-workspace .cell-view.empty {justify-content:center;align-items:center;color:#8293a1;font-size:12px;}
+.class-schedule-workspace .cell-view .cell-tchr {margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .class-schedule-workspace .cell-subj {font-weight:600;}.class-schedule-workspace .cell-tchr {font-size:11px;color:var(--muted);}
 .class-schedule-workspace :is(button,select,a,summary):focus-visible {outline:3px solid #75a9c7;outline-offset:3px;}
 .class-schedule-workspace :is(button,select):disabled {opacity:.55;cursor:not-allowed;}
@@ -364,13 +368,15 @@ export default function ClassScheduleEntry({ mode }: Props) {
   }
 
   function renderCellView(cell: Cell | undefined) {
-    if (!cell?.class_subject_id) return <span>{cell?.note || '—'}</span>
+    if (!cell?.class_subject_id) return <span>{cell?.note || 'คาบว่าง'}</span>
     const subj = subjectMap[cell.class_subject_id]
     if (!subj) return <span>—</span>
+    const activity = cell.class_subject_id.startsWith('activity:')
     return (
       <>
-        <span className="cell-subj">{subj.label}</span>
-        <span className="cell-tchr">{cell.class_subject_id.startsWith('activity:') ? 'กิจกรรม · ไม่ต้องระบุครู' : subj.teacher_name || 'ยังไม่กำหนดครูผู้สอน'}</span>
+        <span className="schedule-subject-code">{activity ? 'กิจกรรมพัฒนาผู้เรียน' : subj.subject_code}</span>
+        <span className="schedule-subject-name" title={subj.label}>{subj.subject_name}</span>
+        {!activity && <span className="cell-tchr" title={subj.teacher_name}>{subj.teacher_name || 'ยังไม่กำหนดครูผู้สอน'}</span>}
       </>
     )
   }
@@ -524,7 +530,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
                     </div>
                   )
                 }
-                return <div className="cell-view">{renderCellView(cell)}</div>
+                return <div className={`cell-view${cell?.class_subject_id?.startsWith('activity:') ? ' activity' : cell?.locked ? ' locked' : ''}${!cell?.class_subject_id ? ' empty' : ''}`}>{renderCellView(cell)}</div>
               }}
             />
             </div>
