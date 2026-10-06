@@ -766,7 +766,38 @@ export async function putClassDocumentSignature(
   return { success: true }
 }
 
+export async function removePp5SubjectSignature(classSubjectId: string, term: number) {
+  const session = await requireSession()
+  if (!session.schoolId || (term !== 1 && term !== 2)) return { error: 'ข้อมูลโรงเรียนหรือภาคเรียนไม่ถูกต้อง' }
+  const db = createServerClient()
+  const { data: cs } = await db.from('class_subjects').select('id, teacher_id, classrooms!inner(school_id)').eq('id', classSubjectId).maybeSingle()
+  const classroom = Array.isArray(cs?.classrooms) ? cs.classrooms[0] : cs?.classrooms
+  if (!cs || classroom?.school_id !== session.schoolId) return { error: 'ไม่พบรายวิชาในโรงเรียนนี้' }
+  if (cs.teacher_id !== session.userId && session.role !== 'admin') return { error: 'เฉพาะครูประจำวิชาเอาลายเซ็นออกได้' }
+  const { data: record, error: readError } = await db.from('approval_signatures').select('*').eq('class_subject_id', classSubjectId).eq('term', term).maybeSingle()
+  if (readError) return { error: readError.message }
+  if (!record?.teacher_signed_at) return { success: true }
+  if (record.status === 'in_review' || record.status === 'approved' || pp5SubjectHasApproverSignatures(record)) return { error: 'เอกสารเสนอเซ็นหรือมีผู้อนุมัติลงนามแล้ว ไม่สามารถเอาลายเซ็นออกได้' }
+  const { data: updated, error } = await db.from('approval_signatures')
+    .update({ teacher_id: null, teacher_signed_at: null, updated_at: new Date().toISOString() })
+    .eq('id', record.id).eq('class_subject_id', classSubjectId).eq('term', term)
+    .eq('status', record.status).eq('teacher_signed_at', record.teacher_signed_at)
+    .is('subject_head_signed_at', null).is('measurement_head_signed_at', null)
+    .is('academic_head_signed_at', null).is('vice_director_signed_at', null).is('director_signed_at', null).select('id')
+  if (error) return { error: error.message }
+  if (!updated?.length) return { error: 'สถานะเอกสารเปลี่ยนแล้ว กรุณารีเฟรชก่อนลองใหม่' }
+  await logActivity({ actor: session, schoolId: session.schoolId, action: 'update', module: 'sign', targetType: 'pp5_subject', targetId: classSubjectId, description: `เอาลายเซ็น ปพ.5 รายวิชา เทอม ${term} ออก` })
+  return { success: true }
+}
+
 export async function removePp6DocumentSignature(classroomId: string, term: number) {
+  return removeClassDocumentSignature('pp6', classroomId, term)
+}
+
+export async function removeClassDocumentSignature(docType: ClassDocType, classroomId: string, term: number, month?: number | null) {
+  if (!['pp5_class', 'pp6', 'classroom_admin'].includes(docType)) return { error: 'ประเภทเอกสารไม่ถูกต้อง' }
+  const periodMonth = docType === 'classroom_admin' ? month : null
+  if (docType === 'classroom_admin' && (!Number.isInteger(periodMonth) || periodMonth! < 1 || periodMonth! > 12)) return { error: 'กรุณาเลือกเดือนก่อนเอาลายเซ็นออก' }
   const session = await requireSession()
   if (!session.schoolId || (term !== 1 && term !== 2)) return { error: 'ข้อมูลโรงเรียนหรือภาคเรียนไม่ถูกต้อง' }
   const db = createServerClient()
@@ -776,21 +807,25 @@ export async function removePp6DocumentSignature(classroomId: string, term: numb
   if (!classroom) return { error: 'ไม่พบห้องเรียนในโรงเรียนนี้' }
   const isHomeroom = classroom.homeroom_teacher_id === session.userId || classroom.homeroom_teacher2_id === session.userId
   if (!isHomeroom && session.role !== 'admin') return { error: 'เฉพาะครูประจำชั้นเอาลายเซ็นออกได้' }
-  const record = await findClassDocumentApproval(db, { classroomId, docType: 'pp6', term, month: null })
+  const record = await findClassDocumentApprovalExact(db, { classroomId, docType, term, month: periodMonth })
+  if (!record && docType === 'classroom_admin') {
+    const legacy = await findClassDocumentApproval(db, { classroomId, docType, term, month: periodMonth })
+    if (legacy?.homeroom_signed_at) return { error: 'ลายเซ็นเดิมใช้ร่วมทั้งภาคเรียน กรุณาใส่ลายเซ็นรายเดือนก่อนเอาออก' }
+  }
   if (!record?.homeroom_signed_at) return { success: true }
-  if (record.status === 'in_review' || record.status === 'approved' || classDocHasApproverSignatures(record, 'pp6')) {
+  if (record.status === 'in_review' || record.status === 'approved' || classDocHasApproverSignatures(record, docType)) {
     return { error: 'เอกสารเสนอเซ็นหรือมีผู้อนุมัติลงนามแล้ว ไม่สามารถเอาลายเซ็นออกได้' }
   }
   const { data: updated, error } = await db.from('class_document_approvals')
     .update({ homeroom_signed_at: null, homeroom_id: null, updated_at: new Date().toISOString() })
-    .eq('id', record.id).eq('school_id', session.schoolId).eq('doc_type', 'pp6')
+    .eq('id', record.id).eq('school_id', session.schoolId).eq('doc_type', docType)
     .eq('status', record.status).eq('homeroom_signed_at', record.homeroom_signed_at)
     .is('academic_head_signed_at', null).is('vice_director_signed_at', null).is('director_signed_at', null)
     .select('id')
   if (error) return { error: error.message }
   if (!updated?.length) return { error: 'สถานะเอกสารเปลี่ยนแล้ว กรุณารีเฟรชก่อนลองใหม่' }
   await logActivity({ actor: session, schoolId: session.schoolId, action: 'update', module: 'sign',
-    targetType: 'pp6', targetId: classroomId, description: `เอาลายเซ็น ปพ.6 เทอม ${term} ออก`,
+    targetType: docType, targetId: classroomId, description: `เอาลายเซ็น ${docType} เทอม ${term}${periodMonth ? ` เดือน ${periodMonth}` : ''} ออก`,
   })
   return { success: true }
 }
@@ -1212,6 +1247,7 @@ export async function fetchPp5SubjectApprovalStatus(classSubjectId: string, term
     isInitiator,
     hasDocumentSignature,
     hasApproverSignatures,
+    canRemoveSignature: isInitiator && hasDocumentSignature && isDraftLike && !hasApproverSignatures,
     canPutSignature: isInitiator && full.status !== 'in_review' && (isDraftLike || full.status === 'approved' || full.status === 'rejected'),
     canPropose: canRepropose || (isInitiator && hasDocumentSignature && isDraftLike),
     canShowPropose: canRepropose || (isInitiator && isDraftLike),
@@ -1282,7 +1318,7 @@ export async function fetchClassDocApprovalStatus(
     status_label: classDocStatusLabel(merged, school, docType),
     isInitiator,
     hasDocumentSignature,
-    canRemoveSignature: docType === 'pp6' && isInitiator && hasDocumentSignature && isDraftLike && !hasApproverSignatures,
+    canRemoveSignature: isInitiator && hasDocumentSignature && isDraftLike && !hasApproverSignatures,
     hasApproverSignatures,
     canPutSignature: isInitiator && full.status !== 'in_review' && (isDraftLike || full.status === 'approved' || full.status === 'rejected'),
     canPropose: canRepropose || (isInitiator && hasDocumentSignature && isDraftLike),

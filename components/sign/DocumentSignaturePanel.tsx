@@ -11,7 +11,8 @@ import {
   proposeClassDocument,
   proposePp5Subject,
   putClassDocumentSignature,
-  removePp6DocumentSignature,
+  removeClassDocumentSignature,
+  removePp5SubjectSignature,
   putPp5SubjectSignature,
   signClassDocument,
   signPp5Subject,
@@ -172,9 +173,11 @@ export default function DocumentSignaturePanel({
     setBusy(true)
     try {
       let result: { error?: string }
-      const removing = variant === 'pp6' && state?.hasDocumentSignature
-      if (removing && classroomId) {
-        result = await removePp6DocumentSignature(classroomId, signTerm)
+      const removing = Boolean(state?.hasDocumentSignature)
+      if (removing && variant === 'pp5_subject' && classSubjectId) {
+        result = await removePp5SubjectSignature(classSubjectId, signTerm)
+      } else if (removing && classroomId) {
+        result = await removeClassDocumentSignature(variantToDocType(variant)!, classroomId, signTerm, signMonth)
       } else if (variant === 'pp5_subject' && classSubjectId) {
         result = await putPp5SubjectSignature(classSubjectId, signTerm)
       } else if (classroomId) {
@@ -304,7 +307,7 @@ export default function DocumentSignaturePanel({
     ? !actionsLocked && (awaitingState || Boolean(state?.isInitiator && (state.canPutSignature || state.canShowPropose)))
     : Boolean(state?.isInitiator && (state.canPutSignature || state.canShowPropose) && !actionsLocked)
   const proposeLabel = state?.canRepropose ? 'เสนอเซ็นอีกครั้ง' : 'เสนอเซ็น'
-  const removingSignature = variant === 'pp6' && Boolean(state?.hasDocumentSignature)
+  const removingSignature = Boolean(state?.hasDocumentSignature)
   const putLabel = removingSignature ? 'เอาลายเซ็นออก' : state?.canRepropose ? 'ใส่ลายเซ็นใหม่' : 'ใส่ลายเซ็น'
   const putReady = !awaitingState && !busy && !actionsLocked && Boolean(removingSignature ? state?.canRemoveSignature : state?.canPutSignature)
   const proposeReady = !awaitingState && !busy && !actionsLocked && Boolean(state?.canPropose)
@@ -342,7 +345,7 @@ export default function DocumentSignaturePanel({
                 type="button"
                 className={`sign-panel__btn sign-panel__btn--signature${putReady ? '' : ' is-dimmed'}`}
                 disabled={!putReady}
-                aria-pressed={variant === 'pp6' ? Boolean(state?.hasDocumentSignature) : undefined}
+                aria-pressed={Boolean(state?.hasDocumentSignature)}
                 title={removingSignature && !state?.canRemoveSignature ? 'เอกสารเสนอเซ็นหรือมีผู้อนุมัติลงนามแล้ว ไม่สามารถเอาลายเซ็นออกได้' : undefined}
                 onClick={handlePutSignature}
               >
