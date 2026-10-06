@@ -1,0 +1,39 @@
+.academic-year-page { max-width: 1120px; margin-inline: auto; width: 100%; }
+.academic-year-feedback { padding: 12px 16px; background: #eef4f8; border: 1px solid #d3e0e9; border-radius: 12px; color: #334155; font-size: 14px; line-height: 1.6; }
+.academic-year-card { background: white; border: 1px solid #cbd5e1; border-radius: 18px; overflow: hidden; box-shadow: 0 3px 12px #0f172a06; }
+.academic-year-card.is-current { border-color: #8bbcae; }
+.academic-year-card__header { padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0; }
+.academic-year-card__title, .academic-year-card__actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.academic-year-card__title h2 { margin: 0; font-size: 22px; font-weight: 700; color: #0f172a; }
+.academic-year-current { background: #dff3e9; color: #166044; border-radius: 20px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+.academic-year-terms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding: 24px; }
+.academic-term { border: 1px solid #d5dee8; border-radius: 14px; overflow: hidden; }
+.academic-term h3 { padding: 15px 18px; margin: 0; background: #f1f5f9; border-bottom: 1px solid #d5dee8; color: #0f172a; font-size: 18px; font-weight: 700; }
+.academic-term__dates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; padding: 18px; }
+.academic-term__dates dt, .academic-term__label { color: #526175; font-size: 13px; margin-bottom: 4px; }
+.academic-term__dates dd { color: #172536; font-size: 15px; font-weight: 500; margin: 0; }
+.academic-term__recording { padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid #e2e8f0; background: #f8fafc; }
+.academic-term__recording.is-open { background: #edf8f2; border-top-color: #cee8db; }
+.academic-term__recording strong { color: #334155; font-size: 16px; }
+.academic-term__recording.is-open strong { color: #166044; }
+.academic-term__recording small { display: block; font-size: 12px; color: #64748b; margin-top: 4px; }
+.academic-score-switch { appearance: none; position: relative; flex: 0 0 56px; width: 56px; height: 32px; padding: 0; border: 1px solid #77869a; border-radius: 999px; background: #8190a3; cursor: pointer; transition: background .18s; }
+.academic-score-switch[aria-checked="true"] { background: #16805c; border-color: #16805c; }
+.academic-score-switch__thumb { position: absolute; width: 24px; height: 24px; top: 3px; left: 3px; background: white; border-radius: 50%; box-shadow: 0 1px 3px #0003; transition: transform .18s; }
+.academic-score-switch[aria-checked="true"] .academic-score-switch__thumb { transform: translateX(24px); }
+.academic-score-switch:focus-visible { outline: 3px solid #2563eb; outline-offset: 4px; }
+.academic-score-switch:disabled { cursor: wait; opacity: .6; }
+.academic-score-switch:disabled:not([aria-busy="true"]) { cursor: not-allowed; }
+.academic-year-card__footer { padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; color: #526175; font-size: 13px; }
+.academic-year-empty { background: white; padding: 40px 20px; border: 1px dashed #94a3b8; border-radius: 16px; text-align: center; color: #526175; }
+@media (max-width: 640px) {
+  .academic-year-terms { grid-template-columns: 1fr; padding: 16px; gap: 16px; }
+  .academic-year-card__header { padding: 18px 16px; }
+  .academic-year-card__title h2 { font-size: 20px; }
+  .academic-year-card__actions { width: 100%; gap: 8px; }
+  .academic-year-card__actions .btn { flex: 1; font-size: 13px; }
+  .academic-year-card__footer { padding: 14px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .academic-score-switch, .academic-score-switch__thumb { transition: none; }
+}

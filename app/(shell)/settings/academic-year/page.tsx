@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import './academic-year.css'
 import {
   fetchAcademicYears,
   setScoreEntryOpen,
@@ -46,17 +47,23 @@ export default function AcademicYearPage() {
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const [schoolId, setSchoolId] = useState<string | null>(null)
 
-  useEffect(() => { loadData() }, [])
+  const [statusMessage, setStatusMessage] = useState('')
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true)
-    const { schoolId: sid, years: y } = await fetchAcademicYears()
-    const globalData = await fetchGlobalTermCalendarsForSchoolYears()
-    setSchoolId(sid)
-    setYears(y)
-    setGlobalCalendars(globalData as GlobalTermCalendar[])
-    setLoading(false)
-  }
+    try {
+      const [schoolData, globalData] = await Promise.all([fetchAcademicYears(), fetchGlobalTermCalendarsForSchoolYears()])
+      setSchoolId(schoolData.schoolId)
+      setYears(schoolData.years)
+      setGlobalCalendars(globalData as GlobalTermCalendar[])
+    } catch {
+      setStatusMessage('โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void Promise.resolve().then(loadData) }, [loadData])
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -75,22 +82,35 @@ export default function AcademicYearPage() {
       is_active: formData.get('is_active') === 'true',
     }
 
-    const { error } = await saveAcademicYear(editItem?.id || null, updates)
-    setSaving(false)
-    if (error) {
-      notify('error', 'เกิดข้อผิดพลาด: ' + error)
-    } else {
-      notify('success', 'บันทึกเรียบร้อยแล้ว')
-      setShowForm(false)
-      setEditItem(null)
-      loadData()
+    try {
+      const { error } = await saveAcademicYear(editItem?.id || null, updates)
+      if (error) {
+        notify('error', 'เกิดข้อผิดพลาด: ' + error)
+      } else {
+        notify('success', 'บันทึกเรียบร้อยแล้ว')
+        setShowForm(false)
+        setEditItem(null)
+        await loadData()
+      }
+    } catch {
+      notify('error', 'บันทึกไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setSaving(false)
     }
   }
 
   async function handleSetActive(id: string) {
     if (!schoolId) return
-    await setActiveAcademicYear(id, schoolId)
-    loadData()
+    setSyncingId(id)
+    try {
+      const result = await setActiveAcademicYear(id, schoolId)
+      if (result?.error) { notify('error', result.error); return }
+      await loadData()
+    } catch {
+      notify('error', 'เปลี่ยนปีปัจจุบันไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setSyncingId(null)
+    }
   }
 
   async function handleToggleScoreEntry(year: AcademicYear, term: 1 | 2) {
@@ -101,7 +121,7 @@ export default function AcademicYearPage() {
       const { error } = await setScoreEntryOpen(year.id, term, open)
       if (error) { notify('error', error); return }
       setYears(previous => previous.map(item => item.id === year.id ? { ...item, [field]: open } : item))
-      notify('success', `${open ? 'เปิด' : 'ปิด'}การบันทึกคะแนน ปี ${year.year_be} ภาคเรียนที่ ${term} แล้ว`)
+      setStatusMessage(`บันทึกแล้ว · ปี ${year.year_be} ภาคเรียนที่ ${term} ${open ? 'เปิด' : 'ปิด'}การบันทึกคะแนน`)
     } catch {
       notify('error', 'เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่')
     } finally {
@@ -112,13 +132,17 @@ export default function AcademicYearPage() {
   function scoreEntryControl(year: AcademicYear, term: 1 | 2) {
     const open = term === 1 ? year.term1_scores_open : year.term2_scores_open
     return (
-      <div style={{ marginTop: 8 }}>
-        <div>{open === undefined ? 'ยังไม่พร้อมตั้งค่าการบันทึกคะแนน' : open ? 'เปิดบันทึกคะแนน' : 'ปิดบันทึกคะแนน'}</div>
-        <button type="button" className="btn btn-secondary" style={{ marginTop: 4, fontSize: 12 }}
-          disabled={togglingPeriod !== null || open === undefined}
-          aria-label={`${open ? 'ปิด' : 'เปิด'}บันทึกคะแนน ปี ${year.year_be} ภาคเรียนที่ ${term}`}
+      <div className={`academic-term__recording ${open === true ? 'is-open' : ''}`}>
+        <div>
+          <div className="academic-term__label">การบันทึกคะแนน</div>
+          <strong>{togglingPeriod === `${year.id}-${term}` ? 'กำลังบันทึก…' : open === undefined ? 'ยังไม่พร้อมใช้งาน' : open ? 'เปิดให้บันทึก' : 'ปิดการบันทึก'}</strong>
+        </div>
+        <button type="button" className="academic-score-switch" role="switch" aria-checked={open === true}
+          aria-busy={togglingPeriod === `${year.id}-${term}`}
+          disabled={togglingPeriod !== null || syncingId !== null || open === undefined}
+          aria-label={`การบันทึกคะแนน ปี ${year.year_be} ภาคเรียนที่ ${term}`}
           onClick={() => handleToggleScoreEntry(year, term)}>
-          {togglingPeriod === `${year.id}-${term}` ? 'กำลังบันทึก...' : open ? 'ปิดการบันทึก' : 'เปิดการบันทึก'}
+          <span className="academic-score-switch__thumb" />
         </button>
       </div>
     )
@@ -126,24 +150,29 @@ export default function AcademicYearPage() {
 
   async function handleSync(year: AcademicYear) {
     setSyncingId(year.id)
-    const { error } = await syncAcademicYearCalendarFromGlobal(year.id)
-    setSyncingId(null)
-    if (error) {
-      notify('error', 'ใช้จากข้อมูลกลางไม่สำเร็จ: ' + error)
-      return
+    try {
+      const { error } = await syncAcademicYearCalendarFromGlobal(year.id)
+      if (error) {
+        notify('error', 'ใช้จากข้อมูลกลางไม่สำเร็จ: ' + error)
+        return
+      }
+      notify('success', `ใช้จากข้อมูลกลาง ปี ${year.year_be} เรียบร้อยแล้ว`)
+      await loadData()
+    } catch {
+      notify('error', 'นำเข้าปฏิทินไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setSyncingId(null)
     }
-    notify('success', `ใช้จากข้อมูลกลาง ปี ${year.year_be} เรียบร้อยแล้ว`)
-    loadData()
   }
 
   if (loading) return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
 
   return (
-    <div className="page-stack">
+    <div className="page-stack academic-year-page">
       <div className="control-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div className="section-title" style={{ marginBottom: 2 }}>ปีการศึกษา</div>
-          <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>กำหนดเองหรือ Sync วันเปิด-ปิดภาคเรียนจากส่วนกลาง</p>
+          <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>เปิด–ปิดการบันทึกคะแนนแยกตามปีและภาคเรียน ด้วยสวิตช์ที่บันทึกทันที</p>
         </div>
         <button
           onClick={() => { setEditItem({}); setShowForm(true) }}
@@ -185,15 +214,15 @@ export default function AcademicYearPage() {
                 </div>
                 <label className="term-calendar-form__active">
                   <input type="checkbox" name="is_active" value="true" defaultChecked={editItem?.is_active} />
-                  <span>ใช้งานอยู่ (active)</span>
+                  <span>ใช้เป็นปีการศึกษาปัจจุบัน</span>
                 </label>
               </div>
 
               <div className="term-calendar-form__block">
-                <div className="term-calendar-form__block-title">เทอม 1</div>
+                <div className="term-calendar-form__block-title">ภาคเรียนที่ 1</div>
                 <div className="term-calendar-form__dates">
                   <div>
-                    <label className="form-label">เปิดเรียนเทอม 1</label>
+                    <label className="form-label">เปิดเรียนภาคเรียนที่ 1</label>
                     <ThaiDatePicker
                       key={`t1s-${editItem?.id || 'new'}`}
                       name="term1_start_date"
@@ -203,7 +232,7 @@ export default function AcademicYearPage() {
                     />
                   </div>
                   <div>
-                    <label className="form-label">ปิดเรียนเทอม 1</label>
+                    <label className="form-label">ปิดเรียนภาคเรียนที่ 1</label>
                     <ThaiDatePicker
                       key={`t1e-${editItem?.id || 'new'}`}
                       name="term1_end_date"
@@ -216,10 +245,10 @@ export default function AcademicYearPage() {
               </div>
 
               <div className="term-calendar-form__block">
-                <div className="term-calendar-form__block-title">เทอม 2</div>
+                <div className="term-calendar-form__block-title">ภาคเรียนที่ 2</div>
                 <div className="term-calendar-form__dates">
                   <div>
-                    <label className="form-label">เปิดเรียนเทอม 2</label>
+                    <label className="form-label">เปิดเรียนภาคเรียนที่ 2</label>
                     <ThaiDatePicker
                       key={`t2s-${editItem?.id || 'new'}`}
                       name="term2_start_date"
@@ -229,7 +258,7 @@ export default function AcademicYearPage() {
                     />
                   </div>
                   <div>
-                    <label className="form-label">ปิดเรียนเทอม 2</label>
+                    <label className="form-label">ปิดเรียนภาคเรียนที่ 2</label>
                     <ThaiDatePicker
                       key={`t2e-${editItem?.id || 'new'}`}
                       name="term2_end_date"
@@ -250,98 +279,52 @@ export default function AcademicYearPage() {
         </div>
       )}
 
-      {globalCalendars.length > 0 ? (
-        <section className="control-card">
-          <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>ข้อมูลกลางที่พร้อมใช้</h3>
-          <p style={{ color: 'var(--text-3)', fontSize: 13, margin: '2px 0 12px' }}>
-            กด「ใช้จากข้อมูลกลาง」ในแถวปีที่ตรงกัน เพื่อดึงวันเปิด–ปิดภาคเรียนจากเขต
-          </p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {globalCalendars.map(calendar => (
-              <span key={calendar.id} className="badge badge-primary">ปี {calendar.year_be}</span>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <section className="control-card" style={{ borderStyle: 'dashed' }}>
-          <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>ยังไม่มีปุ่มซิงก์จากส่วนกลาง</h3>
-          <p style={{ color: 'var(--text-3)', fontSize: 13, margin: '6px 0 0', lineHeight: 1.55 }}>
-            ปุ่ม「ใช้จากข้อมูลกลาง」จะแสดงเมื่อสำนักงานเขตตั้ง<span style={{ fontWeight: 700 }}>ปฏิทินภาคเรียนกลาง</span>
-            ของปีเดียวกับโรงเรียนนี้แล้ว (เมนูเขต → ปฏิทินภาคเรียน)
-            {years.length > 0 && (
-              <> · ปีที่มีในโรงเรียน: {years.map(y => y.year_be).join(', ')}</>
-            )}
-          </p>
-        </section>
-      )}
 
-      <div className="data-card">
-        <table className="thai-table">
-          <thead>
-            <tr>
-              <th>ปีการศึกษา (พ.ศ.)</th>
-              <th>เทอม 1</th>
-              <th>เทอม 2</th>
-              <th>สถานะ</th>
-              <th>จัดการ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {years.length === 0 ? (
-              <tr><td colSpan={5} className="text-center text-gray-400 py-8">ยังไม่มีข้อมูลปีการศึกษา</td></tr>
-            ) : years.map(year => {
-              const globalCalendar = globalCalendars.find(g => g.year_be === year.year_be)
-              return (
-              <tr key={year.id}>
-                <td style={{ fontWeight: 900, fontSize: 18, color: 'var(--primary-dk)' }}>
-                  {year.year_be}
-                  {globalCalendar && <div><span className="badge badge-primary">มีข้อมูลกลาง</span></div>}
-                </td>
-                <td className="text-sm">
-                  {year.term1_start_date ? `${formatThaiDate(year.term1_start_date)} – ${formatThaiDate(year.term1_end_date)}` : '-'}
-                  {scoreEntryControl(year, 1)}
-                </td>
-                <td className="text-sm">
-                  {year.term2_start_date ? `${formatThaiDate(year.term2_start_date)} – ${formatThaiDate(year.term2_end_date)}` : '-'}
-                  {scoreEntryControl(year, 2)}
-                </td>
-                <td>
-                  {year.is_active ? (
-                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">ใช้งานอยู่</span>
-                  ) : (
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">ไม่ active</span>
-                  )}
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {globalCalendar && (
-                      <LoadingButton
-                        className="btn btn-secondary"
-                        style={{ fontSize: 13, padding: '6px 10px' }}
-                        loading={syncingId === year.id}
-                        loadingText="กำลังดึง..."
-                        onClick={() => handleSync(year)}
-                      >
-                        ใช้จากข้อมูลกลาง
-                      </LoadingButton>
-                    )}
-                    <button
-                      onClick={() => { setEditItem(year); setShowForm(true) }}
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                    >แก้ไข</button>
-                    {!year.is_active && (
-                      <button
-                        onClick={() => handleSetActive(year.id)}
-                        className="text-green-600 hover:text-green-800 text-sm"
-                      >ตั้งเป็น Active</button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )})}
-          </tbody>
-        </table>
+      <div className="academic-year-feedback" role="status" aria-live="polite">
+        {statusMessage || 'เปิดสวิตช์ = ครูบันทึกคะแนนได้ · ปิดสวิตช์ = หยุดการบันทึกคะแนน โดยข้อมูลเดิมยังอยู่'}
+        {statusMessage.startsWith('โหลดข้อมูล') && <button className="btn btn-secondary" onClick={() => void loadData()}>ลองใหม่</button>}
       </div>
+      {years.length === 0 ? (
+        <div className="academic-year-empty">ยังไม่มีปีการศึกษา เริ่มต้นด้วยปุ่ม “เพิ่มปีการศึกษา”</div>
+      ) : [...years].sort((a, b) => Number(b.is_active) - Number(a.is_active) || b.year_be - a.year_be).map(year => (
+        <section key={year.id} className={`academic-year-card ${year.is_active ? 'is-current' : ''}`}>
+          <div className="academic-year-card__header">
+            <div className="academic-year-card__title">
+              <h2>ปีการศึกษา {year.year_be}</h2>
+              {year.is_active && <span className="academic-year-current">ปีปัจจุบัน</span>}
+            </div>
+            <div className="academic-year-card__actions">
+              {!year.is_active && <button className="btn btn-secondary" disabled={togglingPeriod !== null || syncingId !== null} onClick={() => handleSetActive(year.id)}>ใช้เป็นปีปัจจุบัน</button>}
+              <button className="btn btn-secondary" disabled={togglingPeriod !== null || syncingId !== null} onClick={() => { setEditItem(year); setShowForm(true) }}>แก้ไขวันเปิด–ปิด</button>
+            </div>
+          </div>
+          <div className="academic-year-terms">
+            {([1, 2] as const).map(term => {
+              const start = term === 1 ? year.term1_start_date : year.term2_start_date
+              const end = term === 1 ? year.term1_end_date : year.term2_end_date
+              return (
+                <div key={term} className="academic-term">
+                  <h3>ภาคเรียนที่ {term}</h3>
+                  <dl className="academic-term__dates">
+                    <div><dt>วันเปิดเรียน</dt><dd>{start ? formatThaiDate(start) : 'ยังไม่กำหนด'}</dd></div>
+                    <div><dt>วันปิดเรียน</dt><dd>{end ? formatThaiDate(end) : 'ยังไม่กำหนด'}</dd></div>
+                  </dl>
+                  {scoreEntryControl(year, term)}
+                </div>
+              )
+            })}
+          </div>
+          {globalCalendars.some(calendar => calendar.year_be === year.year_be) && (
+            <div className="academic-year-card__footer">
+              <span>มีปฏิทินภาคเรียนจากส่วนกลางสำหรับปีนี้</span>
+              <LoadingButton className="btn btn-secondary" loading={syncingId === year.id}
+                disabled={togglingPeriod !== null || syncingId !== null} loadingText="กำลังนำเข้า…" onClick={() => handleSync(year)}>
+                นำเข้าวันเปิด–ปิดจากส่วนกลาง
+              </LoadingButton>
+            </div>
+          )}
+        </section>
+      ))}
     </div>
   )
 }
