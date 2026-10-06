@@ -9,6 +9,7 @@ import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
 import { calcGrade, gradeLabel, gradeColor, RESULT_OPTIONS } from '@/lib/grade'
+import { scoreTransferData, parseScoreTransfer } from '@/lib/score-transfer'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Subject = { id: string; code: string; name: string }
@@ -168,6 +169,12 @@ export default function ScoreEntryPage() {
   const [loadingGrid, setLoadingGrid] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [transferBusy, setTransferBusy] = useState(false)
+  const [importPreview, setImportPreview] = useState<{ rows: Record<string, Row>; context: string; filename: string } | null>(null)
+  const importInput = useRef<HTMLInputElement>(null)
+  const transferContext = JSON.stringify([selectedYear, selectedClass, selectedCS, term, config?.between_scores, config?.midterm_max, config?.final_max])
+  const liveTransferContext = useRef(transferContext)
+  useEffect(() => { liveTransferContext.current = transferContext }, [transferContext])
   const canEdit = roleCanEdit && entryOpen && !loadingGrid && loadedEntry === `${selectedClass}:${selectedCS}:${term}`
   const [term1TermTotals, setTerm1TermTotals] = useState<Record<string, number>>({})
   const [yearTotalMax, setYearTotalMax] = useState(0)
@@ -366,6 +373,58 @@ export default function ScoreEntryPage() {
     return (term1TermTotals[studentId] ?? 0) + termTotal
   }
 
+  async function exportScores() {
+    if (!config || loadingGrid || loadedEntry !== `${selectedClass}:${selectedCS}:${term}`) return
+    setTransferBusy(true)
+    try {
+      const XLSX = await import('xlsx')
+      const workbook = XLSX.utils.book_new()
+      const sheet = XLSX.utils.aoa_to_sheet(scoreTransferData(students, rows, config, term))
+      sheet['!cols'] = [{ wch: 38 }, { wch: 8 }, { wch: 32 }, ...Array.from({ length: config.between_scores.length + 3 }, () => ({ wch: 24 }))]
+      XLSX.utils.book_append_sheet(workbook, sheet, 'คะแนน')
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+        ['รูปแบบ', 'pp5-scores-v1'], ['อ้างอิง (ห้ามแก้)', transferContext],
+        ['วิธีใช้', 'กรอกคะแนนในแผ่นคะแนน แล้วนำเข้าในปี ห้อง วิชา และภาคเรียนเดิม ห้ามแก้รหัสนักเรียนหรือหัวคอลัมน์'],
+        ['ช่องว่าง', 'ช่องคะแนนที่เว้นว่างจะล้างคะแนนเดิมของนักเรียนแถวนั้น'],
+        ['ผลการเรียน', RESULT_OPTIONS.join(', ')], ['สถานะข้อมูล', dirty ? 'รวมคะแนนที่แก้ไขในหน้านี้และยังไม่ได้บันทึก' : 'คะแนนในหน้าที่เลือก'],
+      ]), 'ข้อมูลอ้างอิง')
+      const subject = subjectMap[items.find(item => item.id === selectedCS)?.subject_id || '']
+      XLSX.writeFile(workbook, `คะแนน_${years.find(year => year.id === selectedYear)?.year_be}_เทอม${term}_${subject?.code || 'วิชา'}.xlsx`)
+    } catch {
+      setAlertModal({ type: 'error', title: 'ส่งออกไม่สำเร็จ', message: 'กรุณาลองดาวน์โหลดอีกครั้ง' })
+    } finally { setTransferBusy(false) }
+  }
+
+  async function importScores(file: File) {
+    if (!config || !canEdit || saving) return
+    const context = transferContext
+    setTransferBusy(true)
+    try {
+      if (!/\.xlsx$/i.test(file.name) || file.size > 5 * 1024 * 1024) throw new Error('เลือกไฟล์ Excel .xlsx ขนาดไม่เกิน 5 MB ที่ดาวน์โหลดจากหน้านี้')
+      const XLSX = await import('xlsx')
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellFormula: true })
+      const metadata = workbook.Sheets['ข้อมูลอ้างอิง']
+      const sheet = workbook.Sheets['คะแนน']
+      if (!metadata || !sheet || metadata.A1?.v !== 'รูปแบบ' || metadata.B1?.v !== 'pp5-scores-v1' || metadata.B2?.v !== context) throw new Error('ไฟล์ไม่ตรงกับปี ห้อง วิชา ภาคเรียน หรือคะแนนเต็มที่เลือก กรุณาดาวน์โหลดไฟล์ใหม่')
+      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1')
+      if (range.e.r > 5000 || range.e.c > config.between_scores.length + 10) throw new Error('จำนวนแถวหรือคอลัมน์เกินแบบฟอร์ม กรุณาใช้ไฟล์ที่ดาวน์โหลดจากหน้านี้')
+      if (Object.values(sheet).some(cell => cell && typeof cell === 'object' && 'f' in cell)) throw new Error('กรุณาใช้ค่าคะแนนตัวเลขแทนสูตร Excel ก่อนนำเข้า')
+      const data = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: true })
+      const imported = parseScoreTransfer(data, students, config, term, [...RESULT_OPTIONS])
+      if (liveTransferContext.current !== context) throw new Error('รายการที่เลือกเปลี่ยนแล้ว กรุณานำเข้าใหม่ในรายการที่ต้องการ')
+      setImportPreview({ rows: imported, context, filename: file.name })
+    } catch (error) {
+      setAlertModal({ type: 'error', title: 'นำเข้าไม่สำเร็จ', message: error instanceof Error ? error.message : 'อ่านไฟล์ไม่สำเร็จ' })
+    } finally { setTransferBusy(false) }
+  }
+
+  function applyImportedScores() {
+    if (!importPreview || !canEdit || saving || importPreview.context !== transferContext) return
+    setRows(previous => ({ ...previous, ...importPreview.rows }))
+    setDirty(true)
+    setImportPreview(null)
+  }
+
   async function handleSave() {
     if (!config || !canEdit) return
     const showMidtermOnSave = (config.midterm_max ?? 0) > 0
@@ -435,6 +494,31 @@ export default function ScoreEntryPage() {
         message={alertModal?.message}
         onClose={() => setAlertModal(null)}
       />
+      {importPreview && (
+        <div className="modal-backdrop">
+          <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="score-import-title" style={{ maxWidth: 600, maxHeight: '85vh', overflow: 'auto' }}>
+            <h2 id="score-import-title" style={{ fontSize: 20, fontWeight: 700 }}>ตรวจสอบก่อนนำเข้าคะแนน</h2>
+            <p style={{ overflowWrap: 'anywhere' }}>{importPreview.filename}</p>
+            <p>ปี {years.find(year => year.id === selectedYear)?.year_be} · ห้อง {selectedClassroom?.level}/{selectedClassroom?.room} · {selectedSubject?.name} · ภาคเรียนที่ {term}</p>
+            <p>นักเรียน {Object.keys(importPreview.rows).length} คน · แสดงตัวอย่างไม่เกิน 8 คน</p>
+            <p>คะแนนของนักเรียนในไฟล์จะถูกแทนที่ รวมถึงช่องว่างที่จะล้างคะแนนเดิม นักเรียนที่ไม่อยู่ในไฟล์จะคงคะแนนเดิม</p>
+            <div style={{ overflowX: 'auto', margin: '16px 0' }}>
+              <table className="thai-table"><thead><tr><th>นักเรียน</th><th>ระหว่างเรียน</th>{showMidterm && <th>กลางภาค</th>}<th>ปลายภาค</th>{term === 2 && <th>ผลการเรียน</th>}</tr></thead><tbody>
+                {students.filter(student => importPreview.rows[student.id]).slice(0, 8).map(student => {
+                  const row = importPreview.rows[student.id]
+                  return <tr key={student.id}><td>{student.first_name} {student.last_name}</td><td>{row.unit_scores.map(value => Number.isFinite(value) ? value : 'ว่าง').join(' / ')}</td>{showMidterm && <td>{row.midterm ?? 'ว่าง'}</td>}<td>{row.final ?? 'ว่าง'}</td>{term === 2 && <td>{row.result}</td>}</tr>
+                })}
+              </tbody></table>
+            </div>
+            <p style={{ color: '#92400e' }}>ยืนยันแล้วคะแนนจะแสดงในตาราง กรุณาตรวจสอบและกด “บันทึกคะแนน” เพื่อบันทึกเข้าระบบ</p>
+            {importPreview.context !== transferContext && <p role="alert">รายการที่เลือกเปลี่ยนแล้ว กรุณายกเลิกและนำเข้าใหม่</p>}
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setImportPreview(null)}>ยกเลิก</button>
+              <button className="btn btn-primary" disabled={!canEdit || saving || importPreview.context !== transferContext} onClick={applyImportedScores}>นำคะแนนลงตาราง</button>
+            </div>
+          </section>
+        </div>
+      )}
     <div className="page-stack score-entry-page">
       <style>{SCORE_ENTRY_STYLES}</style>
       {entryMessage && !loadingGrid && (
@@ -527,6 +611,15 @@ export default function ScoreEntryPage() {
                 <span>ปลายภาค <b>{config.final_max}</b></span>
                 <span>รวมทั้งหมด <b>{config.total_max}</b></span>
                 {showYearTotal && yearTotalMax > 0 && <span>รวมทั้งปีการศึกษา <b>{yearTotalMax}</b></span>}
+              </div>
+
+              <div className="control-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div><strong>นำเข้า / ส่งออกคะแนน</strong><p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>ดาวน์โหลด Excel ของห้อง วิชา และภาคเรียนที่เลือก กรอกคะแนนแล้วนำกลับเข้า</p></div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn btn-secondary" disabled={transferBusy || saving || loadedEntry !== `${selectedClass}:${selectedCS}:${term}`} onClick={() => void exportScores()}>ส่งออก Excel</button>
+                  <button className="btn btn-primary" disabled={!canEdit || transferBusy || saving} onClick={() => importInput.current?.click()}>{transferBusy ? 'กำลังจัดการไฟล์…' : 'นำเข้าคะแนน'}</button>
+                  <input ref={importInput} type="file" accept=".xlsx" hidden aria-label="เลือกไฟล์คะแนน Excel" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importScores(file) }} />
+                </div>
               </div>
 
               {selectedCS && (
