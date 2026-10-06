@@ -91,7 +91,7 @@ import { usePp6SectionLayout, Pp6PrintLayoutsProvider } from '@/lib/pp6-print-la
 import Pp5PrintLayoutTuner, { usePp5PrintLayoutsState, usePp6PrintLayoutsState } from '@/components/reports/Pp5PrintLayoutTuner'
 import Pp6JsPdfLivePreview from '@/components/reports/Pp6JsPdfLivePreview'
 import Pp5SubjectJsPdfLivePreview, { pp5TunerSectionToPreview } from '@/components/reports/Pp5SubjectJsPdfLivePreview'
-import Pp5ClassJsPdfLivePreview, { pp5ClassTunerSectionToPreview } from '@/components/reports/Pp5ClassJsPdfLivePreview'
+import Pp5ClassJsPdfLivePreview from '@/components/reports/Pp5ClassJsPdfLivePreview'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 
 function usePp5PageStyle(section: Pp5PrintSection) {
@@ -4589,7 +4589,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           <div className="report-preview-toolbar">
             <label>
               <span>ขนาด</span>
-              <select value={scale} onChange={event => setScale(Number(event.target.value))} disabled={!data} className="form-input">
+              <select value={scale} onChange={event => setScale(Number(event.target.value))} disabled={!data || mode === 'pp5-class'} className="form-input">
                 <option value={72}>เล็ก (72%)</option>
                 <option value={88}>พอดี (88%)</option>
                 <option value={100}>เต็ม (100%)</option>
@@ -4607,15 +4607,15 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                   >
                     {pp5TunerMode === 'pdf' ? 'ปิดปรับ layout' : 'ปรับ layout ปพ.5'}
                   </button>
-                  <button
+                  {mode !== 'pp5-class' && <button
                     type="button"
                     onClick={() => setPp5TunerMode(current => (current === 'preview' ? 'off' : 'preview'))}
                     className={`btn btn-secondary pp5-tuner-toggle${pp5TunerMode === 'preview' ? ' active' : ''}`}
                     disabled={!data}
-                    title={mode === 'pp5-class' ? 'ปรับ layout ของพรีวิว HTML ที่ /reports/pp5-class' : 'ปรับ layout ของพรีวิว HTML ที่ /reports/pp5'}
+                    title="ปรับ layout ของพรีวิว HTML ที่ /reports/pp5"
                   >
                     {pp5TunerMode === 'preview' ? 'ปิดปรับ preview' : 'ปรับ layout ปพ.5 preview'}
-                  </button>
+                  </button>}
                 </>
               )}
               {layoutTunerEnabled && mode === 'pp6' && (
@@ -4660,14 +4660,14 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               previewSection={pp5TunerSectionToPreview(pp5TunerSection)}
             />
           )}
-          {!embedMode && !printMode && mode === 'pp5-class' && data && (
+          {mode === 'pp5-class' && !printMode && data && (
             <Pp5ClassJsPdfLivePreview
-              open={pp5PdfPreviewOpen}
+              inline
+              open
               data={data}
               term={reportTerm}
               sections={sections as Pp5ClassPdfSection[]}
               layouts={pp5PrintLayouts}
-              previewSection={pp5ClassTunerSectionToPreview(pp5TunerSection)}
             />
           )}
           {!embedMode && !printMode && (mode === 'pp6' ? (
@@ -4704,7 +4704,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
             />
           ))}
 
-          <div className="report-preview-shell">
+          <div className="report-preview-shell" style={mode === 'pp5-class' && data && !printMode ? { display: 'none' } : undefined}>
             {!data ? (
               <div className="report-empty">
                 <b>{mode === 'pp5-subject' ? 'ยังไม่ได้เลือกรายวิชา' : mode === 'pp5-class' ? 'เลือกระดับชั้น/ห้องก่อน' : 'เลือกชั้นและห้องก่อน'}</b>

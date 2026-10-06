@@ -895,25 +895,25 @@ async function drawCoverPage(ctx: DrawCtx) {
   const HEADER_BG: [number, number, number] = [248, 250, 252]
 
   const headTop = y
-  drawCell(doc, box.left, headTop, numW, rowH * 2, 'ที่', { bold: true, fontSize: tableFont, fill: HEADER_BG, ...cellOpts })
-  drawCell(doc, box.left + numW, headTop, codeW, rowH * 2, 'รหัส\nวิชา', { bold: true, fontSize: tableSmallFont, noFit: true, fill: HEADER_BG, ...cellOpts })
-  drawCell(doc, box.left + numW + codeW, headTop, nameW, rowH * 2, 'รายวิชา', { bold: true, fontSize: tableFont, fill: HEADER_BG, ...cellOpts })
-  drawCell(doc, box.left + numW + codeW + nameW, headTop, totalStudentW, rowH * 2, 'จำนวน\nนักเรียน', {
+  drawCell(doc, box.left, headTop, numW, rowH * 3, 'ที่', { bold: true, fontSize: tableFont, fill: HEADER_BG, ...cellOpts })
+  drawCell(doc, box.left + numW, headTop, codeW, rowH * 3, 'รหัส\nวิชา', { bold: true, fontSize: tableSmallFont, noFit: true, fill: HEADER_BG, ...cellOpts })
+  drawCell(doc, box.left + numW + codeW, headTop, nameW, rowH * 3, 'รายวิชา', { bold: true, fontSize: tableFont, fill: HEADER_BG, ...cellOpts })
+  drawCell(doc, box.left + numW + codeW + nameW, headTop, totalStudentW, rowH * 3, 'จำนวน\nนักเรียน', {
     bold: true, fontSize: tableSmallFont, noFit: true, fill: HEADER_BG, ...cellOpts,
   })
   const gradeStartX = box.left + numW + codeW + nameW + totalStudentW
-  drawCell(doc, gradeStartX, headTop, gradeSpanW, rowH, 'สรุปผลการเรียน\nจำนวนนักเรียนที่ได้รับผลการเรียน', {
+  drawCell(doc, gradeStartX, headTop, gradeSpanW, rowH * 2, 'สรุปผลการเรียน\nจำนวนนักเรียนที่ได้รับผลการเรียน', {
     bold: true, fontSize: Math.min(bannerFont, tableSmallFont), noFit: true, fill: HEADER_BG, ...cellOpts,
   })
-  drawVerticalHeaderCell(doc, gradeStartX + gradeSpanW, headTop, noteW, rowH * 2, 'หมายเหตุ', {
+  drawVerticalHeaderCell(doc, gradeStartX + gradeSpanW, headTop, noteW, rowH * 3, 'หมายเหตุ', {
     bold: true, fontSize: Math.max(7, tableSmallFont - 2), fill: HEADER_BG,
   })
   let gx = gradeStartX
   for (const column of CLASS_COVER_GRADE_COLUMNS) {
-    drawCell(doc, gx, headTop + rowH, gradeW, rowH, column.label, { bold: true, fontSize: tableSmallFont, fill: HEADER_BG, ...cellOpts })
+    drawCell(doc, gx, headTop + rowH * 2, gradeW, rowH, column.label, { bold: true, fontSize: tableSmallFont, fill: HEADER_BG, ...cellOpts })
     gx += gradeW
   }
-  y = headTop + rowH * 2
+  y = headTop + rowH * 3
 
   paddedSubjects.forEach((subject, index) => {
     const counts = subject ? subjectGradeSummary(data, subject) : null
