@@ -766,6 +766,35 @@ export async function putClassDocumentSignature(
   return { success: true }
 }
 
+export async function removePp6DocumentSignature(classroomId: string, term: number) {
+  const session = await requireSession()
+  if (!session.schoolId || (term !== 1 && term !== 2)) return { error: 'ข้อมูลโรงเรียนหรือภาคเรียนไม่ถูกต้อง' }
+  const db = createServerClient()
+  const { data: classroom } = await db.from('classrooms')
+    .select('id, school_id, homeroom_teacher_id, homeroom_teacher2_id')
+    .eq('id', classroomId).eq('school_id', session.schoolId).maybeSingle()
+  if (!classroom) return { error: 'ไม่พบห้องเรียนในโรงเรียนนี้' }
+  const isHomeroom = classroom.homeroom_teacher_id === session.userId || classroom.homeroom_teacher2_id === session.userId
+  if (!isHomeroom && session.role !== 'admin') return { error: 'เฉพาะครูประจำชั้นเอาลายเซ็นออกได้' }
+  const record = await findClassDocumentApproval(db, { classroomId, docType: 'pp6', term, month: null })
+  if (!record?.homeroom_signed_at) return { success: true }
+  if (record.status === 'in_review' || record.status === 'approved' || classDocHasApproverSignatures(record, 'pp6')) {
+    return { error: 'เอกสารเสนอเซ็นหรือมีผู้อนุมัติลงนามแล้ว ไม่สามารถเอาลายเซ็นออกได้' }
+  }
+  const { data: updated, error } = await db.from('class_document_approvals')
+    .update({ homeroom_signed_at: null, homeroom_id: null, updated_at: new Date().toISOString() })
+    .eq('id', record.id).eq('school_id', session.schoolId).eq('doc_type', 'pp6')
+    .eq('status', record.status).eq('homeroom_signed_at', record.homeroom_signed_at)
+    .is('academic_head_signed_at', null).is('vice_director_signed_at', null).is('director_signed_at', null)
+    .select('id')
+  if (error) return { error: error.message }
+  if (!updated?.length) return { error: 'สถานะเอกสารเปลี่ยนแล้ว กรุณารีเฟรชก่อนลองใหม่' }
+  await logActivity({ actor: session, schoolId: session.schoolId, action: 'update', module: 'sign',
+    targetType: 'pp6', targetId: classroomId, description: `เอาลายเซ็น ปพ.6 เทอม ${term} ออก`,
+  })
+  return { success: true }
+}
+
 export async function proposeClassDocument(
   docType: ClassDocType,
   classroomId: string,
@@ -1253,6 +1282,7 @@ export async function fetchClassDocApprovalStatus(
     status_label: classDocStatusLabel(merged, school, docType),
     isInitiator,
     hasDocumentSignature,
+    canRemoveSignature: docType === 'pp6' && isInitiator && hasDocumentSignature && isDraftLike && !hasApproverSignatures,
     hasApproverSignatures,
     canPutSignature: isInitiator && full.status !== 'in_review' && (isDraftLike || full.status === 'approved' || full.status === 'rejected'),
     canPropose: canRepropose || (isInitiator && hasDocumentSignature && isDraftLike),

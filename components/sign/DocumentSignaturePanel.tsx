@@ -11,6 +11,7 @@ import {
   proposeClassDocument,
   proposePp5Subject,
   putClassDocumentSignature,
+  removePp6DocumentSignature,
   putPp5SubjectSignature,
   signClassDocument,
   signPp5Subject,
@@ -29,6 +30,7 @@ type SignatureState = {
   isInitiator: boolean
   hasDocumentSignature: boolean
   canPutSignature: boolean
+  canRemoveSignature?: boolean
   canPropose: boolean
   canShowPropose: boolean
   canRepropose?: boolean
@@ -153,7 +155,7 @@ export default function DocumentSignaturePanel({
     }
   }, [variant, classSubjectId, classroomId, signTerm, signMonth, canLoad, compact, notify])
 
-  useEffect(() => { void reload() }, [reload])
+  useEffect(() => { void Promise.resolve().then(reload) }, [reload])
 
   async function afterAction(successMessage: string) {
     notify('success', successMessage)
@@ -166,10 +168,14 @@ export default function DocumentSignaturePanel({
   }
 
   async function handlePutSignature() {
+    if (busy) return
     setBusy(true)
     try {
       let result: { error?: string }
-      if (variant === 'pp5_subject' && classSubjectId) {
+      const removing = variant === 'pp6' && state?.hasDocumentSignature
+      if (removing && classroomId) {
+        result = await removePp6DocumentSignature(classroomId, signTerm)
+      } else if (variant === 'pp5_subject' && classSubjectId) {
         result = await putPp5SubjectSignature(classSubjectId, signTerm)
       } else if (classroomId) {
         result = await putClassDocumentSignature(variantToDocType(variant)!, classroomId, signTerm, signMonth)
@@ -177,7 +183,7 @@ export default function DocumentSignaturePanel({
         result = { error: 'ข้อมูลไม่ครบ' }
       }
       if (result.error) notify('error', result.error)
-      else await afterAction('ใส่ลายเซ็นแล้ว — พิมพ์เอกสารได้เลย')
+      else await afterAction(removing ? 'เอาลายเซ็นออกแล้ว' : 'ใส่ลายเซ็นแล้ว — พิมพ์เอกสารได้เลย')
     } catch (err) {
       notify('error', err instanceof Error ? err.message : 'ใส่ลายเซ็นไม่สำเร็จ')
     } finally {
@@ -298,8 +304,9 @@ export default function DocumentSignaturePanel({
     ? !actionsLocked && (awaitingState || Boolean(state?.isInitiator && (state.canPutSignature || state.canShowPropose)))
     : Boolean(state?.isInitiator && (state.canPutSignature || state.canShowPropose) && !actionsLocked)
   const proposeLabel = state?.canRepropose ? 'เสนอเซ็นอีกครั้ง' : 'เสนอเซ็น'
-  const putLabel = state?.canRepropose ? 'ใส่ลายเซ็นใหม่' : 'ใส่ลายเซ็น'
-  const putReady = !awaitingState && !busy && !actionsLocked && Boolean(state?.canPutSignature)
+  const removingSignature = variant === 'pp6' && Boolean(state?.hasDocumentSignature)
+  const putLabel = removingSignature ? 'เอาลายเซ็นออก' : state?.canRepropose ? 'ใส่ลายเซ็นใหม่' : 'ใส่ลายเซ็น'
+  const putReady = !awaitingState && !busy && !actionsLocked && Boolean(removingSignature ? state?.canRemoveSignature : state?.canPutSignature)
   const proposeReady = !awaitingState && !busy && !actionsLocked && Boolean(state?.canPropose)
 
   return (
@@ -335,6 +342,8 @@ export default function DocumentSignaturePanel({
                 type="button"
                 className={`sign-panel__btn sign-panel__btn--signature${putReady ? '' : ' is-dimmed'}`}
                 disabled={!putReady}
+                aria-pressed={variant === 'pp6' ? Boolean(state?.hasDocumentSignature) : undefined}
+                title={removingSignature && !state?.canRemoveSignature ? 'เอกสารเสนอเซ็นหรือมีผู้อนุมัติลงนามแล้ว ไม่สามารถเอาลายเซ็นออกได้' : undefined}
                 onClick={handlePutSignature}
               >
                 {putLabel}
