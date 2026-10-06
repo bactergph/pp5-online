@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { fetchSchoolMisCsvBlob } from '@/lib/schoolmis-client'
-import { schoolMisSubjectHeader } from '@/lib/schoolmis-csv'
+import { schoolMisSubjectHeader, canExportSchoolMisSchool } from '@/lib/schoolmis-csv'
 import { fetchSchoolMisExportInit } from './actions'
 
 type Year = { id: string; year_be: number; is_active: boolean }
@@ -22,21 +22,22 @@ export default function SchoolMisExportPage() {
   const [classroomId, setClassroomId] = useState('')
   const [loading, setLoading] = useState(true)
   const [queued, setQueued] = useState(false)
+  const [canExportSchool, setCanExportSchool] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastQueue, setLastQueue] = useState<{
     label: string
-    level: string
-    room: number
+    level?: string
+    room?: number
   } | null>(null)
 
   useEffect(() => {
     let alive = true
-    setLoading(true)
     fetchSchoolMisExportInit()
       .then(result => {
         if (!alive) return
         const nextYears = (result.years || []) as Year[]
         const nextClassrooms = (result.classrooms || []) as Classroom[]
+        setCanExportSchool(canExportSchoolMisSchool(result.role))
         setYears(nextYears)
         setClassrooms(nextClassrooms)
         const active = nextYears.find(y => y.is_active) || nextYears[0]
@@ -59,42 +60,29 @@ export default function SchoolMisExportPage() {
     () => Array.from(new Set(yearClassrooms.map(c => c.level))).sort((a, b) => a.localeCompare(b, 'th')),
     [yearClassrooms],
   )
+  const activeLevel = levels.includes(level) ? level : levels[0] || ''
   const roomOptions = useMemo(
-    () => yearClassrooms.filter(c => !level || c.level === level).sort((a, b) => a.room - b.room),
-    [yearClassrooms, level],
+    () => yearClassrooms.filter(c => !activeLevel || c.level === activeLevel).sort((a, b) => a.room - b.room),
+    [yearClassrooms, activeLevel],
   )
   const selectedClassroom = roomOptions.find(c => c.id === classroomId) || null
 
-  useEffect(() => {
-    if (!yearId) return
-    if (level && !levels.includes(level)) setLevel(levels[0] || '')
-    else if (!level && levels[0]) setLevel(levels[0])
-  }, [yearId, levels, level])
-
-  useEffect(() => {
-    if (!classroomId) return
-    if (!roomOptions.some(c => c.id === classroomId)) setClassroomId('')
-  }, [roomOptions, classroomId])
-
-  useEffect(() => {
-    setError(null)
-  }, [yearId, classroomId])
-
-  function handleExport() {
-    if (!yearId || !classroomId || !selectedClassroom) {
+  function handleExport(scope: 'classroom' | 'school' = 'classroom') {
+    if (scope === 'school' && !canExportSchool) return
+    if (!yearId || (scope === 'classroom' && (!classroomId || !selectedClassroom))) {
       setError('เลือกปีการศึกษาและห้องเรียนก่อน')
       return
     }
 
-    const label = `SchoolMIS ${selectedClassroom.level}/${selectedClassroom.room}`
-    const placeholderName = `คะแนน_${selectedClassroom.level}_ห้อง_${selectedClassroom.room}.csv`
+    const label = scope === 'school' ? `SchoolMIS ทั้งโรงเรียน · ปี ${years.find(y => y.id === yearId)?.year_be || ''}` : `SchoolMIS ${selectedClassroom!.level}/${selectedClassroom!.room}`
+    const placeholderName = scope === 'school' ? `คะแนน_ทั้งโรงเรียน_ปี${years.find(y => y.id === yearId)?.year_be || ''}.csv` : `คะแนน_${selectedClassroom!.level}_ห้อง_${selectedClassroom!.room}.csv`
 
     setError(null)
     setQueued(true)
     setLastQueue({
       label,
-      level: selectedClassroom.level,
-      room: selectedClassroom.room,
+      level: selectedClassroom?.level,
+      room: selectedClassroom?.room,
     })
 
     // ใช้ fetch API เหมือน PDF — Server Action ในคิวข้ามหน้าจะค้าง "กำลังสร้าง..." ได้
@@ -105,7 +93,8 @@ export default function SchoolMisExportPage() {
       label,
       run: () => fetchSchoolMisCsvBlob({
         academicYearId: year,
-        classroomId: roomId,
+        classroomId: scope === 'school' ? undefined : roomId,
+        scope,
       }),
     })
 
@@ -121,14 +110,14 @@ export default function SchoolMisExportPage() {
         <p className="page-hero-kicker" style={{ color: 'rgba(255,255,255,0.88)' }}>Export</p>
         <h1 style={{ margin: '0 0 6px', color: '#fff', fontSize: 22, fontWeight: 800 }}>SchoolMIS — ส่งออกเกรด</h1>
         <p style={{ margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: 14, maxWidth: 560 }}>
-          ส่งออกเกรดรายวิชาของห้องที่เลือกเป็น CSV ตามรหัสวิชา — ติดตามที่กล่องมุมขวาล่างได้แม้เปลี่ยนหน้า
+          ส่งออกเกรดรายห้องหรือทั้งโรงเรียนเป็น CSV ตามรหัสวิชา — ติดตามที่กล่องมุมขวาล่างได้แม้เปลี่ยนหน้า
         </p>
       </div>
 
       <section className="card-padded">
-        <div className="section-title" style={{ marginBottom: 4 }}>เลือกห้องเรียน</div>
+        <div className="section-title" style={{ marginBottom: 4 }}>เลือกปีการศึกษาและรูปแบบส่งออก</div>
         <p style={{ margin: '0 0 16px', color: 'var(--text-3)', fontSize: 13 }}>
-          กดส่งออกแล้วสลับไปหน้าอื่นได้เลย เหมือนพิมพ์เล่มธุรการชั้นเรียน
+          ส่งออกรายห้องให้เลือกชั้นและห้อง · ส่งออกทั้งโรงเรียนเลือกเฉพาะปีการศึกษา
         </p>
 
         {loading ? (
@@ -140,7 +129,7 @@ export default function SchoolMisExportPage() {
               <select
                 className="form-input"
                 value={yearId}
-                onChange={e => { setYearId(e.target.value); setLevel(''); setClassroomId('') }}
+                onChange={e => { setYearId(e.target.value); setLevel(''); setClassroomId(''); setError(null) }}
               >
                 {years.map(y => (
                   <option key={y.id} value={y.id}>
@@ -153,7 +142,7 @@ export default function SchoolMisExportPage() {
               <span className="form-label">ชั้น</span>
               <select
                 className="form-input"
-                value={level}
+                value={activeLevel}
                 onChange={e => { setLevel(e.target.value); setClassroomId('') }}
                 disabled={!levels.length}
               >
@@ -165,8 +154,8 @@ export default function SchoolMisExportPage() {
               <span className="form-label">ห้อง</span>
               <select
                 className="form-input"
-                value={classroomId}
-                onChange={e => setClassroomId(e.target.value)}
+                value={selectedClassroom?.id || ''}
+                onChange={e => { setClassroomId(e.target.value); setError(null) }}
                 disabled={!roomOptions.length}
               >
                 <option value="">เลือกห้อง</option>
@@ -186,15 +175,21 @@ export default function SchoolMisExportPage() {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={loading || queued || !yearId || !classroomId}
-            onClick={handleExport}
+            disabled={loading || queued || !yearId || !selectedClassroom}
+            onClick={() => handleExport('classroom')}
           >
-            {queued ? 'ใส่คิวแล้ว...' : 'ส่งออก CSV'}
+            {queued ? 'ใส่คิวแล้ว...' : 'ส่งออก CSV รายห้อง'}
           </button>
+          {canExportSchool && <button type="button" className="btn btn-secondary" disabled={loading || queued || !yearId || !yearClassrooms.length} onClick={() => handleExport('school')}>
+            ส่งออก CSV ทั้งโรงเรียน
+          </button>}
           <span style={{ fontSize: 13, color: 'var(--text-3)' }}>
-            ส่งออกเฉพาะเกรด (0–4) ตามรหัสวิชาของชั้นที่เลือก
+            ส่งออกเกรดและผลการเรียนตามรหัสวิชา ไม่รวมกิจกรรมพัฒนาผู้เรียน
           </span>
         </div>
+        {canExportSchool && <p style={{ margin: '12px 0 0', fontSize: 12, color: 'var(--text-3)' }}>
+          ทั้งโรงเรียน: รวมทุกห้องในปีการศึกษาที่เลือกเป็นไฟล์เดียว พร้อมคอลัมน์ชั้นและห้อง โดยไม่ต้องเลือกห้อง
+        </p>}
       </section>
 
       {lastQueue && (

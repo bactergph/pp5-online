@@ -11,10 +11,10 @@ export function classroomGradeNumber(level: string | null | undefined): number |
 
 /**
  * ดึงเลขชั้นจากรหัสวิชา SchoolMIS เช่น ท14101 → 4, ค12101 → 2
- * (ตัวเลขตัวแรกหลังตัวอักษรนำ)
+ * (ตัวเลขตัวที่สองหลังตัวอักษรนำ: ตัวแรกเป็นระดับการศึกษา)
  */
 export function subjectCodeGradeNumber(code: string | null | undefined): number | null {
-  const m = String(code || '').trim().match(/^[^\d]*([1-6])/)
+  const m = String(code || '').trim().match(/^[^\d]*[1-3]([1-6])\d{3}$/)
   if (!m) return null
   const n = Number(m[1])
   return n >= 1 && n <= 6 ? n : null
@@ -99,4 +99,26 @@ export function buildSchoolMisGradesCsv(params: {
 export function schoolMisExportFileName(level: string, room: number, yearBe: number) {
   const safeLevel = String(level || 'ชั้น').replace(/[\\/:*?"<>|]+/g, '_').trim()
   return `คะแนน_${safeLevel}_ห้อง_${room}_ปี${yearBe}.csv`
+}
+
+export function canExportSchoolMisSchool(role: string) {
+  return ['admin', 'academic_head', 'deputy_principal', 'principal', 'district'].includes(role)
+}
+export type SchoolMisSchoolRow = {
+  number: number; studentCode: string; fullName: string; grades: Record<string, string>
+}
+export function buildSchoolMisSchoolCsv(rooms: Array<{
+  level: string; room: number; subjects: { code: string; name: string }[]; rows: SchoolMisSchoolRow[]
+}>) {
+  const subjects = new Map<string, string>()
+  for (const room of rooms) for (const subject of room.subjects) {
+    if (!subjects.has(subject.code)) subjects.set(subject.code, schoolMisSubjectHeader(subject.code, subject.name))
+  }
+  const codes = [...subjects.keys()]
+  const lines = [['#', 'ชั้น', 'ห้อง', 'รหัสนักเรียน', 'ชื่อ-สกุล', ...subjects.values()].map(escapeCsvCell).join(',')]
+  for (const room of rooms) for (const student of room.rows) {
+    lines.push([student.number, room.level, room.room, student.studentCode, student.fullName,
+      ...codes.map(code => student.grades[code] || '')].map(escapeCsvCell).join(','))
+  }
+  return '\uFEFF' + lines.join('\r\n') + '\r\n'
 }

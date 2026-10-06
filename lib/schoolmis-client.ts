@@ -3,7 +3,8 @@
 /** ดึง CSV SchoolMIS ผ่าน API (ไม่ใช้ Server Action — คิวข้ามหน้าไม่ค้าง) */
 export async function fetchSchoolMisCsvBlob(params: {
   academicYearId: string
-  classroomId: string
+  classroomId?: string
+  scope?: 'classroom' | 'school'
 }): Promise<{ blob: Blob; fileName: string }> {
   const res = await fetch('/api/export/schoolmis', {
     method: 'POST',
@@ -11,6 +12,7 @@ export async function fetchSchoolMisCsvBlob(params: {
     body: JSON.stringify({
       academicYearId: params.academicYearId,
       classroomId: params.classroomId,
+      scope: params.scope,
     }),
   })
 
