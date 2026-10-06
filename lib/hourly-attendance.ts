@@ -142,12 +142,11 @@ export function buildTeachingWeeks(
   return weeks
 }
 
-/** ชั่วโมงต่อสัปดาห์จากชั่วโมง/ปี และจำนวนสัปดาห์ในภาคเรียน */
+/** ชั่วโมงต่อสัปดาห์ตามหลักสูตร 40 สัปดาห์/ปี — ไม่เพิ่มคาบเพราะสัปดาห์มีวันหยุด */
 export function hoursPerWeek(hoursPerYear: number, termWeekCount: number) {
-  if (!termWeekCount) return 1
-  const termHours = (hoursPerYear || 0) / 2
-  if (termHours <= 0) return 1
-  return Math.max(1, Math.round(termHours / termWeekCount))
+  // Same 40-week curriculum basis as timetable quotas. Holidays must not add weekly lessons.
+  if (!termWeekCount || !Number.isFinite(hoursPerYear) || hoursPerYear <= 0) return 1
+  return Math.max(1, Math.round(hoursPerYear / 40))
 }
 
 export function globalSlotNumber(weekNumber: number, slot: number, hoursPerWeekCount: number) {

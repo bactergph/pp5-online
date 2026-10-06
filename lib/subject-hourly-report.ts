@@ -34,12 +34,12 @@ export function teachingDayOffsets(hpw: number) {
   return TEACHING_DAY_OFFSETS[n] || TEACHING_DAY_OFFSETS[5]
 }
 
-export function displaySlotsPerWeek(isPrimary: boolean, hpw: number) {
-  return isPrimary ? PRIMARY_SLOTS_PER_WEEK : Math.max(1, hpw)
+export function displaySlotsPerWeek(_isPrimary: boolean, hpw: number) {
+  return Math.max(1, Math.round(hpw))
 }
 
-export function primaryGlobalSlotNumber(weekNumber: number, slot: number) {
-  return (weekNumber - 1) * PRIMARY_SLOTS_PER_WEEK + slot
+export function primaryGlobalSlotNumber(weekNumber: number, slot: number, slotsPerWeek: number) {
+  return (weekNumber - 1) * slotsPerWeek + slot
 }
 
 export type SubjectCalendarDay = {

@@ -1696,7 +1696,7 @@ function SubjectPrimaryHourlyAttendancePage({
             {pageWeeks.map(week => (
               Array.from({ length: slotsPerWeek }, (_, i) => (
                 <th key={`slot-${week.weekNumber}-${i + 1}`} className="pp5-subject-hourly-slot">
-                  {primaryGlobalSlotNumber(week.weekNumber, i + 1)}
+                  {primaryGlobalSlotNumber(week.weekNumber, i + 1, slotsPerWeek)}
                 </th>
               ))
             ))}

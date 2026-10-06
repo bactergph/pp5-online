@@ -3,7 +3,6 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassSubjectContext } from '@/lib/audit'
-import { isPrimaryClassLevel } from '@/lib/class-level'
 import {
   buildTeachingWeeks,
   hoursPerWeek,
@@ -12,7 +11,6 @@ import {
   termDateRange,
   type HourlyStatus,
 } from '@/lib/hourly-attendance'
-import { PRIMARY_SLOTS_PER_WEEK } from '@/lib/subject-hourly-report'
 import { fetchAllRows } from '@/lib/supabase-paginate'
 
 const CAN_EDIT = ['admin', 'district', 'academic_head', 'deputy_principal', 'teacher']
@@ -68,12 +66,13 @@ export async function fetchHourlyGrid(params: {
       .eq('id', params.classSubjectId)
       .maybeSingle(),
     fetchAllRows<{
+      id: string
       student_id: string
       week_number: number
       hour_number: number
       status: string
     }>((from, to) => db.from('hourly_attendance')
-      .select('student_id, week_number, hour_number, status')
+      .select('id, student_id, week_number, hour_number, status')
       .eq('class_subject_id', params.classSubjectId)
       .eq('term', params.term)
       .order('week_number')
@@ -111,10 +110,15 @@ export async function fetchHourlyGrid(params: {
   const subject = (Array.isArray(subjectJoin) ? subjectJoin[0] : subjectJoin) as
     { code: string; name: string; hours_per_year: number } | null | undefined
   const hpw = hoursPerWeek(subject?.hours_per_year || 0, teachingWeeks.length)
-  const { data: classroom } = await db.from('classrooms').select('level').eq('id', params.classroomId).maybeSingle()
-  const effectiveHpw = isPrimaryClassLevel(classroom?.level)
-    ? Math.max(hpw, PRIMARY_SLOTS_PER_WEEK)
-    : hpw
+  const legacyRecords = records.filter(row => studentIds.includes(row.student_id) &&
+    (row.hour_number < 1 || row.hour_number > hpw || !teachingWeeks.some(week => week.weekNumber === row.week_number)))
+
+  const scheduleQuery = () => db.from('class_schedule_slots').select('period', { count: 'exact', head: true })
+    .eq('classroom_id', params.classroomId).eq('academic_year_id', params.academicYearId).eq('class_subject_id', params.classSubjectId)
+  let scheduled = await scheduleQuery().eq('semester', params.term)
+  if (scheduled.error && ['42703', 'PGRST204'].includes(scheduled.error.code || '') && scheduled.error.message.includes('semester') && params.term === 1) scheduled = await scheduleQuery()
+  const scheduleWarning = !scheduled.error && (scheduled.count || 0) > 0 && scheduled.count !== hpw
+    ? `ตารางเรียนมี ${scheduled.count} คาบ/สัปดาห์ แต่ชั่วโมงรายวิชากำหนด ${hpw} คาบ/สัปดาห์ กรุณาตรวจสอบตารางเรียนหรือชั่วโมงรายวิชา` : ''
 
   const recordMap: Record<string, HourlyStatus> = {}
   for (const row of records) {
@@ -134,7 +138,9 @@ export async function fetchHourlyGrid(params: {
       hoursPerYear: subject?.hours_per_year || 0,
     },
     weeks: teachingWeeks,
-    hoursPerWeek: effectiveHpw,
+    hoursPerWeek: hpw,
+    legacyRecords,
+    scheduleWarning,
     records: recordMap,
     yearBe: year.year_be,
     termStart: range.start,
@@ -154,9 +160,15 @@ export async function saveHourlyCell(params: {
 }) {
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
-  await assertClassSubjectAccess(params.classSubjectId, session)
+  const cs = await assertClassSubjectAccess(params.classSubjectId, session)
+  if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา' }
 
   const db = createServerClient()
+  const { data: subject, error: subjectError } = await db.from('subjects').select('hours_per_year').eq('id', cs.subject_id).maybeSingle()
+  if (subjectError || !subject) return { error: 'ตรวจสอบชั่วโมงรายวิชาไม่สำเร็จ กรุณาลองใหม่' }
+  const hpw = hoursPerWeek(subject.hours_per_year || 0, 20)
+  if (!Number.isInteger(params.slot) || params.slot < 1 || params.slot > hpw ||
+    !Number.isInteger(params.weekNumber) || params.weekNumber < 1 || params.weekNumber > 20) return { error: 'คาบหรือสัปดาห์เกินเวลาเรียนของรายวิชา กรุณารีเฟรชหน้า' }
 
   // Sparse: present (/) is default — delete row instead of storing '/'
   if (params.status === '/') {
@@ -225,10 +237,15 @@ export async function fillHourlyPresentAll(params: {
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา', filled: 0 }
 
   const db = createServerClient()
+  const grid = await fetchHourlyGrid(params)
+  if ('error' in grid) return { error: grid.error, filled: 0 }
+  if (!grid.weeks.length) return { error: 'ไม่มีสัปดาห์เรียน', filled: 0 }
   const { count, error: countError } = await db.from('hourly_attendance')
     .select('id', { count: 'exact', head: true })
     .eq('class_subject_id', params.classSubjectId)
     .eq('term', params.term)
+    .gte('hour_number', 1).lte('hour_number', grid.hoursPerWeek)
+    .in('week_number', grid.weeks.map(week => week.weekNumber))
 
   if (countError) return { error: countError.message, filled: 0 }
   const filled = count || 0
@@ -238,6 +255,8 @@ export async function fillHourlyPresentAll(params: {
     .delete()
     .eq('class_subject_id', params.classSubjectId)
     .eq('term', params.term)
+    .gte('hour_number', 1).lte('hour_number', grid.hoursPerWeek)
+    .in('week_number', grid.weeks.map(week => week.weekNumber))
 
   if (error) return { error: error.message, filled: 0 }
 
@@ -271,6 +290,9 @@ export async function fillHourlyPresentColumn(params: {
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา', filled: 0 }
 
   const db = createServerClient()
+  const grid = await fetchHourlyGrid(params)
+  if ('error' in grid) return { error: grid.error, filled: 0 }
+  if (!grid.weeks.some(week => week.weekNumber === params.weekNumber) || !Number.isInteger(params.slot) || params.slot < 1 || params.slot > grid.hoursPerWeek) return { error: 'คาบหรือสัปดาห์ไม่ถูกต้อง', filled: 0 }
   const { count, error: countError } = await db.from('hourly_attendance')
     .select('id', { count: 'exact', head: true })
     .eq('class_subject_id', params.classSubjectId)
@@ -369,6 +391,8 @@ export async function clearHourlyPresentColumn(params: {
 }
 
 export async function clearHourlyAttendanceAll(params: {
+  classroomId: string
+  academicYearId: string
   classSubjectId: string
   term: 1 | 2
 }) {
@@ -377,10 +401,15 @@ export async function clearHourlyAttendanceAll(params: {
   await assertClassSubjectAccess(params.classSubjectId, session)
 
   const db = createServerClient()
+  const grid = await fetchHourlyGrid(params)
+  if ('error' in grid) return { error: grid.error, deleted: 0 }
+  if (!grid.weeks.length) return { error: 'ไม่มีสัปดาห์เรียน', deleted: 0 }
   const { count, error: countError } = await db.from('hourly_attendance')
     .select('id', { count: 'exact', head: true })
     .eq('class_subject_id', params.classSubjectId)
     .eq('term', params.term)
+    .gte('hour_number', 1).lte('hour_number', grid.hoursPerWeek)
+    .in('week_number', grid.weeks.map(week => week.weekNumber))
 
   if (countError) return { error: countError.message, deleted: 0 }
 
@@ -388,6 +417,8 @@ export async function clearHourlyAttendanceAll(params: {
     .delete()
     .eq('class_subject_id', params.classSubjectId)
     .eq('term', params.term)
+    .gte('hour_number', 1).lte('hour_number', grid.hoursPerWeek)
+    .in('week_number', grid.weeks.map(week => week.weekNumber))
 
   if (error) return { error: error.message, deleted: 0 }
 
@@ -405,4 +436,40 @@ export async function clearHourlyAttendanceAll(params: {
   })
 
   return { error: null, deleted: count || 0 }
+}
+
+export async function moveLegacyHourlyRecord(params: {
+  classroomId: string; classSubjectId: string; academicYearId: string; term: 1 | 2
+  recordId: string; weekNumber: number; slot: number
+}) {
+  const session = await requireSession()
+  if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
+  const db = createServerClient()
+  const { data: year } = await db.from('academic_years').select('id').eq('id', params.academicYearId).eq('school_id', session.schoolId || '').maybeSingle()
+  if (!year) return { error: 'ไม่พบปีการศึกษาในโรงเรียนนี้' }
+  const grid = await fetchHourlyGrid(params)
+  if ('error' in grid) return { error: grid.error }
+  const source = grid.legacyRecords.find(row => row.id === params.recordId)
+  const week = grid.weeks.find(item => item.weekNumber === params.weekNumber)
+  if (!source || !week || !Number.isInteger(params.slot) || params.slot < 1 || params.slot > grid.hoursPerWeek) return { error: 'ไม่พบรายการเดิมหรือคาบปลายทางไม่ถูกต้อง' }
+  const { data: target, error: readError } = await db.from('hourly_attendance').select('id')
+    .eq('class_subject_id', params.classSubjectId).eq('term', params.term).eq('student_id', source.student_id)
+    .eq('week_number', params.weekNumber).eq('hour_number', params.slot).maybeSingle()
+  if (readError || target) return { error: readError?.message || 'คาบปลายทางมีข้อมูลแล้ว กรุณาเลือกคาบอื่น ไม่สามารถเขียนทับได้' }
+  // Copy first; never remove the original until the new row has been saved.
+  const { error: copyError } = await db.from('hourly_attendance').insert({
+    student_id: source.student_id, classroom_id: params.classroomId, class_subject_id: params.classSubjectId,
+    date: week.startDate, week_number: params.weekNumber, hour_number: params.slot, term: params.term,
+    status: source.status, recorded_by: session.userId,
+  })
+  if (copyError) return { error: 'บันทึกปลายทางไม่สำเร็จ ข้อมูลเดิมยังอยู่: ' + copyError.message }
+  const { data: removed, error: deleteError } = await db.from('hourly_attendance').delete()
+    .eq('id', source.id).eq('class_subject_id', params.classSubjectId).eq('term', params.term).eq('status', source.status).select('id')
+  if (deleteError || !removed?.length) return { error: 'คัดลอกไปคาบปลายทางแล้ว แต่ยังนำรายการเดิมออกไม่ได้ กรุณารีเฟรชเพื่อตรวจสอบ ข้อมูลทั้งสองรายการยังอยู่' }
+  await logActivity({ actor: session, schoolId: session.schoolId, action: 'update', module: 'hourly_attendance',
+    targetType: 'class_subject', targetId: params.classSubjectId,
+    description: `ย้ายรายการเวลาเรียนเดิม สัปดาห์ ${source.week_number} คาบ ${source.hour_number} ไปสัปดาห์ ${params.weekNumber} คาบ ${params.slot}`,
+    metadata: { ...params, studentId: source.student_id },
+  })
+  return { error: null }
 }

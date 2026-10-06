@@ -7,6 +7,7 @@ import {
 } from '@/app/scores/actions'
 import { fetchHourlyGrid, saveHourlyCell, fillHourlyPresentAll, fillHourlyPresentColumn, clearHourlyPresentColumn, clearHourlyAttendanceAll } from '@/app/attendance/actions'
 import { formatThaiDate } from '@/lib/thaiDate'
+import LegacyHourlyRecords, { type LegacyHourlyRecord } from './LegacyHourlyRecords'
 import {
   chunkWeeks,
   globalSlotNumber,
@@ -80,6 +81,9 @@ export default function HourlyAttendanceEntry() {
   const [subjectInfo, setSubjectInfo] = useState({ code: '', name: '', hoursPerYear: 0 })
   const [termRange, setTermRange] = useState({ start: '', end: '' })
   const [records, setRecords] = useState<Record<string, HourlyStatus>>({})
+  const [legacyRecords, setLegacyRecords] = useState<LegacyHourlyRecord[]>([])
+  const [legacyMoving, setLegacyMoving] = useState(false)
+  const [scheduleWarning, setScheduleWarning] = useState('')
   const [savingCells, setSavingCells] = useState<Record<string, boolean>>({})
   const [bulkFilling, setBulkFilling] = useState(false)
   const [fillingColumnKeys, setFillingColumnKeys] = useState<Record<string, true>>({})
@@ -92,8 +96,8 @@ export default function HourlyAttendanceEntry() {
   const skipYearFetch = useRef(true)
   const skipClassFetch = useRef(true)
   const gridContext = `${selectedYear}:${selectedClass}:${selectedCS}:${term}`
-  const canEdit = gridCanEdit && !gridLoading && loadedGrid === gridContext
-  const attendanceBusy = bulkFilling || clearingAll || Object.keys(savingCells).length > 0 || Object.keys(fillingColumnKeys).length > 0
+  const canEdit = gridCanEdit && !legacyMoving && !gridLoading && loadedGrid === gridContext
+  const attendanceBusy = legacyMoving || bulkFilling || clearingAll || Object.keys(savingCells).length > 0 || Object.keys(fillingColumnKeys).length > 0
 
   const subjectMap = useMemo(() => Object.fromEntries(subjects.map(s => [s.id, s])), [subjects])
   const selectedSubject = subjectMap[items.find(i => i.id === selectedCS)?.subject_id || '']
@@ -187,6 +191,8 @@ export default function HourlyAttendanceEntry() {
         hoursPerYear: data.subject.hoursPerYear,
       })
       setRecords(data.records)
+      setLegacyRecords(data.legacyRecords || [])
+      setScheduleWarning(data.scheduleWarning || '')
       setTermRange({ start: data.termStart || '', end: data.termEnd || '' })
       setLoadedGrid(`${selectedYear}:${selectedClass}:${selectedCS}:${term}`)
     } catch (err) {
@@ -195,6 +201,8 @@ export default function HourlyAttendanceEntry() {
       setStudents([])
       setWeeks([])
       setRecords({})
+      setLegacyRecords([])
+      setScheduleWarning('')
       setTermRange({ start: '', end: '' })
     } finally {
       if (request === gridRequest.current) {
@@ -399,6 +407,8 @@ export default function HourlyAttendanceEntry() {
     setError('')
     try {
       const result = await clearHourlyAttendanceAll({
+        classroomId: selectedClass,
+        academicYearId: selectedYear,
         classSubjectId: selectedCS,
         term,
       })
@@ -550,6 +560,10 @@ export default function HourlyAttendanceEntry() {
         <div className="alert alert-error">ไม่มีวิชาที่คุณสอนในห้องนี้</div>
       )}
       {error && <div className="alert alert-error">{error}</div>}
+      {scheduleWarning && loadedGrid === gridContext && <div className="control-card" role="status" style={{ background: '#fffbef', color: '#854d0e' }}>{scheduleWarning}</div>}
+      {loadedGrid === gridContext && <LegacyHourlyRecords key={gridContext} records={legacyRecords} students={students} weeks={weeks}
+        hoursPerWeek={hoursPerWeekCount} canEdit={canEdit && !attendanceBusy} onReload={loadGrid} onBusyChange={setLegacyMoving}
+        context={{ classroomId: selectedClass, classSubjectId: selectedCS, academicYearId: selectedYear, term }} />}
 
       {selectedCS && !gridLoading && weeks.length > 0 && (
         <div className="control-card hourly-meta">
@@ -561,6 +575,7 @@ export default function HourlyAttendanceEntry() {
           <span>ชั่วโมง/ปี <b>{subjectInfo.hoursPerYear || '-'}</b></span>
           <span>ชั่วโมง/สัปดาห์ <b>{hoursPerWeekCount}</b></span>
           <span>สัปดาห์การเรียน <b>{weeks.length}</b> สัปดาห์</span>
+          <span>คาบในภาคเรียน <b>{weeks.length * hoursPerWeekCount}</b> คาบ</span>
           {termRange.start && termRange.end && (
             <span>ช่วงภาคเรียน <b>{formatThaiDate(termRange.start)} – {formatThaiDate(termRange.end)}</b></span>
           )}

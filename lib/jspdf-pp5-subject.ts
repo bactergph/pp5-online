@@ -1491,7 +1491,7 @@ function drawPrimaryWeeklyPage(
     drawCell(doc, cx, headerTop, w, headH, `สัปดาห์ที่ ${week.weekNumber}`, { bold: true, fontSize: headFont - 0.5 })
     drawCell(doc, cx, headerTop + headH, w, headH, week.dateLabel || '', { bold: true, fontSize: Math.max(5, headFont - 1.5) })
     for (let i = 0; i < slotsPerWeek; i += 1) {
-      drawCell(doc, cx + i * slotW, headerTop + headH * 2, slotW, headH, String(primaryGlobalSlotNumber(week.weekNumber, i + 1)), {
+      drawCell(doc, cx + i * slotW, headerTop + headH * 2, slotW, headH, String(primaryGlobalSlotNumber(week.weekNumber, i + 1, slotsPerWeek)), {
         bold: true, fontSize: Math.max(5, headFont - 1),
       })
     }
