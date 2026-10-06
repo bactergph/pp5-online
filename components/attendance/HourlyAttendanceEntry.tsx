@@ -36,7 +36,7 @@ type ConfirmPhase = 'idle' | 'countdown' | 'armed'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number }
-type CS = { id: string; subject_id: string }
+type CS = { id: string; classroom_id: string; subject_id: string }
 type Subject = { id: string; code: string; name: string }
 type Student = {
   id: string
@@ -62,7 +62,9 @@ export default function HourlyAttendanceEntry() {
   const [loading, setLoading] = useState(true)
   const [gridLoading, setGridLoading] = useState(false)
   const [userRole, setUserRole] = useState('')
-  const [canEdit, setCanEdit] = useState(false)
+  const [gridCanEdit, setCanEdit] = useState(false)
+  const [loadedGrid, setLoadedGrid] = useState('')
+  const gridRequest = useRef(0)
   const [years, setYears] = useState<Year[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [selectedYear, setSelectedYear] = useState('')
@@ -89,6 +91,9 @@ export default function HourlyAttendanceEntry() {
   const [weekTab, setWeekTab] = useState(0)
   const skipYearFetch = useRef(true)
   const skipClassFetch = useRef(true)
+  const gridContext = `${selectedYear}:${selectedClass}:${selectedCS}:${term}`
+  const canEdit = gridCanEdit && !gridLoading && loadedGrid === gridContext
+  const attendanceBusy = bulkFilling || clearingAll || Object.keys(savingCells).length > 0 || Object.keys(fillingColumnKeys).length > 0
 
   const subjectMap = useMemo(() => Object.fromEntries(subjects.map(s => [s.id, s])), [subjects])
   const selectedSubject = subjectMap[items.find(i => i.id === selectedCS)?.subject_id || '']
@@ -112,6 +117,9 @@ export default function HourlyAttendanceEntry() {
       setSelectedClass(list[0]?.id || '')
       setSelectedCS(csList[0]?.id || '')
       setLoading(false)
+    }).catch(() => {
+      setError('โหลดรายการไม่สำเร็จ กรุณารีเฟรชหน้าแล้วลองใหม่')
+      setLoading(false)
     })
   }, [])
 
@@ -121,14 +129,17 @@ export default function HourlyAttendanceEntry() {
       skipYearFetch.current = false
       return
     }
+    let cancelled = false
     void fetchScoreClassrooms(selectedYear).then(cs => {
+      if (cancelled) return
       const list = cs as Classroom[]
-      skipClassFetch.current = true
+      skipClassFetch.current = false
       setClassrooms(list)
       setSelectedClass(list[0]?.id || '')
       setItems([])
       setSelectedCS('')
-    })
+    }).catch(() => { if (!cancelled) setError('โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่') })
+    return () => { cancelled = true }
   }, [selectedYear])
 
   useEffect(() => {
@@ -137,15 +148,22 @@ export default function HourlyAttendanceEntry() {
       skipClassFetch.current = false
       return
     }
+    let cancelled = false
     void fetchScoreSubjects(selectedClass).then(data => {
+      if (cancelled) return
       const list = data as CS[]
       setItems(list)
       setSelectedCS(list[0]?.id || '')
-    })
+    }).catch(() => { if (!cancelled) setError('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่') })
+    return () => { cancelled = true }
   }, [selectedClass])
 
   const loadGrid = useCallback(async () => {
-    if (!selectedYear || !selectedClass || !selectedCS) return
+    const request = ++gridRequest.current
+    if (!selectedYear || !selectedClass || !selectedCS || !items.some(item => item.id === selectedCS && item.classroom_id === selectedClass)) {
+      setGridLoading(false)
+      return
+    }
     setGridLoading(true)
     setError('')
     try {
@@ -156,6 +174,8 @@ export default function HourlyAttendanceEntry() {
         term,
       }
       const data = await fetchHourlyGrid(params)
+      if (request !== gridRequest.current) return
+      if ('error' in data) throw new Error(data.error)
 
       setCanEdit(data.canEdit)
       setStudents(data.students as Student[])
@@ -168,27 +188,34 @@ export default function HourlyAttendanceEntry() {
       })
       setRecords(data.records)
       setTermRange({ start: data.termStart || '', end: data.termEnd || '' })
+      setLoadedGrid(`${selectedYear}:${selectedClass}:${selectedCS}:${term}`)
     } catch (err) {
+      if (request !== gridRequest.current) return
       setError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
       setStudents([])
       setWeeks([])
       setRecords({})
       setTermRange({ start: '', end: '' })
     } finally {
-      setGridLoading(false)
-      setBulkFilling(false)
+      if (request === gridRequest.current) {
+        setGridLoading(false)
+        setBulkFilling(false)
+      }
     }
-  }, [selectedYear, selectedClass, selectedCS, term])
+  }, [selectedYear, selectedClass, selectedCS, term, items])
 
   useEffect(() => {
-    void loadGrid()
+    void Promise.resolve().then(loadGrid)
+    return () => { gridRequest.current += 1 }
   }, [loadGrid])
 
   useEffect(() => {
-    setWeekTab(0)
-    setPendingAction(null)
-    setConfirmPhase('idle')
-    setConfirmCountdown(0)
+    void Promise.resolve().then(() => {
+      setWeekTab(0)
+      setPendingAction(null)
+      setConfirmPhase('idle')
+      setConfirmCountdown(0)
+    })
   }, [weeks, term, selectedCS])
 
   useEffect(() => {
@@ -483,20 +510,20 @@ export default function HourlyAttendanceEntry() {
       <div className="filter-bar control-card hourly-filter">
         <div className="hourly-filter-field hourly-filter-field--year">
           <label className="form-label">ปีการศึกษา</label>
-          <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="form-input">
+          <select value={selectedYear} disabled={attendanceBusy} onChange={e => { setSelectedYear(e.target.value); setSelectedClass(''); setSelectedCS(''); setClassrooms([]); setItems([]); setStudents([]); setWeeks([]); setRecords({}); setError(''); }} className="form-input">
             {years.map(y => <option key={y.id} value={y.id}>{y.year_be}{y.is_active ? ' (ปัจจุบัน)' : ''}</option>)}
           </select>
         </div>
         <div className="hourly-filter-field hourly-filter-field--class">
           <label className="form-label">ห้องเรียน</label>
-          <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="form-input" disabled={classrooms.length === 0}>
+          <select value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedCS(''); setItems([]); setStudents([]); setWeeks([]); setRecords({}); setError(''); }} className="form-input" disabled={attendanceBusy || classrooms.length === 0}>
             <option value="">{classrooms.length === 0 ? '— ไม่มีห้อง —' : '— เลือกห้อง —'}</option>
             {classrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room}</option>)}
           </select>
         </div>
         <div className="hourly-filter-field hourly-filter-field--subject">
           <label className="form-label">รายวิชา</label>
-          <select value={selectedCS} onChange={e => setSelectedCS(e.target.value)} className="form-input" disabled={items.length === 0}>
+          <select value={selectedCS} onChange={e => setSelectedCS(e.target.value)} className="form-input" disabled={attendanceBusy || items.length === 0}>
             <option value="">{items.length === 0 ? '— ไม่มีวิชา —' : '— เลือกรายวิชา —'}</option>
             {items.map(it => {
               const s = subjectMap[it.subject_id]
@@ -508,7 +535,7 @@ export default function HourlyAttendanceEntry() {
           <label className="form-label">ภาคเรียน</label>
           <div className="hourly-term-toggle">
             {([1, 2] as const).map(t => (
-              <button key={t} type="button" onClick={() => setTerm(t)} className={term === t ? 'btn btn-primary' : 'btn btn-secondary'}>
+              <button key={t} type="button" disabled={attendanceBusy} onClick={() => setTerm(t)} className={term === t ? 'btn btn-primary' : 'btn btn-secondary'}>
                 ภาคเรียนที่ {t}
               </button>
             ))}

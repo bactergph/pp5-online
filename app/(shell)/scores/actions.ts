@@ -27,7 +27,8 @@ async function loadScoreClassrooms(
       .eq('classrooms.school_id', schoolId)
     const map = new Map<string, { id: string; level: string; room: number }>()
     for (const row of data || []) {
-      const classroom = row.classrooms as { id: string; level: string; room: number }
+      const joined = row.classrooms
+      const classroom = (Array.isArray(joined) ? joined[0] : joined) as { id: string; level: string; room: number } | null
       if (classroom?.id) map.set(classroom.id, classroom)
     }
     return Array.from(map.values()).sort((a, b) => a.level.localeCompare(b.level, 'th') || a.room - b.room)
@@ -44,7 +45,7 @@ async function loadScoreSubjects(
   session: { userId: string; role: string },
   classroomId: string,
 ) {
-  let q = db.from('class_subjects').select('id, subject_id, teacher_id, order_number')
+  let q = db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
     .eq('classroom_id', classroomId).order('order_number')
   if (session.role === 'teacher') q = q.eq('teacher_id', session.userId)
   const { data } = await q

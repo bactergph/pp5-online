@@ -50,7 +50,8 @@ export async function fetchHourlyGrid(params: {
 }) {
   const session = await requireSession()
   const cs = await assertClassSubjectAccess(params.classSubjectId, session)
-  if (cs.classroom_id !== params.classroomId) throw new Error('ห้องเรียนไม่ตรงกับรายวิชา')
+  if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา กรุณาเลือกรายวิชาใหม่' }
+  if (cs.academic_year_id !== params.academicYearId) return { error: 'ปีการศึกษาไม่ตรงกับรายวิชา กรุณาเลือกห้องและรายวิชาใหม่' }
 
   const db = createServerClient()
   const [yearR, studentsR, subjectR, records] = await Promise.all([
@@ -82,13 +83,13 @@ export async function fetchHourlyGrid(params: {
   ])
 
   const year = yearR.data
-  if (!year) throw new Error('ไม่พบปีการศึกษา')
+  if (!year) return { error: 'ไม่พบปีการศึกษา กรุณาเลือกปีการศึกษาใหม่' }
 
   const students = studentsR.data || []
   const studentIds = students.map(row => row.id as string)
 
   const range = termDateRange(year, params.term)
-  if (!range.start || !range.end) throw new Error('ยังไม่ได้กำหนดวันเปิด-ปิดภาคเรียน')
+  if (!range.start || !range.end) return { error: 'ยังไม่ได้กำหนดวันเปิด–ปิดภาคเรียน กรุณาตั้งค่าที่เมนูปีการศึกษา' }
 
   const [holidaysR, weekendR] = await Promise.all([
     db.from('holidays').select('date')
@@ -326,6 +327,7 @@ export async function clearHourlyPresentColumn(params: {
     academicYearId: params.academicYearId,
     term: params.term,
   })
+  if ('error' in grid) return { error: grid.error, deleted: 0 }
 
   const week = grid.weeks.find(item => item.weekNumber === params.weekNumber)
   if (!week) return { error: 'ไม่พบสัปดาห์', deleted: 0 }

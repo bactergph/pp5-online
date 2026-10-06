@@ -14,7 +14,7 @@ import { scoreTransferData, parseScoreTransfer } from '@/lib/score-transfer'
 type Year = { id: string; year_be: number; is_active: boolean }
 type Subject = { id: string; code: string; name: string }
 type Classroom = { id: string; level: string; room: number }
-type CS = { id: string; subject_id: string; order_number: number }
+type CS = { id: string; classroom_id: string; subject_id: string; order_number: number }
 type Student = { id: string; student_number: number; prefix: string | null; first_name: string; last_name: string; status: string }
 type Config = { unit_count: number; between_scores: number[]; midterm_max: number; final_max: number; total_max: number }
 type Row = { unit_scores: number[]; midterm: number | null; final: number | null; result: string }
@@ -215,9 +215,11 @@ export default function ScoreEntryPage() {
       skipYearFetch.current = false
       return
     }
+    let cancelled = false
     void fetchScoreClassrooms(selectedYear).then(cs => {
+      if (cancelled) return
       const list = cs as Classroom[]
-      skipClassFetch.current = true
+      skipClassFetch.current = false
       setClassrooms(list)
       setSelectedClass(list[0]?.id || '')
       setItems([])
@@ -227,7 +229,8 @@ export default function ScoreEntryPage() {
         setConfig(null)
         setRows({})
       }
-    })
+    }).catch(() => { if (!cancelled) setEntryMessage('โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่') })
+    return () => { cancelled = true }
   }, [selectedYear])
 
   useEffect(() => {
@@ -236,7 +239,9 @@ export default function ScoreEntryPage() {
       skipClassFetch.current = false
       return
     }
+    let cancelled = false
     void fetchScoreSubjects(selectedClass).then(data => {
+      if (cancelled) return
       const list = data as CS[]
       setItems(list)
       setSelectedCS(list[0]?.id || '')
@@ -245,7 +250,8 @@ export default function ScoreEntryPage() {
         setConfig(null)
         setRows({})
       }
-    })
+    }).catch(() => { if (!cancelled) setEntryMessage('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่') })
+    return () => { cancelled = true }
   }, [selectedClass])
 
   function notify(type: 'success' | 'error', text: string) {
@@ -257,7 +263,7 @@ export default function ScoreEntryPage() {
   }
 
   useEffect(() => {
-    if (!selectedClass || !selectedCS) return
+    if (!selectedClass || !selectedCS || !items.some(item => item.id === selectedCS && item.classroom_id === selectedClass)) return
     let cancelled = false
 
     void fetchScoreEntryData(selectedClass, selectedCS, term).then(d => {
@@ -307,7 +313,7 @@ export default function ScoreEntryPage() {
       if (!cancelled) setLoadingGrid(true)
     })
     return () => { cancelled = true }
-  }, [selectedClass, selectedCS, term])
+  }, [selectedClass, selectedCS, term, items])
 
   const scoreConfigHref = useMemo(() => {
     const base = /\/scores\/?$/.test(pathname)
@@ -547,13 +553,13 @@ export default function ScoreEntryPage() {
           <div className="score-entry-filter-card">
             <div className="score-entry-field">
               <label>ปีการศึกษา</label>
-              <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}>
+              <select value={selectedYear} onChange={e => { setSelectedYear(e.target.value); setSelectedClass(''); setSelectedCS(''); setClassrooms([]); setItems([]); setStudents([]); setConfig(null); setRows({}); setDirty(false); }}>
                 {years.map(y => <option key={y.id} value={y.id}>{y.year_be}{y.is_active ? ' (ปัจจุบัน)' : ''}</option>)}
               </select>
             </div>
             <div className="score-entry-field">
               <label>ห้องเรียน</label>
-              <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} disabled={classrooms.length === 0}>
+              <select value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedCS(''); setItems([]); setStudents([]); setConfig(null); setRows({}); setDirty(false); }} disabled={classrooms.length === 0}>
                 <option value="">{classrooms.length === 0 ? '— ไม่มีห้องที่บันทึกได้ —' : '— เลือกห้อง —'}</option>
                 {classrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room}</option>)}
               </select>
