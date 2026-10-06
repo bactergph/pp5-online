@@ -11,6 +11,7 @@ import './Pp5PrintLayoutTuner.css'
 
 type Props = {
   open: boolean
+  inline?: boolean
   data: ReportPayload
   subject: ReportSubject
   term: 0 | 1 | 2
@@ -37,6 +38,7 @@ export function pp5TunerSectionToPreview(section: Pp5PrintSection): Pp5SubjectPd
 /** พรีวิว PDF จริง (jsPDF) — เปิดเป็นแผงแยกเมื่อกดปรับ layout ปพ.5 รายวิชา */
 export default function Pp5SubjectJsPdfLivePreview({
   open,
+  inline = false,
   data,
   subject,
   term,
@@ -54,9 +56,9 @@ export default function Pp5SubjectJsPdfLivePreview({
   useEffect(() => {
     if (!open) return
     const gen = ++genRef.current
-    setBuilding(true)
-    setError('')
     const timer = window.setTimeout(() => {
+      setBuilding(true)
+      setError('')
       void (async () => {
         try {
           const result = await buildPp5SubjectPdfBlob({
@@ -82,7 +84,10 @@ export default function Pp5SubjectJsPdfLivePreview({
       })()
     }, 220)
 
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      genRef.current += 1
+    }
   }, [open, data, subject, term, sections, layouts, previewSection])
 
   useEffect(() => () => {
@@ -90,6 +95,16 @@ export default function Pp5SubjectJsPdfLivePreview({
   }, [])
 
   if (!open) return null
+
+  if (inline) return (
+    <section aria-label="ตัวอย่าง ปพ.5 รายวิชา ขนาด A4" style={{ width: '100%', minWidth: 0 }}>
+      {(building || error) && <div role="status" style={{ padding: '12px 16px', color: '#111827' }}>
+        {building ? 'กำลังสร้างตัวอย่าง…' : error}
+      </div>}
+      {!building && !error && url && <iframe title="ตัวอย่าง ปพ.5 รายวิชา A4" src={url + '#view=FitH'} style={{ display: 'block', width: '100%', height: 'min(85vh, 1120px)', minHeight: 520, border: '1px solid #cbd5e1', borderRadius: 8, background: '#e5e7eb' }} />}
+    </section>
+  )
+
 
   return (
     <div className="ca-layout-live-preview pp6-jspdf-overlay" aria-label="พรีวิว PDF ปพ.5 รายวิชา">

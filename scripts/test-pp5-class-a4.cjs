@@ -36,7 +36,9 @@ const subject = {
  const sections=['cover','criteria','attendance','scores','achievement','character','reading','competency','activities'];const result=await buildPp5ClassPdfBlob({data,term:1,sections},{doc,skipApplyFonts:true});
  for(let i=1;i<=doc.getNumberOfPages();i++){doc.setPage(i);assert.ok(Math.abs(doc.internal.pageSize.getWidth()-210)<.01);assert.ok(Math.abs(doc.internal.pageSize.getHeight()-297)<.01)}
  fs.mkdirSync('tmp/pdfs',{recursive:true});fs.writeFileSync('tmp/pdfs/pp5-class-a4-test.pdf',Buffer.from(await result.blob.arrayBuffer()));console.log('All sections A4:',doc.getNumberOfPages(),'pages');
- let index=0;const m={exports:{}};const source=ts.transpileModule(fs.readFileSync('components/reports/Pp5ClassJsPdfLivePreview.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+ for(const component of ['components/reports/Pp5ClassJsPdfLivePreview.tsx','components/reports/Pp5SubjectJsPdfLivePreview.tsx']){
+ let index=0;const m={exports:{}};const source=ts.transpileModule(fs.readFileSync(component,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
  new Function('require','module','exports',source)(name=>name==='react'?{useEffect:()=>{},useRef:()=>({current:null}),useState:initial=>[index++===0?'blob:test':initial,()=>{}]}:name==='react/jsx-runtime'?require(name):{},m,m.exports);
- const html=require('react-dom/server').renderToStaticMarkup(m.exports.default({open:true,inline:true,data,term:1,sections,layouts:{}}));assert.match(html,/blob:test#view=FitH/);assert.match(html,/210 × 297/);assert.doesNotMatch(html,/pp6-jspdf-overlay/);fs.writeFileSync('tmp/pdfs/pp5-class-a4-preview.html',html);console.log('Inline preview displays actual PDF, no separate HTML layout');
+ const html=require('react-dom/server').renderToStaticMarkup(m.exports.default({open:true,inline:true,data,subject:data.subjects[0],term:1,sections,layouts:{}}));assert.match(html,/blob:test#view=FitH/);assert.doesNotMatch(html,/ตัวอย่างเดียวกับไฟล์ PDF/);assert.doesNotMatch(html,/pp6-jspdf-overlay/);console.log('Inline preview displays actual PDF, no separate HTML layout');
+ }
 })().catch(e=>{console.error(e);process.exitCode=1});
