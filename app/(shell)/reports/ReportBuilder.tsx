@@ -90,7 +90,7 @@ import { pp6SectionLayoutStyle, savePp6PrintLayouts, PP6_PRINT_LAYOUTS_STORAGE_K
 import { usePp6SectionLayout, Pp6PrintLayoutsProvider } from '@/lib/pp6-print-layout-context'
 import Pp5PrintLayoutTuner, { usePp5PrintLayoutsState, usePp6PrintLayoutsState } from '@/components/reports/Pp5PrintLayoutTuner'
 import Pp6JsPdfLivePreview from '@/components/reports/Pp6JsPdfLivePreview'
-import Pp5SubjectJsPdfLivePreview from '@/components/reports/Pp5SubjectJsPdfLivePreview'
+import Pp5SubjectHtmlPreview from '@/components/reports/Pp5SubjectHtmlPreview'
 import Pp5ClassJsPdfLivePreview from '@/components/reports/Pp5ClassJsPdfLivePreview'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 
@@ -4589,7 +4589,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
           <div className="report-preview-toolbar">
             <label>
               <span>ขนาด</span>
-              <select value={scale} onChange={event => setScale(Number(event.target.value))} disabled={!data || mode === 'pp5-class' || mode === 'pp5-subject'} className="form-input">
+              <select value={scale} onChange={event => setScale(Number(event.target.value))} disabled={!data || mode === 'pp5-class'} className="form-input">
                 <option value={72}>เล็ก (72%)</option>
                 <option value={88}>พอดี (88%)</option>
                 <option value={100}>เต็ม (100%)</option>
@@ -4642,9 +4642,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
             />
           )}
           {!printMode && mode === 'pp5-subject' && data && selectedSubject && (
-            <Pp5SubjectJsPdfLivePreview
-              inline
-              open
+            <Pp5SubjectHtmlPreview
+              scale={scale}
               data={data}
               subject={selectedSubject}
               term={reportTerm}
@@ -4684,10 +4683,12 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
               onChange={setPp5PrintLayouts}
               onSave={savePrintLayouts}
               saved={layoutSaved}
-              panelBadge={pp5TunerMode === 'pdf' ? 'PDF' : 'HTML'}
+              panelBadge={mode === 'pp5-subject' ? 'HTML / PDF' : pp5TunerMode === 'pdf' ? 'PDF' : 'HTML'}
               panelTitle={pp5TunerMode === 'pdf' ? 'ปรับ Layout ปพ.5' : 'ปรับ Layout Preview'}
               panelSubtitle={
-                pp5TunerMode === 'pdf'
+                mode === 'pp5-subject'
+                  ? 'ปรับตัวอย่างบนเว็บโดยใช้พิกัดเดียวกับ PDF'
+                  : pp5TunerMode === 'pdf'
                   ? 'ปรับค่าแล้วดูผลในพรีวิว PDF (jsPDF)'
                   : mode === 'pp5-class'
                     ? 'ปรับค่าแล้วดูผลในพรีวิว HTML ที่ /reports/pp5-class'
@@ -4706,7 +4707,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                     : 'เลือกชั้นและห้องเพื่อโหลดรายวิชา จากนั้นเลือกรายวิชาเพื่อดูพรีวิว (ประถมใช้ข้อมูลทั้งปี)'
                   : mode === 'pp6' ? 'เลือกระดับชั้นเพื่อดูพรีวิว ปพ.6' : 'เลือกข้อมูลด้านซ้ายเพื่อดูพรีวิว'}</span>
               </div>
-            ) : mode === 'pp6' ? (
+            ) : mode === 'pp5-subject' && selectedSubject && !printMode ? null : mode === 'pp6' ? (
               <Pp6PrintLayoutsProvider layouts={pp6PrintLayouts}>
               <div
                 className={printMode ? 'report-print-zone is-pdf-export' : 'report-print-zone'}
