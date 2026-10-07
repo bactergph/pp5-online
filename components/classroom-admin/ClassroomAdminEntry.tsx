@@ -21,6 +21,7 @@ import {
   saveMonthlyAttendance,
   saveWeightHeight,
 } from '@/app/classroom-admin/actions'
+import ClassroomDocumentHtmlPreview from '@/components/classroom-admin/ClassroomDocumentHtmlPreview'
 import ClassroomAdminPrintLayoutTuner, { useClassroomAdminPrintLayoutsState } from '@/components/classroom-admin/ClassroomAdminPrintLayoutTuner'
 import { CLASSROOM_ADMIN_PRINT_STYLES, classroomAdminPrintStyles } from '@/components/classroom-admin/classroom-admin-print-styles'
 import { waitForReportFonts } from '@/lib/report-font-faces'
@@ -248,6 +249,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [printScale, setPrintScale] = useState(50)
   const [printRenderRequested, setPrintRenderRequested] = useState(false)
   const pendingPrintWindowRef = useRef<Window | null>(null)
+  const [previewRevision,setPreviewRevision] = useState(0)
   const [layoutTunerOpen, setLayoutTunerOpen] = useState(false)
   const [layoutTunerEnabled, setLayoutTunerEnabled] = useState(true)
   const [layoutTunerSection, setLayoutTunerSection] = useState<ClassroomAdminPrintSection>('monthly')
@@ -1844,6 +1846,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     )
   }
 
+  const sharedHtmlPreview = classroomId && yearId && students.length > 0 ? <ClassroomDocumentHtmlPreview key={`${classroomId}:${yearId}:${monthKey}:${month}:${mode}:${activityType}`} revision={String(previewRevision)} classroomId={classroomId} yearId={yearId} monthKey={isMonthlyMode ? monthKey : setMonthInKey(monthKey || currentMonthKey(), month)} term={boardTerm} report={mode === 'attendance' ? 'attendance' : mode === 'weightHeight' ? 'health' : mode === 'healthInspection' ? 'inspection' : activityType!} layouts={printLayouts} draft={{students,attendance:monthlyAttendanceValues,activities:activityType ? {[activityType]:monthlyActivityValues} : undefined,health:weightRows,inspection:inspectionRows}}/> : null
+
   if (loading && !printMode) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>กำลังโหลด...</div>
 
   return (
@@ -1868,7 +1872,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         previewHint="เลื่อนค่าทางขวาแล้วดูผลบนหน้ากระดาษทันที · ฟอนต์ TH Sarabun New"
         preview={
           students.length > 0
-            ? renderPrintableAttendanceDocument({ preview: true })
+            ? sharedHtmlPreview
             : (
               <div className="ca-layout-live-preview__empty">
                 เลือกห้องที่มีนักเรียนก่อน เพื่อดูพรีวิวเอกสาร
@@ -1910,7 +1914,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             </div>
             <div className="print-preview-stage">
               <div className="print-preview-scale" style={{ transform: `scale(${printScale / 100})` }}>
-                {renderPrintableAttendanceDocument({ preview: true })}
+                {sharedHtmlPreview}
               </div>
             </div>
           </div>
@@ -1984,6 +1988,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 {classroomId && (
                   <div className="classroom-admin-board-sign classroom-admin-board-sign--docked">
                     <DocumentSignaturePanel
+                      onSignatureChange={() => setPreviewRevision(value => value + 1)}
                       variant="classroom_admin"
                       classroomId={classroomId}
                       reportTerm={boardTerm}

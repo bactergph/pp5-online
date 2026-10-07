@@ -303,6 +303,7 @@ function detectImageFormat(dataUrl: string): 'PNG' | 'JPEG' | 'WEBP' {
 }
 
 export type DailyAttendancePdfTarget = {
+  loadImage?: typeof loadImageDataUrl
   doc: jsPDF
   /** ขึ้นหน้าใหม่ก่อนแผ่นแรกของรายงานนี้ (ใช้ตอนต่อเล่ม) */
   startWithNewPage?: boolean
@@ -315,6 +316,7 @@ export async function buildDailyAttendancePdfBlob(
   input: DailyAttendancePdfInput,
   target?: DailyAttendancePdfTarget,
 ) {
+  const loadImage = target?.loadImage ?? loadImageDataUrl
   const reportType: MonthlyJsPdfReportType = input.reportType || 'attendance'
   const isAttendance = reportType === 'attendance'
   const isSaving = reportType === 'saving'
@@ -332,9 +334,9 @@ export async function buildDailyAttendancePdfBlob(
   const [logoData, homeroomSign, directorSign] = await Promise.all([
     target && 'logoData' in target
       ? Promise.resolve(target.logoData ?? null)
-      : loadImageDataUrl(input.schoolLogoUrl, 160, 0.7),
-    loadImageDataUrl(input.signatures?.homeroom, 220, 0.75),
-    loadImageDataUrl(input.signatures?.director, 220, 0.75),
+      : loadImage(input.schoolLogoUrl, 160, 0.7),
+    loadImage(input.signatures?.homeroom, 220, 0.75),
+    loadImage(input.signatures?.director, 220, 0.75),
   ])
 
   const padTop = px(layout.padTopPx)

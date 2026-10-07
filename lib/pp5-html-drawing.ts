@@ -4,10 +4,11 @@ const escape = (value: unknown) => String(value).replace(/[&<>"']/g, char => ({ 
 
 /** Draw the same millimetre coordinates as the PDF, without serializing a PDF. */
 export function createPp5HtmlDrawing(measure: jsPDF) {
+  const pageWidth = Math.round(measure.internal.pageSize.getWidth()), pageHeight = Math.round(measure.internal.pageSize.getHeight())
   const pages: string[][] = [[]]
   let stroke = '#000000', fill = '#000000', textColor = '#000000', width = 0.2, cap = 'butt', join = 'miter'
   const add = (markup: string) => pages[pages.length - 1].push(markup)
-  const paint = (style?: string) => `fill="${style?.includes('F') ? fill : 'none'}" stroke="${!style || style.includes('S') ? stroke : 'none'}" stroke-width="${width}" stroke-linecap="${cap}" stroke-linejoin="${join}"`
+  const paint = (style?: string) => `fill="${style?.includes('F') ? fill : 'none'}" stroke="${!style || style.includes('S') || style.includes('D') ? stroke : 'none'}" stroke-width="${width}" stroke-linecap="${cap}" stroke-linejoin="${join}"`
   const doc: jsPDF = new Proxy(measure, {
     get(target, key) {
       if (key === 'addPage') return () => { pages.push([]); return doc }
@@ -44,5 +45,5 @@ export function createPp5HtmlDrawing(measure: jsPDF) {
       }
     },
   })
-  return { doc, pages: () => pages.map(page => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 297" width="210mm" height="297mm" style="display:block;background:white"><style>@font-face{font-family:Pp5CoordinateFont;src:url('/fonts/th-sarabun-new/regular-pdf.ttf')}@font-face{font-family:Pp5CoordinateFont;src:url('/fonts/th-sarabun-new/bold.ttf');font-weight:700}</style>${page.join('')}</svg>`) }
+  return { doc, pages: () => pages.map(page => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${pageWidth} ${pageHeight}" width="${pageWidth}mm" height="${pageHeight}mm" style="display:block;background:white"><style>@font-face{font-family:Pp5CoordinateFont;src:url('/fonts/th-sarabun-new/regular-pdf.ttf')}@font-face{font-family:Pp5CoordinateFont;src:url('/fonts/th-sarabun-new/bold.ttf');font-weight:700}</style>${page.join('')}</svg>`) }
 }

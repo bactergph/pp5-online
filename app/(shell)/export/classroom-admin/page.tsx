@@ -1,4 +1,5 @@
 'use client'
+import SharedReportHtmlPreview from '@/components/reports/SharedReportHtmlPreview'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { fetchClassroomAdminExportContext, fetchClassroomAdminExportData, fetchClassroomAdminExportSignatures, batchProposeClassroomAdminMonths } from './actions'
@@ -538,6 +539,8 @@ export default function ClassroomAdminExportPage() {
   const homeroomTeacherName = selectedClassroom?.homeroom_teacher_id
     ? (teacherNameById[selectedClassroom.homeroom_teacher_id] || 'ยังไม่กำหนด')
     : 'ยังไม่กำหนด'
+  const sharedBookPreview = hasData ? <SharedReportHtmlPreview kind="classroom" scale={100} options={{schoolName:schoolName||'ชื่อโรงเรียน',schoolLogoUrl,yearBe:dataByMonth[activeMonths[0]]?.academicYear?.year_be||0,classroomLabel:`${dataByMonth[activeMonths[0]]?.classroom?.level||''}/${dataByMonth[activeMonths[0]]?.classroom?.room||''}`,term,monthKeyBase:monthKey,months:activeMonths,reports:selectedReports,dataByMonth,signaturesByMonth,monthlyLayout:printLayouts.monthly,standardLayout:printLayouts.standard,homeroomTeacherName,directorName,actingDirectorPosition}}/> : null
+
   const unsignedSelectedCount = selectedMonths.filter(month => {
     const status = monthSignStatuses.find(item => item.month === month)
     return !status?.hasSignature
@@ -973,23 +976,7 @@ export default function ClassroomAdminExportPage() {
         }}
         saved={layoutSaved}
         previewHint="เลื่อนค่าทางขวาแล้วดูผลบนหน้ากระดาษทันที"
-        preview={
-          hasData
-            ? (
-              <div className="classroom-export-book">
-                {activeMonths.flatMap(month => {
-                  const sheetData = dataByMonth[month]
-                  const sheetMonthKey = setMonthInKey(monthKey, month)
-                  return selectedReports.flatMap(report => renderReportSheet(report, sheetData, sheetMonthKey))
-                })}
-              </div>
-            )
-            : (
-              <div className="ca-layout-live-preview__empty">
-                เลือกเดือนและหมวดรายงานก่อน เพื่อดูพรีวิว
-              </div>
-            )
-        }
+        preview={sharedBookPreview}
       />
       <div className="classroom-export-workspace">
       {!embedMode && !printMode && !autoPrintMode && (
@@ -1132,18 +1119,7 @@ export default function ClassroomAdminExportPage() {
       )}
       {hasData ? (
         <div className="classroom-export-preview-card">
-          <div className="classroom-export-preview-stage">
-            <div
-              className={`classroom-export-book${printMode ? ' is-pdf-export' : ''}`}
-              style={printMode ? undefined : { transform: `scale(${(embedMode ? 72 : previewScale) / 100})`, transformOrigin: 'top center' }}
-            >
-              {activeMonths.flatMap(month => {
-                const sheetData = dataByMonth[month]
-                const sheetMonthKey = setMonthInKey(monthKey, month)
-                return selectedReports.flatMap(report => renderReportSheet(report, sheetData, sheetMonthKey))
-              })}
-            </div>
-          </div>
+          {!printMode ? <div style={{zoom:(embedMode?72:previewScale)/100}}>{sharedBookPreview}</div> : <div className="classroom-export-book is-pdf-export">{activeMonths.flatMap(month=>selectedReports.flatMap(report=>renderReportSheet(report,dataByMonth[month],setMonthInKey(monthKey,month))))}</div>}
         </div>
       ) : (
         <div className="classroom-export-preview-empty no-print">

@@ -78,6 +78,7 @@ function setMonthInKey(monthKey: string, month: number) {
 }
 
 export type ClassroomAdminBookPdfOptions = {
+  loadImage?: typeof loadImageDataUrl
   /** ใช้ doc ที่สร้างไว้แล้ว (เช่น ฝั่งเซิร์ฟเวอร์ติดตั้งฟอนต์จากดิสก์แล้ว) */
   doc?: jsPDF
   skipApplyFonts?: boolean
@@ -91,6 +92,7 @@ export async function buildClassroomAdminBookPdfBlob(
   input: ClassroomAdminBookPdfInput,
   options?: ClassroomAdminBookPdfOptions,
 ) {
+  const loadImage = options?.loadImage ?? loadImageDataUrl
   const reports = input.reports.filter(isJsPdfBookReportType)
   if (!reports.length) throw new Error('ไม่มีรายงานที่รองรับ jsPDF')
 
@@ -104,7 +106,7 @@ export async function buildClassroomAdminBookPdfBlob(
     compress: true,
   })
   if (!options?.skipApplyFonts) await applyThaiFonts(doc)
-  const logoData = await loadImageDataUrl(input.schoolLogoUrl, 160, 0.7)
+  const logoData = await loadImage(input.schoolLogoUrl, 160, 0.7)
 
   let isFirstSheet = true
   const shared = {
@@ -145,7 +147,7 @@ export async function buildClassroomAdminBookPdfBlob(
             signatures,
             layout: input.monthlyLayout,
           },
-          { doc, startWithNewPage, logoData },
+          { doc, startWithNewPage, logoData, loadImage },
         )
       } else if (isStandardJsPdfReportType(report)) {
         const sheet: StandardPdfSheet = {

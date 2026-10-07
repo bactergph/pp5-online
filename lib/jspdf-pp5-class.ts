@@ -95,6 +95,7 @@ export type Pp5ClassPdfOptions = {
 }
 
 export type Pp5ClassPdfBuildOptions = {
+  loadImage?: typeof loadImageDataUrl
   /** ใช้ doc ที่สร้างไว้แล้ว (เช่น ฝั่งเซิร์ฟเวอร์ติดตั้งฟอนต์จากดิสก์แล้ว) */
   doc?: jsPDF
   skipApplyFonts?: boolean
@@ -2224,6 +2225,7 @@ export async function buildPp5ClassPdfBlob(
   options: Pp5ClassPdfOptions,
   buildOptions?: Pp5ClassPdfBuildOptions,
 ): Promise<{ blob: Blob; fileName: string }> {
+  const loadImage = buildOptions?.loadImage ?? loadImageDataUrl
   const { data, term, sections, previewSection } = options
   const selectedSections = previewSection
     ? [previewSection]
@@ -2239,11 +2241,11 @@ export async function buildPp5ClassPdfBlob(
 
   const sigKeys = ['homeroom', 'academic_head', 'measurement_head', 'vice_director', 'director'] as const
   const [logoData, qrPng, ...sigUrls] = await Promise.all([
-    loadImageDataUrl(data.school?.logo_url, 160, 0.7),
+    loadImage(data.school?.logo_url, 160, 0.7),
     data.digitalReference?.verifyUrl
       ? qrDataUrl(documentQrUrl(data.digitalReference), 256)
       : Promise.resolve(null),
-    ...sigKeys.map(k => loadImageDataUrl(data.documentSignatures?.[k], 220, 0.75)),
+    ...sigKeys.map(k => loadImage(data.documentSignatures?.[k], 220, 0.75)),
   ])
   const signatures = Object.fromEntries(sigKeys.map((k, i) => [k, sigUrls[i]])) as Record<string, string | null>
 

@@ -238,6 +238,7 @@ function rowValues(
 }
 
 export type StandardClassroomAdminPdfTarget = {
+  loadImage?: typeof loadImageDataUrl
   doc: jsPDF
   startWithNewPage?: boolean
   logoData?: string | null
@@ -251,6 +252,7 @@ export async function buildStandardClassroomAdminPdfBlob(
   input: StandardClassroomAdminPdfInput,
   target?: StandardClassroomAdminPdfTarget,
 ) {
+  const loadImage = target?.loadImage ?? loadImageDataUrl
   if (!input.sheets.length) throw new Error('ไม่มีแผ่นรายงานสำหรับสร้าง PDF')
 
   const layout = { ...DEFAULT_CLASSROOM_ADMIN_STANDARD_LAYOUT, ...input.layout }
@@ -264,7 +266,7 @@ export async function buildStandardClassroomAdminPdfBlob(
 
   const logoData = target && 'logoData' in target
     ? (target.logoData ?? null)
-    : await loadImageDataUrl(input.schoolLogoUrl, 160, 0.7)
+    : await loadImage(input.schoolLogoUrl, 160, 0.7)
 
   const padTop = px(layout.padTopPx)
   const padX = px(layout.padSidePx)
@@ -289,8 +291,8 @@ export async function buildStandardClassroomAdminPdfBlob(
 
   for (const sheet of input.sheets) {
     const [homeroomSign, directorSign] = await Promise.all([
-      loadImageDataUrl(sheet.signatures?.homeroom, 220, 0.75),
-      loadImageDataUrl(sheet.signatures?.director, 220, 0.75),
+      loadImage(sheet.signatures?.homeroom, 220, 0.75),
+      loadImage(sheet.signatures?.director, 220, 0.75),
     ])
 
     const students = sheet.students || []
