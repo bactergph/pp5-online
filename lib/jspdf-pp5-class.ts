@@ -1046,7 +1046,8 @@ async function drawCoverPage(ctx: DrawCtx) {
   let blockH = Math.max(px(64), sigImgH + layout.sigNameGapMm + lineH * 2 + 4)
   const directorBoxH = viceDirectorName
     ? Math.max(px(104), sigImgH + layout.sigNameGapMm + lineH * 4 + px(50))
-    : px(126)
+    : Math.max(px(126), px(36) + Math.max(3.2, sigImgH - 0.8)
+      + layout.sigNameGapMm + lineH * (directorPos ? 3 : 2) + px(8) + 3)
   const neededH = blockH + layout.sigAfterBlocksMm + directorBoxH
   const availH = pageBottom - y
   if (neededH > availH && availH > 40) {
