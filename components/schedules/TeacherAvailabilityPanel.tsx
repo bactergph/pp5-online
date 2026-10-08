@@ -15,8 +15,6 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   const [error,setError] = useState('')
   const [notice,setNotice] = useState('')
   const [editing,setEditing] = useState<{day:number;period:number}|null>(null)
-  const [chosen,setChosen] = useState('')
-  const [showEditor,setShowEditor]=useState(false)
   const [pending,setPending]=useState<string[]>([])
   const pendingRef=useRef(new Set<string>())
   useEffect(()=>{if(error||notice)void Swal.fire({icon:error?'error':'success',title:error?'ดำเนินการไม่สำเร็จ':notice,text:error||undefined,toast:!error,position:error?'center':'top-end',timer:error?undefined:2200,showConfirmButton:!!error,confirmButtonText:'ตกลง',confirmButtonColor:'#946b25'})},[error,notice])
@@ -51,32 +49,42 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     finally{pendingRef.current.delete(key);setPending([...pendingRef.current]);if(!pendingRef.current.size)await load(true)}
   }
   async function chooseCell(day:number,period:number) {
-    const busy=data?.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
-    setEditing({day,period});setShowEditor(!!busy);setChosen(busy?.lessonId||'');setError('');setNotice('')
-    if(busy)return
-    const blocked=!!data?.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
-    const decision=await Swal.fire({icon:'question',title:`${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} · คาบ ${period}`,text:blocked?'ต้องการปลดล็อกคาบว่างนี้ไหม?':'ต้องการล็อกคาบว่างนี้ไหม?',showCancelButton:true,showDenyButton:!blocked,confirmButtonText:blocked?'ปลดล็อกคาบว่าง':'ล็อกคาบว่าง',denyButtonText:'เลือกวิชา',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25',denyButtonColor:'#64748b'})
-    if(decision.isConfirmed&&data?.supported)void toggle(day,period,blocked)
-    else if(decision.isDenied)setShowEditor(true)
-    else setEditing(null)
+    if(!data)return
+    const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
+    setEditing({day,period});setError('');setNotice('')
+    const title=`${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} · คาบ ${period}`
+    if(busy?.locked){
+      const decision=await Swal.fire({icon:'question',title,text:'คาบเรียนนี้ล็อกอยู่ ต้องการปลดล็อกก่อนแก้ไขไหม?',showCancelButton:true,confirmButtonText:'ปลดล็อกคาบเรียน',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25'})
+      if(decision.isConfirmed)await editCell(day,period,'',false,true)
+      return
+    }
+    if(!busy){
+      const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
+      const decision=await Swal.fire({icon:'question',title,text:blocked?'ต้องการปลดล็อกคาบว่างนี้ไหม?':'ต้องการล็อกคาบว่างนี้ไหม?',showCancelButton:true,showDenyButton:!blocked,confirmButtonText:blocked?'ปลดล็อกคาบว่าง':'ล็อกคาบว่าง',denyButtonText:'เลือกวิชา',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25',denyButtonColor:'#64748b'})
+      if(decision.isConfirmed&&data.supported){void toggle(day,period,blocked);return}
+      if(!decision.isDenied)return
+    }
+    const options=Object.fromEntries(data.lessons.filter(l=>l.teacherId===teacher&&(!busy||l.classroomId===busy.classroomId)&&!data.slots.some(slot=>slot.classroomId===l.classroomId&&slot.day===day&&slot.period===period&&(slot.lessonId!==busy?.lessonId||slot.locked))).map(l=>[l.id,l.label]))
+    const decision=await Swal.fire({title,text:busy?'เปลี่ยนวิชาหรือนำวิชาออกจากคาบนี้':'เลือกรายวิชาและห้องเรียนเพื่อบันทึกลงคาบนี้',input:'select',inputOptions:options,inputValue:busy?.lessonId||'',inputPlaceholder:'เลือกวิชาและห้องเรียน',inputValidator:value=>!value?'กรุณาเลือกวิชา':undefined,showCancelButton:true,showDenyButton:!!busy,confirmButtonText:'บันทึกวิชา',denyButtonText:'เอาวิชาออก',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25',denyButtonColor:'#be3340'})
+    if(decision.isConfirmed)await editCell(day,period,String(decision.value),false,false)
+    else if(decision.isDenied)await editCell(day,period,'',true,false)
   }
-  const busyCell=editing&&data?.busy.find(b=>b.teacherId===teacher&&b.day===editing.day&&b.period===editing.period)
-  async function edit(remove=false,unlock=false){
-    if(!editing||!data)return
-    ++request.current
+  async function editCell(day:number,period:number,lessonId:string,remove:boolean,unlock:boolean){
+    if(!data)return
+    const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
+    const next=data.lessons.find(l=>l.id===lessonId)
+    const room=busy?.classroomId||next?.classroomId
+    if(!room)return
+    const key=`${teacher}:${day}:${period}`
+    pendingRef.current.add(key);setPending([...pendingRef.current]);++request.current
     setSaving(true);setError('');setNotice('')
     try{
-      const next=data.lessons.find(l=>l.id===chosen)
-      const room=busyCell?.classroomId||next?.classroomId
-      if(!room)throw new Error('กรุณาเลือกวิชาและห้องเรียน')
-      const result=unlock?await toggleScheduleCellLock(room,yearId,editing.day,editing.period,semester):await editTeacherScheduleCell(yearId,semester,teacher,room,editing.day,editing.period,busyCell?.lessonId||null,remove?null:chosen)
+      const result=unlock?await toggleScheduleCellLock(room,yearId,day,period,semester):await editTeacherScheduleCell(yearId,semester,teacher,room,day,period,busy?.lessonId||null,remove?null:lessonId)
       if(result.error)throw new Error(result.error)
-      await load(true)
-      await onChanged?.()
-      if(remove)setChosen('')
-      setNotice(unlock?'ปลดล็อกคาบเรียนแล้ว':remove?'นำวิชาออกแล้ว สามารถล็อกคาบว่างหรือเลือกวิชาใหม่ได้':'บันทึกวิชาแล้ว ตารางเรียนของห้องปรับตรงกันแล้ว')
+      await load(true);await onChanged?.()
+      setNotice(unlock?'ปลดล็อกคาบเรียนแล้ว':remove?'นำวิชาออกแล้ว':'บันทึกวิชาแล้ว')
     }catch(e){await load(true);setError(e instanceof Error?e.message:'บันทึกไม่สำเร็จ')}
-    finally{setSaving(false)}
+    finally{pendingRef.current.delete(key);setPending([...pendingRef.current]);setSaving(false)}
   }
   const content=<>
     <style>{`
@@ -91,16 +99,6 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       {!data?<p>กำลังโหลด...</p>:<>
         {!data.supported&&<p role="alert">ยังไม่เปิดใช้การล็อกคาบครู กรุณารันฐานข้อมูล 058_schedule_eight_periods_teacher_blocks.sql</p>}
         {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled||saving} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}>{data.teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
-        {editing&&showEditor&&<section className="availability-editor" aria-label="แก้ไขคาบสอน"><h3>คาบ {editing.period} · {['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][editing.day]}</h3><p>{busyCell?.label||'คาบว่าง'}</p>
-          {busyCell?.locked?<p>คาบเรียนนี้ล็อกอยู่ กรุณาปลดล็อกก่อนแก้ไข</p>:<select aria-label="เลือกวิชาและห้องเรียน" disabled={saving} value={chosen} onChange={e=>setChosen(e.target.value)}><option value="">เลือกวิชาและห้องเรียน</option>{data.lessons.filter(l=>l.teacherId===teacher&&(!busyCell||l.classroomId===busyCell.classroomId)).map(l=>{const taken=data.slots.some(s=>s.classroomId===l.classroomId&&s.day===editing.day&&s.period===editing.period&&(s.lessonId!==busyCell?.lessonId||s.locked));return <option key={l.id} value={l.id} disabled={taken}>{l.label}{taken?' (ห้องมีคาบแล้ว)':''}</option>})}</select>}
-          <div className="availability-editor-actions">
-            {busyCell?.locked?<button disabled={saving} onClick={()=>edit(false,true)}>ปลดล็อกคาบเรียน</button>:<>
-              {busyCell&&<button className="danger" disabled={saving} onClick={()=>edit(true)}>เอาวิชาออก</button>}
-              <button disabled={saving||!chosen||data.blocks.some(b=>b.teacherId===teacher&&b.day===editing.day&&b.period===editing.period)} onClick={()=>edit()}>บันทึกวิชา</button>
-            </>}
-            <button disabled={saving} onClick={()=>setEditing(null)}>ปิด</button>
-          </div>
-        </section>}
         <div className="schedule-grid-scroll"><ScheduleGridTable periodTimes={periodTimes} compactBreak renderCell={(day,period)=>{
           const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
