@@ -106,6 +106,9 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     }catch(e){await load(true);setError(e instanceof Error?e.message:'บันทึกไม่สำเร็จ')}
     finally{pendingRef.current.delete(key);setPending([...pendingRef.current]);release()}
   }
+  const teacherQuotas=data?.quotas.filter(q=>q.teacherId===teacher)||[]
+  const target=teacherQuotas.reduce((n,q)=>n+q.target,0)
+  const progress=target?Math.min(100,100*teacherQuotas.reduce((n,q)=>n+Math.min(q.target,q.used),0)/target):0
   const content=<>
     <style>{`
       .availability-cell{display:flex;flex-direction:column;gap:7px;align-items:center;justify-content:center;width:100%;min-height:90px;padding:8px;border:1px dashed #c4ceca;border-radius:8px;background:#f4f9f6;color:#345341;font:inherit;cursor:pointer;}
@@ -123,16 +126,13 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
         <div className="flex flex-wrap items-end gap-3">
         {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled||clearing} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}>{data.teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
         <button type="button" className="my-4 min-h-11 rounded-md border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50" disabled={disabled||clearing||pending.length>0||!teacher} onClick={()=>void clearSelectedTeacher()}>{clearing?'กำลังล้าง...':'ล้างตารางสอนครูที่เลือก'}</button>
-        </div>
-        <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="schedule-grid-scroll overflow-x-auto"><ScheduleGridTable periodTimes={periodTimes} compactBreak renderCell={(day,period)=>{
-          const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
-          const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
-          const selected=editing?.day===day&&editing?.period===period
-          const loading=pending.includes(`${teacher}:${day}:${period}`)
-          return <button type="button" className={`availability-cell ${blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||clearing||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อกหรือเลือกวิชา':'กดเพื่อเลือกวิชาหรือล็อก'}</span></>}</button>
-        }}/></div>
-        <aside className="self-start rounded-lg border border-stone-200 bg-white p-4 xl:sticky xl:top-4">
+        <details key={teacher} className="relative my-4 w-full shrink-0 rounded-lg border border-stone-200 bg-stone-50 p-3 sm:ml-auto sm:w-64">
+          <summary className="cursor-pointer list-none" aria-label="ดูความคืบหน้าคาบครู">
+            <div className="flex items-center justify-between gap-2 text-xs"><strong>ความคืบหน้าคาบต่อสัปดาห์</strong><span className="text-stone-500">รายละเอียด ▾</span></div>
+            <div className="mt-2 flex justify-between text-xs text-stone-600"><span>เป้า <b>{teacherQuotas.reduce((n,q)=>n+q.target,0)}</b></span><span>ใช้ <b>{teacherQuotas.reduce((n,q)=>n+q.used,0)}</b></span><span>เหลือ <b>{teacherQuotas.reduce((n,q)=>n+Math.max(0,q.target-q.used),0)}</b></span></div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-stone-200"><div className="h-full bg-emerald-600" style={{width:`${progress}%`}} /></div>
+          </summary>
+          <div className="absolute right-0 top-full z-20 mt-2 max-h-80 w-[min(360px,calc(100vw-48px))] overflow-auto rounded-lg border border-stone-200 bg-white p-4 shadow-xl">
           <h3 className="text-sm font-semibold">คาบต่อสัปดาห์ · ครูที่เลือก</h3>
           <p className="my-2 text-xs text-stone-500">แยกตามวิชาและห้องเรียน</p>
           <table className="w-full text-xs"><thead><tr className="border-b border-stone-300 bg-stone-100 text-black"><th className="p-2 text-left">วิชา / ห้อง</th><th className="p-2">เป้า</th><th className="p-2">ใช้</th></tr></thead><tbody>
@@ -140,8 +140,17 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
           </tbody></table>
           {!data.quotas.some(q=>q.teacherId===teacher)&&<p className="py-3 text-xs text-stone-500">ยังไม่มีรายวิชาของครูที่เลือก</p>}
           <p className="mt-3 text-xs leading-5 text-stone-500">กิจกรรมที่ไม่กำหนดครูไม่รวมในภาระงานรายครู</p>
-        </aside>
+          </div>
+        </details>
         </div>
+
+        <div className="schedule-grid-scroll overflow-x-auto"><ScheduleGridTable periodTimes={periodTimes} compactBreak renderCell={(day,period)=>{
+          const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
+          const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
+          const selected=editing?.day===day&&editing?.period===period
+          const loading=pending.includes(`${teacher}:${day}:${period}`)
+          return <button type="button" className={`availability-cell ${blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||clearing||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อกหรือเลือกวิชา':'กดเพื่อเลือกวิชาหรือล็อก'}</span></>}</button>
+        }}/></div>
       </>}
     </div>
   </>
