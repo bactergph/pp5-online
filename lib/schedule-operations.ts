@@ -17,6 +17,12 @@ function cell(day: number, period: number) {
   if (!Number.isInteger(day) || day < 1 || day > 5 || !Number.isInteger(period) || period < 1 || period > 8) throw new Error('วันหรือคาบเรียนไม่ถูกต้อง')
 }
 async function commit(ctx: Awaited<ReturnType<typeof context>>, year: string, rows: ScheduleSlot[], description: string, unlock = false) {
+  for (const lesson of ctx.data.lessons) {
+    const used = rows.filter(s=>s.classroom_id===lesson.classroomId&&lessonKey(s)===lesson.id).length
+    const before = ctx.data.slots.filter(s=>s.classroom_id===lesson.classroomId&&lessonKey(s)===lesson.id).length
+    const target = lesson.activity ? 1 : lesson.count
+    if (used>target && used>before) throw new Error(`${lesson.label} ลงครบ ${target} คาบต่อสัปดาห์แล้ว กรุณานำคาบเดิมออกก่อนเพิ่ม`)
+  }
   await persistSchedule(ctx.session.schoolId, year, ctx.data.slots, rows, unlock, ctx.semester)
   await logActivity({ actor: ctx.session, schoolId: ctx.session.schoolId, action: 'update', module: 'schedules', targetType: 'class_schedule', description })
 }

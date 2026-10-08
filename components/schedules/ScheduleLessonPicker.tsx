@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 
-type Option = { id: string; label: string; teacher_name: string }
+type Option = { id: string; label: string; teacher_name: string; disabled?: boolean; quotaLabel?: string }
 export default function ScheduleLessonPicker({ title, options, selected, onChoose, onClose }: {
   title: string; options: Option[]; selected: string | null; onChoose: (id: string) => void; onClose: () => void
 }) {
@@ -15,7 +15,7 @@ export default function ScheduleLessonPicker({ title, options, selected, onChoos
     <div className="lesson-options">
       <button className="lesson-option" onClick={()=>onChoose('')}><strong>เว้นคาบว่าง</strong><span>นำรายวิชาหรือกิจกรรมออกจากคาบนี้</span></button>
       {[false,true].map(activity=><section key={String(activity)}><h3>{activity?'กิจกรรมพัฒนาผู้เรียน · ไม่ต้องระบุครู':'รายวิชาปกติ'}</h3>
-        {filtered.filter(o=>o.id.startsWith('activity:')===activity).map(o=><button key={o.id} className={`lesson-option${selected===o.id?' selected':''}`} aria-pressed={selected===o.id} onClick={()=>onChoose(o.id)}><strong>{o.label}</strong><span>{activity?'เลือกลงคาบเอง · ไม่รวมจัดอัตโนมัติ':o.teacher_name || 'ยังไม่กำหนดครู'}</span></button>)}
+        {filtered.filter(o=>o.id.startsWith('activity:')===activity).map(o=><button key={o.id} disabled={o.disabled} className={`lesson-option${selected===o.id?' selected':''}`} aria-pressed={selected===o.id} onClick={()=>onChoose(o.id)}><strong>{o.label}</strong><span>{activity?'เลือกลงคาบเอง · ไม่รวมจัดอัตโนมัติ':o.teacher_name || 'ยังไม่กำหนดครู'}</span>{o.quotaLabel&&<small>{o.quotaLabel}</small>}</button>)}
       </section>)}
       {!filtered.length && <p role="status">ไม่พบรายการที่ค้นหา</p>}
     </div>

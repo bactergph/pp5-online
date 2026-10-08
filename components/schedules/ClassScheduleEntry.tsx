@@ -49,6 +49,10 @@ type Props = {
 }
 
 const STYLES = `
+.class-schedule-workspace .schedule-overview {display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.class-schedule-workspace .schedule-overview article {padding:18px;border:1px solid #d6ccbd;background:#fff;border-radius:12px;display:grid;gap:6px;}
+.class-schedule-workspace .schedule-overview strong {font-size:24px;color:#352c20;}.class-schedule-workspace .schedule-overview span {font-size:13px;color:#6d6050;}
+.class-schedule-workspace .schedule-overview article.warning {background:#fff2e5;border-color:#d49a61;}
 .class-schedule-workspace {--ink:#172b3a;--muted:#596b79;--edge:#cbd5df;--accent:#235c78;display:grid;gap:16px;min-width:0;color:var(--ink);}
 .class-schedule-workspace * {box-sizing:border-box;}
 .class-schedule-workspace .schedule-head {display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:4px 0 8px;}
@@ -137,6 +141,27 @@ const STYLES = `
 .copy-modal .schedule-toolbar-btn {padding:9px 14px;border:1px solid #b9c7d2;border-radius:6px;background:#fff;color:#243e50;font:inherit;font-size:13px;cursor:pointer;}
 .copy-modal .schedule-toolbar-btn.primary {background:#235c78;color:#fff;border-color:#235c78;}
 @media(max-width:700px) {.class-schedule-workspace .schedule-filters {grid-template-columns:1fr 1fr;padding:16px;gap:12px;}.class-schedule-workspace .schedule-field:last-child {grid-column:1/-1;}.class-schedule-workspace .schedule-head h1 {font-size:22px;}.class-schedule-workspace .schedule-head-actions {width:100%;justify-content:space-between;}.class-schedule-workspace .schedule-toolbar {align-items:flex-start;}.class-schedule-workspace .schedule-main-actions {width:100%;}.class-schedule-workspace .schedule-main-actions button {flex:1;}.class-schedule-workspace .schedule-main-actions .schedule-save-status {flex-basis:100%;}.class-schedule-workspace .schedule-more-panel {left:0;right:auto;width:min(300px,calc(100vw - 48px));}}
+.class-schedule-workspace {--ink:#302a23;--muted:#716657;--edge:#d7cdbf;--accent:#846124;gap:20px;}
+.class-schedule-workspace .schedule-head {padding:24px;background:#fff;border:1px solid var(--edge);border-radius:14px;}
+.class-schedule-workspace .schedule-filters {border-radius:14px;background:#faf7f1;}
+.class-schedule-workspace .schedule-toolbar {padding:16px;background:#fff;border:1px solid var(--edge);border-radius:12px;}
+.class-schedule-workspace .schedule-grid-card {border-color:#bbae99;border-radius:14px;}
+.class-schedule-workspace .schedule-grid-table {min-width:1040px;}
+.class-schedule-workspace .schedule-grid-table :is(th,td) {border-color:#c9beae;}
+.class-schedule-workspace .schedule-grid-table th {background:#e9e0d2;font-size:15px;}
+.class-schedule-workspace .schedule-grid-table th.col-day {background:#dfd3c0;}
+.class-schedule-workspace .schedule-grid-table .day-col {background:#f2ece2;color:#332c23;}
+.class-schedule-workspace .schedule-grid-table td.cell {padding:10px;height:136px;}
+.class-schedule-workspace .schedule-cell-choice {min-height:68px;padding:10px;border:1px solid #ded5c8;background:#faf8f4;border-radius:8px;}
+.class-schedule-workspace .schedule-cell-choice:hover:not(:disabled) {background:#f3e9d8;border-color:#bca071;}
+.class-schedule-workspace .schedule-cell-choice.locked {background:#eee9e0;border-color:#aa987b;}
+.class-schedule-workspace .schedule-lock-btn {position:static;display:inline-flex;gap:5px;width:auto;height:28px;margin:5px 0 0 6px;padding:3px 8px;background:#f7f3ec;border:1px solid #d7cdbf;color:#66533a;font:inherit;font-size:11px;}
+.class-schedule-workspace .schedule-lock-btn.is-locked {background:#846124;color:white;border-color:#846124;}
+.class-schedule-workspace .schedule-grid-heading {background:#faf7f1;padding:18px;}
+.class-schedule-workspace .quota-table th {background:#e9e0d2;}
+.lesson-picker .lesson-option:disabled {opacity:.55;cursor:not-allowed;background:#eee;}
+.lesson-picker .lesson-option small {font-size:12px;font-weight:600;color:#78551d;}
+@media(max-width:700px){.class-schedule-workspace .schedule-overview {grid-template-columns:1fr;}.class-schedule-workspace .schedule-head{padding:18px;}}
 `
 
 export default function ClassScheduleEntry({ mode }: Props) {
@@ -173,6 +198,13 @@ export default function ClassScheduleEntry({ mode }: Props) {
   )
 
   const selectedClassroom = classrooms.find(c => c.id === selectedClass)
+  const quotaOptions = subjects.map(s=>{
+    const quota=quotas?.items.find(q=>q.class_subject_id===s.id)
+    const target=s.id.startsWith('activity:')?1:quota?.target
+    const used=Object.values(cells).filter(c=>c.class_subject_id===s.id).length
+    const selected=picker&&cells[`${picker.day}-${picker.period}`]?.class_subject_id===s.id
+    return {...s,disabled:target!==undefined&&used>=target&&!selected,quotaLabel:target===undefined?'':`ลงแล้ว ${used} / ${target} คาบต่อสัปดาห์${used>target?' · เกินจำนวน':used===target?' · ครบแล้ว':` · เหลือ ${target-used}`}`}
+  })
   const selectedYearObj = years.find(y => y.id === selectedYear)
   const copySourceClassrooms = classrooms.filter(c => c.id !== selectedClass)
 
@@ -241,6 +273,10 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (cell?.locked) return
 
     const classSubjectId = value || null
+    if (blocked || quotaOptions.find(s=>s.id===value)?.disabled) {
+      setAlert({type:'error',title:'ลงวิชาไม่ได้',message:'รายวิชานี้ลงครบจำนวนคาบต่อสัปดาห์แล้ว กรุณานำคาบเดิมออกก่อน'})
+      return
+    }
     const prev = cells[key]
     setCells(current => ({
       ...current,
@@ -404,13 +440,13 @@ export default function ClassScheduleEntry({ mode }: Props) {
 
   return (
     <>
-      <style>{STYLES + SCHEDULE_PRESENTATION + `
+      <style>{SCHEDULE_PRESENTATION + STYLES + `
         .class-schedule-workspace {--accent:#805d21;--ink:#302a22;--edge:#ddd5c7;gap:20px;}
         .class-schedule-workspace .schedule-head {background:#fff;border:1px solid #e1d9cd;border-radius:16px;padding:22px;}
         .class-schedule-workspace .schedule-filters {border-radius:14px;background:#fffdf9;}
         .class-schedule-workspace .schedule-grid-table th {background:#ece4d7;color:#111;font-size:14px;}
         .class-schedule-workspace .schedule-grid-table td.day-col {background:#f5f0e7;color:#493a28;}
-        .class-schedule-workspace .schedule-grid-table td.cell {height:112px;}
+        .class-schedule-workspace .schedule-grid-table td.cell {height:136px;}
         .class-schedule-workspace .schedule-grid-table {min-width:${Math.max(960,periodTimes.filter(t=>!t.is_break).length*145+110)}px;}
         .class-schedule-workspace .schedule-grid-heading {background:#faf7f1;}
         .teacher-availability-panel {border:1px solid #d8cec0;border-radius:14px;background:#fff;overflow:hidden;}
@@ -500,6 +536,11 @@ export default function ClassScheduleEntry({ mode }: Props) {
         )}
 
 
+        {isManage && quotas && <div className="schedule-overview">
+          <article><strong>{quotas.filled} / {quotas.totalTarget}</strong><span>คาบรายวิชาที่จัด / ต้องเรียนต่อสัปดาห์</span></article>
+          <article className={quotas.items.some(q=>q.used>q.target)?'warning':''}><strong>{quotas.items.reduce((sum,q)=>sum+Math.max(0,q.remaining),0)}</strong><span>คาบรายวิชาที่ยังขาด{quotas.items.some(q=>q.used>q.target)?' · พบวิชาเกินคาบ กรุณานำออก':''}</span></article>
+          <article><strong>{Object.values(cells).filter(c=>c.locked).length}</strong><span>คาบที่ล็อก · ระบบอัตโนมัติจะเก็บไว้</span></article>
+        </div>}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
         {!selectedClass ? (
@@ -540,6 +581,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
                           disabled={blocked}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d={locked?'M8 10V6a4 4 0 018 0v4':'M8 10V6a4 4 0 018 0'}/></svg>
+                          <span>{locked?'ปลดล็อก':cell?.class_subject_id?'ล็อกวิชา':'ล็อกคาบว่าง'}</span>
                         </button>
                       </div>
                       {teacherLine(cell?.class_subject_id)}
@@ -561,11 +603,11 @@ export default function ClassScheduleEntry({ mode }: Props) {
         )}
 
         {isManage && canEdit && selectedYear && <TeacherAvailabilityPanel refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={blocked} />}
-        {isManage && quotas && <details className="schedule-quota-details"><summary>คาบรายวิชา {quotas.filled} / {quotas.totalTarget} คาบ <span>ดูรายละเอียดโควต้า</span></summary><ScheduleQuotaPanel {...quotas} capacity={periodTimes.filter(t=>!t.is_break).length*5} /></details>}
+        {isManage && quotas && <details open className="schedule-quota-details"><summary>ชั่วโมงเรียนของห้อง · รายวิชา {quotas.filled} / {quotas.totalTarget} คาบต่อสัปดาห์ <span>คำนวณจากชั่วโมงต่อปี ÷ 40 สัปดาห์ · กิจกรรมแยกวิชาละ 1 คาบ</span></summary><ScheduleQuotaPanel {...quotas} capacity={periodTimes.filter(t=>!t.is_break).length*5} /></details>}
 
       </div>
 
-      {picker && <ScheduleLessonPicker title={`วัน${SCHEDULE_DAYS.find(d=>d.value===picker.day)?.label} · คาบ ${picker.period}`} options={subjects} selected={cells[`${picker.day}-${picker.period}`]?.class_subject_id || null} onClose={()=>setPicker(null)} onChoose={id=>{const {day,period}=picker;setPicker(null);void handleCellChange(day,period,id)}} />}
+      {picker && <ScheduleLessonPicker title={`วัน${SCHEDULE_DAYS.find(d=>d.value===picker.day)?.label} · คาบ ${picker.period}`} options={quotaOptions} selected={cells[`${picker.day}-${picker.period}`]?.class_subject_id || null} onClose={()=>setPicker(null)} onChoose={id=>{const {day,period}=picker;setPicker(null);void handleCellChange(day,period,id)}} />}
       {copyOpen && (
         <div className="copy-modal-backdrop" onClick={() => setCopyOpen(false)}>
           <div className="copy-modal" onClick={e => e.stopPropagation()}>

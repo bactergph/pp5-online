@@ -76,6 +76,16 @@ const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'
   data.slots[0].locked=true
   await assert.rejects(api.editTeacherCell('y',2,'t','a',1,1,'l1',null),/ปลดล็อก/)
   console.log('PASS: teacher timetable removal/addition updates classroom, expected lesson protects stale edits, teacher/room/term/lock validation')
+  reset();data.slots=[slot('a','l1',1),slot('a','l1',2)]
+  await assert.rejects(api.saveCell('a','y',1,3,'l1',null,2),/ครบ 2 คาบ/);assert.equal(writes,0)
+  await assert.rejects(api.editTeacherCell('y',2,'t','a',1,3,null,'l1'),/ครบ 2 คาบ/);assert.equal(writes,0)
+  await api.saveCell('a','y',1,1,'l1',null,2);assert.equal(writes,1,'saving unchanged full lesson remains allowed')
+  data.slots.push(slot('a','l1',3))
+  await api.saveCell('a','y',1,3,null,null,2);assert.equal(data.slots.length,2,'legacy over-quota timetable can be repaired')
+  reset();data.lessons.push({id:'activity:a',classroomId:'a',teacherId:null,count:0,label:'scout',activity:true})
+  await api.saveCell('a','y',1,1,'activity:a',null)
+  await assert.rejects(api.saveCell('a','y',1,2,'activity:a',null),/ครบ 1 คาบ/)
+  console.log('PASS: manual and teacher edits cannot exceed weekly quota; unchanged and repair edits allowed; activities capped at one period')
   reset();role='teacher';await assert.rejects(api.autoSchedule('y',null,true),/สิทธิ์/);assert.equal(writes,0)
   console.log('PASS: rebuild quota regression, school scope/empty rooms, lock preservation, copy matching, school/role authorization')
 })().catch(e=>{console.error(e);process.exitCode=1})
