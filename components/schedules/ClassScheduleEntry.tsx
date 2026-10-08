@@ -299,7 +299,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     return (
       <>
         <span className="text-xs font-normal text-stone-500">{activity ? 'กิจกรรมพัฒนาผู้เรียน' : subj.subject_code}</span>
-        <span className="line-clamp-3 text-sm font-semibold leading-6" title={subj.label}>{subj.subject_name}</span>
+        <span className="line-clamp-2 text-[13px] font-semibold leading-5" title={subj.label}>{subj.subject_name}</span>
         {!activity && <span className="cell-tchr" title={subj.teacher_name}>{subj.teacher_name || 'ยังไม่กำหนดครูผู้สอน'}</span>}
       </>
     )
@@ -411,7 +411,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
         ) : (
           <section className="overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-sm" aria-label="ตารางเรียนรายสัปดาห์">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-4 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mt-1 [&_p]:text-xs [&_p]:text-stone-500"><div><h2>ห้อง {selectedClassroom?.label}</h2><p>ภาคเรียนที่ {semester} · ปีการศึกษา {selectedYearObj?.year_be}</p></div><span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">จัดแล้ว {Object.values(cells).filter(c => c.class_subject_id).length} / {periodTimes.filter(t=>!t.is_break).length*5} คาบ</span></div>
-            <div className="overflow-x-auto [&_table]:w-full [&_table]:table-fixed [&_table]:min-w-[1120px] [&_th]:border-stone-300! [&_td]:border-stone-200! [&_th]:bg-stone-100! [&_th]:py-4! [&_th]:text-sm! [&_th]:font-semibold! [&_th]:text-black! [&_.period-time]:text-xs! [&_.period-time]:font-normal! [&_.period-time]:text-stone-500! [&_.col-day]:w-20 [&_.day-col]:bg-stone-100! [&_.day-col]:text-stone-700! [&_.col-break]:w-9 [&_.col-break]:min-w-9! [&_.break-col]:bg-amber-50! [&_.cell]:p-2! [&_.cell]:h-40 [&_.cell]:align-top">
+            <div className="overflow-x-auto [&_table]:w-full [&_table]:table-fixed [&_table]:min-w-[880px]! [&_th]:border-stone-300! [&_td]:border-stone-200! [&_th]:bg-stone-100! [&_th]:py-2! [&_th]:text-sm! [&_th]:font-semibold! [&_th]:text-black! [&_.period-time]:text-xs! [&_.period-time]:font-normal! [&_.period-time]:text-stone-500! [&_.col-day]:w-20 [&_.day-col]:bg-stone-100! [&_.day-col]:text-stone-700! [&_.col-break]:w-9 [&_.col-break]:min-w-9! [&_.break-col]:bg-amber-50! [&_.cell]:p-1.5! [&_.cell]:h-28 [&_.cell]:align-top">
             <ScheduleGridTable compactBreak
               periodTimes={periodTimes}
               renderCell={(day, period) => {
@@ -423,10 +423,10 @@ export default function ClassScheduleEntry({ mode }: Props) {
                   return (
                     <div className={`grid gap-1 ${conflictRooms?.length ? 'rounded-xl bg-rose-50' : ''}`}>
                       <div className="grid gap-2">
-                        <button type="button" className={`flex min-h-24 w-full flex-col gap-1 rounded-xl border p-3 text-left transition ${cell?.class_subject_id?.startsWith('activity:')?'border-emerald-200 bg-emerald-50 text-emerald-900':locked?'border-amber-300 bg-amber-50 text-stone-800':'border-stone-200 bg-white text-stone-800 hover:border-amber-400 hover:bg-amber-50/50'}`} 
+                        <button type="button" className={`flex min-h-14 w-full flex-col gap-0.5 rounded-md border px-2 py-1.5 text-left transition ${cell?.class_subject_id?.startsWith('activity:')?'border-emerald-200 bg-emerald-50 text-emerald-900':locked?'border-amber-300 bg-amber-50 text-stone-800':'border-stone-200 bg-white text-stone-800 hover:border-amber-400 hover:bg-amber-50/50'}`} 
                           title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={blocked || locked} onClick={()=>setPicker({day,period})}
                           aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`}>
-                          {cell?.class_subject_id ? <><span className="text-xs font-normal text-stone-500">{subjectMap[cell.class_subject_id]?.subject_code || 'กิจกรรม'}</span><span className="line-clamp-3 text-sm font-semibold leading-6">{subjectMap[cell.class_subject_id]?.subject_name || 'รายวิชา'}</span></> : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
+                          {cell?.class_subject_id ? <><span className="text-xs font-normal text-stone-500">{subjectMap[cell.class_subject_id]?.subject_code || 'กิจกรรม'}</span><span className="line-clamp-2 text-[13px] font-semibold leading-5">{subjectMap[cell.class_subject_id]?.subject_name || 'รายวิชา'}</span></> : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
 
                         </button>
                         <button
@@ -452,7 +452,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
                     </div>
                   )
                 }
-                return <div className={`flex min-h-24 flex-col gap-1 rounded-xl p-3 ${cell?.class_subject_id?.startsWith('activity:')?'bg-emerald-50':'bg-stone-50'}`}>{renderCellView(cell)}</div>
+                return <div className={`flex min-h-14 flex-col gap-0.5 rounded-md px-2 py-1.5 ${cell?.class_subject_id?.startsWith('activity:')?'bg-emerald-50':'bg-stone-50'}`}>{renderCellView(cell)}</div>
               }}
             />
             </div>
