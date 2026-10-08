@@ -6,6 +6,7 @@ import LoadingButton from '@/components/LoadingButton'
 import { type StaffOption } from '@/components/StaffPicker'
 import SchoolLeadersPanel from '@/components/settings/SchoolLeadersPanel'
 import { fetchMySchool, saveSchool, searchSchools, setMySchool, updateSchoolActingDirector, fetchSubjectGroupHeads, saveSubjectGroupHeads, fetchSchoolStaff, saveSchoolLeaders } from '../actions'
+import { loadSchoolSettings } from '@/lib/school-settings-boot'
 import GoogleDriveIntegrationPanel from '@/components/settings/GoogleDriveIntegrationPanel'
 import DmcImportTool, { type DmcImportAction } from '@/components/settings/DmcImportTool'
 import ClassroomManager from '@/components/settings/ClassroomManager'
@@ -137,6 +138,8 @@ function SchoolTabIcon({ d }: { d: string }) {
 export default function SchoolSettingsPage() {
   const [school, setSchool] = useState<Partial<School>>({})
   const [loading, setLoading] = useState(true)
+  const [loadError,setLoadError] = useState<string|null>(null)
+  const [reloadToken,setReloadToken] = useState(0)
   const [saving, setSaving] = useState(false)
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const formRef = useRef<HTMLFormElement>(null)
@@ -178,7 +181,9 @@ export default function SchoolSettingsPage() {
   const loginFormRef = useRef<HTMLFormElement>(null)
 
   useEffect(() => {
-    Promise.all([fetchMySchool(), fetchSubjectGroupHeads(), fetchSchoolStaff()]).then(([data, heads, staffList]) => {
+    let active=true
+    loadSchoolSettings(fetchMySchool,fetchSubjectGroupHeads,fetchSchoolStaff).then(({data,heads,staff:staffList}) => {
+      if (!active) return
       if (data) {
         setSchool(data)
         setViceDirectorName(data.vice_director_name || '')
@@ -192,17 +197,13 @@ export default function SchoolSettingsPage() {
         setAcademicHeadName(data.academic_head_name || '')
         setMeasurementHeadUserId(data.measurement_head_user_id || null)
         setMeasurementHeadName(data.measurement_head_name || '')
-      }
+      } else setStep(0)
       setStaff(staffList as StaffOption[])
-      setSubjectGroupHeads(heads)
-      setLoading(false)
-    })
-  }, [])
-
-  // ยังไม่มีโรงเรียน → บังคับกลับขั้นแรก (เลือกโรงเรียน) เสมอ
-  useEffect(() => {
-    if (!loading && !school.id && step !== 0) setStep(0)
-  }, [loading, school.id, step])
+      setSubjectGroupHeads(heads || {})
+    }).catch(e=>{if(active)setLoadError(e instanceof Error?e.message:'โหลดข้อมูลไม่สำเร็จ')})
+      .finally(()=>{if(active)setLoading(false)})
+    return ()=>{active=false}
+  }, [reloadToken])
 
   const isViceDirectorActing = Boolean(
     (viceDirectorUserId && actingDirectorUserId && viceDirectorUserId === actingDirectorUserId)
@@ -216,7 +217,8 @@ export default function SchoolSettingsPage() {
   async function doSearch(v: string) {
     setQ(v)
     if (v.trim().length < 2) { setResults([]); return }
-    setResults(await searchSchools(v) as typeof results)
+    try {setPickerErr(null);setResults(await searchSchools(v) as typeof results)}
+    catch(e){setResults([]);setPickerErr(e instanceof Error?e.message:'ค้นหาโรงเรียนไม่สำเร็จ')}
   }
   const inOnboarding = searchParams.get('onboarding') === '1'
   function afterSchoolChosen() {
@@ -227,9 +229,12 @@ export default function SchoolSettingsPage() {
   }
   async function pickSchool(id: string) {
     setBusy(true); setPickerErr(null)
-    const { error } = await setMySchool(id)
-    if (error) { setBusy(false); setPickerErr(error); return }
-    afterSchoolChosen()
+    try {
+      const { error } = await setMySchool(id)
+      if (error) {setPickerErr(error);return}
+      afterSchoolChosen()
+    } catch(e){setPickerErr(e instanceof Error?e.message:'เลือกโรงเรียนไม่สำเร็จ')}
+    finally {setBusy(false)}
   }
   // ข้ามการตั้งค่าครั้งแรก → ใช้ระบบได้ในรอบนี้ (cookie session)
   // ครั้งถัดไปที่ login ถ้าตั้งค่ายังไม่ครบ (ไม่รวมโลโก้/Drive) จะเข้า onboarding อีก
@@ -485,6 +490,8 @@ export default function SchoolSettingsPage() {
       </div>
     )
   }
+
+  if (loadError) return <div className="grid min-h-[70vh] place-items-center p-6"><section className="w-full max-w-lg rounded-xl border border-stone-200 bg-white p-6 text-center shadow-sm"><h1 className="text-lg font-semibold text-stone-900">โหลดการตั้งค่าไม่สำเร็จ</h1><p role="alert" className="my-4 text-sm text-rose-700">{loadError}</p><button type="button" onClick={()=>{setLoadError(null);setLoading(true);setReloadToken(n=>n+1)}} className="btn btn-primary">ลองโหลดอีกครั้ง</button></section></div>
 
   // ── การ์ดเลือกโรงเรียนจากฐานข้อมูล (onboarding และเปลี่ยนโรงเรียน) ──
   const firstTime = !school.id
