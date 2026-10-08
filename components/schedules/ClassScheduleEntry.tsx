@@ -5,7 +5,6 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import {
   fetchClassScheduleBundle,
   fetchScheduleClassrooms,
@@ -54,7 +53,7 @@ function setAlert(alert: {type:'success'|'error';title:string;message?:string}) 
 }
 
 export default function ClassScheduleEntry({ mode }: Props) {
-  const pathname = usePathname()
+  const [workspace,setWorkspace]=useState<'class'|'teacher'>('class')
   const isManage = mode === 'manage'
   const [picker, setPicker] = useState<{day:number;period:number} | null>(null)
   const [loading, setLoading] = useState(true)
@@ -319,16 +318,15 @@ export default function ClassScheduleEntry({ mode }: Props) {
     )
   }
 
-  const viewHref = '/schedules/class'
   const manageHref = '/schedules/class/manage'
 
   if (loading) {
-    return <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">กำลังโหลด...</div>
+    return <div className="rounded-lg border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">กำลังโหลด...</div>
   }
 
   return (
     <>
-      <div className="grid min-w-0 gap-6 text-stone-800 [&_button]:cursor-pointer [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-2 [&_:focus-visible]:outline-amber-600">
+      <div className="grid min-w-0 gap-5 text-stone-800 [&_button]:rounded-md! [&_select]:rounded-md! [&_button]:cursor-pointer [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-2 [&_:focus-visible]:outline-amber-600">
         <div className="flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm [&_h1]:text-2xl [&_h1]:font-bold [&_p]:mt-2 [&_p]:text-sm [&_p]:text-stone-500">
           <div>
             <h1>{isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
@@ -341,17 +339,11 @@ export default function ClassScheduleEntry({ mode }: Props) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-          {canEdit && (
-            <div className="flex gap-1 rounded-xl bg-stone-100 p-1">
-              <Link href={viewHref} className={`rounded-lg px-4 py-2 text-sm font-semibold ${pathname.endsWith('/manage') ? 'text-stone-500' : 'bg-white text-amber-900 shadow-sm'}`}>
-                ดูตารางเรียน
-              </Link>
-              <Link href={manageHref} className={`rounded-lg px-4 py-2 text-sm font-semibold ${pathname.endsWith('/manage') ? 'bg-white text-amber-900 shadow-sm' : 'text-stone-500'}`}>
-                จัดการตารางเรียน
-              </Link>
-            </div>
-          )}
-          {selectedClass && <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" aria-disabled={blocked} onClick={e => { if (blocked) e.preventDefault() }} href={`/export/schedules?print=1&type=class&year=${selectedYear}&semester=${semester}&classroom=${selectedClass}`}>พิมพ์ / PDF</Link>}
+          {isManage && canEdit ? <div role="tablist" aria-label="จัดตาราง" className="flex flex-wrap gap-1 border-b border-stone-300">
+            <button role="tab" aria-selected={workspace==='class'} onClick={()=>setWorkspace('class')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='class'?'border-amber-700 text-amber-900':'border-transparent text-stone-500'}`}>ตารางเรียน</button>
+            <button role="tab" aria-selected={workspace==='teacher'} onClick={()=>setWorkspace('teacher')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='teacher'?'border-amber-700 text-amber-900':'border-transparent text-stone-500'}`}>ตารางครูและล็อกคาบว่าง</button>
+          </div> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-amber-900">จัดการตารางเรียน</Link>}
+          {selectedClass && <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" aria-disabled={blocked} onClick={e => { if (blocked) e.preventDefault() }} href={`/export/schedules?print=1&type=class&year=${selectedYear}&semester=${semester}&classroom=${selectedClass}`}>พิมพ์ / PDF</Link>}
           </div>
         </div>
 
@@ -402,14 +394,14 @@ export default function ClassScheduleEntry({ mode }: Props) {
         )}
 
 
-        {isManage && quotas && <div className="grid gap-4 sm:grid-cols-3 [&_article]:grid [&_article]:gap-2 [&_article]:rounded-2xl [&_article]:border [&_article]:border-stone-200 [&_article]:bg-white [&_article]:p-5 [&_article]:shadow-sm [&_strong]:text-3xl [&_strong]:font-semibold [&_strong]:text-stone-800 [&_span]:text-xs [&_span]:text-stone-500">
+        {workspace==='class' && isManage && quotas && <div className="grid gap-4 sm:grid-cols-3 [&_article]:grid [&_article]:gap-2 [&_article]:rounded-2xl [&_article]:border [&_article]:border-stone-200 [&_article]:bg-white [&_article]:p-5 [&_article]:shadow-sm [&_strong]:text-3xl [&_strong]:font-semibold [&_strong]:text-stone-800 [&_span]:text-xs [&_span]:text-stone-500">
           <article><strong>{quotas.filled} / {quotas.totalTarget}</strong><span>คาบรายวิชาที่จัด / ต้องเรียนต่อสัปดาห์</span></article>
           <article className={quotas.items.some(q=>q.used>q.target)?'border-rose-300! bg-rose-50!':''}><strong>{quotas.items.reduce((sum,q)=>sum+Math.max(0,q.remaining),0)}</strong><span>คาบรายวิชาที่ยังขาด{quotas.items.some(q=>q.used>q.target)?' · พบวิชาเกินคาบ กรุณานำออก':''}</span></article>
           <article><strong>{Object.values(cells).filter(c=>c.locked).length}</strong><span>คาบที่ล็อก · ระบบอัตโนมัติจะเก็บไว้</span></article>
         </div>}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
-        {!selectedClass ? (
+        {workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางครูและล็อกคาบว่าง</h2><TeacherAvailabilityPanel expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">ไม่พบห้องเรียนในปีการศึกษานี้</div>
         ) : subjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">
@@ -468,7 +460,6 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </section>
         )}
 
-        {isManage && canEdit && selectedYear && <div className="rounded-2xl border border-stone-200 bg-white p-5 [&_summary]:cursor-pointer [&_summary]:text-sm [&_summary]:font-semibold [&_summary_span]:ml-2 [&_summary_span]:text-xs [&_summary_span]:font-normal [&_summary_span]:text-stone-500 [&_.teacher-availability-body]:mt-4"><TeacherAvailabilityPanel refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={blocked} /></div>}
         {isManage && quotas && <details open className="overflow-auto rounded-2xl border border-stone-200 bg-white p-5 [&_summary]:cursor-pointer [&_summary]:text-sm [&_summary]:font-semibold [&_summary_span]:mt-1 [&_summary_span]:block [&_summary_span]:text-xs [&_summary_span]:font-normal [&_summary_span]:text-stone-500 [&_.quota-panel]:mt-4 [&_.quota-panel]:min-w-[560px]"><summary>ชั่วโมงเรียนของห้อง · รายวิชา {quotas.filled} / {quotas.totalTarget} คาบต่อสัปดาห์ <span>คำนวณจากชั่วโมงต่อปี ÷ 40 สัปดาห์ · กิจกรรมแยกวิชาละ 1 คาบ</span></summary><ScheduleQuotaPanel {...quotas} capacity={periodTimes.filter(t=>!t.is_break).length*5} /></details>}
 
       </div>

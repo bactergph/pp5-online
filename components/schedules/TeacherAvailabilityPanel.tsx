@@ -1,12 +1,14 @@
 'use client'
 
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import {useCallback, useEffect, useRef, useState} from 'react'
 import {fetchTeacherAvailability, setTeacherAvailabilityBlock, editTeacherScheduleCell, toggleScheduleCellLock} from '@/app/schedules/actions'
 import {type PeriodTimeRow} from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
 
 type Availability = Awaited<ReturnType<typeof fetchTeacherAvailability>>
-export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string}) {
+export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean}) {
   const [data,setData] = useState<Availability|null>(null)
   const [teacher,setTeacher] = useState('')
   const [saving,setSaving] = useState(false)
@@ -14,6 +16,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   const [notice,setNotice] = useState('')
   const [editing,setEditing] = useState<{day:number;period:number}|null>(null)
   const [chosen,setChosen] = useState('')
+  useEffect(()=>{if(error||notice)void Swal.fire({icon:error?'error':'success',title:error?'ดำเนินการไม่สำเร็จ':'บันทึกสำเร็จ',text:error||notice,confirmButtonText:'ตกลง',confirmButtonColor:'#946b25'})},[error,notice])
   const request = useRef(0)
   const load = useCallback(async()=>{
     const id=++request.current
@@ -57,8 +60,6 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     `}</style>
     <div className="teacher-availability-body">
       <p>กดคาบเพื่อเลือกวิชา นำวิชาออก หรือล็อกคาบว่าง การแก้ไขจะปรับตารางเรียนของห้องให้ตรงกันด้วย</p>
-      {error&&<p role="alert" className="availability-error">{error}</p>}
-      {notice&&<p role="status">{notice}</p>}
       {!data?<p>กำลังโหลด...</p>:<>
         {!data.supported&&<p role="alert">ยังไม่เปิดใช้การล็อกคาบครู กรุณารันฐานข้อมูล 058_schedule_eight_periods_teacher_blocks.sql</p>}
         {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled||saving} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}>{data.teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
@@ -81,5 +82,5 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       </>}
     </div>
   </>
-  return fixedTeacher?<section className="teacher-availability-panel">{content}</section>:<details className="teacher-availability-panel"><summary>ตารางครูและล็อกคาบว่าง <span>นำวิชาออก เปลี่ยนวิชา หรือเว้นคาบสอน</span></summary>{content}</details>
+  return fixedTeacher||expanded?<section className="teacher-availability-panel">{content}</section>:<details className="teacher-availability-panel"><summary>ตารางครูและล็อกคาบว่าง <span>นำวิชาออก เปลี่ยนวิชา หรือเว้นคาบสอน</span></summary>{content}</details>
 }
