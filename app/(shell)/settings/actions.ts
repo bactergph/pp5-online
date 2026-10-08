@@ -184,10 +184,10 @@ export async function setMySchool(catalogId: string) {
     }
   }
 
-  const { resolveMemberSchoolId } = await import('@/lib/school-member')
+  const { createMemberSchoolFromCatalog } = await import('@/lib/school-member')
   let member: { id: string; name: string; member_code: string | null }
   try {
-    member = await resolveMemberSchoolId(catalogId)
+    member = await createMemberSchoolFromCatalog(catalogId)
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'สร้างโรงเรียนสมาชิกไม่สำเร็จ' }
   }
