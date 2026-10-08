@@ -332,9 +332,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
       <div className="grid min-w-0 gap-5 text-stone-800 [&_button]:rounded-md! [&_select]:rounded-md! [&_button]:cursor-pointer [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-2 [&_:focus-visible]:outline-amber-600">
         <div className="flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm [&_h1]:text-2xl [&_h1]:font-bold [&_p]:mt-2 [&_p]:text-sm [&_p]:text-stone-500">
           <div>
-            <h1>{isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
+            <h1>{workspace==='teacher'?'ตารางสอน/ล็อคคาบ':isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
             <p>
-              {selectedClassroom && selectedYearObj
+              {workspace==='teacher' ? `ภาคเรียนที่ ${semester} · ปีการศึกษา ${selectedYearObj?.year_be || ''}` : selectedClassroom && selectedYearObj
                 ? `ห้อง ${selectedClassroom.label} · ภาคเรียนที่ ${semester} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
                 : isManage
                   ? 'กำหนดวิชาในแต่ละคาบ — ครูผู้สอนดึงจากข้อมูลจัดครูเข้าสอน'
@@ -344,13 +344,13 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <div className="flex flex-wrap items-center gap-3">
           {isManage && canEdit ? <div role="tablist" aria-label="จัดตาราง" className="flex flex-wrap gap-1 border-b border-stone-300">
             <button role="tab" aria-selected={workspace==='class'} onClick={()=>setWorkspace('class')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='class'?'border-amber-700 text-amber-900':'border-transparent text-stone-500'}`}>ตารางเรียน</button>
-            <button role="tab" aria-selected={workspace==='teacher'} onClick={()=>setWorkspace('teacher')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='teacher'?'border-amber-700 text-amber-900':'border-transparent text-stone-500'}`}>ตารางครูและล็อกคาบว่าง</button>
+            <button role="tab" aria-selected={workspace==='teacher'} onClick={()=>setWorkspace('teacher')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='teacher'?'border-amber-700 text-amber-900':'border-transparent text-stone-500'}`}>ตารางสอน/ล็อคคาบ</button>
           </div> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-amber-900">จัดการตารางเรียน</Link>}
-          {selectedClass && <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" aria-disabled={blocked} onClick={e => { if (blocked) e.preventDefault() }} href={`/export/schedules?print=1&type=class&year=${selectedYear}&semester=${semester}&classroom=${selectedClass}`}>พิมพ์ / PDF</Link>}
+          {workspace==='class' && selectedClass && <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" aria-disabled={blocked} onClick={e => { if (blocked) e.preventDefault() }} href={`/export/schedules?print=1&type=class&year=${selectedYear}&semester=${semester}&classroom=${selectedClass}`}>พิมพ์ / PDF</Link>}
           </div>
         </div>
 
-        <div className="grid gap-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:grid-cols-3">
+        <div className={`grid gap-4 rounded-lg border border-stone-200 bg-white p-5 shadow-sm ${workspace==='teacher'?'sm:grid-cols-2':'sm:grid-cols-3'}`}>
           <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
             <label htmlFor="schedule-year">ปีการศึกษา</label>
             <select id="schedule-year" disabled={!!busyAction || !!savingKey} value={selectedYear} onChange={e => { setPicker(null); setSelectedYear(e.target.value) }}>
@@ -367,17 +367,17 @@ export default function ClassScheduleEntry({ mode }: Props) {
             </select>
           </div>
 
-          <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
+          {workspace==='class' && (          <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
             <label htmlFor="schedule-class">ห้องเรียน</label>
             <select id="schedule-class" disabled={!!busyAction || !!savingKey} value={selectedClass} onChange={e => { setPicker(null); setSelectedClass(e.target.value) }}>
               {classrooms.map(c => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
             </select>
-          </div>
+          </div>)}
         </div>
 
-        {isManage && canEdit && selectedClass && (
+        {workspace==='class' && isManage && canEdit && selectedClass && (
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 border-amber-700! bg-amber-800! text-white! hover:bg-amber-900!" disabled={blocked} onClick={() => handleAutoSchedule(false)}>{busyAction === 'auto' ? 'กำลังจัดตาราง...' : 'จัดอัตโนมัติห้องนี้'}</button>
@@ -406,7 +406,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
         </div>}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
-        {workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางครูและล็อกคาบว่าง</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
+        {workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">ไม่พบห้องเรียนในปีการศึกษานี้</div>
         ) : subjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">
@@ -465,7 +465,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </section>
         )}
 
-        {isManage && quotas && <details open className="overflow-auto rounded-2xl border border-stone-200 bg-white p-5 [&_summary]:cursor-pointer [&_summary]:text-sm [&_summary]:font-semibold [&_summary_span]:mt-1 [&_summary_span]:block [&_summary_span]:text-xs [&_summary_span]:font-normal [&_summary_span]:text-stone-500 [&_.quota-panel]:mt-4 [&_.quota-panel]:min-w-[560px]"><summary>ชั่วโมงเรียนของห้อง · รายวิชา {quotas.filled} / {quotas.totalTarget} คาบต่อสัปดาห์ <span>คำนวณจากชั่วโมงต่อปี ÷ 40 สัปดาห์ · กิจกรรมแยกวิชาละ 1 คาบ</span></summary><ScheduleQuotaPanel {...quotas} capacity={periodTimes.filter(t=>!t.is_break).length*5} /></details>}
+        {workspace==='class' && isManage && quotas && <details open className="overflow-auto rounded-2xl border border-stone-200 bg-white p-5 [&_summary]:cursor-pointer [&_summary]:text-sm [&_summary]:font-semibold [&_summary_span]:mt-1 [&_summary_span]:block [&_summary_span]:text-xs [&_summary_span]:font-normal [&_summary_span]:text-stone-500 [&_.quota-panel]:mt-4 [&_.quota-panel]:min-w-[560px]"><summary>ชั่วโมงเรียนของห้อง · รายวิชา {quotas.filled} / {quotas.totalTarget} คาบต่อสัปดาห์ <span>คำนวณจากชั่วโมงต่อปี ÷ 40 สัปดาห์ · กิจกรรมแยกวิชาละ 1 คาบ</span></summary><ScheduleQuotaPanel {...quotas} capacity={periodTimes.filter(t=>!t.is_break).length*5} /></details>}
 
       </div>
 
