@@ -11,13 +11,13 @@ type Availability = Awaited<ReturnType<typeof fetchTeacherAvailability>>
 export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded,onChanged}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean;onChanged?:()=>Promise<void>}) {
   const [data,setData] = useState<Availability|null>(null)
   const [teacher,setTeacher] = useState('')
-  const [saving,setSaving] = useState(false)
   const [error,setError] = useState('')
   const [notice,setNotice] = useState('')
   const [editing,setEditing] = useState<{day:number;period:number}|null>(null)
   const [pending,setPending]=useState<string[]>([])
   const pendingRef=useRef(new Set<string>())
-  useEffect(()=>{if(error||notice)void Swal.fire({icon:error?'error':'success',title:error?'ดำเนินการไม่สำเร็จ':notice,text:error||undefined,toast:!error,position:error?'center':'top-end',timer:error?undefined:2200,showConfirmButton:!!error,confirmButtonText:'ตกลง',confirmButtonColor:'#946b25'})},[error,notice])
+  const editQueue=useRef(Promise.resolve())
+  useEffect(()=>{if(Swal.isVisible())return;if(error||notice)void Swal.fire({icon:error?'error':'success',title:error?'ดำเนินการไม่สำเร็จ':notice,text:error||undefined,toast:!error,position:error?'center':'top-end',timer:error?undefined:2200,showConfirmButton:!!error,confirmButtonText:'ตกลง',confirmButtonColor:'#946b25'})},[error,notice])
   const request = useRef(0)
   const load = useCallback(async(keepSelection=false)=>{
     const id=++request.current
@@ -27,12 +27,12 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   },[yearId,semester,fixedTeacher])
   useEffect(()=>{let active=true;const counter=request;void Promise.resolve().then(()=>{if(active)void load(true)});return()=>{active=false;counter.current++}},[load,refreshToken])
   useEffect(()=>{
-    if(saving||pending.length)return
+    if(pending.length)return
     const refresh=()=>{if(document.visibilityState==='visible')void load(true)}
     const timer=window.setInterval(refresh,15000)
     window.addEventListener('focus',refresh)
     return()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh)}
-  },[load,saving,pending.length])
+  },[load,pending.length])
   async function toggle(day:number,period:number,blocked:boolean){
     const targetTeacher=teacher
     const key=`${targetTeacher}:${day}:${period}`
@@ -76,15 +76,20 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     const room=busy?.classroomId||next?.classroomId
     if(!room)return
     const key=`${teacher}:${day}:${period}`
+    if(pendingRef.current.has(key))return
     pendingRef.current.add(key);setPending([...pendingRef.current]);++request.current
-    setSaving(true);setError('');setNotice('')
+    const previous=editQueue.current
+    let release:()=>void=()=>{}
+    editQueue.current=new Promise<void>(resolve=>{release=resolve})
+    setError('');setNotice('')
+    await previous
     try{
       const result=unlock?await toggleScheduleCellLock(room,yearId,day,period,semester):await editTeacherScheduleCell(yearId,semester,teacher,room,day,period,busy?.lessonId||null,remove?null:lessonId)
       if(result.error)throw new Error(result.error)
       await load(true);await onChanged?.()
       setNotice(unlock?'ปลดล็อกคาบเรียนแล้ว':remove?'นำวิชาออกแล้ว':'บันทึกวิชาแล้ว')
     }catch(e){await load(true);setError(e instanceof Error?e.message:'บันทึกไม่สำเร็จ')}
-    finally{pendingRef.current.delete(key);setPending([...pendingRef.current]);setSaving(false)}
+    finally{pendingRef.current.delete(key);setPending([...pendingRef.current]);release()}
   }
   const content=<>
     <style>{`
@@ -95,16 +100,18 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       .availability-editor{border:1px solid #c9beae;border-radius:12px;background:#fffdf8;padding:20px;display:grid;gap:12px;margin:16px 0;}.availability-editor h3{margin:0;}.availability-editor select{font:inherit;padding:12px;border:1px solid #bfb6a7;border-radius:8px;max-width:100%;}.availability-editor-actions{display:flex;gap:10px;flex-wrap:wrap;}.availability-editor button{font:inherit;padding:9px 14px;border:1px solid #bfb6a7;border-radius:8px;background:white;cursor:pointer;}.availability-editor button.danger{color:#a32929;}.availability-editor button:disabled{opacity:.5;cursor:not-allowed;}.availability-teacher{display:grid;gap:8px;max-width:360px;margin:16px 0;}.availability-teacher select{font:inherit;padding:10px;}.availability-error{color:#b02525;}
     `}</style>
     <div className="teacher-availability-body">
+      {error&&<p role="alert" className="text-sm text-rose-700">{error}</p>}
+      {notice&&<p role="status" className="text-sm text-emerald-700">{notice}</p>}
       <p>กดคาบเพื่อเลือกวิชา นำวิชาออก หรือล็อกคาบว่าง การแก้ไขจะปรับตารางเรียนของห้องให้ตรงกันด้วย</p>
       {!data?<p>กำลังโหลด...</p>:<>
         {!data.supported&&<p role="alert">ยังไม่เปิดใช้การล็อกคาบครู กรุณารันฐานข้อมูล 058_schedule_eight_periods_teacher_blocks.sql</p>}
-        {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled||saving} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}>{data.teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
+        {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}>{data.teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
         <div className="schedule-grid-scroll"><ScheduleGridTable periodTimes={periodTimes} compactBreak renderCell={(day,period)=>{
           const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const selected=editing?.day===day&&editing?.period===period
           const loading=pending.includes(`${teacher}:${day}:${period}`)
-          return <button type="button" className={`availability-cell ${blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||saving||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อกหรือเลือกวิชา':'กดเพื่อเลือกวิชาหรือล็อก'}</span></>}</button>
+          return <button type="button" className={`availability-cell ${blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อกหรือเลือกวิชา':'กดเพื่อเลือกวิชาหรือล็อก'}</span></>}</button>
         }}/></div>
       </>}
     </div>
