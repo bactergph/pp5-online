@@ -382,6 +382,11 @@ export async function fetchSchoolUsers() {
     .order('full_name')
   if (session.schoolId) query.eq('school_id', session.schoolId)
   const { data } = await query
+  const staffRows = await Promise.all((data || []).map(async user => {
+    if (!user.email?.startsWith('pending-')) return {...user,role_pending:false}
+    const {data:account} = await db.auth.admin.getUserById(user.id)
+    return {...user,role_pending:account.user?.app_metadata?.staff_role_pending ?? (user.role === 'teacher')}
+  }))
   let code: string | null = null
   if (session.schoolId) {
     const { data: sc } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()
@@ -390,7 +395,7 @@ export async function fetchSchoolUsers() {
   return {
     schoolId: session.schoolId,
     code,
-    users: data || [],
+    users: staffRows,
     canManage: hasRole(session, ADMIN_ROLES),
     viewerRole: session.role,
   }
@@ -459,10 +464,13 @@ export async function updateUser(id: string, payload: Record<string, string | bo
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
   const { data: target } = await db.from('users')
-    .select('prefix, full_name, role, school_id')
+    .select('prefix, full_name, role, school_id, email')
     .eq('id', id)
     .maybeSingle()
   const { error } = await db.from('users').update(payload).eq('id', id)
+  if (!error && target?.email?.startsWith('pending-') && payload.role) {
+    await db.auth.admin.updateUserById(id,{app_metadata:{staff_role_pending:false}})
+  }
   if (!error && target?.school_id) {
     const { data: updated } = await db.from('users')
       .select('id, prefix, full_name, role, school_id')

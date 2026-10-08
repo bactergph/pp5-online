@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import SignatureUploadBox from '@/components/SignatureUploadBox'
+import StaffTableEditor from '@/components/StaffTableEditor'
 import { fetchSchoolUsers, updateUser, toggleUserActive, resetTeacherPassword, deleteSchoolUser } from '../actions'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { ROLE_LABELS } from '@/lib/roles'
@@ -17,6 +18,7 @@ type User = {
   is_homeroom: boolean
   is_active: boolean
   signature_url?: string | null
+  role_pending?: boolean
 }
 
 const ROLES = [
@@ -46,6 +48,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [tableMode, setTableMode] = useState(false)
   const [editUser, setEditUser] = useState<Partial<User> | null>(null)
   const [saving, setSaving] = useState(false)
   const { notify, clearAlert, AlertModal } = useAppAlert()
@@ -71,8 +74,8 @@ export default function UsersPage() {
 
   useEffect(() => { loadUsers() }, [])
 
-  async function loadUsers() {
-    setLoading(true)
+  async function loadUsers(showLoading = true) {
+    if (showLoading) setLoading(true)
     const { schoolId: sid, code, users: data, canManage: manage, viewerRole: role } = await fetchSchoolUsers()
     setSchoolId(sid)
     setSchoolCode(code)
@@ -92,7 +95,7 @@ export default function UsersPage() {
     setEditUser(null)
     setIsHomeroom(false)
     setSignatureUrl(null)
-    setSelectedRole('teacher')
+    setSelectedRole('')
     setPosition('')
     setShowForm(true)
   }
@@ -136,9 +139,9 @@ export default function UsersPage() {
         loadUsers()
       }
     } else {
-      if (!password) {
+      if (Boolean(password) !== Boolean(username)) {
         setSaving(false)
-        notify('error', 'กรุณากรอกรหัสผ่านสำหรับผู้ใช้ใหม่')
+        notify('error', 'กรอกชื่อผู้ใช้และรหัสผ่านคู่กัน หรือเว้นไว้เพื่อกำหนดภายหลัง')
         return
       }
       const res = await fetch('/api/users/create', {
@@ -312,14 +315,14 @@ export default function UsersPage() {
               </div>
               {!editUser?.id && (
                 <div>
-                  <label className="form-label">ชื่อผู้ใช้ (username) *</label>
-                  <input name="username" className="form-input" required placeholder="a-z 0-9 . _" pattern="[A-Za-z0-9._]+" />
+                  <label className="form-label">ชื่อผู้ใช้ (กำหนดภายหลังได้)</label>
+                  <input name="username" className="form-input" placeholder="a-z 0-9 . _" pattern="[A-Za-z0-9._]+" />
                 </div>
               )}
               {!editUser?.id && (
                 <div>
-                  <label className="form-label">รหัสผ่าน *</label>
-                  <input name="password" type="password" className="form-input" required minLength={6} placeholder="อย่างน้อย 6 ตัวอักษร" />
+                  <label className="form-label">รหัสผ่าน (กำหนดภายหลังได้)</label>
+                  <input name="password" type="password" className="form-input" minLength={6} placeholder="เว้นไว้ก่อน หรือกรอกอย่างน้อย 6 ตัวอักษร" />
                 </div>
               )}
               <div>
@@ -344,6 +347,7 @@ export default function UsersPage() {
                   }}
                   className="form-input"
                 >
+                  {!editUser?.id && <option value="">กำหนดภายหลัง</option>}
                   {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
               </div>
@@ -389,6 +393,7 @@ export default function UsersPage() {
         </div>
       )}
 
+      {tableMode && canManage ? <StaffTableEditor users={users} onSaved={()=>loadUsers(false)} onClose={()=>setTableMode(false)} /> : <>
       <div className="filter-bar control-card" style={{ justifyContent: 'space-between' }}>
         <input
           type="text"
@@ -398,10 +403,10 @@ export default function UsersPage() {
           className="form-input"
           style={{ maxWidth: '320px' }}
         />
-        {canManage && <button onClick={openAdd} className="btn btn-primary" style={{ flexShrink: 0 }}>
+        {canManage && <div className="flex flex-wrap gap-2"><button onClick={()=>setTableMode(true)} className="btn btn-secondary">เพิ่ม / แก้ไขแบบตาราง</button><button onClick={openAdd} className="btn btn-primary" style={{ flexShrink: 0 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }}><path d="M12 5v14M5 12h14"/></svg>
           เพิ่มบุคลากร
-        </button>}
+        </button></div>}
       </div>
 
       <div className="table-card data-card">
@@ -435,7 +440,7 @@ export default function UsersPage() {
                   <td style={{ fontSize: '13px', color: 'var(--text-2)' }}>{user.position || '-'}</td>
                   <td>
                     <span style={{ padding: '3px 10px', borderRadius: '100px', fontSize: '12px', fontWeight: 600, background: badge.bg, color: badge.color }}>
-                      {getRoleLabel(user.role)}
+                      {user.role_pending ? 'ยังไม่กำหนดบทบาท' : getRoleLabel(user.role)}
                     </span>
                   </td>
                   <td>
@@ -444,19 +449,19 @@ export default function UsersPage() {
                       background: user.is_active ? '#D1FAE5' : '#FEE2E2',
                       color: user.is_active ? '#065F46' : '#991B1B',
                     }}>
-                      {user.is_active ? 'ใช้งาน' : 'รออนุมัติ'}
+                      {user.email?.startsWith('pending-') ? 'ยังไม่เปิดบัญชี' : user.is_active ? 'ใช้งาน' : 'รออนุมัติ'}
                     </span>
                   </td>
                   {canManage && <td>
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                       <button onClick={() => openEdit(user)} style={{ fontSize: '13px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>แก้ไข</button>
-                      <button onClick={() => { setResetTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` }); setResetMsg(null) }}
+                      {!user.email?.startsWith('pending-') && <button onClick={() => { setResetTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` }); setResetMsg(null) }}
                         style={{ fontSize: '13px', color: '#C49212', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         รีเซ็ตรหัสผ่าน
-                      </button>
-                      <button onClick={() => handleToggleActive(user)} style={{ fontSize: '13px', color: user.is_active ? '#D97706' : '#059669', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      </button>}
+                      {user.email?.startsWith('pending-') ? <button onClick={()=>setTableMode(true)} className="text-sm text-amber-800">กำหนดบัญชี / บทบาท</button> : <button onClick={() => handleToggleActive(user)} style={{ fontSize: '13px', color: user.is_active ? '#D97706' : '#059669', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         {user.is_active ? 'ระงับ' : 'อนุมัติ'}
-                      </button>
+                      </button>}
                       {canDeleteUser(user) && (
                         <button
                           onClick={() => setDeleteTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` })}
@@ -473,6 +478,7 @@ export default function UsersPage() {
           </tbody>
         </table>
       </div>
+      </>}
     </div>
   )
 }

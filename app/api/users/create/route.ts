@@ -4,6 +4,7 @@ import { getSession } from '@/lib/session'
 import { createServerClient } from '@/lib/supabase'
 import { schoolMemberEmail } from '@/lib/schoolAuth'
 import { logActivity } from '@/lib/audit'
+import { saveStaffRows } from '@/lib/staff-table'
 
 export async function POST(req: NextRequest) {
   // ตรวจสอบว่าผู้ขอเป็น admin
@@ -14,6 +15,19 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const { email, username, password, full_name, prefix, position, role, is_homeroom } = body
+
+  if (!username && !email && !password) {
+    try {
+      const [result] = await saveStaffRows([{key:'single',prefix,full_name,position,role:role || '',username:'',password:'',is_homeroom:Boolean(is_homeroom)}])
+      return NextResponse.json(result.error?{error:result.error}:{success:true,userId:result.id},{status:result.error?400:200})
+    } catch(e) {
+      return NextResponse.json({error:e instanceof Error?e.message:'บันทึกไม่สำเร็จ'},{status:400})
+    }
+  }
+
+  if (!['teacher','academic_head','deputy_principal','principal','admin'].includes(role)) {
+    return NextResponse.json({error:'กรุณาเลือกบทบาทก่อนเปิดบัญชีใช้งาน'},{status:400})
+  }
 
   if (!password || !full_name) {
     return NextResponse.json({ error: 'กรุณากรอกข้อมูลให้ครบ' }, { status: 400 })
