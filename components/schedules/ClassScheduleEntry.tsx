@@ -401,7 +401,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
         </div>}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
-        {workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางครูและล็อกคาบว่าง</h2><TeacherAvailabilityPanel expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
+        {workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางครูและล็อกคาบว่าง</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">ไม่พบห้องเรียนในปีการศึกษานี้</div>
         ) : subjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">
