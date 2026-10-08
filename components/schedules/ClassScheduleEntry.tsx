@@ -53,7 +53,7 @@ function setAlert(alert: {type:'success'|'error';title:string;message?:string}) 
 }
 
 export default function ClassScheduleEntry({ mode }: Props) {
-  const [workspace,setWorkspace]=useState<'class'|'teacher'>('class')
+  const [workspace,setWorkspace]=useState<'class'|'teacher'|'activity'>('class')
   const isManage = mode === 'manage'
   const [picker, setPicker] = useState<{day:number;period:number} | null>(null)
   const [loading, setLoading] = useState(true)
@@ -332,7 +332,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
       <div className="grid min-w-0 gap-5 text-stone-800 [&_button]:rounded-md! [&_select]:rounded-md! [&_button]:cursor-pointer [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-2 [&_:focus-visible]:outline-amber-600">
         <div className="flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm [&_h1]:text-2xl [&_h1]:font-bold [&_p]:mt-2 [&_p]:text-sm [&_p]:text-stone-500">
           <div>
-            <h1>{workspace==='teacher'?'ตารางสอน/ล็อคคาบ':isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
+            <h1>{workspace==='teacher'?'ตารางสอน/ล็อคคาบ':workspace==='activity'?'ตารางกิจกรรมพัฒนาผู้เรียน':isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
             <p>
               {workspace==='teacher' ? `ภาคเรียนที่ ${semester} · ปีการศึกษา ${selectedYearObj?.year_be || ''}` : selectedClassroom && selectedYearObj
                 ? `ห้อง ${selectedClassroom.label} · ภาคเรียนที่ ${semester} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
@@ -345,6 +345,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           {isManage && canEdit ? <div role="tablist" aria-label="จัดตาราง" className="flex flex-wrap gap-1 border-b border-stone-300">
             <button role="tab" aria-selected={workspace==='class'} onClick={()=>setWorkspace('class')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='class'?'border-amber-700 text-amber-900':'border-transparent text-stone-500'}`}>ตารางเรียน</button>
             <button role="tab" aria-selected={workspace==='teacher'} onClick={()=>setWorkspace('teacher')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='teacher'?'border-amber-700 text-amber-900':'border-transparent text-stone-500'}`}>ตารางสอน/ล็อคคาบ</button>
+            <button role="tab" aria-selected={workspace==='activity'} onClick={()=>setWorkspace('activity')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='activity'?'border-emerald-700 text-emerald-900':'border-transparent text-stone-500'}`}>กิจกรรมพัฒนาผู้เรียน</button>
           </div> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-amber-900">จัดการตารางเรียน</Link>}
           {workspace==='class' && selectedClass && <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" aria-disabled={blocked} onClick={e => { if (blocked) e.preventDefault() }} href={`/export/schedules?print=1&type=class&year=${selectedYear}&semester=${semester}&classroom=${selectedClass}`}>พิมพ์ / PDF</Link>}
           </div>
@@ -367,7 +368,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
             </select>
           </div>
 
-          {workspace==='class' && (          <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
+          {workspace!=='teacher' && (          <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
             <label htmlFor="schedule-class">ห้องเรียน</label>
             <select id="schedule-class" disabled={!!busyAction || !!savingKey} value={selectedClass} onChange={e => { setPicker(null); setSelectedClass(e.target.value) }}>
               {classrooms.map(c => (
@@ -404,6 +405,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <article className={quotas.items.some(q=>q.used>q.target)?'border-rose-300! bg-rose-50!':''}><strong>{quotas.items.reduce((sum,q)=>sum+Math.max(0,q.remaining),0)}</strong><span>คาบรายวิชาที่ยังขาด{quotas.items.some(q=>q.used>q.target)?' · พบวิชาเกินคาบ กรุณานำออก':''}</span></article>
           <article><strong>{Object.values(cells).filter(c=>c.locked).length}</strong><span>คาบที่ล็อก · ระบบอัตโนมัติจะเก็บไว้</span></article>
         </div>}
+        {workspace==='activity'&&<p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">กิจกรรมพัฒนาผู้เรียน · ไม่ต้องระบุครู · รายการละ 1 คาบต่อสัปดาห์ กดคาบว่างเพื่อเลือกกิจกรรม รายวิชาที่มีอยู่จะยังแสดงเพื่อป้องกันคาบทับกัน</p>}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
         {workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
@@ -469,7 +471,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
 
       </div>
 
-      {picker && <ScheduleLessonPicker title={`วัน${SCHEDULE_DAYS.find(d=>d.value===picker.day)?.label} · คาบ ${picker.period}`} options={quotaOptions} selected={cells[`${picker.day}-${picker.period}`]?.class_subject_id || null} onClose={()=>setPicker(null)} onChoose={id=>{const {day,period}=picker;setPicker(null);void handleCellChange(day,period,id)}} />}
+      {picker && <ScheduleLessonPicker title={`วัน${SCHEDULE_DAYS.find(d=>d.value===picker.day)?.label} · คาบ ${picker.period}`} options={workspace==='activity'?quotaOptions.filter(s=>s.id.startsWith('activity:')):quotaOptions} selected={cells[`${picker.day}-${picker.period}`]?.class_subject_id || null} onClose={()=>setPicker(null)} onChoose={id=>{const {day,period}=picker;setPicker(null);void handleCellChange(day,period,id)}} />}
       {copyOpen && (
         <div className="fixed inset-0 z-[9000] grid place-items-center bg-stone-950/40 p-5 backdrop-blur-sm" onClick={() => setCopyOpen(false)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl [&_h3]:mb-5 [&_h3]:text-lg [&_h3]:font-semibold" onClick={e => e.stopPropagation()}>
