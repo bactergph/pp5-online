@@ -130,7 +130,7 @@ export async function scheduleActivityLevel(year:string,semester:number,settingI
     if(lesson.teacherId)throw new Error(`กิจกรรมของห้อง ${room.level}/${room.room} ยังผูกครูอยู่ กรุณานำครูออกก่อน`)
     const existing=rows.find(s=>s.classroom_id===room.id&&s.day_of_week===day&&s.period===period)
     if(existing&&lessonKey(existing)===lesson.id)continue
-    if(existing&&(existing.locked||lessonKey(existing)||existing.note))throw new Error(`ห้อง ${room.level}/${room.room} มีคาบหรือคาบล็อกอยู่ กรุณาเลือกคาบว่าง`)
+    if(existing?.locked)throw new Error(`ห้อง ${room.level}/${room.room} ล็อกคาบนี้ไว้ กรุณาปลดล็อกก่อนลงกิจกรรม`)
     if(rows.some(s=>s.classroom_id===room.id&&lessonKey(s)===lesson.id))throw new Error(`กิจกรรมนี้ลงครบแล้วในห้อง ${room.level}/${room.room}`)
     if(existing)rows.splice(rows.indexOf(existing),1)
     rows.push({classroom_id:room.id,academic_year_id:year,day_of_week:day,period,...lessonColumns(lesson.id),note:null,locked:false});added++

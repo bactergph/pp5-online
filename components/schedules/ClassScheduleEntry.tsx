@@ -69,7 +69,10 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const [semester, setSemester] = useState(1)
   const [selectedClass, setSelectedClass] = useState('')
   const [canEdit, setCanEdit] = useState(false)
-  const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [pendingCells, setPendingCells] = useState<Set<string>>(new Set())
+  const pendingRef = useRef(new Set<string>())
+  const editQueue = useRef<Promise<void>>(Promise.resolve())
+  const savingKey = pendingCells.size > 0
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [gridLoading, setGridLoading] = useState(false)
   const [loadedContext, setLoadedContext] = useState('')
@@ -77,6 +80,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const gridRequest = useRef(0)
   const roomRequest = useRef(0)
   const blocked = !!busyAction || !!savingKey || gridLoading || loadedContext !== `${selectedYear}:${semester}:${selectedClass}`
+  const cellBlocked = !!busyAction || gridLoading || loadedContext !== `${selectedYear}:${semester}:${selectedClass}`
   const [copyOpen, setCopyOpen] = useState(false)
   const [copyFromClass, setCopyFromClass] = useState('')
 
@@ -155,13 +159,30 @@ export default function ClassScheduleEntry({ mode }: Props) {
     void Promise.resolve().then(loadGrid)
   }, [loadGrid, selectedClass, selectedYear])
 
-  async function handleCellChange(day: number, period: number, value: string) {
+  function queueCellEdit(day: number, period: number, action: () => Promise<void>) {
+    const key = `${day}-${period}`
+    if (cellBlocked || pendingRef.current.has(key)) return
+    pendingRef.current.add(key)
+    setPendingCells(new Set(pendingRef.current))
+    const run = editQueue.current.then(action).finally(() => {
+      pendingRef.current.delete(key)
+      setPendingCells(new Set(pendingRef.current))
+    })
+    editQueue.current = run.catch(() => {})
+    return run
+  }
+
+  function handleCellChange(day: number, period: number, value: string) {
+    return queueCellEdit(day, period, () => saveCellChange(day, period, value))
+  }
+
+  async function saveCellChange(day: number, period: number, value: string) {
     const key = `${day}-${period}`
     const cell = cells[key]
     if (cell?.locked) return
 
     const classSubjectId = value || null
-    if (blocked || quotaOptions.find(s=>s.id===value)?.disabled) {
+    if (cellBlocked || quotaOptions.find(s=>s.id===value)?.disabled) {
       setAlert({type:'error',title:'ลงวิชาไม่ได้',message:'รายวิชานี้ลงครบจำนวนคาบต่อสัปดาห์แล้ว กรุณานำคาบเดิมออกก่อน'})
       return
     }
@@ -170,7 +191,6 @@ export default function ClassScheduleEntry({ mode }: Props) {
       ...current,
       [key]: { ...current[key], class_subject_id: classSubjectId, note: null },
     }))
-    setSavingKey(key)
     try {
       const saved = await saveClassScheduleCell(selectedClass, selectedYear, day, period, classSubjectId, null, semester)
       if (saved.error) throw new Error(saved.error)
@@ -211,14 +231,15 @@ export default function ClassScheduleEntry({ mode }: Props) {
         title: 'บันทึกไม่สำเร็จ',
         message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด',
       })
-    } finally {
-      setSavingKey(null)
     }
   }
 
-  async function handleToggleLock(day: number, period: number) {
+  function handleToggleLock(day: number, period: number) {
+    return queueCellEdit(day, period, () => saveToggleLock(day, period))
+  }
+
+  async function saveToggleLock(day: number, period: number) {
     const key = `${day}-${period}`
-    setSavingKey(key)
     try {
       const response = await toggleScheduleCellLock(selectedClass, selectedYear, day, period, semester)
       if (response.error || !response.data) throw new Error(response.error || 'บันทึกไม่สำเร็จ')
@@ -237,8 +258,6 @@ export default function ClassScheduleEntry({ mode }: Props) {
         title: 'ล็อกไม่สำเร็จ',
         message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด',
       })
-    } finally {
-      setSavingKey(null)
     }
   }
 
@@ -426,13 +445,14 @@ export default function ClassScheduleEntry({ mode }: Props) {
                 const key = `${day}-${period}`
                 const cell = cells[key]
                 const conflictRooms = conflicts[key]
+                const pending = pendingCells.has(key)
                 if (isManage && canEdit) {
                   const locked = cell?.locked ?? false
                   return (
                     <div className={`grid gap-1 ${conflictRooms?.length ? 'rounded-xl bg-rose-50' : ''}`}>
                       <div className="grid gap-2">
                         <button type="button" className={`flex min-h-14 w-full flex-col gap-0.5 rounded-md border px-2 py-1.5 text-left transition ${cell?.class_subject_id?.startsWith('activity:')?'border-emerald-200 bg-emerald-50 text-emerald-900':locked?'border-amber-300 bg-amber-50 text-stone-800':'border-stone-200 bg-white text-stone-800 hover:border-amber-400 hover:bg-amber-50/50'}`} 
-                          title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={blocked || locked} onClick={()=>setPicker({day,period})}
+                          title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={cellBlocked || pending || locked} aria-busy={pending} onClick={()=>setPicker({day,period})}
                           aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`}>
                           {cell?.class_subject_id ? <><span className="text-xs font-normal text-stone-500">{subjectMap[cell.class_subject_id]?.subject_code || 'กิจกรรม'}</span><span className="line-clamp-2 text-[13px] font-semibold leading-5">{subjectMap[cell.class_subject_id]?.subject_name || 'รายวิชา'}</span></> : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
 
@@ -444,11 +464,13 @@ export default function ClassScheduleEntry({ mode }: Props) {
                           aria-label={locked ? 'ปลดล็อกคาบ' : 'ล็อกคาบ'}
                           aria-pressed={locked}
                           onClick={() => handleToggleLock(day, period)}
-                          disabled={blocked}
+                          disabled={cellBlocked || pending}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d={locked?'M8 10V6a4 4 0 018 0v4':'M8 10V6a4 4 0 018 0'}/></svg>
                           <span>{locked?'ปลดล็อก':cell?.class_subject_id?'ล็อกวิชา':'ล็อกคาบว่าง'}</span>
                         </button>
+                        {cell?.class_subject_id && !locked && <button type="button" disabled={cellBlocked || pending} className="w-fit rounded-md px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50" aria-label={`เอาวิชาออก วัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`} onClick={()=>{void handleCellChange(day,period,'')}}>เอาวิชาออก</button>}
+                        {pending && <span role="status" className="flex items-center gap-1.5 text-xs text-amber-800"><span className="size-3 animate-spin rounded-full border-2 border-amber-200 border-t-amber-700" aria-hidden="true" />กำลังบันทึก…</span>}
                       </div>
                       {teacherLine(cell?.class_subject_id)}
                       {cell?.note && !cell.class_subject_id && <div className="mt-2 truncate px-1 text-xs text-stone-500">{cell.note}</div>}
