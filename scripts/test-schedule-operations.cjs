@@ -10,6 +10,7 @@ function moduleFrom(path, requireFn) {
 let data, writes, loadedTerm, writtenTerm, role='admin'
 const solver = moduleFrom('lib/schedule-solver.ts')
 const store = {
+  loadScheduleConstraints:async()=>({periodCount:6,blocks:[],blocksSupported:true}),
   loadSchedule: async(s,y,term)=>{loadedTerm=term;return data},
   requireScheduleClass: (d,id)=>{const c=d.classrooms.find(c=>c.id===id);if(!c)throw Error('room');return c},
   lessonKey:s=>s.activity_id?'activity:'+s.activity_id:s.class_subject_id,

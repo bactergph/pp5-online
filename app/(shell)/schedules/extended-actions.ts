@@ -1,5 +1,5 @@
 import 'server-only'
-import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
+import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import * as scheduleOps from '@/lib/schedule-operations'
 
 import { createServerClient } from '@/lib/supabase'
@@ -10,6 +10,7 @@ import {
   type PeriodTimeRow,
   workloadStatus,
   workloadLabel,
+  validatePeriodTimes,
 } from '@/lib/schedule-helpers'
 import {
   SCHEDULE_DAYS,
@@ -54,8 +55,7 @@ export async function fetchPeriodTimes() {
   if (error) throw new Error(error.message)
   if (!data?.length) return { times: DEFAULT_PERIOD_TIMES, isDefault: true }
   const teachingCount = (data as PeriodTimeRow[]).filter(t => !t.is_break).length
-  // ค่าเก่า (เช่น 8 คาบ) ไม่ตรงโครงประถม 6 คาบ → ใช้ค่าเริ่มต้นใหม่
-  if (teachingCount !== SCHEDULE_PERIOD_COUNT) {
+  if (teachingCount < 1 || teachingCount > 8) {
     return { times: DEFAULT_PERIOD_TIMES, isDefault: true }
   }
   return { times: data as PeriodTimeRow[], isDefault: false }
@@ -64,6 +64,8 @@ export async function fetchPeriodTimes() {
 export async function savePeriodTimes(times: PeriodTimeRow[]) {
   const session = await requireScheduleSession()
   if (!canEdit(session) || !session.schoolId) throw new Error('ไม่มีสิทธิ์')
+  const invalid = validatePeriodTimes(times)
+  if (invalid) throw new Error(invalid)
   const db = createServerClient()
   const { error } = await db.rpc('save_school_period_times', { p_school_id: session.schoolId, p_rows: times })
   if (error) throw new Error(error.message)
@@ -273,10 +275,10 @@ export async function fetchSubstituteDay(date: string, yearId: string, semester 
   return {
     day: dayRow,
     day_label: SCHEDULE_DAYS.find(d => d.value === dayRow!.day_of_week)?.label || '',
-    busy: schedule.slots.filter(s => s.day_of_week === dayOfWeek).flatMap(s => {
+    busy: [...(await loadScheduleConstraints(session.schoolId!, yearId, semester)).blocks.filter(b=>b.day===dayOfWeek).map(b=>({teacherId:b.teacherId,period:b.period})), ...schedule.slots.filter(s => s.day_of_week === dayOfWeek).flatMap(s => {
       const teacherId = schedule.lessons.find(l => l.id === lessonKey(s))?.teacherId
       return teacherId ? [{ teacherId, period: s.period }] : []
-    }),
+    })],
     entries: entries || [],
   }
 }
@@ -385,6 +387,8 @@ export async function getTeacherConflictAt(
 
   const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
   const rooms: string[] = []
+  const constraints = await loadScheduleConstraints(session.schoolId,yearId,semester)
+  if (constraints.blocks.some(b=>b.teacherId===teacherId && b.day===day && b.period===period)) rooms.push('คาบว่างที่ครูล็อกไว้')
   for (const row of slots) {
     if (row.day_of_week !== day || row.period !== period) continue
     if (ignoreClassroomId && row.classroom_id === ignoreClassroomId) continue

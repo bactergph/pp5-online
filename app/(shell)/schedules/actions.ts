@@ -170,6 +170,13 @@ export async function savePeriodTimes(times: PeriodTimeRow[]) {
   return mod.savePeriodTimes(times)
 }
 
+export async function fetchTeacherAvailability(yearId: string, semester = 1) {
+  return scheduleOps.teacherAvailability(yearId,semester)
+}
+export async function setTeacherAvailabilityBlock(yearId: string, semester: number, teacherId: string, day: number, period: number, blocked: boolean) {
+  return scheduleResult(()=>scheduleOps.setTeacherBlock(yearId,semester,teacherId,day,period,blocked))
+}
+
 export async function fetchScheduleQuotas(classroomId: string, yearId: string, semester = 1) {
   const mod = await import('./extended-actions')
   return mod.fetchScheduleQuotas(classroomId, yearId, semester)

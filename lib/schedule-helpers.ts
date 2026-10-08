@@ -13,6 +13,19 @@ export type PeriodTimeRow = {
   sort_order: number
 }
 
+export const MAX_SCHEDULE_PERIODS = 8
+export function schedulePeriods(times: PeriodTimeRow[]) {
+  return (times.length ? times : DEFAULT_PERIOD_TIMES).filter(t => !t.is_break).map(t => t.period)
+}
+export function validatePeriodTimes(times: PeriodTimeRow[]) {
+  const teaching = times.filter(t => !t.is_break)
+  if (!teaching.length || teaching.length > MAX_SCHEDULE_PERIODS || times.filter(t => t.is_break && t.period === 0).length !== 1 || times.length !== teaching.length + 1 || teaching.some((t, i) => t.period !== i + 1)) return 'ต้องมีคาบเรียนเรียงจาก 1 สูงสุด 8 คาบ และพักเที่ยงหนึ่งช่วง'
+  for (const [i, t] of times.entries()) {
+    if (!t.label.trim() || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t.start_time) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t.end_time) || t.start_time >= t.end_time || (i > 0 && times[i-1].end_time > t.start_time)) return 'กรุณาระบุเวลาให้ครบ เรียงตามลำดับ และไม่ทับซ้อนกัน'
+  }
+  return null
+}
+
 /** ค่าเริ่มต้นระดับประถม: 6 วิชา/วัน · วิชาละ 1 ชม. · เริ่ม 08:30 · พักเที่ยง 11:30–12:30 · เลิก 15:30 */
 export const DEFAULT_PERIOD_TIMES: PeriodTimeRow[] = [
   { period: 1, label: 'คาบที่ 1', start_time: '08:30', end_time: '09:30', is_break: false, sort_order: 1 },

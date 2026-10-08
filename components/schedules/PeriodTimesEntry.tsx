@@ -2,10 +2,23 @@
 
 import { useEffect, useState } from 'react'
 import { fetchPeriodTimes, savePeriodTimes } from '@/app/schedules/actions'
-import { DEFAULT_PERIOD_TIMES, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import AppAlertModal from '@/components/AppAlertModal'
 
 const STYLES = `
+  .period-workspace {max-width:1060px;margin:0 auto;}
+  .period-workspace .schedule-head {padding:24px;border-radius:18px;background:#fff;border:1px solid #ddd5c9;}
+  .period-workspace .schedule-head h1 {font-size:26px;color:#30271d;}
+  .period-workspace .schedule-head p {font-size:14px;line-height:1.7;font-weight:400;}
+  .period-workspace .period-summary {display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+  .period-workspace .period-summary span {background:#f3eee5;border-radius:8px;padding:8px 12px;font-size:13px;color:#57432c;}
+  .period-workspace .period-table th {background:#ebe3d6;font-size:14px;color:#111;padding:14px;}
+  .period-workspace .period-table td {padding:14px;}
+  .period-workspace .period-table input {min-height:44px;font:inherit;font-size:14px;}
+  .period-workspace .period-actions {padding:16px 0;justify-content:space-between;}
+  .period-workspace .period-btn {min-height:42px;font-size:14px;}
+  .period-workspace button:disabled {opacity:.5;cursor:not-allowed;}
+  .period-workspace .period-error {color:#a32323;background:#fff1f0;padding:12px;border-radius:8px;font-size:14px;}
   .schedule-page { display: grid; gap: 14px; }
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
   .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
@@ -46,25 +59,41 @@ export default function PeriodTimesEntry() {
   const [isDefault, setIsDefault] = useState(true)
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
 
-  useEffect(() => { load() }, [])
-
-  async function load() {
+  useEffect(() => {
+    let active=true
+    async function load() {
     try {
       const data = await fetchPeriodTimes()
+      if (!active) return
       setTimes(data.times as PeriodTimeRow[])
       setIsDefault(data.isDefault)
     } catch (e) {
+      if (!active) return
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     } finally {
-      setLoading(false)
+      if(active) setLoading(false)
     }
-  }
+    }
+    void load()
+    return ()=>{active=false}
+  },[])
 
   function updateRow(index: number, field: keyof PeriodTimeRow, value: string | number | boolean) {
     setTimes(current => current.map((row, i) => i === index ? { ...row, [field]: value } : row))
   }
 
+  const teachingCount = times.filter(t => !t.is_break).length
+  const invalid = validatePeriodTimes(times)
+  function addPeriod() {
+    if (teachingCount >= 8) return
+    const last = times[times.length - 1]
+    const [h,m] = last.end_time.split(':').map(Number)
+    const end = Math.min(1439, h * 60 + m + 50)
+    setTimes([...times, {period:teachingCount+1,label:`คาบที่ ${teachingCount+1}`,start_time:last.end_time,end_time:`${String(Math.floor(end/60)).padStart(2,'0')}:${String(end%60).padStart(2,'0')}`,is_break:false,sort_order:times.length+1}])
+  }
+
   async function handleSave() {
+    if (invalid) { setAlert({type:'error',title:'ตรวจสอบเวลาคาบ',message:invalid}); return }
     setSaving(true)
     try {
       await savePeriodTimes(times)
@@ -87,10 +116,11 @@ export default function PeriodTimesEntry() {
   return (
     <>
       <style>{STYLES}</style>
-      <div className="schedule-page">
+      <div className="schedule-page period-workspace">
         <div className="schedule-head">
           <h1>ตั้งค่าเวลาคาบเรียน</h1>
-          <p>ระดับประถม: 6 คาบ/วัน · คาบละ 1 ชั่วโมง · เริ่ม 08:30 · พักเที่ยง 11:30–12:30 · เลิก 15:30</p>
+          <p>กำหนดเวลาเรียนของโรงเรียน เพิ่มได้สูงสุด 8 คาบต่อวัน และปรับช่วงพักเที่ยงได้</p>
+          <div className="period-summary"><span>{teachingCount} คาบต่อวัน</span><span>{teachingCount*5} ช่องต่อสัปดาห์</span><span>ใช้ร่วมกับตารางเรียน ตารางสอน และ PDF</span></div>
         </div>
 
         <div className="period-info">
@@ -108,6 +138,7 @@ export default function PeriodTimesEntry() {
                 <th style={{ width: 120 }}>เริ่ม</th>
                 <th style={{ width: 120 }}>สิ้นสุด</th>
                 <th style={{ width: 80 }}>พัก</th>
+                <th style={{width:90}}>จัดการ</th>
               </tr>
             </thead>
             <tbody>
@@ -117,12 +148,15 @@ export default function PeriodTimesEntry() {
                   <td>
                     <input
                       value={row.label}
+                      disabled={saving}
+                      aria-label={`ชื่อ ${row.is_break ? 'พักเที่ยง' : `คาบ ${row.period}`}`}
                       onChange={e => updateRow(index, 'label', e.target.value)}
                     />
                   </td>
                   <td>
                     <input
                       value={row.start_time}
+                      type="time" disabled={saving} aria-label={`เวลาเริ่ม ${row.label}`}
                       onChange={e => updateRow(index, 'start_time', e.target.value)}
                       placeholder="08:30"
                     />
@@ -130,22 +164,26 @@ export default function PeriodTimesEntry() {
                   <td>
                     <input
                       value={row.end_time}
+                      type="time" disabled={saving} aria-label={`เวลาสิ้นสุด ${row.label}`}
                       onChange={e => updateRow(index, 'end_time', e.target.value)}
                       placeholder="09:20"
                     />
                   </td>
                   <td>{row.is_break ? 'พัก' : 'เรียน'}</td>
+                  <td>{!row.is_break && row.period===teachingCount && teachingCount>1 && <button type="button" className="period-btn" disabled={saving} onClick={()=>setTimes(times.filter((_,i)=>i!==index))} aria-label={`ลบคาบ ${row.period}`}>ลบ</button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
+        {invalid && <div className="period-error" role="alert">{invalid}</div>}
         <div className="period-actions">
+          <button type="button" className="period-btn" disabled={saving || teachingCount>=8} onClick={addPeriod}>+ เพิ่มคาบเรียน ({teachingCount}/8)</button>
           <button type="button" className="period-btn primary" onClick={handleSave} disabled={saving}>
             {saving ? 'กำลังบันทึก...' : 'บันทึกเวลาคาบ'}
           </button>
-          <button type="button" className="period-btn" onClick={resetDefault}>คืนค่าเริ่มต้น</button>
+          <button type="button" className="period-btn" disabled={saving} onClick={resetDefault}>คืนค่าเริ่มต้น 6 คาบ</button>
         </div>
       </div>
 

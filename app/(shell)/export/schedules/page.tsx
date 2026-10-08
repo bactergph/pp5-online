@@ -260,8 +260,8 @@ export default function ScheduleExportPage() {
     })
   }
 
-  const periods = SCHEDULE_PERIODS
-  const morning = SCHEDULE_MORNING_PERIODS
+  const periods = periodTimes.length ? periodTimes.filter(t=>!t.is_break).map(t=>t.period) : SCHEDULE_PERIODS
+  const morning = periodTimes.length ? periodTimes.findIndex(t=>t.is_break) : SCHEDULE_MORNING_PERIODS
 
   if (loading) return <div style={{ padding: 28, textAlign: 'center', fontWeight: 700, color: '#64748B' }}>กำลังโหลด...</div>
 

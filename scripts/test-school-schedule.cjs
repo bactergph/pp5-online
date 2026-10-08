@@ -52,3 +52,18 @@ const required=solve([lesson('needed','room','teacher',1)],blockedFirst)
 assert.equal(required.error,undefined)
 assert.equal(required.assignments[0].period,6)
 console.log('PASS: final period reserved when feasible, minimal overflow, mandatory last-period fallback')
+
+// Configured 8-period grids and teacher unavailability must be respected together.
+const extendedLessons=[{id:'eight',classroomId:'r',teacherId:'t',count:35,label:'r · full'}]
+const unavailability=[{teacherId:'t',day:1,period:1},{teacherId:'t',day:2,period:2}]
+const eight=solve(extendedLessons,[],150000,8,unavailability)
+assert.equal(eight.error,undefined)
+assert.equal(eight.assignments.length,35)
+assert.ok(eight.assignments.some(p=>p.period===8))
+assert.ok(eight.assignments.every(p=>p.period<=8&&!unavailability.some(b=>b.day===p.day&&b.period===p.period)))
+assert.ok(solve([{...extendedLessons[0],count:39}],[],150000,8,unavailability).error)
+assert.ok(solve(extendedLessons,[{classroomId:'r',lessonId:'eight',day:1,period:1}],150000,8,unavailability).error)
+const seven=solve([{...extendedLessons[0],count:30}],[],150000,7)
+assert.equal(seven.error,undefined)
+assert.ok(seven.assignments.every(p=>p.period<7),'reserve configured last period, not hardcoded sixth')
+console.log('PASS: 7/8-period solver, teacher blocked slots, fixed-block conflict, blocked capacity, configured final period reservation')

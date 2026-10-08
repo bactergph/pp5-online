@@ -2,7 +2,7 @@ import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
-import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { periodTimeLabel, schedulePeriods, type PeriodTimeRow } from '@/lib/schedule-helpers'
 
 const PAGE_W = 297
 const MARGIN_X = 12
@@ -45,11 +45,11 @@ function scheduleFileName(title: string) {
 }
 
 /** ความกว้างคอลัมน์: วัน + คาบเช้า + พักเที่ยง + คาบบ่าย */
-function columnWidths() {
+function columnWidths(count: number) {
   const contentW = PAGE_W - MARGIN_X * 2
   const dayW = 26
   const breakW = 20
-  const periodW = (contentW - dayW - breakW) / PERIODS.length
+  const periodW = (contentW - dayW - breakW) / count
   return { dayW, breakW, periodW }
 }
 
@@ -98,6 +98,9 @@ function drawCell(
 
 /** สร้าง PDF ตารางเรียน/ตารางสอน ด้วย jsPDF บนเครื่องผู้ใช้ — คืน Blob ใส่คิวได้ */
 export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
+  const PERIODS = schedulePeriods(input.periodTimes)
+  const breakIndex = input.periodTimes.findIndex(t=>t.is_break)
+  const MORNING = breakIndex >= 0 ? breakIndex : SCHEDULE_MORNING_PERIODS
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true })
   await applyThaiFonts(doc)
 
@@ -133,7 +136,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y)
   y += 6
 
-  const { dayW, breakW, periodW } = columnWidths()
+  const { dayW, breakW, periodW } = columnWidths(PERIODS.length)
   const headerH = 12
   const rowH = 16
 

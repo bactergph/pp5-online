@@ -1,6 +1,18 @@
 import 'server-only'
 import { createServerClient } from '@/lib/supabase'
 import { weeklyHoursFromYear } from '@/lib/schedule-helpers'
+
+export async function loadScheduleConstraints(schoolId: string, yearId: string, semester: number) {
+  const db = createServerClient()
+  const [times, blocks] = await Promise.all([
+    db.from('school_period_times').select('period').eq('school_id',schoolId).eq('is_break',false),
+    db.from('schedule_teacher_blocks').select('teacher_id,day_of_week,period').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',semester),
+  ])
+  if (times.error) throw new Error(times.error.message)
+  if (blocks.error && !['42P01','PGRST205'].includes(blocks.error.code)) throw new Error(blocks.error.message)
+  const periodCount = times.data?.length || 6
+  return {periodCount, blocks: (blocks.data || []).map(b=>({teacherId:b.teacher_id,day:b.day_of_week,period:b.period})), blocksSupported:!blocks.error}
+}
 import { LEARNER_DEVELOPMENT_KEY, LEARNER_DEVELOPMENT_NAME } from '@/lib/schedule-activity'
 
 export type ScheduleSlot = {

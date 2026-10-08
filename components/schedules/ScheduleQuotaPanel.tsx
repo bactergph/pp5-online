@@ -13,6 +13,7 @@ type Props = {
   items: QuotaItem[]
   filled: number
   totalTarget: number
+  capacity?: number
 }
 
 const STYLES = `
@@ -48,7 +49,7 @@ const STYLES = `
   .quota-remaining.is-over { color: #DC2626; }
 `
 
-export default function ScheduleQuotaPanel({ items, filled, totalTarget }: Props) {
+export default function ScheduleQuotaPanel({ items, filled, totalTarget, capacity = 30 }: Props) {
   if (!items.length) return null
 
   return (
@@ -61,7 +62,7 @@ export default function ScheduleQuotaPanel({ items, filled, totalTarget }: Props
             จัดแล้ว {filled} / {totalTarget} คาบ
           </span>
         </div>
-        {totalTarget > 30 && <p role="alert" style={{ color: '#B91C1C', padding: '0 14px' }}>ต้องการ {totalTarget} คาบ แต่ตารางมี 30 ช่อง กรุณาปรับชั่วโมงรายวิชาหรือคาบกิจกรรมก่อนจัดอัตโนมัติ</p>}
+        {totalTarget > capacity && <p role="alert" style={{ color: '#B91C1C', padding: '0 14px' }}>ต้องการ {totalTarget} คาบ แต่ตารางมี {capacity} ช่อง กรุณาปรับชั่วโมงรายวิชาหรือคาบกิจกรรมก่อนจัดอัตโนมัติ</p>}
         <table className="quota-table">
           <thead>
             <tr>

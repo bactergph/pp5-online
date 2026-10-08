@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
-import { SCHEDULE_COLUMNS, SCHEDULE_DAYS } from '@/lib/schedules'
+import { SCHEDULE_DAYS, type ScheduleColumn } from '@/lib/schedules'
+import { DEFAULT_PERIOD_TIMES } from '@/lib/schedule-helpers'
 
 const GRID_STYLES = `
   .schedule-grid-table { width: 100%; min-width: 960px; border-collapse: collapse; }
@@ -42,6 +43,7 @@ type Props = {
 }
 
 export default function ScheduleGridTable({ renderCell, periodTimes, compactBreak = false }: Props) {
+  const columns: ScheduleColumn[] = (periodTimes?.length ? periodTimes : DEFAULT_PERIOD_TIMES).map(t => t.is_break ? { kind: 'break', header: t.label } : { kind: 'period', period: t.period, header: String(t.period) })
   return (
     <>
       <style>{GRID_STYLES}</style>
@@ -49,7 +51,7 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
         <thead>
           <tr>
             <th className="col-day">วัน</th>
-            {SCHEDULE_COLUMNS.map(col => (
+            {columns.map(col => (
               <th
                 key={col.kind === 'period' ? `p-${col.period}` : 'break'}
                 className={col.kind === 'break' ? 'col-break' : 'col-period'}
@@ -70,12 +72,12 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
           {SCHEDULE_DAYS.map(day => (
             <tr key={day.value}>
               <td className="day-col">{day.label}</td>
-              {SCHEDULE_COLUMNS.map(col => {
+              {columns.map(col => {
                 if (col.kind === 'break') {
                   if (compactBreak && day.value !== SCHEDULE_DAYS[0].value) return null
                   return (
                     <td key={`${day.value}-break`} className="break-col" rowSpan={compactBreak ? SCHEDULE_DAYS.length : undefined}>
-                      พักเที่ยง
+                      {col.header}
                     </td>
                   )
                 }

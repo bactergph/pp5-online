@@ -25,6 +25,7 @@ import ScheduleLessonPicker from './ScheduleLessonPicker'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
+import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; label: string }
@@ -403,7 +404,28 @@ export default function ClassScheduleEntry({ mode }: Props) {
 
   return (
     <>
-      <style>{STYLES + SCHEDULE_PRESENTATION}</style>
+      <style>{STYLES + SCHEDULE_PRESENTATION + `
+        .class-schedule-workspace {--accent:#805d21;--ink:#302a22;--edge:#ddd5c7;gap:20px;}
+        .class-schedule-workspace .schedule-head {background:#fff;border:1px solid #e1d9cd;border-radius:16px;padding:22px;}
+        .class-schedule-workspace .schedule-filters {border-radius:14px;background:#fffdf9;}
+        .class-schedule-workspace .schedule-grid-table th {background:#ece4d7;color:#111;font-size:14px;}
+        .class-schedule-workspace .schedule-grid-table td.day-col {background:#f5f0e7;color:#493a28;}
+        .class-schedule-workspace .schedule-grid-table td.cell {height:112px;}
+        .class-schedule-workspace .schedule-grid-table {min-width:${Math.max(960,periodTimes.filter(t=>!t.is_break).length*145+110)}px;}
+        .class-schedule-workspace .schedule-grid-heading {background:#faf7f1;}
+        .teacher-availability-panel {border:1px solid #d8cec0;border-radius:14px;background:#fff;overflow:hidden;}
+        .teacher-availability-panel summary {padding:17px 20px;cursor:pointer;font-weight:600;color:#382d20;}
+        .teacher-availability-panel summary span {font-size:12px;font-weight:400;color:#756957;margin-left:12px;}
+        .teacher-availability-body {padding:0 20px 20px;}
+        .teacher-availability-body p {font-size:13px;line-height:1.8;}
+        .availability-teacher {display:grid;gap:8px;max-width:360px;margin:15px 0;font-size:13px;}
+        .availability-teacher select {height:42px;padding:8px;border:1px solid #c9beae;border-radius:8px;background:white;font:inherit;}
+        .availability-cell {display:flex;flex-direction:column;gap:7px;align-items:center;justify-content:center;width:100%;height:86px;border:1px dashed #c4ceca;border-radius:8px;background:#f4f9f6;color:#345341;font:inherit;cursor:pointer;}
+        .availability-cell span {font-size:11px;line-height:1.5;}
+        .availability-cell.is-blocked {background:#f9ecd2;border:1px solid #c69742;color:#72501e;}
+        .availability-cell.is-busy {background:#edf1f5;border:1px solid #ced7e0;color:#516171;cursor:default;}
+        .availability-error {color:#b02525;}
+      `}</style>
       <div className="schedule-page class-schedule-workspace">
         <div className="schedule-head">
           <div>
@@ -489,7 +511,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </div>
         ) : (
           <section className="schedule-grid-card" aria-label="ตารางเรียนรายสัปดาห์">
-            <div className="schedule-grid-heading"><div><h2>ห้อง {selectedClassroom?.label}</h2><p>ภาคเรียนที่ {semester} · ปีการศึกษา {selectedYearObj?.year_be}</p></div><span className="schedule-save-status">จัดแล้ว {Object.values(cells).filter(c => c.class_subject_id).length} / 30 คาบ</span></div>
+            <div className="schedule-grid-heading"><div><h2>ห้อง {selectedClassroom?.label}</h2><p>ภาคเรียนที่ {semester} · ปีการศึกษา {selectedYearObj?.year_be}</p></div><span className="schedule-save-status">จัดแล้ว {Object.values(cells).filter(c => c.class_subject_id).length} / {periodTimes.filter(t=>!t.is_break).length*5} คาบ</span></div>
             <div className="schedule-grid-scroll">
             <ScheduleGridTable compactBreak
               periodTimes={periodTimes}
@@ -538,7 +560,8 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </section>
         )}
 
-        {isManage && quotas && <details className="schedule-quota-details"><summary>คาบรายวิชา {quotas.filled} / {quotas.totalTarget} คาบ <span>ดูรายละเอียดโควต้า</span></summary><ScheduleQuotaPanel {...quotas} /></details>}
+        {isManage && canEdit && selectedYear && <TeacherAvailabilityPanel refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={blocked} />}
+        {isManage && quotas && <details className="schedule-quota-details"><summary>คาบรายวิชา {quotas.filled} / {quotas.totalTarget} คาบ <span>ดูรายละเอียดโควต้า</span></summary><ScheduleQuotaPanel {...quotas} capacity={periodTimes.filter(t=>!t.is_break).length*5} /></details>}
 
       </div>
 

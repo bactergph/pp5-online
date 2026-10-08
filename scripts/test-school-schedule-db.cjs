@@ -132,6 +132,29 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   await db.exec(`insert into schedule_substitute_entries(substitute_day_id,absent_teacher_id,substitute_teacher_id,period,classroom_id) values('${id(83)}','${id(31)}','${id(30)}',3,'${id(20)}')`)
   await assert.rejects(db.exec(`insert into schedule_substitute_entries(substitute_day_id,absent_teacher_id,substitute_teacher_id,period,classroom_id) values('${id(84)}','${id(31)}','${id(30)}',3,'${id(20)}')`),/ชน/)
   console.log('PASS: migration repeatable, existing semester 1 retained, semester 2 save/clear/stale/conflict isolation')
+
+  await db.exec("alter table users add column role text default 'teacher'; alter table users add column is_active boolean default true")
+  const eightMigration=fs.readFileSync('supabase/migrations/058_schedule_eight_periods_teacher_blocks.sql','utf8')
+  await db.exec(eightMigration);await db.exec(eightMigration)
+  const eightTimes=[1,2,3,4,0,5,6,7,8].map((p,i)=>({period:p,label:p?'คาบ '+p:'พัก',start_time:String(7+i).padStart(2,'0')+':00',end_time:String(8+i).padStart(2,'0')+':00',is_break:p===0,sort_order:i+1}))
+  await saveTimes(eightTimes)
+  assert.equal((await db.query('select count(*)::int n from school_period_times where not is_break')).rows[0].n,8)
+  const block=(term,teacher,day,period,value)=>db.query('select set_schedule_teacher_block($1,$2,$3,$4,$5,$6,$7)',[id(1),id(10),term,id(teacher),day,period,value])
+  await block(2,30,2,8,true)
+  const term2=[a,slot(23,52,1)]
+  await assert.rejects(saveTerm(2,term2,[...term2,{...slot(20,50,8),day_of_week:2}]),/ล็อกคาบว่าง/)
+  await block(2,30,2,8,false)
+  const late={...slot(20,50,8),day_of_week:2}
+  await saveTerm(2,term2,[...term2,late])
+  await assert.rejects(block(2,30,2,8,true),/มีสอน/)
+  await block(1,30,2,8,true) // Independent term availability.
+  await assert.rejects(saveTimes(times),/คาบที่ต้องการลบ/)
+  await assert.rejects(block(2,30,2,9,true),/ไม่ถูกต้อง/)
+  await assert.rejects(block(2,999,2,7,true),/ไม่ถูกต้อง/)
+  const nine=[...eightTimes,{period:9,label:'9',start_time:'17:00',end_time:'18:00',is_break:false}]
+  await assert.rejects(saveTimes(nine),/สูงสุด 8/)
+  assert.equal((await db.query("select has_function_privilege('authenticated','set_schedule_teacher_block(uuid,uuid,integer,uuid,integer,integer,boolean)','execute') allowed")).rows[0].allowed,false)
+  console.log('PASS: 8 periods, lunch after fourth period, block/assignment exclusion, term isolation, shrink protection, role grants, migration repeatable')
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

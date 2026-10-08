@@ -3,17 +3,18 @@ import { getSession } from '@/lib/session'
 import { createServerClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/audit'
 import { SCHEDULE_EDIT_ROLES } from '@/lib/schedules'
-import { lessonColumns, lessonKey, loadSchedule, persistSchedule, requireScheduleClass, type ScheduleSlot } from '@/lib/schedule-store'
+import { lessonColumns, lessonKey, loadSchedule, loadScheduleConstraints, persistSchedule, requireScheduleClass, type ScheduleSlot } from '@/lib/schedule-store'
 import { solveSchoolSchedule } from '@/lib/schedule-solver'
 import { LEARNER_DEVELOPMENT_KEY } from '@/lib/schedule-activity'
 
 async function context(yearId: string, semester = 1) {
   const session = await getSession()
   if (!session?.schoolId || !SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])) throw new Error('ไม่มีสิทธิ์แก้ไขตารางเรียน')
-  return { session, semester, data: await loadSchedule(session.schoolId, yearId, semester) }
+  const [data,constraints] = await Promise.all([loadSchedule(session.schoolId,yearId,semester),loadScheduleConstraints(session.schoolId,yearId,semester)])
+  return { session, semester, data, constraints }
 }
 function cell(day: number, period: number) {
-  if (!Number.isInteger(day) || day < 1 || day > 5 || !Number.isInteger(period) || period < 1 || period > 6) throw new Error('วันหรือคาบเรียนไม่ถูกต้อง')
+  if (!Number.isInteger(day) || day < 1 || day > 5 || !Number.isInteger(period) || period < 1 || period > 8) throw new Error('วันหรือคาบเรียนไม่ถูกต้อง')
 }
 async function commit(ctx: Awaited<ReturnType<typeof context>>, year: string, rows: ScheduleSlot[], description: string, unlock = false) {
   await persistSchedule(ctx.session.schoolId, year, ctx.data.slots, rows, unlock, ctx.semester)
@@ -22,6 +23,9 @@ async function commit(ctx: Awaited<ReturnType<typeof context>>, year: string, ro
 export async function saveCell(roomId: string, year: string, day: number, period: number, lesson: string | null, note: string | null, semester = 1) {
   cell(day, period)
   const ctx = await context(year, semester)
+  if (period > ctx.constraints.periodCount) throw new Error('คาบนี้ยังไม่ได้ตั้งเวลาเรียน')
+  const teacherId = ctx.data.lessons.find(l=>l.id===lesson)?.teacherId
+  if (teacherId && ctx.constraints.blocks.some(b=>b.teacherId===teacherId && b.day===day && b.period===period)) throw new Error('ครูล็อกคาบว่างนี้ไว้ กรุณาเลือกคาบอื่น')
   requireScheduleClass(ctx.data, roomId)
   const current = ctx.data.slots.find(s => s.classroom_id === roomId && s.day_of_week === day && s.period === period)
   if (current?.locked) throw new Error('กรุณาปลดล็อกคาบก่อนแก้ไข')
@@ -41,6 +45,23 @@ export async function toggleLock(roomId: string, year: string, day: number, peri
   rows.push({ ...(existing || { classroom_id: roomId, academic_year_id: year, day_of_week: day, period, class_subject_id: null, activity_id: null, note: null }), locked })
   await commit(ctx, year, rows, `${locked ? 'ล็อก' : 'ปลดล็อก'}คาบเรียน`, true)
   return { locked }
+}
+
+export async function teacherAvailability(year: string, semester = 1) {
+  const ctx = await context(year,semester)
+  const {data,error} = await createServerClient().from('users').select('id,prefix,full_name').eq('school_id',ctx.session.schoolId).eq('is_active',true).in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name')
+  if (error) throw new Error(error.message)
+  return {teachers:(data||[]).map(t=>({id:t.id,name:`${t.prefix||''} ${t.full_name}`.trim()})),blocks:ctx.constraints.blocks,supported:ctx.constraints.blocksSupported,busy:ctx.data.slots.flatMap(s=>{const l=ctx.data.lessons.find(l=>l.id===lessonKey(s));return l?.teacherId?[{teacherId:l.teacherId,day:s.day_of_week,period:s.period,label:l.label}]:[]})}
+}
+export async function setTeacherBlock(year: string, semester: number, teacherId: string, day: number, period: number, blocked: boolean) {
+  cell(day,period)
+  const ctx = await context(year,semester)
+  if (period>ctx.constraints.periodCount) throw new Error('คาบนี้ยังไม่ได้ตั้งเวลาเรียน')
+  if (!ctx.constraints.blocksSupported) throw new Error('กรุณารันฐานข้อมูล 058_schedule_eight_periods_teacher_blocks.sql ก่อน')
+  const {error} = await createServerClient().rpc('set_schedule_teacher_block',{p_school_id:ctx.session.schoolId,p_year_id:year,p_semester:semester,p_teacher_id:teacherId,p_day:day,p_period:period,p_blocked:blocked})
+  if (error) throw new Error(error.message)
+  await logActivity({actor:ctx.session,schoolId:ctx.session.schoolId,action:'update',module:'schedules',targetType:'teacher_availability',description:`${blocked?'ล็อก':'ปลดล็อก'}คาบว่างครู วัน ${day} คาบ ${period}`})
+  return {ok:true}
 }
 export async function clearRoom(roomId: string, year: string, semester = 1) {
   const ctx = await context(year, semester)
@@ -82,7 +103,7 @@ export async function autoSchedule(year: string, roomId: string | null, clearFir
     const id = lessonKey(s); if (id) outsideCounts.set(id, (outsideCounts.get(id) || 0) + 1)
   }
   const lessons = ctx.data.lessons.map(l => ({ ...l, count: !l.activity && scope.has(l.classroomId) ? l.count : outsideCounts.get(l.id) || 0 }))
-  const result = solveSchoolSchedule(lessons, retained.filter(s => s.locked || lessonKey(s) || s.note).map(s => ({ classroomId: s.classroom_id, lessonId: lessonKey(s), day: s.day_of_week, period: s.period })))
+  const result = solveSchoolSchedule(lessons, retained.filter(s => s.locked || lessonKey(s) || s.note).map(s => ({ classroomId: s.classroom_id, lessonId: lessonKey(s), day: s.day_of_week, period: s.period })),150000,ctx.constraints.periodCount,ctx.constraints.blocks)
   if (result.error) throw new Error(result.error)
   const rows = retained.filter(s => s.locked || lessonKey(s) || s.note)
   for (const a of result.assignments) rows.push({ classroom_id: a.classroomId, academic_year_id: year, day_of_week: a.day, period: a.period, ...lessonColumns(a.lessonId), note: null, locked: false })
