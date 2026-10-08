@@ -16,6 +16,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   const [editing,setEditing] = useState<{day:number;period:number}|null>(null)
   const [pending,setPending]=useState<string[]>([])
   const pendingRef=useRef(new Set<string>())
+  const reservedLessons=useRef(new Map<string,string>())
   const editQueue=useRef(Promise.resolve())
   const [clearing,setClearing]=useState(false)
   async function clearSelectedTeacher(){
@@ -79,7 +80,11 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       if(decision.isConfirmed&&data.supported){void toggle(day,period,blocked);return}
       if(!decision.isDenied)return
     }
-    const options=Object.fromEntries(data.lessons.filter(l=>l.teacherId===teacher&&(!busy||l.classroomId===busy.classroomId)&&!data.slots.some(slot=>slot.classroomId===l.classroomId&&slot.day===day&&slot.period===period&&(slot.lessonId!==busy?.lessonId||slot.locked))).map(l=>[l.id,l.label]))
+    const options=Object.fromEntries(data.lessons.filter(l=>{
+      const quota=data.quotas.find(q=>q.id===l.id)
+      const used=data.slots.filter(slot=>slot.classroomId===l.classroomId&&slot.lessonId===l.id).length+[...reservedLessons.current.values()].filter(id=>id===l.id).length
+      return l.teacherId===teacher&&(!busy||l.classroomId===busy.classroomId)&&(l.id===busy?.lessonId||!quota||used<quota.target)&&!data.slots.some(slot=>slot.classroomId===l.classroomId&&slot.day===day&&slot.period===period&&(slot.lessonId!==busy?.lessonId||slot.locked))
+    }).map(l=>{const quota=data.quotas.find(q=>q.id===l.id);return [l.id,`${l.label}${quota?` · เหลือ ${Math.max(0,quota.target-quota.used)} คาบ`:''}`]}))
     const decision=await Swal.fire({title,text:busy?'เปลี่ยนวิชาหรือนำวิชาออกจากคาบนี้':'เลือกรายวิชาและห้องเรียนเพื่อบันทึกลงคาบนี้',input:'select',inputOptions:options,inputValue:busy?.lessonId||'',inputPlaceholder:'เลือกวิชาและห้องเรียน',inputValidator:value=>!value?'กรุณาเลือกวิชา':undefined,showCancelButton:true,showDenyButton:!!busy,confirmButtonText:'บันทึกวิชา',denyButtonText:'เอาวิชาออก',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25',denyButtonColor:'#be3340'})
     if(decision.isConfirmed)await editCell(day,period,String(decision.value),false,false)
     else if(decision.isDenied)await editCell(day,period,'',true,false)
@@ -92,6 +97,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     if(!room)return
     const key=`${teacher}:${day}:${period}`
     if(pendingRef.current.has(key))return
+    if(!remove&&!unlock&&lessonId!==busy?.lessonId)reservedLessons.current.set(key,lessonId)
     pendingRef.current.add(key);setPending([...pendingRef.current]);++request.current
     const previous=editQueue.current
     let release:()=>void=()=>{}
@@ -104,7 +110,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       await load(true);await onChanged?.()
       setNotice(unlock?'ปลดล็อกคาบเรียนแล้ว':remove?'นำวิชาออกแล้ว':'บันทึกวิชาแล้ว')
     }catch(e){await load(true);setError(e instanceof Error?e.message:'บันทึกไม่สำเร็จ')}
-    finally{pendingRef.current.delete(key);setPending([...pendingRef.current]);release()}
+    finally{reservedLessons.current.delete(key);pendingRef.current.delete(key);setPending([...pendingRef.current]);release()}
   }
   const teacherQuotas=data?.quotas.filter(q=>q.teacherId===teacher)||[]
   const target=teacherQuotas.reduce((n,q)=>n+q.target,0)
