@@ -219,6 +219,9 @@ export async function clearClassSchedule(classroomId: string, yearId: string, se
   const mod = await import('./extended-actions')
   return scheduleResult(() => mod.clearClassSchedule(classroomId, yearId, semester))
 }
+export async function clearScheduleScope(yearId:string,semester:number,scope:'room'|'level'|'school',classroomId:string) {
+  return scheduleResult(()=>scheduleOps.clearScope(yearId,semester,scope,classroomId))
+}
 
 export async function runAutoScheduleClass(
   classroomId: string,

@@ -10,7 +10,7 @@ import {
   fetchScheduleClassrooms,
   fetchScheduleInit,
   saveClassScheduleCell,
-  clearClassSchedule,
+  clearScheduleScope,
   copyClassSchedule,
   fetchPeriodTimes,
   fetchScheduleQuotas,
@@ -259,14 +259,17 @@ export default function ClassScheduleEntry({ mode }: Props) {
     }
   }
 
-  async function handleClear() {
-    if (!(await scheduleAlert.fire({icon:'warning',title:'ล้างตารางห้องนี้?',text:'นำคาบที่ไม่ล็อกออก คาบที่ล็อกจะเก็บไว้',showCancelButton:true,confirmButtonText:'ล้างคาบที่ไม่ล็อก',confirmButtonColor:'#be3340'})).isConfirmed) return
+  async function handleClear(scope:'room'|'level'|'school'='room') {
+    if(blocked)return
+    const label=scope==='school'?'ทั้งโรงเรียน':scope==='level'?`ระดับชั้น ${selectedClassroom?.level}`:`ห้อง ${selectedClassroom?.label}`
+    const roomCount=scope==='school'?classrooms.length:scope==='level'?classrooms.filter(c=>c.level===selectedClassroom?.level).length:1
+    if (!(await scheduleAlert.fire({icon:'warning',title:`ล้างตาราง${label}?`,text:`ปีการศึกษา ${selectedYearObj?.year_be} ภาคเรียนที่ ${semester} · ${roomCount} ห้อง นำเฉพาะคาบที่ไม่ล็อกออก คาบที่ล็อกและล็อกคาบว่างของครูจะเก็บไว้`,showCancelButton:true,confirmButtonText:'ยืนยันล้างตาราง',confirmButtonColor:'#be3340'})).isConfirmed) return
     setBusyAction('clear')
     try {
-      const result = await clearClassSchedule(selectedClass, selectedYear, semester)
+      const result = await clearScheduleScope(selectedYear,semester,scope,selectedClass)
       if (result.error) throw new Error(result.error)
       await loadGrid()
-      setAlert({ type: 'success', title: 'ล้างตารางสำเร็จ' })
+      setAlert({ type: 'success', title: 'ล้างตารางสำเร็จ',message:`${label} · ${result.data?.rooms} ห้อง · นำออก ${result.data?.removed} คาบ` })
     } catch (e) {
       setAlert({ type: 'error', title: 'ล้างไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     } finally {
@@ -387,7 +390,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
                 <label><input type="checkbox" checked={rebuild} disabled={blocked} onChange={e => setRebuild(e.target.checked)} /> จัดรายวิชาที่ไม่ล็อกใหม่</label>
                 <p>{rebuild ? 'จัดรายวิชาใหม่ โดยเก็บคาบที่ล็อกและกิจกรรมไว้' : 'จัดอัตโนมัติจะเติมเฉพาะช่องว่าง'} · เว้นคาบสุดท้ายไว้เมื่อทำได้</p>
                 <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked || copySourceClassrooms.length === 0} onClick={() => { setCopyFromClass(copySourceClassrooms[0]?.id || ''); setCopyOpen(true) }}>คัดลอกจากห้องอื่น</button>
-                <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 border-rose-200! text-rose-700! hover:bg-rose-50!" disabled={blocked} onClick={handleClear}>{busyAction === 'clear' ? 'กำลังล้าง...' : 'ล้างคาบที่ไม่ล็อกของห้องนี้'}</button>
+                <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 border-rose-200! text-rose-700! hover:bg-rose-50!" disabled={blocked} onClick={()=>handleClear('room')}>{busyAction === 'clear' ? 'กำลังล้าง...' : 'ล้างคาบที่ไม่ล็อกของห้องนี้'}</button>
+                <button type="button" className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={blocked} onClick={()=>handleClear('level')}>ล้างตารางทั้งระดับชั้น {selectedClassroom?.level}</button>
+                <button type="button" className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={blocked} onClick={()=>handleClear('school')}>ล้างตารางทั้งโรงเรียน</button>
               </div>
             </details>
           </div>
