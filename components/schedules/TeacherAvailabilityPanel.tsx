@@ -3,7 +3,7 @@
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import {useCallback, useEffect, useRef, useState} from 'react'
-import {fetchTeacherAvailability, setTeacherAvailabilityBlock, editTeacherScheduleCell, toggleScheduleCellLock} from '@/app/schedules/actions'
+import {fetchTeacherAvailability, setTeacherAvailabilityBlock, editTeacherScheduleCell, toggleScheduleCellLock, clearTeacherSchedule} from '@/app/schedules/actions'
 import {type PeriodTimeRow} from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
 
@@ -17,6 +17,21 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   const [pending,setPending]=useState<string[]>([])
   const pendingRef=useRef(new Set<string>())
   const editQueue=useRef(Promise.resolve())
+  const [clearing,setClearing]=useState(false)
+  async function clearSelectedTeacher(){
+    if(!teacher||clearing||pendingRef.current.size)return
+    const name=data?.teachers.find(t=>t.id===teacher)?.name||'ครูที่เลือก'
+    const decision=await Swal.fire({icon:'warning',title:'ล้างตารางสอนครูที่เลือก?',text:`${name} · ภาคเรียนที่ ${semester} นำเฉพาะคาบสอนที่ไม่ล็อกออกจากตารางห้องเรียนด้วย คาบที่ล็อกและล็อกคาบว่างจะเก็บไว้`,showCancelButton:true,confirmButtonText:'ล้างตารางสอนครูคนนี้',cancelButtonText:'ยกเลิก',confirmButtonColor:'#be3340'})
+    if(!decision.isConfirmed)return
+    setClearing(true);setError('');setNotice('')
+    try{
+      const result=await clearTeacherSchedule(yearId,semester,teacher)
+      if(result.error)throw new Error(result.error)
+      await load(true);await onChanged?.();setEditing(null)
+      setNotice(`ล้างตารางสอน ${name} แล้ว ${result.data?.removed||0} คาบ`)
+    }catch(e){await load(true);setError(e instanceof Error?e.message:'ล้างไม่สำเร็จ')}
+    finally{setClearing(false)}
+  }
   useEffect(()=>{if(Swal.isVisible())return;if(error||notice)void Swal.fire({icon:error?'error':'success',title:error?'ดำเนินการไม่สำเร็จ':notice,text:error||undefined,toast:!error,position:error?'center':'top-end',timer:error?undefined:2200,showConfirmButton:!!error,confirmButtonText:'ตกลง',confirmButtonColor:'#946b25'})},[error,notice])
   const request = useRef(0)
   const load = useCallback(async(keepSelection=false)=>{
@@ -27,12 +42,12 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   },[yearId,semester,fixedTeacher])
   useEffect(()=>{let active=true;const counter=request;void Promise.resolve().then(()=>{if(active)void load(true)});return()=>{active=false;counter.current++}},[load,refreshToken])
   useEffect(()=>{
-    if(pending.length)return
+    if(pending.length||clearing)return
     const refresh=()=>{if(document.visibilityState==='visible')void load(true)}
     const timer=window.setInterval(refresh,15000)
     window.addEventListener('focus',refresh)
     return()=>{window.clearInterval(timer);window.removeEventListener('focus',refresh)}
-  },[load,pending.length])
+  },[load,pending.length,clearing])
   async function toggle(day:number,period:number,blocked:boolean){
     const targetTeacher=teacher
     const key=`${targetTeacher}:${day}:${period}`
@@ -105,13 +120,16 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       <p>กดคาบเพื่อเลือกวิชา นำวิชาออก หรือล็อกคาบว่าง การแก้ไขจะปรับตารางเรียนของห้องให้ตรงกันด้วย</p>
       {!data?<p>กำลังโหลด...</p>:<>
         {!data.supported&&<p role="alert">ยังไม่เปิดใช้การล็อกคาบครู กรุณารันฐานข้อมูล 058_schedule_eight_periods_teacher_blocks.sql</p>}
-        {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}>{data.teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
+        <div className="flex flex-wrap items-end gap-3">
+        {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled||clearing} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}>{data.teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
+        <button type="button" className="my-4 min-h-11 rounded-md border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50" disabled={disabled||clearing||pending.length>0||!teacher} onClick={()=>void clearSelectedTeacher()}>{clearing?'กำลังล้าง...':'ล้างตารางสอนครูที่เลือก'}</button>
+        </div>
         <div className="schedule-grid-scroll"><ScheduleGridTable periodTimes={periodTimes} compactBreak renderCell={(day,period)=>{
           const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const selected=editing?.day===day&&editing?.period===period
           const loading=pending.includes(`${teacher}:${day}:${period}`)
-          return <button type="button" className={`availability-cell ${blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อกหรือเลือกวิชา':'กดเพื่อเลือกวิชาหรือล็อก'}</span></>}</button>
+          return <button type="button" className={`availability-cell ${blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||clearing||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อกหรือเลือกวิชา':'กดเพื่อเลือกวิชาหรือล็อก'}</span></>}</button>
         }}/></div>
       </>}
     </div>

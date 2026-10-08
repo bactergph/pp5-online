@@ -103,6 +103,14 @@ export async function clearScope(year:string,semester:number,scope:'room'|'level
   await commit(ctx,year,ctx.data.slots.filter(s=>!ids.has(s.classroom_id)||s.locked),`ล้างตาราง ${scope==='school'?'ทั้งโรงเรียน':scope==='level'?`ระดับชั้น ${room.level}`:'รายห้อง'} · ${rooms.length} ห้อง · ${removed.length} คาบ`)
   return {rooms:rooms.length,removed:removed.length}
 }
+export async function clearTeacher(year:string,semester:number,teacherId:string) {
+  const ctx=await context(year,semester)
+  if(!teacherId)throw new Error('กรุณาเลือกครู')
+  const lessonIds=new Set(ctx.data.lessons.filter(l=>l.teacherId===teacherId&&!l.activity).map(l=>l.id))
+  const removed=ctx.data.slots.filter(s=>!s.locked&&lessonIds.has(lessonKey(s)||''))
+  await commit(ctx,year,ctx.data.slots.filter(s=>s.locked||!lessonIds.has(lessonKey(s)||'')),`ล้างตารางสอนครู ${teacherId} · ${removed.length} คาบ`)
+  return {removed:removed.length}
+}
 export async function copyRoom(from: string, to: string, year: string, semester = 1) {
   if (from === to) throw new Error('กรุณาเลือกห้องต้นทางต่างจากห้องปลายทาง')
   const ctx = await context(year, semester)

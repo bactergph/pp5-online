@@ -94,7 +94,11 @@ const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'
   await assert.rejects(api.clearScope('y',2,'school','foreign'),/room/)
   reset();data.slots=[slot('a','l1',1),slot('b','l2',1)];await api.clearScope('y',1,'room','a');assert.equal(data.slots.length,1);assert.equal(data.slots[0].classroom_id,'b')
   console.log('PASS: atomic room/level/school clearing retains locked periods, other levels and term isolation')
-  reset();role='teacher';await assert.rejects(api.clearScope('y',1,'school','a'),/สิทธิ์/);assert.equal(writes,0)
+  reset();data.lessons[1].teacherId='other';data.slots=[slot('a','l1',1),slot('a','l1',2,true),slot('b','l2',1)]
+  const teacherClear=await api.clearTeacher('y',2,'t');assert.equal(teacherClear.removed,1);assert.equal(data.slots.length,2);assert.ok(data.slots.some(s=>s.classroom_id==='b'));assert.ok(data.slots.some(s=>s.locked));assert.equal(writtenTerm,2)
+  console.log('PASS: clearing selected teacher preserves other teachers and locked periods')
+  reset();role='teacher';await assert.rejects(api.clearTeacher('y',1,'t'),/สิทธิ์/);assert.equal(writes,0)
+  await assert.rejects(api.clearScope('y',1,'school','a'),/สิทธิ์/);assert.equal(writes,0)
   await assert.rejects(api.autoSchedule('y',null,true),/สิทธิ์/);assert.equal(writes,0)
   console.log('PASS: rebuild quota regression, school scope/empty rooms, lock preservation, copy matching, school/role authorization')
 })().catch(e=>{console.error(e);process.exitCode=1})

@@ -222,6 +222,9 @@ export async function clearClassSchedule(classroomId: string, yearId: string, se
 export async function clearScheduleScope(yearId:string,semester:number,scope:'room'|'level'|'school',classroomId:string) {
   return scheduleResult(()=>scheduleOps.clearScope(yearId,semester,scope,classroomId))
 }
+export async function clearTeacherSchedule(yearId:string,semester:number,teacherId:string) {
+  return scheduleResult(()=>scheduleOps.clearTeacher(yearId,semester,teacherId))
+}
 
 export async function runAutoScheduleClass(
   classroomId: string,
