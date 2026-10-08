@@ -111,6 +111,33 @@ export async function clearTeacher(year:string,semester:number,teacherId:string)
   await commit(ctx,year,ctx.data.slots.filter(s=>s.locked||!lessonIds.has(lessonKey(s)||'')),`ล้างตารางสอนครู ${teacherId} · ${removed.length} คาบ`)
   return {removed:removed.length}
 }
+export async function activityLevelOptions(year:string,semester:number) {
+  const ctx=await context(year,semester)
+  return {levels:[...new Set(ctx.data.classrooms.map(c=>c.level))],activities:[...new Map(ctx.data.lessons.filter(l=>l.activity&&l.selectable!==false).map(l=>[l.subjectId,{id:l.subjectId,name:l.name}])).values()]}
+}
+export async function scheduleActivityLevel(year:string,semester:number,settingId:string,levels:string[],day:number,period:number){
+  cell(day,period)
+  const ctx=await context(year,semester)
+  if(period>ctx.constraints.periodCount)throw new Error('คาบนี้ยังไม่ได้ตั้งเวลาเรียน')
+  if(!levels.length)throw new Error('กรุณาเลือกระดับชั้น')
+  if(levels.some(level=>!ctx.data.classrooms.some(c=>c.level===level)))throw new Error('ไม่พบระดับชั้นในโรงเรียนนี้')
+  const rooms=ctx.data.classrooms.filter(c=>levels.includes(c.level))
+  const rows=[...ctx.data.slots]
+  let added=0
+  for(const room of rooms){
+    const lesson=ctx.data.lessons.find(l=>l.classroomId===room.id&&l.activity&&l.subjectId===settingId&&l.selectable!==false)
+    if(!lesson)throw new Error(`ห้อง ${room.level}/${room.room} ยังไม่มีรายการกิจกรรมนี้`)
+    if(lesson.teacherId)throw new Error(`กิจกรรมของห้อง ${room.level}/${room.room} ยังผูกครูอยู่ กรุณานำครูออกก่อน`)
+    const existing=rows.find(s=>s.classroom_id===room.id&&s.day_of_week===day&&s.period===period)
+    if(existing&&lessonKey(existing)===lesson.id)continue
+    if(existing&&(existing.locked||lessonKey(existing)||existing.note))throw new Error(`ห้อง ${room.level}/${room.room} มีคาบหรือคาบล็อกอยู่ กรุณาเลือกคาบว่าง`)
+    if(rows.some(s=>s.classroom_id===room.id&&lessonKey(s)===lesson.id))throw new Error(`กิจกรรมนี้ลงครบแล้วในห้อง ${room.level}/${room.room}`)
+    if(existing)rows.splice(rows.indexOf(existing),1)
+    rows.push({classroom_id:room.id,academic_year_id:year,day_of_week:day,period,...lessonColumns(lesson.id),note:null,locked:false});added++
+  }
+  await commit(ctx,year,rows,`ลงกิจกรรมระดับชั้น ${levels.join(', ')} · ${added} ห้อง`)
+  return {added,rooms:rooms.length}
+}
 export async function copyRoom(from: string, to: string, year: string, semester = 1) {
   if (from === to) throw new Error('กรุณาเลือกห้องต้นทางต่างจากห้องปลายทาง')
   const ctx = await context(year, semester)

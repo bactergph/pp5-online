@@ -25,6 +25,7 @@ import { SCHEDULE_DAYS } from '@/lib/schedules'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
 import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
+import ActivityLevelSchedule from './ActivityLevelSchedule'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; label: string }
@@ -405,6 +406,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <article className={quotas.items.some(q=>q.used>q.target)?'border-rose-300! bg-rose-50!':''}><strong>{quotas.items.reduce((sum,q)=>sum+Math.max(0,q.remaining),0)}</strong><span>คาบรายวิชาที่ยังขาด{quotas.items.some(q=>q.used>q.target)?' · พบวิชาเกินคาบ กรุณานำออก':''}</span></article>
           <article><strong>{Object.values(cells).filter(c=>c.locked).length}</strong><span>คาบที่ล็อก · ระบบอัตโนมัติจะเก็บไว้</span></article>
         </div>}
+        {workspace==='activity'&&selectedYear&&<ActivityLevelSchedule key={`${selectedYear}:${semester}`} yearId={selectedYear} semester={semester} periodTimes={periodTimes} onChanged={loadGrid} />}
         {workspace==='activity'&&<p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">กิจกรรมพัฒนาผู้เรียน · ไม่ต้องระบุครู · รายการละ 1 คาบต่อสัปดาห์ กดคาบว่างเพื่อเลือกกิจกรรม รายวิชาที่มีอยู่จะยังแสดงเพื่อป้องกันคาบทับกัน</p>}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 

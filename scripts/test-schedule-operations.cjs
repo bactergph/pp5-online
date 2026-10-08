@@ -97,6 +97,11 @@ const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'
   reset();data.lessons[1].teacherId='other';data.slots=[slot('a','l1',1),slot('a','l1',2,true),slot('b','l2',1)]
   const teacherClear=await api.clearTeacher('y',2,'t');assert.equal(teacherClear.removed,1);assert.equal(data.slots.length,2);assert.ok(data.slots.some(s=>s.classroom_id==='b'));assert.ok(data.slots.some(s=>s.locked));assert.equal(writtenTerm,2)
   console.log('PASS: clearing selected teacher preserves other teachers and locked periods')
+  reset();data.classrooms.push({id:'a2',level:'ป.1',room:2});data.lessons.push(...['a','a2'].map(id=>({id:'activity:'+id,classroomId:id,teacherId:null,count:0,label:'scout',subjectId:'scout',name:'scout',activity:true,selectable:true})))
+  const bulkActivity=await api.scheduleActivityLevel('y',2,'scout',['ป.1'],3,6);assert.equal(bulkActivity.added,2);assert.equal(writes,1);assert.equal(writtenTerm,2);assert.equal(data.slots.length,2)
+  await assert.rejects(api.scheduleActivityLevel('y',2,'scout',['ป.1'],4,6),/ครบแล้ว/);assert.equal(writes,1)
+  data.slots=[];data.slots.push(slot('a2','l1',6,true));await assert.rejects(api.scheduleActivityLevel('y',2,'scout',['ป.1'],1,6),/ล็อก/);assert.equal(writes,1);assert.equal(data.slots.length,1)
+  console.log('PASS: level activity batch uses no teacher, preserves occupied/locked slots, caps quota and writes atomically')
   reset();role='teacher';await assert.rejects(api.clearTeacher('y',1,'t'),/สิทธิ์/);assert.equal(writes,0)
   await assert.rejects(api.clearScope('y',1,'school','a'),/สิทธิ์/);assert.equal(writes,0)
   await assert.rejects(api.autoSchedule('y',null,true),/สิทธิ์/);assert.equal(writes,0)

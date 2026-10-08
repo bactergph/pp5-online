@@ -225,6 +225,8 @@ export async function clearScheduleScope(yearId:string,semester:number,scope:'ro
 export async function clearTeacherSchedule(yearId:string,semester:number,teacherId:string) {
   return scheduleResult(()=>scheduleOps.clearTeacher(yearId,semester,teacherId))
 }
+export async function fetchActivityLevelOptions(yearId:string,semester:number) {return scheduleOps.activityLevelOptions(yearId,semester)}
+export async function saveActivityLevelSchedule(yearId:string,semester:number,settingId:string,levels:string[],day:number,period:number) {return scheduleResult(()=>scheduleOps.scheduleActivityLevel(yearId,semester,settingId,levels,day,period))}
 
 export async function runAutoScheduleClass(
   classroomId: string,
