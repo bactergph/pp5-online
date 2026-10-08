@@ -335,7 +335,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <div>
             <h1>{workspace==='teacher'?'ตารางสอน/ล็อคคาบ':workspace==='activity'?'ตารางกิจกรรมพัฒนาผู้เรียน':isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
             <p>
-              {workspace==='teacher' ? `ภาคเรียนที่ ${semester} · ปีการศึกษา ${selectedYearObj?.year_be || ''}` : selectedClassroom && selectedYearObj
+              {workspace!=='class' ? `ภาคเรียนที่ ${semester} · ปีการศึกษา ${selectedYearObj?.year_be || ''}` : selectedClassroom && selectedYearObj
                 ? `ห้อง ${selectedClassroom.label} · ภาคเรียนที่ ${semester} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
                 : isManage
                   ? 'กำหนดวิชาในแต่ละคาบ — ครูผู้สอนดึงจากข้อมูลจัดครูเข้าสอน'
@@ -352,7 +352,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </div>
         </div>
 
-        <div className={`grid gap-4 rounded-lg border border-stone-200 bg-white p-5 shadow-sm ${workspace==='teacher'?'sm:grid-cols-2':'sm:grid-cols-3'}`}>
+        <div className={`grid gap-4 rounded-lg border border-stone-200 bg-white p-5 shadow-sm ${workspace!=='class'?'sm:grid-cols-2':'sm:grid-cols-3'}`}>
           <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
             <label htmlFor="schedule-year">ปีการศึกษา</label>
             <select id="schedule-year" disabled={!!busyAction || !!savingKey} value={selectedYear} onChange={e => { setPicker(null); setSelectedYear(e.target.value) }}>
@@ -369,7 +369,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
             </select>
           </div>
 
-          {workspace!=='teacher' && (          <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
+          {workspace==='class' && (          <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
             <label htmlFor="schedule-class">ห้องเรียน</label>
             <select id="schedule-class" disabled={!!busyAction || !!savingKey} value={selectedClass} onChange={e => { setPicker(null); setSelectedClass(e.target.value) }}>
               {classrooms.map(c => (
@@ -407,10 +407,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <article><strong>{Object.values(cells).filter(c=>c.locked).length}</strong><span>คาบที่ล็อก · ระบบอัตโนมัติจะเก็บไว้</span></article>
         </div>}
         {workspace==='activity'&&selectedYear&&<ActivityLevelSchedule key={`${selectedYear}:${semester}`} yearId={selectedYear} semester={semester} periodTimes={periodTimes} onChanged={loadGrid} />}
-        {workspace==='activity'&&<p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">กิจกรรมพัฒนาผู้เรียน · ไม่ต้องระบุครู · รายการละ 1 คาบต่อสัปดาห์ กดคาบว่างเพื่อเลือกกิจกรรม รายวิชาที่มีอยู่จะยังแสดงเพื่อป้องกันคาบทับกัน</p>}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
-        {workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
+        {workspace==='activity'?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">ไม่พบห้องเรียนในปีการศึกษานี้</div>
         ) : subjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">
