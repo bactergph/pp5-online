@@ -1,7 +1,9 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import LoadingButton from '@/components/LoadingButton'
-import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, searchSchoolsForAdminAssign, resetSchoolMemberSettings } from './actions'
+import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, searchSchoolsForAdminAssign, resetSchoolMemberSettings, approveAdmins } from './actions'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { schoolMemberIdHint } from '@/lib/school-identity'
 
@@ -55,6 +57,7 @@ export default function DistrictAdminsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [approving, setApproving] = useState(false)
 
   // clear school member settings
   const [resetSettingsTarget, setResetSettingsTarget] = useState<{ schoolId: string; schoolName: string } | null>(null)
@@ -82,8 +85,8 @@ export default function DistrictAdminsPage() {
     setOpenMenuId(prev => prev === id ? null : id)
   }, [])
 
-  async function loadData() {
-    setLoading(true)
+  async function loadData(showLoading = true) {
+    if (showLoading) setLoading(true)
     const { admins: a, schools: s } = await fetchAdminsAndSchools()
     setAdmins(a); setSchools(s); setLoading(false)
   }
@@ -157,7 +160,27 @@ export default function DistrictAdminsPage() {
     })
   }
   function toggleSelectAll() {
-    setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(a => a.id)))
+    setSelected(prev => {
+      const next = new Set(prev)
+      const all = filtered.length > 0 && filtered.every(a=>prev.has(a.id))
+      filtered.forEach(a=>{if(all)next.delete(a.id);else next.add(a.id)})
+      return next
+    })
+  }
+
+  async function handleApproveSelected() {
+    const targets=admins.filter(a=>selected.has(a.id)&&!a.is_active)
+    if (!targets.length || approving) return
+    setApproving(true)
+    try {
+      const confirm=await Swal.fire({icon:'question',title:`อนุมัติผู้ดูแลที่เลือก ${targets.length} คน?`,text:targets.slice(0,5).map(a=>a.full_name).join(', ')+(targets.length>5?' และรายการที่เลือกอื่น ๆ':''),showCancelButton:true,confirmButtonText:'อนุมัติที่เลือก',cancelButtonText:'ยกเลิก',confirmButtonColor:'#059669'})
+      if (!confirm.isConfirmed) return
+      const result=await approveAdmins(targets.map(a=>a.id))
+      setSelected(new Set(result.failed.map(f=>f.id)))
+      await loadData(false)
+      await Swal.fire({icon:result.failed.length?'warning':'success',title:result.failed.length?'อนุมัติสำเร็จบางรายการ':'อนุมัติเรียบร้อย',text:`อนุมัติ ${result.approved.length} คน${result.skipped.length?` · เปิดใช้งานอยู่แล้ว ${result.skipped.length} คน`:''}${result.failed.length?` · ไม่สำเร็จ ${result.failed.length} คน: ${result.failed.map(f=>`${f.name} (${f.error})`).join('; ')}`:''}`,confirmButtonText:'ตกลง',confirmButtonColor:'#059669'})
+    } catch(e) {notify('error',e instanceof Error?e.message:'อนุมัติไม่สำเร็จ')}
+    finally {setApproving(false)}
   }
 
   async function handleDelete() {
@@ -397,8 +420,9 @@ export default function DistrictAdminsPage() {
           </p>
         </div>
         <div className="page-actions">
+          {selected.size > 0 && <LoadingButton loading={approving} loadingText="กำลังอนุมัติ…" disabled={deleting || !admins.some(a=>selected.has(a.id)&&!a.is_active)} onClick={()=>void handleApproveSelected()}>อนุมัติที่เลือก ({admins.filter(a=>selected.has(a.id)&&!a.is_active).length})</LoadingButton>}
           {selected.size > 0 && (
-            <button onClick={() => setShowDeleteConfirm(true)}
+            <button disabled={approving} onClick={() => setShowDeleteConfirm(true)}
               style={{ padding: '8px 14px', borderRadius: '8px', background: '#FEE2E2', color: '#DC2626', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
               ลบที่เลือก ({selected.size})
@@ -493,7 +517,8 @@ export default function DistrictAdminsPage() {
               <tr>
                 <th style={{ width: '40px', textAlign: 'center' }}>
                   <input type="checkbox"
-                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    checked={filtered.length > 0 && filtered.every(a=>selected.has(a.id))}
+                    disabled={approving || deleting} aria-label="เลือกผู้ดูแลทั้งหมดที่แสดง"
                     onChange={toggleSelectAll}
                     style={{ width: '15px', height: '15px', accentColor: 'var(--primary)', cursor: 'pointer' }} />
                 </th>
@@ -515,7 +540,7 @@ export default function DistrictAdminsPage() {
                 return ( // menuOpen ใช้ highlight ปุ่ม ⋯ เท่านั้น
                   <tr key={admin.id} style={{ background: isSelected ? '#F5EDE3' : undefined }}>
                     <td style={{ textAlign: 'center' }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(admin.id)}
+                      <input type="checkbox" checked={isSelected} disabled={approving || deleting} aria-label={`เลือก ${admin.full_name}`} onChange={() => toggleSelect(admin.id)}
                         style={{ width: '15px', height: '15px', accentColor: 'var(--primary)', cursor: 'pointer' }} />
                     </td>
                     <td>

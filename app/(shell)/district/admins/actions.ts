@@ -3,6 +3,11 @@ import { createServerClient } from '@/lib/supabase'
 import { requireDistrict } from '@/lib/district'
 import { logActivity } from '@/lib/audit'
 import { seedEvaluationSettingsForSchool } from '@/lib/evaluation-settings-seed'
+import { approveSelectedAdmins } from '@/lib/approve-admins'
+
+export async function approveAdmins(ids: string[]) {
+  return approveSelectedAdmins(ids)
+}
 
 type AdminRow = {
   id: string

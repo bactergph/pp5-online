@@ -46,11 +46,12 @@ export function allDefaultEvaluationRowsForSchool(schoolId: string) {
   ]
 }
 
-export async function seedEvaluationSettingsForSchool(schoolId: string) {
+export async function seedEvaluationSettingsForSchool(schoolId: string, preserveExisting = false) {
   const db = createServerClient()
   const rows = allDefaultEvaluationRowsForSchool(schoolId)
   const { error } = await db.from('evaluation_settings').upsert(rows, {
     onConflict: 'school_id,kind,education_band,field_key',
+    ignoreDuplicates: preserveExisting,
   })
   return { error: error?.message ?? null, count: rows.length }
 }
