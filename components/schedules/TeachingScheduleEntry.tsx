@@ -6,6 +6,7 @@ import { fetchPeriodTimes, fetchScheduleInit, fetchTeachingScheduleGrid } from '
 import type { PeriodTimeRow } from '@/lib/schedule-helpers'
 import AppAlertModal from '@/components/AppAlertModal'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
+import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Teacher = { id: string; prefix: string; full_name: string }
@@ -139,10 +140,10 @@ export default function TeachingScheduleEntry() {
         </div>
 
         <div className="schedule-info">
-          ตารางสอนสร้างจากตารางเรียนอัตโนมัติ (ตามครูผู้สอนในแต่ละรายวิชา)
+          ตารางสอนอ้างอิงจากครูผู้สอนของแต่ละรายวิชา
           {canEdit && (
             <>
-              {' '}— แก้ไขได้ที่{' '}
+              {' '}— กดคาบด้านล่างเพื่อเอาวิชาออก เปลี่ยนวิชา หรือล็อกคาบว่าง หรือไปที่{' '}
               <Link href="/schedules/class/manage">จัดการตารางเรียน</Link>
             </>
           )}
@@ -183,14 +184,14 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-empty">ไม่พบครูในโรงเรียน</div>
         ) : (
           <div className="schedule-grid-card">
-            <ScheduleGridTable
+            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<ScheduleGridTable
               periodTimes={periodTimes}
               renderCell={(day, period) => {
                 const key = `${day}-${period}`
                 const cell = cells[key]
                 return <div className="cell-view">{renderCell(cell)}</div>
               }}
-            />
+            />}
           </div>
         )}
       </div>

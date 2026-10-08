@@ -52,6 +52,19 @@ const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'
   reset();data.lessons.push({id:'activity:manual',classroomId:'a',teacherId:null,count:0,label:'แนะแนว',activity:true,teacherOptional:true})
   await api.autoSchedule('y',null,true)
   assert.ok(data.slots.every(s=>!s.activity_id),'automatic scheduling must never add an activity')
+
+  reset();data.slots=[slot('a','l1',1)]
+  await api.editTeacherCell('y',2,'t','a',1,1,'l1',null)
+  assert.equal(data.slots.length,0,'removing from teacher timetable must remove classroom slot')
+  await api.editTeacherCell('y',2,'t','a',1,1,null,'l1')
+  assert.equal(data.slots[0].class_subject_id,'l1')
+  assert.equal(writtenTerm,2)
+  await assert.rejects(api.editTeacherCell('y',2,'other','a',1,1,'l1',null),/ไม่ใช่คาบ/)
+  await assert.rejects(api.editTeacherCell('y',2,'t','a',1,1,null,null),/ถูกแก้ไข/)
+  await assert.rejects(api.editTeacherCell('y',2,'t','a',1,1,'l1','l2'),/ไม่ได้กำหนด/)
+  data.slots[0].locked=true
+  await assert.rejects(api.editTeacherCell('y',2,'t','a',1,1,'l1',null),/ปลดล็อก/)
+  console.log('PASS: teacher timetable removal/addition updates classroom, expected lesson protects stale edits, teacher/room/term/lock validation')
   reset();role='teacher';await assert.rejects(api.autoSchedule('y',null,true),/สิทธิ์/);assert.equal(writes,0)
   console.log('PASS: rebuild quota regression, school scope/empty rooms, lock preservation, copy matching, school/role authorization')
 })().catch(e=>{console.error(e);process.exitCode=1})

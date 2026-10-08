@@ -173,6 +173,9 @@ export async function savePeriodTimes(times: PeriodTimeRow[]) {
 export async function fetchTeacherAvailability(yearId: string, semester = 1) {
   return scheduleOps.teacherAvailability(yearId,semester)
 }
+export async function editTeacherScheduleCell(yearId:string,semester:number,teacherId:string,classroomId:string,day:number,period:number,expectedLesson:string|null,lessonId:string|null) {
+  return scheduleResult(()=>scheduleOps.editTeacherCell(yearId,semester,teacherId,classroomId,day,period,expectedLesson,lessonId))
+}
 export async function setTeacherAvailabilityBlock(yearId: string, semester: number, teacherId: string, day: number, period: number, blocked: boolean) {
   return scheduleResult(()=>scheduleOps.setTeacherBlock(yearId,semester,teacherId,day,period,blocked))
 }
