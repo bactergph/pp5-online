@@ -58,30 +58,12 @@ export async function login(
 
   const mustChangePassword = Boolean(userProfile.must_change_password)
 
-  let effectiveSchoolId = userProfile.school_id
-  let requestedSchoolCode = ''
-
-  // Admin ที่เข้า login ผ่าน URL โรงเรียน แต่ profile เก่ายังไม่มี school_id
-  // ให้ผูกกับโรงเรียนนั้นทันที เพื่อให้ Super Admin เห็นโรงเรียนที่กำหนดแล้ว
-  if (!effectiveSchoolId && requestedSchoolId && userProfile.role === 'admin') {
-    const { data: requestedSchool } = await serverClient
-      .from('schools')
-      .select('id, code')
-      .eq('id', requestedSchoolId)
-      .maybeSingle()
-
-    if (requestedSchool?.id) {
-      const { error: linkError } = await serverClient
-        .from('users')
-        .update({ school_id: requestedSchool.id })
-        .eq('id', userProfile.id)
-
-      if (!linkError) {
-        effectiveSchoolId = requestedSchool.id
-        requestedSchoolCode = requestedSchool.code ? String(requestedSchool.code).trim().toLowerCase() : ''
-      }
-    }
+  const effectiveSchoolId = userProfile.school_id
+  const requestedSchoolCode = ''
+  if (requestedSchoolId && userProfile.role !== 'district' && effectiveSchoolId && requestedSchoolId !== effectiveSchoolId) {
+    return { error: 'บัญชีนี้ไม่ได้อยู่ในโรงเรียนที่เลือก' }
   }
+  // School membership comes from the profile; a login URL cannot assign it.
 
   let redirectTo = '/dashboard'
   const { cookies } = await import('next/headers')

@@ -30,10 +30,13 @@ import { buildDefaultEvaluationRows, seedEvaluationSettingsForSchool } from '@/l
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
 import { invalidateClassroomStudents, invalidateClassroomStudentsMany } from '@/lib/students-cache'
 import { invalidateSchoolCalendar } from '@/lib/school-calendar-cache'
+import { staffAccessError, staffProfileError } from '@/lib/staff-permissions'
 
-async function requireSchoolSession() {
+async function requireSchoolSession(allowUnassigned = false) {
   const session = await getSession()
   if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (session.mustChangePassword) throw new Error('กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน')
+  if (!allowUnassigned && !session.schoolId) throw new Error('กรุณากำหนดโรงเรียนก่อนใช้งาน')
   return session
 }
 
@@ -55,7 +58,7 @@ function asText(value: unknown) {
 // ============================================================
 
 export async function fetchMySchool() {
-  const session = await requireSchoolSession()
+  const session = await requireSchoolSession(true)
   const db = createServerClient()
   if (!session.schoolId) return null   // ยังไม่ได้เลือกโรงเรียน → ให้หน้าแสดงตัวเลือกค้นหาจากฐานข้อมูล
   const { data } = await db.from('schools').select('*').eq('id', session.schoolId).maybeSingle()
@@ -142,7 +145,7 @@ export async function saveSubjectGroupHeads(
 
 // ค้นหาโรงเรียนจากฐานข้อมูล (สำหรับ admin เลือกโรงเรียนของตน)
 export async function searchSchools(q: string) {
-  const session = await requireSchoolSession()
+  const session = await requireSchoolSession(true)
   if (!hasRole(session, ADMIN_ROLES)) return []
   if (!q || q.trim().length < 2) return []
   const db = createServerClient()
@@ -166,7 +169,7 @@ export async function searchSchools(q: string) {
 
 // เลือกชื่อจากฐานอ้างอิง → สร้างโรงเรียนสมาชิกใหม่ (ID ใหม่) ไม่แชร์ข้อมูลกับแถว catalog
 export async function setMySchool(catalogId: string) {
-  const session = await requireSchoolSession()
+  const session = await requireSchoolSession(true)
   if (session.role !== 'admin') return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้น' }
   const db = createServerClient()
 
@@ -211,8 +214,10 @@ export async function setMySchool(catalogId: string) {
 }
 
 export async function saveSchool(id: string | null, payload: Record<string, string | null>) {
-  const session = await requireSchoolSession()
+  const session = await requireSchoolSession(true)
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้น' }
+  if (id && id !== session.schoolId) return {error:'ไม่มีสิทธิ์แก้ไขข้อมูลโรงเรียนนี้'}
+  if ('id' in payload) return {error:'ไม่สามารถเปลี่ยนรหัสโรงเรียนผ่านฟอร์มนี้'}
   const db = createServerClient()
   const { revalidatePath } = await import('next/cache')
   const withoutPendingColumns = () => {
@@ -375,12 +380,13 @@ export async function updateSchoolActingDirector(payload: {
 // ============================================================
 
 export async function fetchSchoolUsers() {
-  const session = await requireSchoolSession()
+  const session = await requireSchoolSession(true)
+  if (staffAccessError(session)) return {schoolId:null,code:null,users:[],canManage:false,viewerRole:session.role}
   const db = createServerClient()
   const query = db.from('users')
     .select('id, email, username, prefix, full_name, position, role, is_homeroom, is_active, signature_url')
     .order('full_name')
-  if (session.schoolId) query.eq('school_id', session.schoolId)
+  query.eq('school_id', session.schoolId).neq('role','district')
   const { data } = await query
   const staffRows = await Promise.all((data || []).map(async user => {
     if (!user.email?.startsWith('pending-')) return {...user,role_pending:false}
@@ -461,13 +467,18 @@ export async function saveSchoolLeaders(payload: {
 
 export async function updateUser(id: string, payload: Record<string, string | boolean | null>) {
   const session = await requireSchoolSession()
-  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
+  const accessError = staffAccessError(session) || staffProfileError(payload)
+  if (accessError) return {error:accessError}
   const db = createServerClient()
   const { data: target } = await db.from('users')
-    .select('prefix, full_name, role, school_id, email')
+    .select('id, prefix, full_name, role, school_id, email')
     .eq('id', id)
+    .eq('school_id',session.schoolId)
     .maybeSingle()
-  const { error } = await db.from('users').update(payload).eq('id', id)
+  const targetError = staffAccessError(session,target)
+  if (targetError) return {error:targetError}
+  if (id===session.userId && payload.role && payload.role!==session.role) return {error:'ไม่สามารถเปลี่ยนบทบาทบัญชีที่กำลังใช้งาน'}
+  const { error } = await db.from('users').update(payload).eq('id', id).eq('school_id',session.schoolId)
   if (!error && target?.email?.startsWith('pending-') && payload.role) {
     await db.auth.admin.updateUserById(id,{app_metadata:{staff_role_pending:false}})
   }
@@ -496,10 +507,16 @@ export async function updateUser(id: string, payload: Record<string, string | bo
 
 export async function toggleUserActive(id: string, isActive: boolean) {
   const session = await requireSchoolSession()
-  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
+  const accessError=staffAccessError(session)
+  if (accessError) return {error:accessError}
+  if (id===session.userId) return {error:'ไม่สามารถระงับหรืออนุมัติบัญชีที่กำลังใช้งาน'}
+  if (typeof isActive!=='boolean') return {error:'สถานะไม่ถูกต้อง'}
   const db = createServerClient()
-  const { data: target } = await db.from('users').select('full_name, role, school_id').eq('id', id).maybeSingle()
-  const { error } = await db.from('users').update({ is_active: isActive }).eq('id', id)
+  const { data: target } = await db.from('users').select('full_name, role, school_id').eq('id', id).eq('school_id',session.schoolId).maybeSingle()
+  const targetError=staffAccessError(session,target)
+  if (targetError) return {error:targetError}
+  if (session.role==='admin' && target?.role==='admin') return {error:'การอนุมัติหรือระงับผู้ดูแลโรงเรียนต้องทำโดยผู้ดูแลเขต'}
+  const { error } = await db.from('users').update({ is_active: isActive }).eq('id', id).eq('school_id',session.schoolId)
   if (!error) {
     await logActivity({
       actor: session,
@@ -513,20 +530,24 @@ export async function toggleUserActive(id: string, isActive: boolean) {
       metadata: { targetRole: target?.role ?? null },
     })
   }
+  return {error:error?.message || null}
 }
 
 /** ลบบุคลากรออกจากระบบ (auth + users) — ใช้ได้เฉพาะ admin/district */
 export async function deleteSchoolUser(id: string) {
   const session = await requireSchoolSession()
-  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
+  const accessError=staffAccessError(session)
+  if (accessError) return {error:accessError}
   if (session.userId === id) return { error: 'ไม่สามารถลบบัญชีของตนเองได้' }
 
   const db = createServerClient()
   const { data: target } = await db.from('users')
     .select('id, full_name, prefix, role, school_id')
     .eq('id', id)
+    .eq('school_id',session.schoolId)
     .maybeSingle()
-  if (!target) return { error: 'ไม่พบผู้ใช้' }
+  const targetError=staffAccessError(session,target)
+  if (targetError || !target) return {error:targetError || 'ไม่พบผู้ใช้'}
 
   if (session.role === 'admin') {
     if (!session.schoolId || target.school_id !== session.schoolId) {
@@ -551,7 +572,7 @@ export async function deleteSchoolUser(id: string) {
   const { error: authError } = await db.auth.admin.deleteUser(id)
   if (authError) return { error: authError.message }
 
-  const { error } = await db.from('users').delete().eq('id', id)
+  const { error } = await db.from('users').delete().eq('id', id).eq('school_id',session.schoolId)
   // แถว users อาจถูกลบแล้วจาก ON DELETE CASCADE ของ auth.users — ไม่ถือเป็น error
   if (error && !/not found|0 rows|does not exist/i.test(error.message)) {
     return { error: error.message }
@@ -1425,27 +1446,25 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
 // ============================================================
 export async function resetTeacherPassword(userId: string) {
   const session = await requireSchoolSession()
-  if (!['admin', 'district'].includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
+  const accessError=staffAccessError(session)
+  if (accessError) return {error:accessError}
   const db = createServerClient()
   const { SCHOOL_TEMP_PASSWORD } = await import('@/lib/school-temp-password')
-  // ตรวจว่า user นั้นอยู่ในโรงเรียนเดียวกัน (ป้องกัน admin ข้ามโรงเรียน)
-  if (session.role === 'admin' && session.schoolId) {
-    const { data: target } = await db.from('users').select('school_id, role').eq('id', userId).single()
-    if (!target || target.school_id !== session.schoolId) return { error: 'ไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้คนนี้' }
-    if (!['teacher', 'academic_head', 'deputy_principal', 'principal'].includes(target.role)) {
-      return { error: 'รีเซ็ตได้เฉพาะครูและผู้บริหารโรงเรียน' }
-    }
+  const {data:target} = await db.from('users').select('full_name, role, school_id').eq('id',userId).eq('school_id',session.schoolId).maybeSingle()
+  const targetError=staffAccessError(session,target)
+  if (targetError) return {error:targetError}
+  if (session.role==='admin' && target?.role==='admin') {
+    return {error:'การรีเซ็ตรหัสผ่านผู้ดูแลโรงเรียนต้องทำโดยผู้ดูแลเขต'}
   }
 
   const { error } = await db.auth.admin.updateUserById(userId, { password: SCHOOL_TEMP_PASSWORD })
   if (error) return { error: error.message }
 
-  const flagRes = await db.from('users').update({ must_change_password: true }).eq('id', userId)
+  const flagRes = await db.from('users').update({ must_change_password: true }).eq('id', userId).eq('school_id',session.schoolId)
   if (flagRes.error && !String(flagRes.error.message || '').includes('must_change_password')) {
     return { error: flagRes.error.message }
   }
 
-  const { data: target } = await db.from('users').select('full_name, role, school_id').eq('id', userId).maybeSingle()
   await logActivity({
     actor: session,
     schoolId: target?.school_id ?? session.schoolId,

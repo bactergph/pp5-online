@@ -162,7 +162,8 @@ export default function UsersPage() {
   }
 
   async function handleToggleActive(user: User) {
-    await toggleUserActive(user.id, !user.is_active)
+    const result=await toggleUserActive(user.id, !user.is_active)
+    if (result.error) {notify('error',result.error);return}
     loadUsers()
   }
 
@@ -427,6 +428,7 @@ export default function UsersPage() {
               <tr><td colSpan={canManage ? 7 : 6} style={{ textAlign: 'center', color: 'var(--text-3)', padding: '40px 0' }}>ยังไม่มีข้อมูลบุคลากร</td></tr>
             ) : filtered.map((user, i) => {
               const badge = ROLE_BADGE[user.role] || { bg: '#F3F4F6', color: '#6B7280' }
+              const canManageAccount = viewerRole==='district' || ['teacher','academic_head','deputy_principal','principal'].includes(user.role)
               return (
                 <tr key={user.id}>
                   <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{i + 1}</td>
@@ -455,11 +457,11 @@ export default function UsersPage() {
                   {canManage && <td>
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                       <button onClick={() => openEdit(user)} style={{ fontSize: '13px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>แก้ไข</button>
-                      {!user.email?.startsWith('pending-') && <button onClick={() => { setResetTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` }); setResetMsg(null) }}
+                      {canManageAccount && !user.email?.startsWith('pending-') && <button onClick={() => { setResetTarget({ id: user.id, name: `${user.prefix} ${user.full_name}` }); setResetMsg(null) }}
                         style={{ fontSize: '13px', color: '#C49212', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         รีเซ็ตรหัสผ่าน
                       </button>}
-                      {user.email?.startsWith('pending-') ? <button onClick={()=>setTableMode(true)} className="text-sm text-amber-800">กำหนดบัญชี / บทบาท</button> : <button onClick={() => handleToggleActive(user)} style={{ fontSize: '13px', color: user.is_active ? '#D97706' : '#059669', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      {user.email?.startsWith('pending-') ? <button onClick={()=>setTableMode(true)} className="text-sm text-amber-800">กำหนดบัญชี / บทบาท</button> : canManageAccount && <button onClick={() => handleToggleActive(user)} style={{ fontSize: '13px', color: user.is_active ? '#D97706' : '#059669', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         {user.is_active ? 'ระงับ' : 'อนุมัติ'}
                       </button>}
                       {canDeleteUser(user) && (

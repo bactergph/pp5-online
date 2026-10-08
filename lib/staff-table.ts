@@ -5,6 +5,7 @@ import { getSession } from '@/lib/session'
 import { schoolMemberEmail } from '@/lib/schoolAuth'
 import { syncUserRoleToSchoolLeaders } from '@/lib/school-leaders'
 import { logActivity } from '@/lib/audit'
+import { staffAccessError } from '@/lib/staff-permissions'
 
 const roles = ['teacher', 'academic_head', 'deputy_principal', 'principal', 'admin']
 export type StaffTableRow = { key: string; id?: string; prefix: string; full_name: string; position: string; role: string; username: string; password: string; is_homeroom: boolean }
@@ -19,7 +20,7 @@ export function validateStaffRow(row: StaffTableRow) {
 
 export async function saveStaffRows(rows: StaffTableRow[]) {
   const session = await getSession()
-  if (!session?.schoolId || !['admin','district'].includes(session.role)) throw Error('ไม่มีสิทธิ์จัดการบุคลากร')
+  if (!session?.schoolId || staffAccessError(session)) throw Error('ไม่มีสิทธิ์จัดการบุคลากร')
   if (!Array.isArray(rows) || !rows.length || rows.length > 50) throw Error('บันทึกได้ครั้งละ 1–50 รายการ')
   const db = createServerClient()
   const results: {key:string;id?:string;error?:string}[] = []

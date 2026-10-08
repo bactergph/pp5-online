@@ -5,11 +5,12 @@ import { createServerClient } from '@/lib/supabase'
 import { schoolMemberEmail } from '@/lib/schoolAuth'
 import { logActivity } from '@/lib/audit'
 import { saveStaffRows } from '@/lib/staff-table'
+import { staffAccessError } from '@/lib/staff-permissions'
 
 export async function POST(req: NextRequest) {
   // ตรวจสอบว่าผู้ขอเป็น admin
   const session = await getSession()
-  if (!session || !['district', 'admin'].includes(session.role)) {
+  if (!session || staffAccessError(session)) {
     return NextResponse.json({ error: 'ไม่มีสิทธิ์' }, { status: 403 })
   }
 

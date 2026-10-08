@@ -27,7 +27,7 @@ const db={from:()=>query(),auth:{admin:{
 }}}
 const exportsObject={}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/staff-table.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>({
-  'server-only':{},crypto:require('node:crypto'),'@/lib/supabase':{createServerClient:()=>db},'@/lib/session':{getSession:async()=>session},'@/lib/schoolAuth':{schoolMemberEmail:(u,s)=>`${u}@${s}.pp5.local`},'@/lib/school-leaders':{syncUserRoleToSchoolLeaders:async()=>{}},'@/lib/audit':{logActivity:async()=>{}},
+  'server-only':{},crypto:require('node:crypto'),'@/lib/supabase':{createServerClient:()=>db},'@/lib/session':{getSession:async()=>session},'@/lib/staff-permissions':{staffAccessError:actor=>!actor.schoolId||!['admin','district'].includes(actor.role)||actor.mustChangePassword?'denied':null},'@/lib/schoolAuth':{schoolMemberEmail:(u,s)=>`${u}@${s}.pp5.local`},'@/lib/school-leaders':{syncUserRoleToSchoolLeaders:async()=>{}},'@/lib/audit':{logActivity:async()=>{}},
 })[name]})
 const row=(overrides={})=>({key:'r',prefix:'นาย',full_name:'สมชาย ใจดี',position:'ครู',role:'',username:'',password:'',is_homeroom:false,...overrides})
 async function run(){

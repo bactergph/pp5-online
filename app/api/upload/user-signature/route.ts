@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { createServerClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/audit'
+import { staffAccessError } from '@/lib/staff-permissions'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  if (!session) {
+  if (!session || session.mustChangePassword) {
     return NextResponse.json({ error: 'ไม่มีสิทธิ์' }, { status: 403 })
   }
 
@@ -27,9 +28,9 @@ export async function POST(req: NextRequest) {
   }
 
   const db = createServerClient()
-  const { data: target } = await db.from('users').select('school_id, full_name').eq('id', userId).maybeSingle()
+  const { data: target } = await db.from('users').select('school_id, full_name, role').eq('id', userId).maybeSingle()
   if (!target) return NextResponse.json({ error: 'ไม่พบผู้ใช้' }, { status: 404 })
-  if (!isSelf && session.role === 'admin' && target.school_id !== session.schoolId) {
+  if (!isSelf && staffAccessError(session,target)) {
     return NextResponse.json({ error: 'ไม่มีสิทธิ์' }, { status: 403 })
   }
 

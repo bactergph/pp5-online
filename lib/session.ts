@@ -4,6 +4,7 @@ import 'server-only'
 import { cache } from 'react'
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
+import { createServerClient } from '@/lib/supabase'
 
 // ข้อมูลที่เก็บใน session
 export type SessionPayload = {
@@ -78,5 +79,15 @@ export async function deleteSession() {
 export const getSession = cache(async (): Promise<SessionPayload | null> => {
   const cookieStore = await cookies()
   const cookie = cookieStore.get('session')?.value
-  return await decrypt(cookie)
+  const session = await decrypt(cookie)
+  if (!session?.userId) return null
+  const db = createServerClient()
+  let {data:profile,error} = await db.from('users').select('id, email, full_name, role, school_id, is_active, is_homeroom, must_change_password').eq('id',session.userId).maybeSingle()
+  if (error?.message?.includes('must_change_password')) {
+    const fallback = await db.from('users').select('id, email, full_name, role, school_id, is_active, is_homeroom').eq('id',session.userId).maybeSingle()
+    profile = fallback.data ? {...fallback.data,must_change_password:session.mustChangePassword ?? false} : null
+    error = fallback.error
+  }
+  if (error || !profile || profile.is_active !== true) return null
+  return {...session,role:profile.role,schoolId:profile.role==='district'?session.schoolId:profile.school_id,email:profile.email || session.email,fullName:profile.full_name,isHomeroom:Boolean(profile.is_homeroom),mustChangePassword:Boolean(profile.must_change_password)}
 })
