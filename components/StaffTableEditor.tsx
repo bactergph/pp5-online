@@ -18,6 +18,9 @@ export default function StaffTableEditor({users,onSaved,onClose}:{users:Staff[];
   const [saving,setSaving] = useState(false)
   const [savedCount,setSavedCount] = useState(0)
   const [saveTotal,setSaveTotal] = useState(0)
+  const [failedCount,setFailedCount] = useState(0)
+  const [saveStatus,setSaveStatus] = useState<'idle'|'saving'|'done'|'interrupted'>('idle')
+  const [currentName,setCurrentName] = useState('')
   const changed = rows.filter(r=>r.dirty)
   function change(key:string,field:keyof StaffTableRow,value:string|boolean) {
     setRows(current=>current.map(r=>r.key===key?{...r,[field]:value,dirty:true,error:undefined}:r))
@@ -54,10 +57,13 @@ export default function StaffTableEditor({users,onSaved,onClose}:{users:Staff[];
     setSaving(true)
     setSavedCount(0)
     setSaveTotal(changed.length)
+    setFailedCount(0)
+    setSaveStatus('saving')
     try {
       const results: {key:string;id?:string;error?:string}[]=[]
-      for (let offset=0;offset<changed.length;offset+=50) {
-      const response=await fetch('/api/users/table',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:changed.slice(offset,offset+50).map(({dirty,error,...r})=>{void dirty;void error;return r})})})
+      for (let offset=0;offset<changed.length;offset++) {
+      setCurrentName(changed[offset].full_name)
+      const response=await fetch('/api/users/table',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:changed.slice(offset,offset+1).map(({dirty,error,...r})=>{void dirty;void error;return r})})})
       const data=await response.json()
       if (!response.ok) throw Error(data.error || 'บันทึกไม่สำเร็จ')
       const batch=data.results as {key:string;id?:string;error?:string}[]
@@ -67,16 +73,20 @@ export default function StaffTableEditor({users,onSaved,onClose}:{users:Staff[];
         return !result?r:result.error?{...r,error:result.error}:{...r,id:result.id,password:'',dirty:false,error:undefined}
       }))
       setSavedCount(results.length)
+      setFailedCount(results.filter(r=>r.error).length)
       }
+      setCurrentName('')
+      setSaveStatus('done')
       await onSaved()
       const failed=results.filter(r=>r.error).length
       await Swal.fire({icon:failed?'warning':'success',title:failed?'บันทึกบางรายการไม่สำเร็จ':'บันทึกบุคลากรแล้ว',text:`สำเร็จ ${results.length-failed} รายการ${failed?` · ไม่สำเร็จ ${failed} รายการ ตรวจข้อความในแต่ละแถวแล้วบันทึกอีกครั้ง`:''}`,confirmButtonText:'ตกลง',confirmButtonColor:'#946b25'})
-    } catch(e) {await Swal.fire({icon:'error',title:'บันทึกไม่สำเร็จ',text:e instanceof Error?e.message:'เกิดข้อผิดพลาด'})}
+    } catch(e) {setSaveStatus('interrupted');setCurrentName('');await Swal.fire({icon:'error',title:'การบันทึกหยุดลง',text:`${e instanceof Error?e.message:'เกิดข้อผิดพลาด'} · รายการที่สำเร็จแล้วจะไม่ถูกบันทึกซ้ำเมื่อกดลองอีกครั้ง`})}
     finally {setSaving(false)}
   }
   return <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 p-5"><div><h2 className="text-lg font-semibold text-stone-900">เพิ่ม / แก้ไขบุคลากรแบบตาราง</h2><p className="mt-1 text-sm text-stone-600">กรอกชื่อก่อน แล้วกำหนดชื่อผู้ใช้ รหัสผ่าน และบทบาทภายหลังได้ · แก้ไขหลายแถวแล้วบันทึกครั้งเดียว</p></div><button disabled={saving} onClick={()=>void close()} className="rounded-md border border-stone-300 px-4 py-2 text-sm font-semibold disabled:opacity-50">กลับรายการบุคลากร</button></header>
     <div className="flex flex-wrap items-center gap-3 border-b border-stone-200 px-5 py-3"><button disabled={saving} onClick={()=>setPasteOpen(true)} className="rounded-md bg-stone-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">วางรายชื่อจาก Excel</button><span className="text-sm text-stone-600">หรือคลิกช่องแล้วกด Ctrl+V เพื่อวางหลายแถว / หลายคอลัมน์ตามลำดับหัวตาราง · เพิ่มแถวอัตโนมัติ</span></div><p className="border-b border-amber-100 bg-amber-50 px-5 py-3 text-sm text-amber-900">รายการใหม่ที่ยังไม่กำหนดบัญชีจะยังเข้าสู่ระบบไม่ได้ เมื่อพร้อมใช้งานให้กรอกชื่อผู้ใช้ รหัสผ่านอย่างน้อย 6 ตัวอักษร และเลือกบทบาท ส่วนบัญชีเดิมเว้นรหัสผ่านไว้เพื่อใช้รหัสเดิม</p>
+    {saveStatus!=='idle'&&<div className="border-b border-stone-200 bg-stone-50 px-5 py-4" aria-live="polite"><div className="mb-2 flex justify-between gap-3"><span className="text-sm font-semibold">{saveStatus==='saving'?'กำลังอัปโหลดและบันทึกรายชื่อ':saveStatus==='interrupted'?'การบันทึกหยุดลง':failedCount?'บันทึกเสร็จแล้ว · มีรายการที่ต้องแก้ไข':'บันทึกครบแล้ว'}</span><span className="text-sm font-semibold tabular-nums">{savedCount} / {saveTotal} คน · {saveTotal?Math.round(savedCount/saveTotal*100):0}%</span></div><div role="progressbar" aria-label="ความคืบหน้าการบันทึกรายชื่อ" aria-valuemin={0} aria-valuemax={saveTotal} aria-valuenow={savedCount} className="h-3 overflow-hidden rounded-full bg-stone-200"><div style={{width:saveTotal?`${savedCount/saveTotal*100}%`:'0%'}} className={`h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none ${saveStatus==='interrupted'||failedCount?'bg-amber-600':'bg-emerald-600'}`} /></div><div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-stone-600"><span>สำเร็จ {savedCount-failedCount} คน · ไม่สำเร็จ {failedCount} คน · รอดำเนินการ {saveTotal-savedCount} คน</span>{currentName&&<span>กำลังบันทึก: {currentName}</span>}</div></div>}
     <fieldset disabled={saving} className="min-w-0 disabled:opacity-70"><div className="max-h-[65vh] overflow-auto" onPaste={e=>{const target=e.target as HTMLElement;const row=target.dataset.row;const column=target.dataset.column;if(row!==undefined&&column!==undefined&&/[\t\r\n]/.test(e.clipboardData.getData("text/plain"))){e.preventDefault();paste(e.clipboardData.getData("text/plain"),Number(row),Number(column))}}}><table className="w-full min-w-[1100px] text-left text-sm"><thead className="sticky top-0 z-10 bg-stone-100 text-black"><tr>{['ที่','คำนำหน้า','ชื่อ-นามสกุล *','ตำแหน่ง','ชื่อผู้ใช้','รหัสผ่าน','บทบาท','ประจำชั้น','สถานะ'].map(x=><th key={x} className="border-b border-stone-300 px-3 py-3 font-semibold">{x}</th>)}</tr></thead><tbody>
       {rows.map((r,index)=><tr key={r.key} className={`border-b border-stone-200 ${r.error?'bg-rose-50':r.dirty?'bg-amber-50/40':'bg-white'}`}><td className="px-3 py-3 text-stone-500">{index+1}</td>
         <td className="min-w-24 px-2 py-3"><select data-row={index} data-column={0} aria-label={`คำนำหน้า แถว ${index+1}`} className={inputStyle} value={r.prefix} onChange={e=>change(r.key,'prefix',e.target.value)}>{Array.from(new Set(['','นาย','นาง','นางสาว',r.prefix])).map(p=><option key={p} value={p}>{p||'ไม่ระบุ'}</option>)}</select></td>
