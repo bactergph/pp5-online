@@ -14,6 +14,23 @@ export type PeriodTimeRow = {
 }
 
 export const MAX_SCHEDULE_PERIODS = 8
+/** Move lunch and retain each period's duration, starting at the school's first bell. */
+export function moveLunchBreak(times: PeriodTimeRow[], afterPeriod: number): PeriodTimeRow[] {
+  const lessons = times.filter(t => !t.is_break)
+  const lunch = times.find(t => t.is_break)
+  if (!lunch || !Number.isInteger(afterPeriod) || afterPeriod < 1 || afterPeriod > lessons.length) throw new Error('กรุณาเลือกคาบก่อนพักเที่ยง')
+  const minute = (value: string) => {const [h,m]=value.split(':').map(Number);return h*60+m}
+  const clock = (value: number) => `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}`
+  const ordered = [...lessons.slice(0,afterPeriod),lunch,...lessons.slice(afterPeriod)]
+  let cursor = minute(times[0].start_time)
+  return ordered.map((row,index)=>{
+    const duration = minute(row.end_time)-minute(row.start_time)
+    if (!Number.isFinite(duration) || duration<=0 || cursor+duration>1439) throw new Error('กรุณาตรวจสอบเวลาเริ่มและสิ้นสุดก่อนย้ายช่วงพัก')
+    const result = {...row,start_time:clock(cursor),end_time:clock(cursor+duration),sort_order:index+1}
+    cursor+=duration
+    return result
+  })
+}
 export function schedulePeriods(times: PeriodTimeRow[]) {
   return (times.length ? times : DEFAULT_PERIOD_TIMES).filter(t => !t.is_break).map(t => t.period)
 }

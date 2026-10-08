@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { fetchPeriodTimes, savePeriodTimes } from '@/app/schedules/actions'
-import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { DEFAULT_PERIOD_TIMES, moveLunchBreak, validatePeriodTimes, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import AppAlertModal from '@/components/AppAlertModal'
 
 const STYLES = `
@@ -18,6 +18,10 @@ const STYLES = `
   .period-workspace .period-actions {padding:16px 0;justify-content:space-between;}
   .period-workspace .period-btn {min-height:42px;font-size:14px;}
   .period-workspace button:disabled {opacity:.5;cursor:not-allowed;}
+  .period-lunch-setting {display:grid;gap:10px;padding:20px;background:#fff;border:1px solid #ddd5c9;border-radius:14px;}
+  .period-lunch-setting label {font-size:16px;font-weight:700;color:#30271d;}
+  .period-lunch-setting select {font:inherit;padding:12px;border:1px solid #bfb6a7;border-radius:8px;max-width:320px;background:white;}
+  .period-lunch-setting p {margin:0;font-size:14px;line-height:1.7;color:#655746;}
   .period-workspace .period-error {color:#a32323;background:#fff1f0;padding:12px;border-radius:8px;font-size:14px;}
   .schedule-page { display: grid; gap: 14px; }
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
@@ -84,6 +88,12 @@ export default function PeriodTimesEntry() {
 
   const teachingCount = times.filter(t => !t.is_break).length
   const invalid = validatePeriodTimes(times)
+  const lunchIndex = times.findIndex(t=>t.is_break)
+  const morningCount = times.slice(0,lunchIndex).filter(t=>!t.is_break).length
+  function changeLunch(afterPeriod:number) {
+    try {setTimes(moveLunchBreak(times,afterPeriod))}
+    catch(e) {setAlert({type:'error',title:'ย้ายช่วงพักไม่สำเร็จ',message:e instanceof Error?e.message:'กรุณาตรวจสอบเวลา'})}
+  }
   function addPeriod() {
     if (teachingCount >= 8) return
     const last = times[times.length - 1]
@@ -118,9 +128,9 @@ export default function PeriodTimesEntry() {
       <style>{STYLES}</style>
       <div className="schedule-page period-workspace">
         <div className="schedule-head">
-          <h1>ตั้งค่าเวลาคาบเรียน</h1>
+          <h1>เวลาเรียนและพักเที่ยง</h1>
           <p>กำหนดเวลาเรียนของโรงเรียน เพิ่มได้สูงสุด 8 คาบต่อวัน และปรับช่วงพักเที่ยงได้</p>
-          <div className="period-summary"><span>{teachingCount} คาบต่อวัน</span><span>{teachingCount*5} ช่องต่อสัปดาห์</span><span>ใช้ร่วมกับตารางเรียน ตารางสอน และ PDF</span></div>
+          <div className="period-summary"><span>{teachingCount} คาบต่อวัน</span><span>ช่วงเช้า {morningCount} คาบ · ช่วงบ่าย {teachingCount-morningCount} คาบ</span><span>ใช้ร่วมกับตารางเรียน ตารางสอน และ PDF</span></div>
         </div>
 
         <div className="period-info">
@@ -129,6 +139,13 @@ export default function PeriodTimesEntry() {
             : 'ใช้เวลาที่กำหนดสำหรับโรงเรียนแล้ว'}
         </div>
 
+        <div className="period-lunch-setting">
+          <label htmlFor="lunch-after-period">พักเที่ยงหลังคาบ</label>
+          <select id="lunch-after-period" value={morningCount} disabled={saving} onChange={e=>changeLunch(Number(e.target.value))}>
+            {times.filter(t=>!t.is_break).map(t=><option key={t.period} value={t.period}>หลังคาบที่ {t.period}</option>)}
+          </select>
+          <p>เมื่อเปลี่ยนคาบก่อนพัก ระบบจะเรียงเวลาใหม่โดยคงระยะเวลาแต่ละคาบและช่วงพักไว้ สามารถปรับเวลาเริ่มและสิ้นสุดในตารางด้านล่างได้ก่อนบันทึก</p>
+        </div>
         <div className="period-table-wrap">
           <table className="period-table">
             <thead>

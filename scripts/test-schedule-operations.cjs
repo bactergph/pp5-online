@@ -9,6 +9,17 @@ function moduleFrom(path, requireFn) {
 }
 let data, writes, loadedTerm, writtenTerm, role='admin'
 const solver = moduleFrom('lib/schedule-solver.ts')
+const timing = moduleFrom('lib/schedule-helpers.ts',()=>({SCHEDULE_DAYS:[],SCHEDULE_PERIOD_COUNT:6}))
+for (const morning of [2,3,4]) {
+  const shifted=timing.moveLunchBreak(timing.DEFAULT_PERIOD_TIMES,morning)
+  assert.equal(shifted.findIndex(t=>t.is_break),morning)
+  assert.equal(shifted[morning].start_time,`${String(8+morning).padStart(2,'0')}:30`)
+  assert.equal(shifted[shifted.length-1].end_time,'15:30')
+  assert.equal(timing.validatePeriodTimes(shifted),null)
+  assert.deepEqual(Array.from(shifted,t=>t.sort_order),[1,2,3,4,5,6,7])
+}
+assert.throws(()=>timing.moveLunchBreak(timing.DEFAULT_PERIOD_TIMES,9))
+console.log('PASS: lunch can follow periods 2, 3, 4 with valid ordered times and unchanged teaching durations')
 const store = {
   loadScheduleConstraints:async()=>({periodCount:6,blocks:[],blocksSupported:true}),
   loadSchedule: async(s,y,term)=>{loadedTerm=term;return data},
