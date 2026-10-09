@@ -1,4 +1,5 @@
 'use server'
+import { fetchTermClosedDays } from '@/lib/term-calendar-server'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
@@ -92,7 +93,8 @@ async function fetchWeekendSchoolDaysForRange(academicYearId: string, start: str
 }
 
 async function fetchHolidaysForRange(academicYearId: string, start: string, end: string) {
-  return getHolidaysCached(academicYearId, start, end, async () => {
+  const closedDays = await fetchTermClosedDays(academicYearId, start, end)
+  const holidays = await getHolidaysCached(academicYearId, start, end, async () => {
     const db = createServerClient()
     const { data } = await db.from('holidays')
       .select('date, name')
@@ -101,6 +103,7 @@ async function fetchHolidaysForRange(academicYearId: string, start: string, end:
       .lte('date', end)
     return data || []
   })
+  return [...holidays, ...closedDays]
 }
 
 function calcBmi(weight: number | null, height: number | null) {
@@ -153,6 +156,7 @@ async function filterRowsForTeachingDays<T extends { day: number }>(academicYear
   const openWeekendDays = new Set(weekendSchoolDays.map(d => d.date))
 
   return rows.filter(row => {
+    if (!Number.isInteger(row.day) || row.day < 1 || row.day > range.days) return false
     const date = isoDateFromMonthDay(monthKey, row.day)
     if (holidayDates.has(date)) return false
     if (isWeekendDate(date) && !openWeekendDays.has(date)) return false
@@ -326,6 +330,8 @@ export async function saveDailyAttendance(classroomId: string, date: string, row
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
   if (!date || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
+  const closedDays = await fetchHolidaysForRange(access.classroom.academic_year_id, date, date)
+  if (closedDays.some(day => day.date === date)) return { error: 'วันที่เลือกเป็นวันหยุดหรืออยู่นอกช่วงเปิดภาคเรียน', count: 0 }
 
   const db = createServerClient()
   // Sparse: มา (ม) = ไม่มีแถว — ลบแถวแทนการเก็บ ม
@@ -917,6 +923,8 @@ export async function saveDailyActivity(
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
   if (!date || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
+  const closedDays = await fetchHolidaysForRange(access.classroom.academic_year_id, date, date)
+  if (closedDays.some(day => day.date === date)) return { error: 'วันที่เลือกเป็นวันหยุดหรืออยู่นอกช่วงเปิดภาคเรียน', count: 0 }
 
   const payload = rows.map(row => ({
     student_id: row.student_id,

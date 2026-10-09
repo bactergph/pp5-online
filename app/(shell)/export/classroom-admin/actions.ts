@@ -1,4 +1,5 @@
 'use server'
+import { fetchTermClosedDays } from '@/lib/term-calendar-server'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { isDailyPresentOrDefault } from '@/lib/daily-attendance'
@@ -202,7 +203,8 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
       .eq('month', range.month),
   ])
 
-  const holidayMap = new Map(holidays.map(h => [h.date, h.name]))
+  const calendarHolidays = [...holidays, ...await fetchTermClosedDays(academicYearId, range.start, range.end)]
+  const holidayMap = new Map(calendarHolidays.map(h => [h.date, h.name]))
   const openWeekendMap = new Map(openWeekends.map(d => [d.date, d.name]))
   const schoolDays = Array.from({ length: range.days }, (_, i) => i + 1).filter(day => {
     const date = dateOf(monthKey, day)
