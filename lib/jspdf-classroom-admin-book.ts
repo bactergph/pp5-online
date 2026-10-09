@@ -1,3 +1,4 @@
+import { setAcademicMonth, calendarYearBe } from '@/lib/academic-month'
 import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import {
@@ -72,10 +73,7 @@ export type ClassroomAdminBookPdfInput = {
   fileName?: string
 }
 
-function setMonthInKey(monthKey: string, month: number) {
-  const [year] = monthKey.split('-')
-  return `${year}-${String(month).padStart(2, '0')}`
-}
+const setMonthInKey = setAcademicMonth
 
 export type ClassroomAdminBookPdfOptions = {
   loadImage?: typeof loadImageDataUrl
@@ -132,6 +130,7 @@ export async function buildClassroomAdminBookPdfBlob(
         await buildDailyAttendancePdfBlob(
           {
             ...shared,
+            yearBe: calendarYearBe(monthKey),
             reportType: report,
             term: input.term,
             monthKey,

@@ -1,4 +1,5 @@
 'use client'
+import { setAcademicMonth, calendarYearBe } from '@/lib/academic-month'
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { flushSync } from 'react-dom'
@@ -190,7 +191,7 @@ function currentClassLabel(classrooms: Classroom[], classroomId: string) {
 function thaiMonthTitle(monthKey: string, years: Year[], yearId: string) {
   const [, monthText] = monthKey.split('-')
   const monthName = MONTHS.find(m => m.value === Number(monthText))?.label || ''
-  const year = years.find(y => y.id === yearId)?.year_be
+  const year = calendarYearBe(monthKey) || years.find(y => y.id === yearId)?.year_be
   return `${monthName}${year ? ` พ.ศ.${year}` : ''}`
 }
 
@@ -206,10 +207,7 @@ function selectedMonthNumber(monthKey: string) {
   return Number(monthKey.split('-')[1])
 }
 
-function setMonthInKey(monthKey: string, month: number) {
-  const [year] = monthKey.split('-')
-  return `${year}-${String(month).padStart(2, '0')}`
-}
+const setMonthInKey = setAcademicMonth
 
 function weekdayLabel(monthKey: string, day: number) {
   const [year, month] = monthKey.split('-').map(Number)

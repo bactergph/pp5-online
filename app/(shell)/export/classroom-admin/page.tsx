@@ -1,4 +1,5 @@
 'use client'
+import { setAcademicMonth, calendarYearBe } from '@/lib/academic-month'
 import SharedReportHtmlPreview from '@/components/reports/SharedReportHtmlPreview'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -116,8 +117,7 @@ function monthName(monthKey: string) {
 }
 
 function setMonthInKey(monthKey: string, month: number) {
-  const baseMonthKey = monthKey || currentMonthKey()
-  return `${baseMonthKey.slice(0, 4)}-${String(month).padStart(2, '0')}`
+  return setAcademicMonth(monthKey || currentMonthKey(), month)
 }
 
 function studentName(student: Student) {
@@ -718,7 +718,7 @@ export default function ClassroomAdminExportPage() {
           <div>
             <h1>{reportLabel(type)}</h1>
             <div className="attendance-print-school">{schoolName || 'ชื่อโรงเรียน'}</div>
-            <p>ภาคเรียนที่ {term}  |  ห้อง {data.classroom?.level}/{data.classroom?.room}  |  เดือน{monthName(sheetMonthKey)} พ.ศ.{data.academicYear?.year_be}{pageLabel}</p>
+            <p>ภาคเรียนที่ {term}  |  ห้อง {data.classroom?.level}/{data.classroom?.room}  |  เดือน{monthName(sheetMonthKey)} พ.ศ.{calendarYearBe(sheetMonthKey)}{pageLabel}</p>
           </div>
         </header>
 
@@ -742,7 +742,7 @@ export default function ClassroomAdminExportPage() {
               <tr>
                 <th rowSpan={3}>เลขที่</th>
                 <th rowSpan={3}>ชื่อ-นามสกุล</th>
-                <th colSpan={days.length} className="attendance-print-month-title">เดือน{monthName(sheetMonthKey)} พ.ศ.{data.academicYear?.year_be}</th>
+                <th colSpan={days.length} className="attendance-print-month-title">เดือน{monthName(sheetMonthKey)} พ.ศ.{calendarYearBe(sheetMonthKey)}</th>
                 {type === 'attendance' && <th colSpan={4} className="attendance-print-summary-title">สรุปผล</th>}
                 {showActivitySummary && (
                   <th rowSpan={3} className="attendance-print-summary-title">

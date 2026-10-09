@@ -1,3 +1,4 @@
+import { calendarYearBe } from '@/lib/academic-month'
 import { jsPDF } from 'jspdf'
 import { CLASSROOM_ADMIN_A4_LANDSCAPE_MM } from '@/lib/classroom-admin-a4-landscape'
 import { CLASSROOM_ADMIN_CHECK_MARK } from '@/lib/classroom-admin-check-mark'
@@ -474,7 +475,7 @@ export async function buildDailyAttendancePdfBlob(
     const meta = [
       `ภาคเรียนที่ ${input.term}`,
       `ห้อง ${input.classroomLabel || '-'}`,
-      `เดือน${monthLabel} พ.ศ.${input.yearBe}${pageLabel}`,
+      `เดือน${monthLabel} พ.ศ.${calendarYearBe(input.monthKey)}${pageLabel}`,
     ].join('  |  ')
     doc.text(meta, PAGE_W / 2, y, { align: 'center', baseline: 'top' })
     y += lineStepMm(metaPt, headLineGap + 1.5)
@@ -497,7 +498,7 @@ export async function buildDailyAttendancePdfBlob(
     drawRect(doc, colX(2), tableTop, dayBlockW, headerRowH, COLORS.cyan)
     drawCenteredText(
       doc,
-      `เดือน${monthLabel} พ.ศ.${input.yearBe}`,
+      `เดือน${monthLabel} พ.ศ.${calendarYearBe(input.monthKey)}`,
       colX(2),
       tableTop,
       dayBlockW,
