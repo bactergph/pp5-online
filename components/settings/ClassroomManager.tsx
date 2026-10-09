@@ -1,4 +1,5 @@
 'use client'
+import './classroom-manager.css'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import { useRouter } from 'next/navigation'
@@ -221,18 +222,21 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
         message={alertModal?.message}
         onClose={() => setAlertModal(null)}
       />
-      <div className="page-stack">
+      <div className="page-stack classroom-modern">
         {embedded ? (
           <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>{subtitle}</p>
         ) : (
           <div className="page-hero">
             <div>
-              <span className="page-hero-kicker">Classroom setup</span>
+              <span className="page-hero-kicker">การจัดการชั้นเรียน</span>
               <h1 className="page-title">{title}</h1>
               <p className="page-subtitle">{subtitle}</p>
             </div>
           </div>
         )}
+        {!isHomeroom && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {[{ label: 'ประเภทโรงเรียน', value: savedEducationType === 'secondary' ? 'มัธยมศึกษา' : 'ประถมศึกษา' }, { label: 'ห้องที่เปิดสอน', value: `${classrooms.length} ห้อง` }, { label: 'นักเรียนทั้งหมด', value: `${classrooms.reduce((sum, room) => sum + room.student_count, 0)} คน` }].map(item => <div key={item.label} className="rounded-2xl border border-slate-200 bg-white px-5 py-4"><p className="text-sm text-slate-500">{item.label}</p><p className="mt-1 text-xl font-semibold text-slate-900">{item.value}</p></div>)}
+        </div>}
 
         {/* ── โหมดชั้นเรียน: จอเดียว ปี + ติ๊กชั้น ── */}
         {!isHomeroom && canManage && (
@@ -300,16 +304,16 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.04em', marginBottom: 8, textTransform: 'uppercase' }}>
                   {group.title}
                 </div>
-                <div className="wizard-level-grid">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                   {group.levels.map(level => {
                     const rooms = levelRooms[level] || 0
                     const on = rooms > 0
                     return (
                       <div
                         key={level}
-                        className={`classroom-level-chip${on ? ' is-on' : ''}`}
+                        className={`rounded-xl border p-3 transition-colors ${on ? 'border-amber-500 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}
                       >
-                        <label className="classroom-level-chip__label">
+                        <label className="mb-3 flex cursor-pointer items-center gap-2 text-slate-900">
                           <input
                             type="checkbox"
                             checked={on}
@@ -323,17 +327,18 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
                         <input
                           type="number"
                           min={1}
+                          max={100}
                           inputMode="numeric"
                           value={on ? rooms : ''}
                           disabled={!on}
                           onChange={e => setLevelRooms(prev => ({
                             ...prev,
-                            [level]: Math.max(1, Number((e.target.value || '').replace(/\D/g, '')) || 1),
+                            [level]: Math.min(100, Math.max(1, Number((e.target.value || '').replace(/\D/g, '')) || 1)),
                           }))}
-                          className="form-input classroom-level-chip__rooms"
+                          className="form-input"
                           aria-label={`จำนวนห้อง ${level}`}
                         />
-                        <span className="classroom-level-chip__unit">ห้อง</span>
+                        <span className="mt-1 block text-xs text-slate-500">จำนวนห้อง</span>
                       </div>
                     )
                   })}
@@ -413,9 +418,9 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
                           </select>
                         </div>
                       </div>
-                      <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 10 }}>
+                      {savedEducationType !== 'secondary' && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 10 }}>
                         * ครูที่ถูกกำหนดเป็นครูประจำชั้น จะได้สิทธิ์เห็นเมนู &quot;ธุรการชั้นเรียน&quot; อัตโนมัติ
-                      </p>
+                      </p>}
                       <div className="form-actions" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
                         <button type="button" onClick={() => setShowForm(false)} disabled={saving} className="btn btn-secondary">ยกเลิก</button>
                         <LoadingButton type="submit" loading={saving}>บันทึก</LoadingButton>

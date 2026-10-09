@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import {
-  fetchSubjects,
+  fetchSubjectSettingsInit,
   saveSubject,
   deleteSubject,
   deleteAllSubjects,
@@ -29,6 +29,7 @@ import {
 import LoadingButton from '@/components/LoadingButton'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { type EvaluationKind, type EvaluationSetting } from '@/lib/evaluation-settings'
+import type { SchoolEducationType } from '@/lib/school-education-type'
 
 type Subject = {
   id: string
@@ -168,20 +169,21 @@ type ParsedRow = {
   type: string; hours_per_year: number; credits: number; max_score: number
 }
 
-function gridToRows(grid: GridRow[]): ParsedRow[] {
+function gridToRows(grid: GridRow[], secondary = false): ParsedRow[] {
   const out: ParsedRow[] = []
   const seen = new Set<string>()
   for (const row of grid) {
     const code = row.code.trim()
     const name = row.name.trim()
     if (!code || !name || !/\d/.test(code)) continue   // ข้ามแถวว่าง/หัวตาราง
-    const hours = parseInt((row.hours || '').replace(/[^0-9]/g, '')) || 0
+    const value = Number(row.hours.trim()) || 0
+    const hours = secondary ? value * 80 : value
     const r: ParsedRow = {
       code, name, short_name: null,
       subject_group: deriveGroup(code),
       type: row.type.includes('เพิ่ม') ? 'เพิ่มเติม' : 'พื้นฐาน',
       hours_per_year: hours,
-      credits: Math.round((hours / 40) * 2) / 2,
+      credits: secondary ? value : Math.round((hours / 40) * 2) / 2,
       max_score: 100,
     }
     if (seen.has(code)) { out[out.findIndex(x => x.code === code)] = r }  // รหัสซ้ำ = เอาอันหลัง
@@ -233,6 +235,9 @@ function sortSubjectsByCurriculum(subjects: Subject[]) {
 export default function SubjectsPage() {
   const [activeTab, setActiveTab] = useState<SubjectSettingsTab>('subjects')
   const [subjects, setSubjects] = useState<Subject[]>([])
+  const [educationType, setEducationType] = useState<SchoolEducationType>('primary')
+  const secondary = educationType === 'secondary'
+  const [creditInput, setCreditInput] = useState('0.5')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingAll, setDeletingAll] = useState(false)
@@ -279,7 +284,7 @@ export default function SubjectsPage() {
   const [grid, setGrid] = useState<GridRow[]>(() => Array.from({ length: 12 }, blankRow))
   const [pasteSaving, setPasteSaving] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
-  const validRows = gridToRows(grid)
+  const validRows = gridToRows(grid, secondary)
   const evaluationKind = activeTab === 'activities' ? 'activities' as const : null
   const currentSettings = evaluationKind ? evaluationSettings[evaluationKind] : []
   const displayedSettings = currentSettings
@@ -336,8 +341,9 @@ export default function SubjectsPage() {
   }, [activeTab, clubYearId, clubClassroomId])
 
   async function load() {
-    const data = await fetchSubjects()
-    setSubjects(data as Subject[])
+    const data = await fetchSubjectSettingsInit()
+    setSubjects(data.subjects as Subject[])
+    setEducationType(data.educationType)
     setLoading(false)
   }
 
@@ -350,12 +356,14 @@ export default function SubjectsPage() {
   }
 
   function openAdd() {
+    setCreditInput(secondary ? '0.5' : '0')
     setEditing(empty)
     setFormCode('')
     setShowForm(true)
     setShowPaste(false)
   }
   function openEdit(s: Subject) {
+    setCreditInput(String(s.credits || (secondary ? 0.5 : 0)))
     setEditing({ ...s, short_name: s.short_name || '' })
     setFormCode(s.code)
     setShowForm(true)
@@ -784,7 +792,7 @@ export default function SubjectsPage() {
               <div>
                 <div className="section-title" style={{ marginBottom: 6 }}>วางจากตาราง</div>
                 <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.55 }}>
-                  คัดลอกจาก Excel แล้ว <b>คลิกช่องมุมซ้ายบน → Ctrl+V</b> · คอลัมน์: รหัส · ชื่อ · ประเภท · ชม./ปี
+                  คัดลอกจาก Excel แล้ว <b>คลิกช่องมุมซ้ายบน → Ctrl+V</b> · คอลัมน์: รหัส · ชื่อ · ประเภท · {secondary ? 'หน่วยกิต' : 'ชม./ปี'}
                   <br />
                   ชั้นอ่านจากรหัสอัตโนมัติ เช่น <code>ท11101</code> = ป.1 · <code>ท12101</code> = ป.2 · กลุ่มสาระจากตัวอักษรนำ
                 </p>
@@ -800,7 +808,7 @@ export default function SubjectsPage() {
                   <tr style={{ background: 'var(--bg-2)' }}>
                     <th style={{ width: 36, padding: '8px 6px', color: 'var(--text-3)', fontWeight: 500, fontSize: 12 }}>#</th>
                     {GRID_COLS.map(c => (
-                      <th key={c.key} style={{ width: c.w, padding: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text-2)', borderLeft: '1px solid var(--border)' }}>{c.label}</th>
+                      <th key={c.key} style={{ width: c.w, padding: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text-2)', borderLeft: '1px solid var(--border)' }}>{secondary && c.key === 'hours' ? 'หน่วยกิต' : c.label}</th>
                     ))}
                     <th style={{ width: 72, padding: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text-2)', borderLeft: '1px solid var(--border)' }}>ชั้น</th>
                     <th style={{ padding: '8px', textAlign: 'left', fontWeight: 600, color: 'var(--text-3)', borderLeft: '1px solid var(--border)' }}>กลุ่มสาระ</th>
@@ -910,13 +918,14 @@ export default function SubjectsPage() {
                     <option value="เพิ่มเติม">เพิ่มเติม</option>
                   </select>
                 </div>
-                <div>
+                {!secondary && <div>
                   <label className="form-label">ชั่วโมง/ปี</label>
                   <input name="hours_per_year" type="number" defaultValue={editing.hours_per_year} className="form-input" min={0} />
-                </div>
+                </div>}
                 <div>
                   <label className="form-label">หน่วยกิต</label>
-                  <input name="credits" type="number" step="0.5" defaultValue={editing.credits} className="form-input" min={0} />
+                  <input name="credits" type="number" step="0.5" value={creditInput} onChange={e => setCreditInput(e.target.value)} className="form-input" min={secondary ? 0.5 : 0} required={secondary} />
+                  {secondary && <p className="mt-2 text-sm text-slate-600">{Number(creditInput) * 2 || 0} ชม./สัปดาห์ · {Number(creditInput) * 40 || 0} ชม./ภาคเรียน</p>}
                 </div>
                 <div>
                   <label className="form-label">คะแนนเต็ม</label>
@@ -952,6 +961,7 @@ export default function SubjectsPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
               <div style={{ minWidth: 0 }}>
                 <div className="section-title" style={{ marginBottom: 6 }}>ข้อมูลรายวิชา</div>
+                {secondary && <p className="mb-2 text-sm text-slate-600">กรอกหน่วยกิต · 0.5 นก. = 1 ชม./สัปดาห์ = 20 ชม./ภาคเรียน (20 สัปดาห์)</p>}
                 <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
                   รายวิชาพื้นฐาน/เพิ่มเติมทั้งหมด {subjects.length} รายการ
                 </p>
@@ -975,7 +985,7 @@ export default function SubjectsPage() {
                     <th style={{ width: 70 }}>ชั้น</th>
                     <th>กลุ่มสาระ</th>
                     <th style={{ width: 80 }}>ประเภท</th>
-                    <th style={{ width: 70, textAlign: 'right' }}>ชม./ปี</th>
+                    <th style={{ width: 100, textAlign: 'right' }}>{secondary ? 'ชม./ภาคเรียน' : 'ชม./ปี'}</th>
                     <th style={{ width: 70, textAlign: 'right' }}>นก.</th>
                     <th style={{ width: 70, textAlign: 'right' }}>เต็ม</th>
                     <th style={{ width: 100 }}>จัดการ</th>
@@ -1008,7 +1018,7 @@ export default function SubjectsPage() {
                         }}>{s.subject_group}</span>
                       </td>
                       <td>{s.type}</td>
-                      <td style={{ textAlign: 'right' }}>{s.hours_per_year}</td>
+                      <td style={{ textAlign: 'right' }}>{secondary ? Number(s.credits) * 40 : s.hours_per_year}</td>
                       <td style={{ textAlign: 'right' }}>{s.credits}</td>
                       <td style={{ textAlign: 'right' }}>{s.max_score}</td>
                       <td>
@@ -1143,7 +1153,7 @@ export default function SubjectsPage() {
                     <th>ชื่อวิชา</th>
                     <th style={{ width: 180 }}>กลุ่มสาระ</th>
                     <th style={{ width: 90 }}>ประเภท</th>
-                    <th style={{ width: 90, textAlign: 'right' }}>ชม./ปี</th>
+                    <th style={{ width: 100, textAlign: 'right' }}>{secondary ? 'ชม./ภาคเรียน' : 'ชม./ปี'}</th>
                     <th style={{ width: 90 }}>จัดการ</th>
                   </tr>
                 </thead>
@@ -1164,7 +1174,7 @@ export default function SubjectsPage() {
                         </td>
                         <td>{subject?.subject_group || '-'}</td>
                         <td>{subject?.type || '-'}</td>
-                        <td style={{ textAlign: 'right' }}>{subject?.hours_per_year ?? '-'}</td>
+                        <td style={{ textAlign: 'right' }}>{subject ? secondary ? Number(subject.credits) * 40 : subject.hours_per_year : '-'}</td>
                         <td>
                           <button
                             type="button"

@@ -1,0 +1,20 @@
+.classroom-modern { max-width: 1440px; margin-inline: auto; gap: 20px; }
+.classroom-modern .page-hero { padding: 24px; border: 1px solid #e2e8f0; border-radius: 20px; background: white; box-shadow: none; }
+.classroom-modern .page-title { color: #0f172a; font-size: 26px; }
+.classroom-modern .page-hero-kicker { color: #64748b; letter-spacing: 0; }
+.classroom-modern .control-card, .classroom-modern .data-card { border: 1px solid #e2e8f0; border-radius: 18px; background: white; box-shadow: 0 4px 18px rgb(15 23 42 / 3%); }
+.classroom-modern .control-card { padding: 22px; }
+.classroom-modern .section-title { color: #0f172a; font-size: 18px; }
+.classroom-modern .form-input { border: 1px solid #cbd5e1; border-radius: 9px; background: white; min-height: 42px; color: #0f172a; box-shadow: none; }
+.classroom-modern .form-input:focus { outline: 2px solid #d4a017; outline-offset: 2px; }
+.classroom-modern .form-input:disabled { background: #f1f5f9; color: #94a3b8; }
+.classroom-modern input[type=checkbox] { accent-color: #a16207; width: 17px; height: 17px; }
+.classroom-modern .table-card { overflow-x: auto; }
+.classroom-modern .thai-table thead th { background: #f1f5f9; color: #0f172a; font-size: 14px; border-bottom: 1px solid #cbd5e1; }
+.classroom-modern .thai-table tbody td { padding-block: 14px; }
+.classroom-modern .thai-table tbody tr:hover { background: #fafafa; }
+.classroom-modern .btn { border-radius: 9px; min-height: 40px; }
+@media (max-width: 640px) {
+  .classroom-modern .control-card, .classroom-modern .page-hero { padding: 16px; }
+  .classroom-modern .page-title { font-size: 22px; }
+}

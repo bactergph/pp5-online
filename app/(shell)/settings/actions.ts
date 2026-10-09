@@ -31,6 +31,9 @@ import { SUBJECT_GROUPS } from '@/lib/subject-groups'
 import { invalidateClassroomStudents, invalidateClassroomStudentsMany } from '@/lib/students-cache'
 import { invalidateSchoolCalendar } from '@/lib/school-calendar-cache'
 import { staffAccessError, staffProfileError } from '@/lib/staff-permissions'
+import { getSchoolShell } from '@/lib/school-shell'
+import { resolveSchoolEducationType } from '@/lib/school-education-type'
+import { secondaryCreditHours } from '@/lib/subject-credit-hours'
 
 async function requireSchoolSession(allowUnassigned = false) {
   const session = await getSession()
@@ -1494,6 +1497,12 @@ export async function fetchSubjects() {
   return data || []
 }
 
+export async function fetchSubjectSettingsInit() {
+  const session = await requireSchoolSession()
+  const [subjects, school] = await Promise.all([fetchSubjects(), session.schoolId ? getSchoolShell(session.schoolId) : Promise.resolve(null)])
+  return { subjects, educationType: resolveSchoolEducationType(school?.education_type) }
+}
+
 export async function saveSubject(id: string | null, payload: Record<string, unknown>) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
@@ -1501,6 +1510,13 @@ export async function saveSubject(id: string | null, payload: Record<string, unk
   const code = typeof payload.code === 'string' ? payload.code.trim() : ''
   const name = typeof payload.name === 'string' ? payload.name.trim() : ''
   if (!code || !name) return { error: 'กรุณาระบุรหัสวิชาและชื่อวิชา' }
+  const school = await getSchoolShell(session.schoolId)
+  if (school?.education_type === 'secondary') {
+    try {
+      const hours = secondaryCreditHours(payload.credits)
+      payload = { ...payload, credits: hours.credits, hours_per_year: hours.annual }
+    } catch (error) { return { error: error instanceof Error ? error.message : 'หน่วยกิตไม่ถูกต้อง' } }
+  }
   payload = {
     code, name, short_name: payload.short_name, subject_group: payload.subject_group,
     type: payload.type, hours_per_year: payload.hours_per_year,
@@ -2676,7 +2692,11 @@ export async function bulkUpsertSubjects(rows: {
   if (!session.schoolId) return { error: 'ไม่พบโรงเรียน', count: 0 }
   if (rows.length === 0) return { error: 'ไม่มีข้อมูลให้เพิ่ม', count: 0 }
   const db = createServerClient()
-  const payload = rows.map(r => ({ ...r, school_id: session.schoolId }))
+  const school = await getSchoolShell(session.schoolId)
+  let payload
+  try {
+    payload = rows.map(r => ({ ...r, ...(school?.education_type === 'secondary' ? { hours_per_year: secondaryCreditHours(r.credits).annual } : {}), school_id: session.schoolId }))
+  } catch { return { error: 'รายวิชามัธยมต้องมีหน่วยกิตตั้งแต่ 0.5 และเพิ่มครั้งละ 0.5 กรุณาตรวจรายการนำเข้า', count: 0 } }
   const { data, error } = await db.from('subjects')
     .upsert(payload, { onConflict: 'school_id,code' })
     .select('id')
