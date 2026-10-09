@@ -1,5 +1,6 @@
 'use client'
 
+import { reportWithSignatureVisibility } from '@/lib/report-signature-visibility'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
@@ -3834,7 +3835,11 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
   const prevSectionsRef = useRef(sections)
-  const [data, setData] = useState<ReportPayload | null>(null)
+  const [sourceData, setData] = useState<ReportPayload | null>(null)
+  const [hiddenSignatureContexts,setHiddenSignatureContexts] = useState<Set<string>>(()=>new Set())
+  const signatureContext = `${yearId}:${classroomId}:${term}`
+  const signaturesVisible = !hiddenSignatureContexts.has(signatureContext)
+  const data = useMemo(()=>mode === 'pp5-class' ? reportWithSignatureVisibility(sourceData,signaturesVisible) : sourceData,[mode,sourceData,signaturesVisible])
   const [logoResolved, setLogoResolved] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -4570,6 +4575,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         )}
 
         <main className="report-preview-panel">
+          {!embedMode&&!printMode&&mode==='pp5-class'&&sourceData&&<section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-4" aria-label="ลายเซ็นสำหรับพิมพ์"><div><strong>ลายเซ็นในตัวอย่าง / PDF</strong><p className="mt-1 text-sm text-stone-600">ใส่หรือเอาออกได้ทุกเวลา · ไม่เปลี่ยนสถานะเสนอเซ็นในเอกสารลงนาม</p></div><button type="button" aria-pressed={signaturesVisible} onClick={()=>setHiddenSignatureContexts(current=>{const next=new Set(current);if(next.has(signatureContext))next.delete(signatureContext);else next.add(signatureContext);return next})} className="rounded-lg border border-stone-300 bg-stone-50 px-4 py-2 font-semibold">{signaturesVisible?'เอาลายเซ็นออกจาก PDF':'ใส่ลายเซ็นใน PDF'}</button></section>}
           {!embedMode && !printMode && (mode === 'pp5-subject' || mode === 'pp5-class' || mode === 'pp6') && (
             <DocumentSignaturePanel
               variant={mode === 'pp5-subject' ? 'pp5_subject' : mode === 'pp5-class' ? 'pp5_class' : 'pp6'}

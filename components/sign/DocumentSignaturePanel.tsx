@@ -308,7 +308,7 @@ export default function DocumentSignaturePanel({
     : Boolean(state?.isInitiator && (state.canPutSignature || state.canShowPropose) && !actionsLocked)
   const proposeLabel = state?.canRepropose ? 'เสนอเซ็นอีกครั้ง' : 'เสนอเซ็น'
   const removingSignature = Boolean(state?.hasDocumentSignature)
-  const putLabel = removingSignature ? 'เอาลายเซ็นออก' : state?.canRepropose ? 'ใส่ลายเซ็นใหม่' : 'ใส่ลายเซ็น'
+  const putLabel = variant === 'pp5_class' ? 'ลงชื่อสำหรับเสนอเซ็น' : removingSignature ? 'เอาลายเซ็นออก' : state?.canRepropose ? 'ใส่ลายเซ็นใหม่' : 'ใส่ลายเซ็น'
   const putReady = !awaitingState && !busy && !actionsLocked && Boolean(removingSignature ? state?.canRemoveSignature : state?.canPutSignature)
   const proposeReady = !awaitingState && !busy && !actionsLocked && Boolean(state?.canPropose)
 
@@ -341,7 +341,7 @@ export default function DocumentSignaturePanel({
               </p>
             )}
             <div className="sign-panel__dual-actions">
-              <button
+              {!(variant==='pp5_class'&&removingSignature)&&<button
                 type="button"
                 className={`sign-panel__btn sign-panel__btn--signature${putReady ? '' : ' is-dimmed'}`}
                 disabled={!putReady}
@@ -350,7 +350,7 @@ export default function DocumentSignaturePanel({
                 onClick={handlePutSignature}
               >
                 {putLabel}
-              </button>
+              </button>}
               <button
                 type="button"
                 className={`sign-panel__btn sign-panel__btn--propose${proposeReady ? '' : ' is-dimmed'}`}
