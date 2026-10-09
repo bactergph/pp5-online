@@ -74,7 +74,7 @@ export async function toggleLock(roomId: string, year: string, day: number, peri
 
 export async function teacherAvailability(year: string, semester = 1) {
   const ctx = await context(year,semester)
-  const {data,error} = await createServerClient().from('users').select('id,prefix,full_name').eq('school_id',ctx.session.schoolId).eq('is_active',true).in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name')
+  const {data,error} = await createServerClient().from('users').select('id,prefix,full_name').eq('school_id',ctx.session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name')
   if (error) throw new Error(error.message)
   return {quotas:ctx.data.lessons.filter(l=>l.teacherId).map(l=>({id:l.id,teacherId:l.teacherId,label:l.label,activity:l.activity,target:l.activity?1:l.count,used:ctx.data.slots.filter(s=>s.classroom_id===l.classroomId&&lessonKey(s)===l.id).length})),teachers:(data||[]).map(t=>({id:t.id,name:`${t.prefix||''} ${t.full_name}`.trim()})),blocks:ctx.constraints.blocks,supported:ctx.constraints.blocksSupported,lessons:ctx.data.lessons.filter(l=>!l.activity&&l.selectable!==false).map(l=>({id:l.id,teacherId:l.teacherId,classroomId:l.classroomId,label:l.label})),slots:ctx.data.slots.map(s=>({classroomId:s.classroom_id,day:s.day_of_week,period:s.period,lessonId:lessonKey(s),locked:s.locked})),busy:ctx.data.slots.flatMap(s=>{const l=ctx.data.lessons.find(l=>l.id===lessonKey(s));return l?.teacherId?[{teacherId:l.teacherId,day:s.day_of_week,period:s.period,label:l.label,classroomId:s.classroom_id,lessonId:l.id,locked:s.locked}]:[]})}
 }
