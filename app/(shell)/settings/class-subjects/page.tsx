@@ -14,7 +14,7 @@ type Subject = {
   subject_group: string; type: string; hours_per_year: number; credits: number; max_score: number
 }
 type Classroom = { id: string; level: string; room: number }
-type CS = { id: string; subject_id: string; teacher_id: string | null; order_number: number }
+type CS = { id: string; subject_id: string; teacher_id: string | null; order_number: number; room_name?: string | null }
 
 export default function ClassSubjectsPage() {
   const [canManage, setCanManage] = useState(false)
@@ -26,6 +26,7 @@ export default function ClassSubjectsPage() {
   const [selectedClass, setSelectedClass] = useState('')
   const [items, setItems] = useState<CS[]>([])
   const [loading, setLoading] = useState(true)
+  const [roomDrafts,setRoomDrafts] = useState<Record<string,string>>({})
   const [teacherDrafts, setTeacherDrafts] = useState<Record<string, string>>({})
   const [openTeacherPicker, setOpenTeacherPicker] = useState<string | null>(null)
   const [alertModal, setAlertModal] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
@@ -42,7 +43,7 @@ export default function ClassSubjectsPage() {
     }
     Promise.resolve().then(() => {
       setItems([])
-      setTeacherDrafts({})
+      setTeacherDrafts({}); setRoomDrafts({})
       setOpenTeacherPicker(null)
     })
   }, [selectedClass])
@@ -61,7 +62,7 @@ export default function ClassSubjectsPage() {
     setSelectedClass(cs[0]?.id || '')
   }
   async function loadItems(classId: string) {
-    setTeacherDrafts({})
+    setTeacherDrafts({}); setRoomDrafts({})
     setOpenTeacherPicker(null)
     setItems(await fetchClassSubjects(classId) as CS[])
   }
@@ -90,6 +91,7 @@ export default function ClassSubjectsPage() {
     return teachers.filter(t => `${t.prefix} ${t.full_name}`.toLowerCase().includes(normalized))
   }
   const pendingTeacherChanges = items.reduce((count, item) => {
+    if ((roomDrafts[item.id] ?? item.room_name ?? "").trim() !== (item.room_name || "")) return count+1
     if (!(item.id in teacherDrafts)) return count
     const desired = teacherIdByName(teacherDrafts[item.id])
     if (desired === null) return count + 1
@@ -97,11 +99,12 @@ export default function ClassSubjectsPage() {
   }, 0)
   async function handleSaveTeachers() {
     const changes = items.map(item => {
-      if (!(item.id in teacherDrafts)) return null
-      const input = teacherDrafts[item.id]
+      const roomChanged = (roomDrafts[item.id] ?? item.room_name ?? "").trim() !== (item.room_name || "")
+      if (!(item.id in teacherDrafts) && !roomChanged) return null
+      const input = teacherDrafts[item.id] ?? teacherName(item.teacher_id)
       const desired = teacherIdByName(input)
       if (desired === null) return { item, error: input.trim() }
-      if (desired === (item.teacher_id || '')) return null
+      if (desired === (item.teacher_id || '') && !roomChanged) return null
       return { item, teacherId: desired }
     }).filter(Boolean) as Array<{ item: CS; teacherId?: string; error?: string }>
 
@@ -118,7 +121,7 @@ export default function ClassSubjectsPage() {
     setSavingEdit(true)
     setAlertModal(null)
     for (const change of changes) {
-      const { error } = await setClassSubjectTeacher(change.item.id, change.teacherId || null)
+      const { error } = await setClassSubjectTeacher(change.item.id, change.teacherId || null, (roomDrafts[change.item.id] ?? change.item.room_name ?? "").trim())
       if (error) {
         setSavingEdit(false)
         notify('error', error)
@@ -127,10 +130,10 @@ export default function ClassSubjectsPage() {
       }
     }
     setSavingEdit(false)
-    setTeacherDrafts({})
+    setTeacherDrafts({}); setRoomDrafts({})
     setOpenTeacherPicker(null)
     loadItems(selectedClass)
-    notify('success', `บันทึกครูผู้สอน ${changes.length} รายการเรียบร้อย`)
+    notify('success', `บันทึกครูและสถานที่เรียน ${changes.length} รายการเรียบร้อย`)
   }
   if (loading) return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
 
@@ -174,19 +177,19 @@ export default function ClassSubjectsPage() {
                     <col style={{ width: 44 }} />
                     <col style={{ width: 96 }} />
                     <col />
-                    <col style={{ width: 320 }} />
+                    <col style={{ width: 320 }} /><col style={{width:220}} />
                   </colgroup>
                   <thead>
                     <tr>
                       <th style={{ textAlign: 'center' }}>#</th>
                       <th>รหัสวิชา</th>
                       <th>ชื่อวิชา / ประเภท</th>
-                      <th>ครูผู้สอน</th>
+                      <th>ครูผู้สอน</th><th>สถานที่เรียน</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.length === 0 ? (
-                      <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>
+                      <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>
                         ยังไม่มีวิชาในห้องนี้
                       </td></tr>
                     ) : items.map((cs, i) => {
@@ -269,6 +272,7 @@ export default function ClassSubjectsPage() {
                               teacherName(cs.teacher_id) || '— ยังไม่กำหนด —'
                             )}
                           </td>
+                          <td>{canManage?<input aria-label={`สถานที่เรียน ${s?.name || ""}`} className="form-input" maxLength={120} disabled={savingEdit} value={roomDrafts[cs.id] ?? cs.room_name ?? ""} placeholder="เช่น ห้องวิทยาศาสตร์" onChange={e=>setRoomDrafts(current=>({...current,[cs.id]:e.target.value}))}/>:cs.room_name || "—"}</td>
                         </tr>
                       )
                     })}
@@ -281,7 +285,7 @@ export default function ClassSubjectsPage() {
                     {pendingTeacherChanges > 0 ? `มี ${pendingTeacherChanges} รายการรอบันทึก` : 'ยังไม่มีการเปลี่ยนครูผู้สอน'}
                   </div>
                   <LoadingButton loading={savingEdit} onClick={handleSaveTeachers} disabled={pendingTeacherChanges === 0}>
-                    บันทึกครูผู้สอน
+                    บันทึกครูและสถานที่เรียน
                   </LoadingButton>
                 </div>
               )}

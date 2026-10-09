@@ -2396,11 +2396,11 @@ export async function fetchClassroomsLite(yearId: string) {
 }
 
 export async function fetchClassSubjects(classroomId: string) {
-  await requireSchoolSession()
+  const session = await requireSchoolSession()
   const db = createServerClient()
   const { data } = await db.from('class_subjects')
-    .select('id, subject_id, teacher_id, order_number')
-    .eq('classroom_id', classroomId).order('order_number')
+    .select('*,classrooms!inner(school_id)')
+    .eq('classroom_id', classroomId).eq('classrooms.school_id', session.schoolId).order('order_number')
   return data || []
 }
 
@@ -2513,11 +2513,24 @@ export async function reorderClassSubjects(classroomId: string) {
   }
 }
 
-export async function setClassSubjectTeacher(id: string, teacherId: string | null) {
+export async function setClassSubjectTeacher(id: string, teacherId: string | null, roomName?: string) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
-  const { error } = await db.from('class_subjects').update({ teacher_id: teacherId || null }).eq('id', id)
+  const target = await db.from('class_subjects').select('id,classrooms!inner(school_id)').eq('id',id).eq('classrooms.school_id',session.schoolId).maybeSingle()
+  if (target.error || !target.data) return {error:'ไม่มีสิทธิ์แก้ไขรายวิชานี้'}
+  if (teacherId) {
+    const teacher = await db.from('users').select('id').eq('id',teacherId).eq('school_id',session.schoolId).maybeSingle()
+    if (teacher.error || !teacher.data) return {error:'ครูผู้สอนต้องอยู่ในโรงเรียนนี้'}
+  }
+  if (roomName !== undefined && (typeof roomName !== 'string' || roomName.trim().length>120)) return {error:'ชื่อสถานที่เรียนต้องไม่เกิน 120 ตัวอักษร'}
+  const payload = {teacher_id:teacherId || null,...(roomName===undefined?{}:{room_name:roomName.trim() || null})}
+  let {error} = await db.from('class_subjects').update(payload).eq('id',id)
+  if (error && /room_name/.test(error.message)) {
+    if (roomName?.trim()) return {error:'กรุณารันไฟล์ 059_class_subject_room_name.sql ใน Supabase ก่อนบันทึกสถานที่เรียน'}
+    const fallback = await db.from('class_subjects').update({teacher_id:teacherId || null}).eq('id',id)
+    error = fallback.error
+  }
   if (!error) {
     const context = await resolveClassSubjectContext(id)
     await logActivity({

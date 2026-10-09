@@ -99,7 +99,7 @@ export async function fetchClassScheduleSubjects(classroomId: string, semester =
   const { data: room, error } = await createServerClient().from('classrooms').select('academic_year_id').eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
   if (error || !room) throw new Error('ไม่พบห้องเรียน')
   const data = await loadSchedule(session.schoolId, room.academic_year_id, semester)
-  return data.lessons.filter(l => l.classroomId === classroomId && l.selectable !== false).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,label:(l.code+' '+l.name).trim(),activity:l.activity }))
+  return data.lessons.filter(l => l.classroomId === classroomId && l.selectable !== false).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,room_name:l.roomName || "",label:(l.code+' '+l.name).trim(),activity:l.activity }))
 }
 
 export async function fetchClassScheduleGrid(classroomId: string, yearId: string, semester = 1) {
@@ -133,7 +133,7 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
     return { class_subject_id: l.id, code: l.code, name: l.name, target: l.count, used, remaining: l.count - used }
   })
   return { grid, warnings,
-    subjects: lessons.filter(l => l.selectable !== false || data.slots.some(s => lessonKey(s) === l.id)).map(l => ({ id:l.id, teacher_id:l.teacherId, subject_code:l.code, subject_name:l.name, teacher_name:l.teacherName, label:`${l.code} ${l.name}`.trim() })),
+    subjects: lessons.filter(l => l.selectable !== false || data.slots.some(s => lessonKey(s) === l.id)).map(l => ({ id:l.id, teacher_id:l.teacherId, subject_code:l.code, subject_name:l.name, teacher_name:l.teacherName,room_name:l.roomName || "", label:`${l.code} ${l.name}`.trim() })),
     quotas: { items, filled: items.reduce((n,l) => n+l.used,0), totalTarget: items.reduce((n,l) => n+l.target,0) },
   }
 }

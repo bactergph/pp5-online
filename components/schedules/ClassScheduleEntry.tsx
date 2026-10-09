@@ -39,6 +39,7 @@ type SubjectOption = {
   teacher_id: string | null
   subject_code: string
   subject_name: string
+  room_name?: string
   teacher_name: string
   label: string
 }
@@ -103,7 +104,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     const fileName = `${title}.pdf`.replace(/[\\/:*?"<>|]/g,'-')
     const gridData = Object.fromEntries(Object.entries(cells).map(([key,cell])=>{
       const subject = cell.class_subject_id ? subjectMap[cell.class_subject_id] : null
-      return [key,{line1:subject?.label || cell.note || '—',line2:subject?.teacher_name || ''}]
+      return [key,{line1:subject?.label || cell.note || '—',line2:[subject?.teacher_name,subject?.room_name].filter(Boolean).join(' · ')}]
     }))
     const times = [...periodTimes]
     enqueueFileExport({fileName,label:`ตารางเรียน · ${selectedClassroom.label}`,run:async()=>{
@@ -344,6 +345,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
       <>
         <span className="text-xs font-normal text-stone-500">{activity ? 'กิจกรรมพัฒนาผู้เรียน' : subj.subject_code}</span>
         <span className="line-clamp-2 text-[13px] font-semibold leading-5" title={subj.label}>{subj.subject_name}</span>
+        {subj.room_name&&<span className="cell-tchr">สถานที่: {subj.room_name}</span>}
         {!activity && <span className="cell-tchr" title={subj.teacher_name}>{subj.teacher_name || 'ยังไม่กำหนดครูผู้สอน'}</span>}
       </>
     )
@@ -358,6 +360,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     return (
       <div className={`mt-2 truncate px-1 text-xs ${missing?'text-amber-700':'text-stone-500'}`}>
         {subj.teacher_name || 'ยังไม่กำหนดครู — ไปที่จัดครูเข้าสอน'}
+        {subj.room_name&&<span className="block">สถานที่: {subj.room_name}</span>}
       </div>
     )
   }

@@ -156,7 +156,7 @@ export default function ScheduleExportPage() {
       fetchClassScheduleSubjects(classroomId, Number(semester)),
     ])
     const subjMap = Object.fromEntries(
-      (subs as { id: string; label: string; teacher_name: string }[]).map(s => [s.id, s]),
+      (subs as { id: string; label: string; teacher_name: string; room_name?: string }[]).map(s => [s.id, s]),
     )
 
     const data: Record<string, { line1: string; line2: string }> = {}
@@ -168,7 +168,7 @@ export default function ScheduleExportPage() {
       const subj = subjMap[cell.class_subject_id]
       data[key] = {
         line1: subj?.label || '—',
-        line2: subj?.teacher_name || '',
+        line2: [subj?.teacher_name,subj?.room_name].filter(Boolean).join(' · '),
       }
     }
     if (request !== gridRequest.current) return
