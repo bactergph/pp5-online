@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import LoadingButton from '@/components/LoadingButton'
+import { useRouter } from 'next/navigation'
 import AppAlertModal from '@/components/AppAlertModal'
 import { SCHOOL_LEVEL_GROUPS, schoolLevels, type SchoolEducationType } from '@/lib/school-education-type'
 import {
@@ -30,6 +31,7 @@ function defaultYearBe() {
 
 export default function ClassroomManager({ embedded = false, mode = 'levels' }: { embedded?: boolean; mode?: Mode }) {
   const isHomeroom = mode === 'homeroom'
+  const router = useRouter()
   const [years, setYears] = useState<Year[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [canManage, setCanManage] = useState(false)
@@ -132,6 +134,7 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
       const result = await saveSchoolEducationType(educationType)
       if (result.error) { notify('error', result.error); return }
       setSavedEducationType(educationType)
+      router.refresh()
       notify('success', 'บันทึกประเภทโรงเรียนแล้ว')
     } catch { notify('error', 'บันทึกประเภทโรงเรียนไม่สำเร็จ') }
     finally { setSavingType(false) }

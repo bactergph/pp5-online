@@ -19,6 +19,13 @@ assert(!profile.schoolLevels('primary').includes('ม.4'))
 assert(!profile.schoolLevels('secondary').includes('ป.1'))
 assert.equal(profile.resolveSchoolEducationType(null, ['ม.6']), 'secondary')
 assert.equal(profile.resolveSchoolEducationType('primary', ['ม.6']), 'primary')
+const menus = [{ href: '/reports', children: [{ href: '/reports/pp5-class' }, { href: '/reports/pp5' }, { href: '/reports/pp6' }] }, { href: '/classroom-admin', children: [{ href: '/classroom-admin/milk' }] }, { href: '/export', children: [{ href: '/export/classroom-admin' }, { href: '/export/schedules' }] }, { href: '/classroom-admin/sign' }]
+const filtered = profile.filterSchoolMenu(menus, 'secondary')
+assert.equal(filtered.length, 2)
+assert.equal(filtered[0].children.map(row => row.href).join(','), '/reports/pp5,/reports/pp6')
+assert.equal(filtered[1].children[0].href, '/export/schedules')
+assert.equal(menus[0].children.length, 3)
+assert.equal(profile.filterSchoolMenu(menus, 'primary'), menus)
 
 function fixture({ role = 'admin', type = 'secondary', year = true, studentError = false } = {}) {
   const writes = []

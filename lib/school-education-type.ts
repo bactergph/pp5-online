@@ -1,5 +1,17 @@
 export type SchoolEducationType = 'primary' | 'secondary'
 
+type MenuNode = { href?: string; children?: MenuNode[] }
+export function filterSchoolMenu<T extends MenuNode>(items: T[], type: SchoolEducationType): T[] {
+  if (type !== 'secondary') return items
+  return items.flatMap(item => {
+    const href = item.href || ''
+    if (href === '/reports/pp5-class' || href.startsWith('/reports/pp5-class/') || href === '/classroom-admin' || href.startsWith('/classroom-admin/') || href === '/export/classroom-admin' || href.startsWith('/export/classroom-admin/')) return []
+    if (!item.children) return [item]
+    const children = filterSchoolMenu(item.children, type)
+    return children.length ? [{ ...item, children } as T] : []
+  })
+}
+
 export const SCHOOL_LEVEL_GROUPS = {
   primary: [
     { title: 'อนุบาล', levels: ['อ.2', 'อ.3'] },

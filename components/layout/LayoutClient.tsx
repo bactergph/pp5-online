@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import Sidebar from './Sidebar'
 import Navbar from './Navbar'
 import NavigationProgress from './NavigationProgress'
+import type { SchoolEducationType } from '@/lib/school-education-type'
 
 /** Navbar titles — same labels as the old per-section layouts */
 const TITLE_BY_PREFIX: { prefix: string; title: string }[] = [
@@ -35,6 +36,7 @@ function titleFromPath(pathname: string, fallback?: string) {
 }
 
 type Props = {
+  educationType?: SchoolEducationType
   children: React.ReactNode
   title?: string
   userRole: string
@@ -62,6 +64,7 @@ function LayoutClientInner({
   schoolName = null,
   hasSchool = false,
   isActingDirector = false,
+  educationType = 'primary',
 }: Props) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -97,6 +100,7 @@ function LayoutClientInner({
     <div className="app-shell">
       <NavigationProgress />
       <Sidebar
+        educationType={educationType}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         userRole={userRole}

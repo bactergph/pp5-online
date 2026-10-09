@@ -6,6 +6,7 @@ import { defaultSidebarIcon, normalizeSidebarTone, type SidebarTone } from '@/li
 import { logout } from '@/lib/actions/auth'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { filterSchoolMenu, type SchoolEducationType } from '@/lib/school-education-type'
 
 type Child = { href?: string; label: string; icon?: React.ReactNode; children?: Child[]; tone?: SidebarTone }
 type NavItem = { href: string; label: string; icon: React.ReactNode; children?: Child[] }
@@ -515,6 +516,7 @@ function renderSubmenuChildren(
 }
 
 type Props = {
+  educationType?: SchoolEducationType
   isOpen: boolean
   onClose: () => void
   userRole: string
@@ -540,6 +542,7 @@ export default function Sidebar({
   schoolLogoUrl = null,
   schoolProgramName = null,
   schoolName = null,
+  educationType = 'primary',
 }: Props) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement | null>(null)
@@ -557,7 +560,7 @@ export default function Sidebar({
     setExpanded([])
   }, [pathname])
 
-  const sections = buildNav(navRole, isHomeroom)
+  const sections = buildNav(navRole, isHomeroom).map(section => ({ ...section, items: filterSchoolMenu(section.items, educationType) })).filter(section => section.items.length > 0)
   const schoolPrefix = schoolCode && userRole !== 'district' ? `/${schoolCode}` : ''
   const scopedHref = (href: string) => {
     if (!schoolPrefix || !href.startsWith('/') || href.startsWith('/district')) return href
