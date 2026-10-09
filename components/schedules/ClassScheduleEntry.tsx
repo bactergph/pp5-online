@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import {
   fetchClassScheduleBundle,
+  fetchScheduleExportContext,
   fetchScheduleClassrooms,
   fetchScheduleInit,
   saveClassScheduleCell,
@@ -19,6 +20,10 @@ import {
   runAutoScheduleSchool,
   toggleScheduleCellLock,
 } from '@/app/schedules/actions'
+import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
+import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
+import { scheduleSchoolName } from '@/lib/schedule-school-name'
+import { directorDisplayName } from '@/lib/school-director'
 import type { PeriodTimeRow } from '@/lib/schedule-helpers'
 import ScheduleLessonPicker from './ScheduleLessonPicker'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -90,6 +95,22 @@ export default function ClassScheduleEntry({ mode }: Props) {
   )
 
   const selectedClassroom = classrooms.find(c => c.id === selectedClass)
+  function downloadClassPdf() {
+    if (blocked || !selectedClassroom) return
+    const classLabel = selectedClassroom.label.replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
+    const year = years.find(y=>y.id===selectedYear)?.year_be || ''
+    const title = `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${year} ${classLabel}`
+    const fileName = `${title}.pdf`.replace(/[\\/:*?"<>|]/g,'-')
+    const gridData = Object.fromEntries(Object.entries(cells).map(([key,cell])=>{
+      const subject = cell.class_subject_id ? subjectMap[cell.class_subject_id] : null
+      return [key,{line1:subject?.label || cell.note || '—',line2:subject?.teacher_name || ''}]
+    }))
+    const times = [...periodTimes]
+    enqueueFileExport({fileName,label:`ตารางเรียน · ${selectedClassroom.label}`,run:async()=>{
+      const ctx = await fetchScheduleExportContext()
+      return buildSchedulePdfBlob({title,fileName,gridData,periodTimes:times,schoolName:scheduleSchoolName(ctx.school?.name),schoolLogoUrl:ctx.school?.logo_url,academicHeadName:ctx.school?.academic_head_name || '',directorName:directorDisplayName(ctx.school,''),directorPosition:ctx.school?.acting_director?'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา':ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา'})
+    }})
+  }
   const quotaOptions = subjects.map(s=>{
     const quota=quotas?.items.find(q=>q.class_subject_id===s.id)
     const target=s.id.startsWith('activity:')?1:quota?.target
@@ -367,7 +388,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
             <button role="tab" aria-selected={workspace==='teacher'} onClick={()=>setWorkspace('teacher')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='teacher'?'border-amber-700 text-amber-900':'border-transparent text-stone-500'}`}>ตารางสอน/ล็อคคาบ</button>
             <button role="tab" aria-selected={workspace==='activity'} onClick={()=>setWorkspace('activity')} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='activity'?'border-emerald-700 text-emerald-900':'border-transparent text-stone-500'}`}>กิจกรรมพัฒนาผู้เรียน</button>
           </div> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-amber-900">จัดการตารางเรียน</Link>}
-          {workspace==='class' && selectedClass && <Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" aria-disabled={blocked} onClick={e => { if (blocked) e.preventDefault() }} href={`/export/schedules?print=1&type=class&year=${selectedYear}&semester=${semester}&classroom=${selectedClass}`}>พิมพ์ / PDF</Link>}
+          {workspace==='class' && selectedClass && <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked} onClick={downloadClassPdf}>ดาวน์โหลด PDF</button>}
           </div>
         </div>
 
