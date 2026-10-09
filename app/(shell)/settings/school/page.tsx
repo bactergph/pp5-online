@@ -1,5 +1,7 @@
 'use client'
 import Image from 'next/image'
+import Link from 'next/link'
+import './onboarding-modern.css'
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import LoadingButton from '@/components/LoadingButton'
@@ -47,7 +49,7 @@ const ONBOARDING_STEPS: { key: string; label: string; title: string; desc: strin
   { key: 'school', label: 'เลือกโรงเรียน', title: 'เลือกโรงเรียนของคุณ', desc: 'ค้นหาและเลือกโรงเรียนจากฐานข้อมูลที่สำนักงานเขตเตรียมไว้', icon: 'M3 21h18 M5 21V7l7-4 7 4v14 M9 21v-6h6v6' },
   { key: 'general', label: 'ข้อมูลทั่วไป', title: 'ข้อมูลทั่วไป', desc: 'ข้อมูลที่ใช้บนเอกสารราชการและรายงานของโรงเรียน', icon: 'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5' },
   { key: 'leaders', label: 'ผู้บริหาร/ผู้รับผิดชอบ', title: 'ผู้บริหารและผู้รับผิดชอบ', desc: 'ชื่อที่ใช้ลงนามในเอกสารและรายงานสรุป', icon: 'M12 12a4 4 0 100-8 4 4 0 000 8z M4 22a8 8 0 0116 0' },
-  { key: 'login', label: 'สร้างหน้า login', title: 'สร้างหน้า login โรงเรียน', desc: 'ตั้ง URL โรงเรียนสำหรับลิงก์เข้าระบบของครูและบุคลากร', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+  { key: 'login', label: 'ลิงก์เข้าโรงเรียน', title: 'ตั้งลิงก์เข้าสู่ระบบโรงเรียน', desc: 'ตั้ง URL โรงเรียนสำหรับลิงก์เข้าระบบของครูและบุคลากร', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
   { key: 'branding', label: 'โลโก้และตรา', title: 'โลโก้และตราโรงเรียน', desc: 'อัปโหลดโลโก้และตราสำหรับพิมพ์ ปพ.5, ปพ.6 และรายงาน', icon: 'M3 5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5z M8.5 8.5h.01 M21 15l-5-5L5 21' },
   { key: 'classrooms', label: 'ชั้นเรียน', title: 'ชั้นเรียน', desc: 'ตั้งปีการศึกษาและชั้นที่เปิดสอนในจอเดียว (ทำภายหลังได้)', icon: 'M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z' },
   { key: 'import', label: 'นำเข้านักเรียน', title: 'นำเข้ารายชื่อนักเรียน', desc: 'นำเข้ารายชื่อนักเรียนจากไฟล์ DMC (ทำภายหลังได้)', icon: 'M17 8l-5-5-5 5 M12 3v12 M5 21h14' },
@@ -467,7 +469,7 @@ export default function SchoolSettingsPage() {
     // ระหว่างโหลดหลังเลือกโรงเรียน ให้ค้างบน onboarding เต็มจอ ไม่เด้งไปเมนูตั้งค่า
     if (inOnboarding) {
       return (
-        <div className="onboarding-wrap onboarding-wrap--full onboarding-wrap--wizard">
+        <div className="onboarding-wrap onboarding-wrap--full onboarding-wrap--wizard onboarding-modern">
           <div className="onboarding-orbs" aria-hidden />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh', color: 'var(--text-3)', position: 'relative', zIndex: 1 }}>
             <div style={{ textAlign: 'center' }}>
@@ -503,11 +505,11 @@ export default function SchoolSettingsPage() {
       <div className="onboarding-card">
         <div className="onboarding-body">
           <p style={{ margin: '0 0 14px', color: 'var(--text-2)', fontSize: 14, lineHeight: 1.55 }}>
-            ค้นหาชื่อจากฐานอ้างอิง แล้วกดเลือก — ระบบจะสร้างโรงเรียนสมาชิกใหม่ให้คุณ (รหัสใหม่ แยกข้อมูลจากโรงเรียนอื่นที่ชื่อซ้ำได้)
+            ค้นหาชื่อโรงเรียนที่คุณดูแล และตรวจสอบจังหวัดกับอำเภอก่อนเลือก ข้อมูลที่คุณบันทึกจะอยู่ในพื้นที่ของโรงเรียนคุณ
           </p>
           <div className="onboarding-search">
             <svg className="onboarding-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-            <input className="form-input onboarding-search-input" placeholder="พิมพ์ชื่อโรงเรียน (อย่างน้อย 2 ตัวอักษร)" value={q} onChange={e => doSearch(e.target.value)} autoFocus />
+            <input className="form-input onboarding-search-input" aria-label="ค้นหาโรงเรียน" placeholder="ค้นหาชื่อโรงเรียน อย่างน้อย 2 ตัวอักษร" value={q} onChange={e => doSearch(e.target.value)} autoFocus />
           </div>
           <div className="onboarding-results">
             {results.map(r => (
@@ -580,9 +582,10 @@ export default function SchoolSettingsPage() {
     else if (isLast) primaryBtn = <button type="button" onClick={finishOnboarding} className="btn btn-primary btn-lg">เสร็จสิ้น · เริ่มใช้งาน</button>
 
     return (
-      <div className="onboarding-wrap onboarding-wrap--full onboarding-wrap--wizard">
+      <div className="onboarding-wrap onboarding-wrap--full onboarding-wrap--wizard onboarding-modern">
         <AlertModal />
         <div className="onboarding-orbs" aria-hidden />
+        <header className="onboarding-topbar"><Link href="/"><Image src="/brand/jarnsek-logo.png" alt="" width={34} height={34} /><strong>จารย์เสก</strong></Link><Link href="/">หน้าแนะนำระบบ ↗</Link></header>
         <div className="onboarding-wizard">
           <aside className="wizard-rail">
             <div className="onboarding-brand"><span className="onboarding-brand-dot" />จารย์เสก · Jarn-Sek</div>
@@ -593,7 +596,7 @@ export default function SchoolSettingsPage() {
                 const clickable = canNavigate && i !== step
                 return (
                   <li key={s.key} className={`wizard-step is-${state}`}>
-                    <button type="button" disabled={!clickable} onClick={() => clickable && goStep(i)} className="wizard-step-btn">
+                    <button type="button" disabled={!clickable} onClick={() => clickable && goStep(i)} className="wizard-step-btn" aria-current={i === step ? 'step' : undefined}>
                       <span className="wizard-step-index">
                         {i < step
                           ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
@@ -615,12 +618,12 @@ export default function SchoolSettingsPage() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
             </button>
             <p className="wizard-skip-hint">
-              ใช้ระบบได้ตอนนี้ · login ครั้งหน้าถ้ายังไม่ครบจะกลับมาตั้งค่าต่อ
+              การตั้งค่าที่ยังไม่ครบจะกลับมาให้ทำต่อ เมื่อเข้าสู่ระบบครั้งถัดไป
             </p>
           </aside>
 
           <div className="wizard-main">
-            <div className="wizard-progress"><div className="wizard-progress-bar" style={{ width: `${progressPct}%` }} /></div>
+            <div className="wizard-progress" role="progressbar" aria-label="ตำแหน่งขั้นตอนตั้งค่า" aria-valuemin={0} aria-valuemax={lastIndex} aria-valuenow={step}><div className="wizard-progress-bar" style={{ width: `${progressPct}%` }} /></div>
             <div className="wizard-head">
               <span className="wizard-head-badge">ขั้นตอนที่ {step + 1} จาก {ONBOARDING_STEPS.length}</span>
               <div className="wizard-head-row">
@@ -632,6 +635,7 @@ export default function SchoolSettingsPage() {
                 <div className="wizard-head-text">
                   <h1 className="wizard-title">{meta.title}</h1>
                   <p className="wizard-desc">{meta.desc}</p>
+                  {[4, 5, 6, 7].includes(step) && <p className="wizard-optional-note">ขั้นตอนนี้ทำภายหลังได้</p>}
                 </div>
               </div>
             </div>

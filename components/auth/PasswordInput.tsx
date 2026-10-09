@@ -39,7 +39,6 @@ export default function PasswordInput({
         className="auth-scout-password__toggle"
         onClick={() => setVisible(v => !v)}
         aria-label={visible ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-        tabIndex={-1}
       >
         {visible ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
