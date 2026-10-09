@@ -70,13 +70,29 @@
   .workspace-theme .sidebar-link.is-active .sidebar-link-icon,
   .workspace-theme .sidebar-child-link.is-active .sidebar-child-icon { color: #2563eb; }
   .workspace-theme .sidebar-child-group-label { color: #475569 !important; }
+  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-child-group-label {
+    color: #475569 !important;
+    background: #eef2f6;
+    opacity: 1;
+    letter-spacing: normal;
+  }
+  .workspace-theme .sidebar .sidebar-child-group {
+    --sb-tone-label: #475569;
+    --sb-tone-active-fg: #1d4ed8;
+    --sb-tone-active-bg: #eff6ff;
+    --sb-tone-active-border: #bfdbfe;
+    --sb-tone-badge-bg: #e2e8f0;
+    --sb-tone-badge-fg: #475569;
+    --sb-tone-rail: #d8dee8;
+  }
   .workspace-theme .sidebar-submenu--cards .sidebar-child-group {
     background: #f8fafc;
     border-color: #e2e8f0;
     box-shadow: none;
   }
-  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-submenu-link { color: #475569; }
-  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-submenu-link:hover { background: #eaf0f8; color: #1d4ed8; }
+  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-submenu-link { color: #475569 !important; }
+  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-submenu-link:hover { background: #eaf0f8; color: #1d4ed8 !important; }
+  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-submenu-link.is-active { color: #1d4ed8 !important; }
   .workspace-theme .sidebar-footer { border-color: #e2e8f0; }
   .workspace-theme .sidebar-logout { background: #fff; border-color: #e2e8f0; color: #b91c1c; border-radius: 8px; }
   .workspace-theme .sidebar-logout:hover { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
@@ -110,6 +126,7 @@
   .workspace-theme .page-hero { background: #fff !important; color: #1f2937; border: 1px solid #d8dee8; border-radius: 12px; box-shadow: var(--shadow-sm); }
   .workspace-theme .page-hero h2 { color: #1f2937 !important; }
   .workspace-theme .page-hero p { color: #475569 !important; }
+  .workspace-theme .page-hero .page-hero-kicker { display: block; }
   .workspace-theme .page-hero span { color: #1d4ed8 !important; background: #eff6ff !important; }
   .workspace-theme .page-hero > div:last-child { color: #2563eb; background: #eff6ff !important; border-radius: 12px !important; }
   .workspace-theme .page-hero svg[stroke="white"] { stroke: #2563eb; }
