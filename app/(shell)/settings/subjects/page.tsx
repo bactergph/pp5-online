@@ -687,7 +687,7 @@ export default function SubjectsPage() {
       sort_order: Number(fd.get('sort_order') || editingSetting.sort_order),
       is_active: fd.get('is_active') === 'on',
       ...(evaluationKind === 'activities'
-        ? { hours_per_year: Math.max(0, Number(fd.get('hours_per_year') || 0)) }
+        ? { hours_per_year: Math.max(0, Number(fd.get('hours_per_year') || 0)) * (secondary ? 2 : 1) }
         : {}),
     }
     const { error } = editingSetting.id
@@ -1448,12 +1448,12 @@ export default function SubjectsPage() {
                       <input name="description" defaultValue={editingSetting.description || ''} className="form-input" />
                     </div>
                     <div>
-                      <label className="form-label">ชั่วโมง/ปี</label>
+                      <label className="form-label">{secondary ? 'ชั่วโมง/ภาคเรียน' : 'ชั่วโมง/ปี'}</label>
                       <input
                         name="hours_per_year"
                         type="number"
                         min={0}
-                        defaultValue={editingSetting.hours_per_year ?? 0}
+                        defaultValue={(editingSetting.hours_per_year ?? 0) / (secondary ? 2 : 1)}
                         className="form-input"
                       />
                     </div>
@@ -1495,7 +1495,7 @@ export default function SubjectsPage() {
                     <tr>
                       <th style={{ width: 54 }}>ลำดับ</th>
                       <th>รายการประเมิน</th>
-                      <th style={{ width: 90 }}>ชม./ปี</th>
+                      <th style={{ width: 100 }}>{secondary ? 'ชม./ภาคเรียน' : 'ชม./ปี'}</th>
                       <th style={{ width: 90 }}>สถานะ</th>
                       <th style={{ width: 180 }}>จัดการ</th>
                     </tr>
@@ -1510,7 +1510,7 @@ export default function SubjectsPage() {
                             {setting.short_label}{setting.description ? ` · ${setting.description}` : ''}
                           </div>
                         </td>
-                        <td style={{ textAlign: 'center', fontWeight: 700 }}>{setting.hours_per_year ?? 0}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 700 }}>{(setting.hours_per_year ?? 0) / (secondary ? 2 : 1)}</td>
                         <td>
                           <span className={`badge ${setting.is_active ? 'badge-success' : 'badge-gray'}`}>
                             {setting.is_active ? 'เปิดใช้' : 'ปิด'}
