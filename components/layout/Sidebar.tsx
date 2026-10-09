@@ -314,8 +314,8 @@ const CLASSROOM_ADMIN_SIGN_NAV: NavItem = {
 const ASSIGN: NavItem = {
   href: '/settings', label: 'มอบหมายและตั้งค่าวิชาการ', icon: ic(I.users),
   children: [
-    { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
-    { href: '/score-config',   label: 'กำหนดสัดส่วนคะแนน', icon: ic(I.sliders) },
+    { href: '/settings/subjects', label: 'รายวิชา/สัดส่วนคะแนน', icon: ic(I.book) },
+    { href: '/settings/activities', label: 'กิจกรรม/ชุมนุม', icon: ic(I.star) },
     { href: '/settings/evaluation-criteria', label: 'เกณฑ์การประเมิน', icon: ic(I.doc) },
     { href: '/settings/class-subjects', label: 'กำหนดครูประจำวิชา', icon: ic(I.users) },
     { href: '/classrooms/homeroom', label: 'กำหนดครูประจำชั้น', icon: ic(I.class) },
@@ -352,8 +352,8 @@ const ADMIN_SETTINGS: NavItem = {
       children: [
         { href: '/classrooms', label: 'ชั้นที่เปิดสอน', icon: ic(I.class) },
         { href: '/students', label: 'นักเรียน', icon: ic(I.users) },
-        { href: '/settings/subjects', label: 'รายวิชา / ชุมนุม', icon: ic(I.book) },
-        { href: '/score-config', label: 'กำหนดสัดส่วนคะแนน', icon: ic(I.sliders) },
+        { href: '/settings/subjects', label: 'รายวิชา/สัดส่วนคะแนน', icon: ic(I.book) },
+        { href: '/settings/activities', label: 'กิจกรรม/ชุมนุม', icon: ic(I.star) },
         { href: '/settings/evaluation-criteria', label: 'เกณฑ์การประเมิน', icon: ic(I.doc) },
         { href: '/settings/class-subjects', label: 'กำหนดครูประจำวิชา', icon: ic(I.pen) },
         { href: '/classrooms/homeroom', label: 'กำหนดครูประจำชั้น', icon: ic(I.users) },
