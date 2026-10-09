@@ -5,6 +5,7 @@ import IosViewportFix from '@/components/layout/IosViewportFix'
 import './globals.css'
 import './glass-login.css'
 import './report-fonts.css'
+import './workspace-theme.css'
 
 export const metadata: Metadata = {
   title: 'จารย์เสก (Jarn-Sek) - ระบบจัดการงานวิชาการครู',

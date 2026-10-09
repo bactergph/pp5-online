@@ -97,7 +97,7 @@ function LayoutClientInner({
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell workspace-theme">
       <NavigationProgress />
       <Sidebar
         educationType={educationType}
