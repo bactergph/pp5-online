@@ -794,7 +794,7 @@ export default function SubjectsPage() {
                 <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.55 }}>
                   คัดลอกจาก Excel แล้ว <b>คลิกช่องมุมซ้ายบน → Ctrl+V</b> · คอลัมน์: รหัส · ชื่อ · ประเภท · {secondary ? 'หน่วยกิต' : 'ชม./ปี'}
                   <br />
-                  ชั้นอ่านจากรหัสอัตโนมัติ เช่น <code>ท11101</code> = ป.1 · <code>ท12101</code> = ป.2 · กลุ่มสาระจากตัวอักษรนำ
+                  {secondary ? <>ชั้นอ่านจากรหัสอัตโนมัติ เช่น <code>ท21101</code> = ม.1 · <code>ท31101</code> = ม.4 · หน่วยกิต เช่น 0.5, 1, 1.5 · กลุ่มสาระจากตัวอักษรนำ</> : <>ชั้นอ่านจากรหัสอัตโนมัติ เช่น <code>ท11101</code> = ป.1 · <code>ท12101</code> = ป.2 · กลุ่มสาระจากตัวอักษรนำ</>}
                 </p>
               </div>
               <button type="button" onClick={() => { setShowPaste(false); clearGrid() }} disabled={pasteSaving} className="btn btn-ghost" style={{ padding: '7px 10px' }}>
@@ -827,7 +827,7 @@ export default function SubjectsPage() {
                               value={row[c.key]}
                               onChange={e => setCell(r, c.key, e.target.value)}
                               onPaste={e => onCellPaste(r, ci, e)}
-                              placeholder={c.key === 'code' ? 'ท11101' : c.key === 'name' ? 'ภาษาไทย1' : c.key === 'type' ? 'พื้นฐาน' : '200'}
+                              placeholder={c.key === 'code' ? secondary ? 'ท21101' : 'ท11101' : c.key === 'name' ? 'ภาษาไทย1' : c.key === 'type' ? 'พื้นฐาน' : secondary ? '0.5' : '200'}
                               style={{
                                 width: '100%', border: 'none', outline: 'none', padding: '8px', fontSize: 13,
                                 background: 'transparent', fontFamily: 'inherit', boxSizing: 'border-box',
