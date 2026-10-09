@@ -1,9 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import {
   fetchSubjects,
   saveSubject,
   deleteSubject,
+  deleteAllSubjects,
   bulkUpsertSubjects,
   syncSubjectsFromGlobal,
   fetchEvaluationSettings,
@@ -232,6 +235,7 @@ export default function SubjectsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deletingAll, setDeletingAll] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<typeof empty>(empty)
   const [search, setSearch] = useState('')
@@ -537,6 +541,22 @@ export default function SubjectsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleDeleteAll() {
+    if (deletingAll || !subjects.length) return
+    const first = await Swal.fire({ title: 'ลบข้อมูลรายวิชาทั้งหมด?', text: `ลบรายวิชาทั้งหมด ${subjects.length} รายการของโรงเรียนนี้ รวมรายการที่ไม่ได้แสดงจากตัวกรอง`, icon: 'warning', showCancelButton: true, confirmButtonText: 'ดำเนินการต่อ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#dc2626' })
+    if (!first.isConfirmed) return
+    const second = await Swal.fire({ title: 'ยืนยันการลบอีกครั้ง', text: 'ข้อมูลที่ลบจะกู้คืนจากหน้านี้ไม่ได้ หากมีรายวิชาที่เปิดสอนอยู่ ระบบจะไม่ลบรายการใด', icon: 'warning', showCancelButton: true, confirmButtonText: 'ยืนยัน ลบทั้งหมด', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#dc2626', focusCancel: true })
+    if (!second.isConfirmed) return
+    setDeletingAll(true)
+    try {
+      const result = await deleteAllSubjects()
+      if (result.error) { notify('error', result.error); return }
+      await load()
+      notify('success', `ลบรายวิชาแล้ว ${result.count} รายการ`)
+    } catch { notify('error', 'ลบรายวิชาไม่สำเร็จ กรุณาลองใหม่') }
+    finally { setDeletingAll(false) }
   }
 
   async function handleDelete(s: Subject) {
@@ -942,6 +962,7 @@ export default function SubjectsPage() {
                 </LoadingButton>
                 <button type="button" onClick={() => { setGrid(Array.from({ length: 12 }, blankRow)); setShowPaste(true); setShowForm(false) }} className="btn btn-secondary">วางจากตาราง</button>
                 <button type="button" onClick={openAdd} className="btn btn-primary">+ เพิ่มรายวิชา</button>
+                <LoadingButton type="button" onClick={handleDeleteAll} loading={deletingAll} disabled={!subjects.length || saving || syncBusy} loadingText="กำลังลบ..." className="btn btn-secondary" style={{ color: '#b91c1c', borderColor: '#fecaca' }}>ลบทั้งหมด</LoadingButton>
               </div>
             </div>
             <div style={{ overflowX: 'auto', maxWidth: '100%' }}>

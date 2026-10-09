@@ -1559,17 +1559,38 @@ export async function saveSubject(id: string | null, payload: Record<string, unk
   return { error: saveError(error) }
 }
 
+export async function deleteAllSubjects() {
+  const session = await requireSchoolSession()
+  if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', count: 0 }
+  if (!session.schoolId) return { error: 'กรุณาเลือกโรงเรียน', count: 0 }
+  const db = createServerClient()
+  const { data, error } = await db.rpc('delete_school_subjects', { p_school_id: session.schoolId })
+  if (error) return {
+    error: error.code === 'PGRST202'
+      ? 'กรุณารัน SQL 060_delete_school_subjects.sql ใน Supabase ก่อนใช้ปุ่มลบทั้งหมด'
+      : error.message,
+    count: 0,
+  }
+  const count = Number(data || 0)
+  try {
+    await logActivity({ actor: session, schoolId: session.schoolId, action: 'delete', module: 'subjects',
+      targetType: 'subject', targetLabel: 'รายวิชาทั้งหมด', description: `ลบรายวิชาทั้งหมด ${count} รายการ`, metadata: { count } })
+  } catch (error) { console.error('Subject deletion audit failed', error) }
+  return { error: undefined, count }
+}
+
 export async function deleteSubject(id: string) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
   // กันลบถ้าวิชาถูกใช้ใน class_subjects แล้ว
-  const { data: subject } = await db.from('subjects').select('name, code, school_id').eq('id', id).maybeSingle()
+  const { data: subject } = await db.from('subjects').select('name, code, school_id').eq('id', id).eq('school_id', session.schoolId).maybeSingle()
+  if (!subject) return { error: 'ไม่พบรายวิชาในโรงเรียนนี้' }
   const { count } = await db.from('class_subjects')
     .select('id', { count: 'exact', head: true })
     .eq('subject_id', id)
   if ((count ?? 0) > 0) return { error: 'ลบไม่ได้ — วิชานี้ถูกเปิดสอนอยู่ (มีใน "วิชาที่เปิดสอน")' }
-  const { error } = await db.from('subjects').delete().eq('id', id)
+  const { error } = await db.from('subjects').delete().eq('id', id).eq('school_id', session.schoolId)
   if (!error) {
     await logActivity({
       actor: session,
