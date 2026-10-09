@@ -106,7 +106,7 @@ export default function PeriodTimesEntry() {
     if (invalid) { setAlert({type:'error',title:'ตรวจสอบเวลาคาบ',message:invalid}); return }
     setSaving(true)
     try {
-      await savePeriodTimes(times)
+      await savePeriodTimes(times.map((row, index) => ({ ...row, label: !row.is_break && /^คาบ(?:ที่)?\s*\d+$/.test(row.label) ? `คาบที่ ${index + 1}` : row.label })))
       setIsDefault(false)
       setAlert({ type: 'success', title: 'บันทึกสำเร็จ', message: 'เวลาคาบเรียนถูกบันทึกแล้ว' })
     } catch (e) {
@@ -129,8 +129,8 @@ export default function PeriodTimesEntry() {
       <div className="schedule-page period-workspace">
         <div className="schedule-head">
           <h1>เวลาเรียนและพักเที่ยง</h1>
-          <p>กำหนดเวลาเรียนของโรงเรียน เพิ่มได้สูงสุด 8 คาบต่อวัน และปรับช่วงพักเที่ยงได้</p>
-          <div className="period-summary"><span>{teachingCount} คาบต่อวัน</span><span>ช่วงเช้า {morningCount} คาบ · ช่วงบ่าย {teachingCount-morningCount} คาบ</span><span>ใช้ร่วมกับตารางเรียน ตารางสอน และ PDF</span></div>
+          <p>กำหนดเวลาแบบ 24 ชั่วโมง เพิ่มคาบเรียนได้สูงสุด 8 คาบต่อวัน พร้อมคาบพักเที่ยง</p>
+          <div className="period-summary"><span>{times.length} คาบรวมพักเที่ยง</span><span>เรียน {teachingCount} คาบ · พัก {times.length-teachingCount} คาบ</span><span>ช่วงเช้า {morningCount} คาบ · ช่วงบ่าย {teachingCount-morningCount} คาบ</span></div>
         </div>
 
         <div className="period-info">
@@ -142,7 +142,7 @@ export default function PeriodTimesEntry() {
         <div className="period-lunch-setting">
           <label htmlFor="lunch-after-period">พักเที่ยงหลังคาบ</label>
           <select id="lunch-after-period" value={morningCount} disabled={saving} onChange={e=>changeLunch(Number(e.target.value))}>
-            {times.filter(t=>!t.is_break).map(t=><option key={t.period} value={t.period}>หลังคาบที่ {t.period}</option>)}
+            {times.map((t,index)=>!t.is_break && <option key={t.period} value={t.period}>หลังคาบที่ {index+1}</option>)}
           </select>
           <p>เมื่อเปลี่ยนคาบก่อนพัก ระบบจะเรียงเวลาใหม่โดยคงระยะเวลาแต่ละคาบและช่วงพักไว้ สามารถปรับเวลาเริ่มและสิ้นสุดในตารางด้านล่างได้ก่อนบันทึก</p>
         </div>
@@ -152,8 +152,8 @@ export default function PeriodTimesEntry() {
               <tr>
                 <th style={{ width: 48 }}>คาบ</th>
                 <th>ชื่อ</th>
-                <th style={{ width: 120 }}>เริ่ม</th>
-                <th style={{ width: 120 }}>สิ้นสุด</th>
+                <th style={{ width: 120 }}>เริ่ม (24 ชม.)</th>
+                <th style={{ width: 120 }}>สิ้นสุด (24 ชม.)</th>
                 <th style={{ width: 80 }}>พัก</th>
                 <th style={{width:90}}>จัดการ</th>
               </tr>
@@ -161,10 +161,10 @@ export default function PeriodTimesEntry() {
             <tbody>
               {times.map((row, index) => (
                 <tr key={`${row.period}-${row.sort_order}-${index}`} className={row.is_break ? 'is-break' : ''}>
-                  <td>{row.is_break ? '—' : row.period}</td>
+                  <td>{index + 1}{row.is_break && <span style={{display:'block',fontSize:11}}>พักเที่ยง</span>}</td>
                   <td>
                     <input
-                      value={row.label}
+                      value={!row.is_break && /^คาบ(?:ที่)?\s*\d+$/.test(row.label) ? `คาบที่ ${index + 1}` : row.label}
                       disabled={saving}
                       aria-label={`ชื่อ ${row.is_break ? 'พักเที่ยง' : `คาบ ${row.period}`}`}
                       onChange={e => updateRow(index, 'label', e.target.value)}
@@ -173,7 +173,7 @@ export default function PeriodTimesEntry() {
                   <td>
                     <input
                       value={row.start_time}
-                      type="time" disabled={saving} aria-label={`เวลาเริ่ม ${row.label}`}
+                      type="text" inputMode="numeric" maxLength={5} pattern="([01][0-9]|2[0-3]):[0-5][0-9]" disabled={saving} aria-label={`เวลาเริ่ม ${row.label} แบบ 24 ชั่วโมง`}
                       onChange={e => updateRow(index, 'start_time', e.target.value)}
                       placeholder="08:30"
                     />
@@ -181,7 +181,7 @@ export default function PeriodTimesEntry() {
                   <td>
                     <input
                       value={row.end_time}
-                      type="time" disabled={saving} aria-label={`เวลาสิ้นสุด ${row.label}`}
+                      type="text" inputMode="numeric" maxLength={5} pattern="([01][0-9]|2[0-3]):[0-5][0-9]" disabled={saving} aria-label={`เวลาสิ้นสุด ${row.label} แบบ 24 ชั่วโมง`}
                       onChange={e => updateRow(index, 'end_time', e.target.value)}
                       placeholder="09:20"
                     />
@@ -193,6 +193,8 @@ export default function PeriodTimesEntry() {
             </tbody>
           </table>
         </div>
+
+        <p className="period-info">ใช้เวลาแบบ 24 ชั่วโมง เช่น 08:30 และ 13:30 · พักเที่ยงนับเป็นหนึ่งคาบในลำดับที่แสดง และไม่ใช้จัดวิชาเรียน</p>
 
         {invalid && <div className="period-error" role="alert">{invalid}</div>}
         <div className="period-actions">
