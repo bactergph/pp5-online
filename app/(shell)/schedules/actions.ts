@@ -142,6 +142,9 @@ export async function saveClassScheduleCell(classroomId: string, yearId: string,
   return scheduleResult(() => scheduleOps.saveCell(classroomId, yearId, day, period, lesson, note, semester))
 }
 
+export async function moveClassScheduleCell(roomId:string,yearId:string,fromDay:number,fromPeriod:number,toDay:number,toPeriod:number,expectedLesson:string,semester=1) {
+  return scheduleResult(()=>scheduleOps.moveCell(roomId,yearId,fromDay,fromPeriod,toDay,toPeriod,expectedLesson,semester))
+}
 export async function fetchTeachingScheduleGrid(teacherId: string, yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   if (session.role === 'teacher' && teacherId !== session.userId) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')

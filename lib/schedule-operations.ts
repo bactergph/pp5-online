@@ -26,6 +26,25 @@ async function commit(ctx: Awaited<ReturnType<typeof context>>, year: string, ro
   await persistSchedule(ctx.session.schoolId, year, ctx.data.slots, rows, unlock, ctx.semester)
   await logActivity({ actor: ctx.session, schoolId: ctx.session.schoolId, action: 'update', module: 'schedules', targetType: 'class_schedule', description })
 }
+export async function moveCell(roomId:string,year:string,fromDay:number,fromPeriod:number,toDay:number,toPeriod:number,expectedLesson:string,semester=1) {
+  cell(fromDay,fromPeriod);cell(toDay,toPeriod)
+  const ctx=await context(year,semester)
+  requireScheduleClass(ctx.data,roomId)
+  if(fromPeriod>ctx.constraints.periodCount || toPeriod>ctx.constraints.periodCount) throw Error('คาบนี้ยังไม่ได้ตั้งเวลาเรียน')
+  const source=ctx.data.slots.find(s=>s.classroom_id===roomId&&s.day_of_week===fromDay&&s.period===fromPeriod)
+  const target=ctx.data.slots.find(s=>s.classroom_id===roomId&&s.day_of_week===toDay&&s.period===toPeriod)
+  if(!source || lessonKey(source)!==expectedLesson) throw Error('คาบต้นทางเปลี่ยนแล้ว กรุณาโหลดตารางใหม่')
+  if(source.locked || target?.locked) throw Error('กรุณาปลดล็อกคาบก่อนย้าย')
+  if(fromDay===toDay&&fromPeriod===toPeriod) return
+  if(target && (lessonKey(target)||target.note)) throw Error('คาบปลายทางมีข้อมูลอยู่ กรุณาเลือกคาบว่าง')
+  const lesson=ctx.data.lessons.find(l=>l.id===expectedLesson&&l.classroomId===roomId)
+  if(!lesson) throw Error('ไม่พบวิชาในห้องนี้')
+  if(lesson.teacherId&&ctx.constraints.blocks.some(b=>b.teacherId===lesson.teacherId&&b.day===toDay&&b.period===toPeriod)) throw Error('ครูล็อกคาบว่างนี้ไว้')
+  if(lesson.teacherId&&ctx.data.slots.some(s=>s!==source&&s.day_of_week===toDay&&s.period===toPeriod&&ctx.data.lessons.find(l=>l.id===lessonKey(s))?.teacherId===lesson.teacherId)) throw Error('ครูมีสอนในคาบปลายทางแล้ว')
+  const rows=ctx.data.slots.filter(s=>s!==source&&s!==target)
+  rows.push({...source,day_of_week:toDay,period:toPeriod})
+  await commit(ctx,year,rows,`ย้ายคาบเรียนจากวัน ${fromDay} คาบ ${fromPeriod} ไปวัน ${toDay} คาบ ${toPeriod}`)
+}
 export async function saveCell(roomId: string, year: string, day: number, period: number, lesson: string | null, note: string | null, semester = 1) {
   cell(day, period)
   const ctx = await context(year, semester)

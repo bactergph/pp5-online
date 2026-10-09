@@ -11,6 +11,7 @@ import {
   fetchScheduleClassrooms,
   fetchScheduleInit,
   saveClassScheduleCell,
+  moveClassScheduleCell,
   clearScheduleScope,
   copyClassSchedule,
   fetchPeriodTimes,
@@ -26,6 +27,7 @@ import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
 import type { PeriodTimeRow } from '@/lib/schedule-helpers'
 import ScheduleLessonPicker from './ScheduleLessonPicker'
+import ScheduleLessonPalette from './ScheduleLessonPalette'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
@@ -60,6 +62,11 @@ function setAlert(alert: {type:'success'|'error';title:string;message?:string}) 
 }
 
 export default function ClassScheduleEntry({ mode }: Props) {
+  const [dragLesson,setDragLesson] = useState<{id:string;from?:{day:number;period:number};context:string}|null>(null)
+  const [dropKey,setDropKey] = useState<string|null>(null)
+  const [paletteFilter,setPaletteFilter] = useState('')
+  const [paletteSelection,setPaletteSelection] = useState<string|null>(null)
+  const [showCompleted,setShowCompleted] = useState(false)
   const [workspace,setWorkspace]=useState<'class'|'teacher'|'activity'>('class')
   const isManage = mode === 'manage'
   const [picker, setPicker] = useState<{day:number;period:number} | null>(null)
@@ -119,6 +126,11 @@ export default function ClassScheduleEntry({ mode }: Props) {
     const selected=picker&&cells[`${picker.day}-${picker.period}`]?.class_subject_id===s.id
     return {...s,disabled:target!==undefined&&used>=target&&!selected,quotaLabel:target===undefined?'':`ลงแล้ว ${used} / ${target} คาบต่อสัปดาห์${used>target?' · เกินจำนวน':used===target?' · ครบแล้ว':` · เหลือ ${target-used}`}`}
   })
+  const remainingLessons = subjects.map(s=>{
+    const target=s.id.startsWith('activity:')?1:quotas?.items.find(q=>q.class_subject_id===s.id)?.target
+    const used=Object.values(cells).filter(c=>c.class_subject_id===s.id).length
+    return {...s,target,used,remaining:target===undefined?undefined:Math.max(0,target-used)}
+  }).filter(s=>(showCompleted||s.remaining!==0)&&[s.subject_name,s.subject_code,s.teacher_name,s.room_name].join(' ').toLowerCase().includes(paletteFilter.toLowerCase()))
   const selectedYearObj = years.find(y => y.id === selectedYear)
   const copySourceClassrooms = classrooms.filter(c => c.id !== selectedClass)
 
@@ -196,6 +208,31 @@ export default function ClassScheduleEntry({ mode }: Props) {
 
   function handleCellChange(day: number, period: number, value: string) {
     return queueCellEdit(day, period, () => saveCellChange(day, period, value))
+  }
+  function placePaletteLesson(day:number,period:number) {
+    const payload=dragLesson || (paletteSelection?{id:paletteSelection,context:`${selectedYear}:${semester}:${selectedClass}`}:null)
+    setDragLesson(null);setDropKey(null)
+    if(!payload || payload.context!==`${selectedYear}:${semester}:${selectedClass}` || cellBlocked) return
+    const key=`${day}-${period}`
+    if(cells[key]?.locked || pendingRef.current.has(key)) return
+    if(cells[key]?.class_subject_id || cells[key]?.note) {setAlert({type:'error',title:'กรุณาเลือกคาบว่าง',message:'นำวิชาเดิมออกก่อนวางวิชาใหม่'});return}
+    if(!payload.from) {setPaletteSelection(null);void handleCellChange(day,period,payload.id);return}
+    const fromKey=`${payload.from.day}-${payload.from.period}`
+    if(pendingRef.current.has(fromKey)||cells[fromKey]?.locked) return
+    pendingRef.current.add(fromKey);setPendingCells(new Set(pendingRef.current))
+    void queueCellEdit(day,period,async()=>{
+      try {
+        const result=await moveClassScheduleCell(selectedClass,selectedYear,payload.from!.day,payload.from!.period,day,period,payload.id,semester)
+        if(result.error) throw Error(result.error)
+        setCells(current=>{
+          const next={...current,[key]:{class_subject_id:payload.id,note:null,locked:false}}
+          delete next[fromKey]
+          return next
+        })
+        setConflicts(current=>{const next={...current};delete next[fromKey];delete next[key];return next})
+      } catch(e) {setAlert({type:'error',title:'ย้ายคาบไม่สำเร็จ',message:e instanceof Error?e.message:'เกิดข้อผิดพลาด'})}
+      finally {pendingRef.current.delete(fromKey);setPendingCells(new Set(pendingRef.current))}
+    })
   }
 
   async function saveCellChange(day: number, period: number, value: string) {
@@ -460,7 +497,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
             <Link href="/settings/class-subjects">ไปกำหนดรายวิชาและครูผู้สอน</Link>
           </div>
         ) : (
-          <section className="overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-sm" aria-label="ตารางเรียนรายสัปดาห์">
+          <div className={isManage&&canEdit?'grid items-start gap-4 xl:grid-cols-[240px_minmax(0,1fr)]':''}>
+          {isManage&&canEdit&&<ScheduleLessonPalette lessons={remainingLessons} filter={paletteFilter} onFilter={setPaletteFilter} showCompleted={showCompleted} onShowCompleted={setShowCompleted} selected={paletteSelection} onSelect={setPaletteSelection} disabled={cellBlocked} onDrag={id=>{setPaletteSelection(null);setDragLesson({id,context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}}/>}
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-sm" aria-label="ตารางเรียนรายสัปดาห์">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-4 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mt-1 [&_p]:text-xs [&_p]:text-stone-500"><div><h2>ห้อง {selectedClassroom?.label}</h2><p>ภาคเรียนที่ {semester} · ปีการศึกษา {selectedYearObj?.year_be}</p></div><span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">จัดแล้ว {Object.values(cells).filter(c => c.class_subject_id).length} / {periodTimes.filter(t=>!t.is_break).length*5} คาบ</span></div>
             <div className="overflow-x-auto [&_table]:w-full [&_table]:table-fixed [&_table]:min-w-[880px]! [&_th]:border-stone-300! [&_td]:border-stone-200! [&_th]:bg-stone-100! [&_th]:py-2! [&_th]:text-sm! [&_th]:font-semibold! [&_th]:text-black! [&_.period-time]:text-xs! [&_.period-time]:font-normal! [&_.period-time]:text-stone-500! [&_.col-day]:w-20 [&_.day-col]:bg-stone-100! [&_.day-col]:text-stone-700! [&_.col-break]:w-9 [&_.col-break]:min-w-9! [&_.break-col]:bg-amber-50! [&_.cell]:p-1.5! [&_.cell]:h-28 [&_.cell]:align-top">
             <ScheduleGridTable compactBreak
@@ -473,10 +512,11 @@ export default function ClassScheduleEntry({ mode }: Props) {
                 if (isManage && canEdit) {
                   const locked = cell?.locked ?? false
                   return (
-                    <div className={`grid gap-1 ${conflictRooms?.length ? 'rounded-xl bg-rose-50' : ''}`}>
+                    <div onDragOver={e=>{if(dragLesson&&!locked&&!pending&&!cellBlocked){e.preventDefault();setDropKey(key)}}} onDragLeave={()=>setDropKey(current=>current===key?null:current)} onDrop={e=>{e.preventDefault();placePaletteLesson(day,period)}} className={`grid gap-1 rounded-lg ${dropKey===key?'bg-amber-50 ring-2 ring-amber-500':''} ${conflictRooms?.length ? 'rounded-xl bg-rose-50' : ''}`}>
                       <div className="grid gap-2">
                         <button type="button" className={`flex min-h-14 w-full flex-col gap-0.5 rounded-md border px-2 py-1.5 text-left transition ${cell?.class_subject_id?.startsWith('activity:')?'border-emerald-200 bg-emerald-50 text-emerald-900':locked?'border-amber-300 bg-amber-50 text-stone-800':'border-stone-200 bg-white text-stone-800 hover:border-amber-400 hover:bg-amber-50/50'}`} 
-                          title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={cellBlocked || pending || locked} aria-busy={pending} onClick={()=>setPicker({day,period})}
+                          title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={cellBlocked || pending || locked} aria-busy={pending}
+                          draggable={!!cell?.class_subject_id&&!locked&&!pending&&!cellBlocked} onDragStart={e=>{if(!cell?.class_subject_id)return;e.dataTransfer.setData('application/x-jarnsek-lesson',cell.class_subject_id);e.dataTransfer.effectAllowed='move';setPaletteSelection(null);setDragLesson({id:cell.class_subject_id,from:{day,period},context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}} onClick={()=>paletteSelection?placePaletteLesson(day,period):setPicker({day,period})}
                           aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`}>
                           {cell?.class_subject_id ? <><span className="text-xs font-normal text-stone-500">{subjectMap[cell.class_subject_id]?.subject_code || 'กิจกรรม'}</span><span className="line-clamp-2 text-[13px] font-semibold leading-5">{subjectMap[cell.class_subject_id]?.subject_name || 'รายวิชา'}</span></> : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
 
@@ -511,7 +551,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
             />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 px-5 py-4 text-xs text-stone-500"><span>{isManage && canEdit ? 'คลิกคาบเพื่อเลือกวิชา · บันทึกทันที' : 'ตารางเรียนรายสัปดาห์'}</span><div className="flex flex-wrap gap-4 [&_span]:inline-flex [&_span]:items-center [&_span]:gap-2 [&_a]:font-semibold [&_a]:text-amber-800"><span><i className="h-2.5 w-2.5 rounded-full bg-emerald-300" />กิจกรรม</span><span><i className="h-2.5 w-2.5 rounded-full bg-amber-400" />คาบที่ล็อก</span><Link href="/schedules/conflicts">ตรวจคาบชน</Link></div></div>
-          </section>
+          </section></div>
         )}
 
         {workspace==='class' && isManage && quotas && <details open className="overflow-auto rounded-2xl border border-stone-200 bg-white p-5 [&_summary]:cursor-pointer [&_summary]:text-sm [&_summary]:font-semibold [&_summary_span]:mt-1 [&_summary_span]:block [&_summary_span]:text-xs [&_summary_span]:font-normal [&_summary_span]:text-stone-500 [&_.quota-panel]:mt-4 [&_.quota-panel]:min-w-[560px]"><summary>ชั่วโมงเรียนของห้อง · รายวิชา {quotas.filled} / {quotas.totalTarget} คาบต่อสัปดาห์ <span>คำนวณจากชั่วโมงต่อปี ÷ 40 สัปดาห์ · กิจกรรมแยกวิชาละ 1 คาบ</span></summary><ScheduleQuotaPanel {...quotas} capacity={periodTimes.filter(t=>!t.is_break).length*5} /></details>}

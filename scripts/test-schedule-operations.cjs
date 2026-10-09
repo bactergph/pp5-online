@@ -38,6 +38,12 @@ const api=moduleFrom('lib/schedule-operations.ts',name=>({
 function reset(){writes=0;data={classrooms:[{id:'a',level:'ป.1',room:1},{id:'b',level:'ป.2',room:1},{id:'empty',level:'อ.2',room:1}],lessons:[{id:'l1',classroomId:'a',teacherId:'t',count:2,label:'a · math',subjectId:'math',name:'math',activity:false},{id:'l2',classroomId:'b',teacherId:'t',count:2,label:'b · math',subjectId:'math',name:'math',activity:false}],slots:[]}}
 const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'y',day_of_week:1,period,class_subject_id:id,activity_id:null,note:null,locked})
 ;(async()=>{
+  reset();data.slots=[slot('a','l1',1),slot('a','l1',2)];await api.moveCell('a','y',1,1,2,3,'l1',2);assert.equal(writes,1);assert.equal(writtenTerm,2);assert.equal(data.slots.length,2);assert.ok(data.slots.some(s=>s.day_of_week===2&&s.period===3));assert.ok(!data.slots.some(s=>s.day_of_week===1&&s.period===1));
+  reset();data.slots=[slot('a','l1',1,true)];await assert.rejects(api.moveCell('a','y',1,1,2,2,'l1'),/ล็อก/);assert.equal(writes,0);
+  reset();data.slots=[slot('a','l1',1),slot('a','l1',2)];await assert.rejects(api.moveCell('a','y',1,1,1,2,'l1'),/ปลายทาง/);assert.equal(writes,0);
+  reset();data.slots=[slot('a','l1',1)];await assert.rejects(api.moveCell('a','y',1,1,2,2,'changed'),/ต้นทาง/);assert.equal(writes,0);
+  reset();data.slots=[slot('a','l1',1),slot('b','l2',2)];data.lessons[1].teacherId='t';await assert.rejects(api.moveCell('a','y',1,1,1,2,'l1'),/ครู/);assert.equal(writes,0);
+  console.log('PASS: atomic move preserves quota and semester; locked, occupied, stale and teacher-conflicting moves leave source unchanged');
   reset();await api.autoSchedule('y','a',true,2);assert.equal(loadedTerm,2);assert.equal(writtenTerm,2)
   reset();await api.saveCell('a','y',1,1,'l1',null,2);assert.equal(loadedTerm,2);assert.equal(writtenTerm,2)
   reset();data.slots=[slot('a','l1',1),slot('a','l1',2)]
