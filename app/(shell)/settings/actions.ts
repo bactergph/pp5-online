@@ -2339,7 +2339,7 @@ export async function fetchClassSubjectInit() {
   const sid = session.schoolId || ''
   const [years, teachers, subjects] = await Promise.all([
     db.from('academic_years').select('id, year_be, is_active').eq('school_id', sid).order('year_be', { ascending: false }),
-    db.from('users').select('id, prefix, full_name').in('role', ['teacher', 'academic_head', 'deputy_principal']).eq('school_id', sid).eq('is_active', true).order('full_name'),
+    db.from('users').select('id, prefix, full_name').in('role', ['teacher', 'academic_head', 'deputy_principal']).eq('school_id', sid).or('is_active.eq.true,email.like.pending-%').order('full_name'),
     db.from('subjects').select('id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score').eq('school_id', sid).order('code'),
   ])
   return {

@@ -57,7 +57,7 @@ export async function fetchScheduleInit() {
 
   const { data: teachers } = await db.from('users')
     .select('id, prefix, full_name')
-    .eq('is_active', true)
+    .or('is_active.eq.true,email.like.pending-%')
     .eq('school_id', session.schoolId)
     .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin', 'principal'])
     .order('full_name')
