@@ -2,15 +2,46 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
+import { resolveSchoolEducationType, schoolLevels, type SchoolEducationType } from '@/lib/school-education-type'
 
 async function requireSession() {
   const session = await getSession()
   if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (session.mustChangePassword) throw new Error('กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน')
   return session
 }
 
 // ผอ. = ดูอย่างเดียว (oversight) · จัดการได้: admin + หัวหน้าวิชาการ (กำหนดครูประจำชั้น)
 const CAN_MANAGE = ['admin', 'district', 'academic_head', 'deputy_principal']
+type ClassroomSetupResult = {
+  error: string | null
+  academicYearId?: string
+  yearBe?: number
+  created?: number
+  deleted?: number
+  blocked?: string[]
+}
+
+async function loadSchoolEducationType(db: ReturnType<typeof createServerClient>, schoolId: string): Promise<SchoolEducationType> {
+  const { data, error } = await db.from('schools').select('*').eq('id', schoolId).maybeSingle()
+  if (error || !data) throw new Error('โหลดประเภทโรงเรียนไม่สำเร็จ')
+  if (data.education_type === 'primary' || data.education_type === 'secondary') return data.education_type
+  const { data: rooms, error: roomError } = await db.from('classrooms').select('level').eq('school_id', schoolId).in('level', ['ม.4', 'ม.5', 'ม.6']).limit(1)
+  if (roomError) throw new Error('ตรวจสอบระดับชั้นไม่สำเร็จ')
+  return resolveSchoolEducationType(data.education_type, (rooms || []).map(row => row.level))
+}
+
+export async function saveSchoolEducationType(type: SchoolEducationType) {
+  const session = await requireSession()
+  if (!CAN_MANAGE.includes(session.role) || session.mustChangePassword) return { error: 'ไม่มีสิทธิ์' }
+  if (!session.schoolId) return { error: 'กรุณาเลือกโรงเรียน' }
+  if (type !== 'primary' && type !== 'secondary') return { error: 'ประเภทโรงเรียนไม่ถูกต้อง' }
+  const db = createServerClient()
+  const { data, error } = await db.from('schools').update({ education_type: type }).eq('id', session.schoolId).select('id').maybeSingle()
+  if (error) return { error: ['PGRST204', '42703'].includes(error.code) ? 'กรุณารัน SQL 061_school_education_type.sql ใน Supabase ก่อนบันทึกประเภทโรงเรียน' : error.message }
+  if (!data) return { error: 'ไม่พบโรงเรียนที่ต้องการบันทึก' }
+  return { error: null }
+}
 
 // ข้อมูลตั้งต้น: ปีการศึกษา + ครู + ห้องของปีที่ active
 export async function fetchClassroomInit() {
@@ -34,6 +65,7 @@ export async function fetchClassroomInit() {
     teachers: teachersRes.data || [],
     activeYearId: active?.id || '',
     classrooms,
+    educationType: sid ? await loadSchoolEducationType(db, sid) : 'primary' as SchoolEducationType,
   }
 }
 
@@ -73,11 +105,19 @@ export async function saveClassroom(id: string | null, payload: {
   const session = await requireSession()
   if (!CAN_MANAGE.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
+  if (!session.schoolId) return { error: 'กรุณาเลือกโรงเรียน' }
+  const allowed = schoolLevels(await loadSchoolEducationType(db, session.schoolId))
+  const { data: year } = await db.from('academic_years').select('id').eq('id', payload.academic_year_id).eq('school_id', session.schoolId).maybeSingle()
+  if (!year) return { error: 'ไม่พบปีการศึกษาของโรงเรียนนี้' }
+  if (!allowed.includes(payload.level)) {
+    const { data: existing } = id ? await db.from('classrooms').select('level').eq('id', id).eq('school_id', session.schoolId).maybeSingle() : { data: null }
+    if (!existing || existing.level !== payload.level) return { error: 'ระดับชั้นไม่ตรงกับประเภทโรงเรียนที่เลือก' }
+  }
   const row = { ...payload, school_id: session.schoolId }
 
   let error
   let savedId = id
-  if (id) ({ error } = await db.from('classrooms').update(row).eq('id', id))
+  if (id) ({ error } = await db.from('classrooms').update(row).eq('id', id).eq('school_id', session.schoolId))
   else {
     const res = await db.from('classrooms').insert(row).select('id').single()
     error = res.error
@@ -121,17 +161,25 @@ export async function applyClassroomLevels(
   const db = createServerClient()
   const sid = session.schoolId || ''
 
-  const { data: existing } = await db.from('classrooms')
+  if (!sid) return { error: 'กรุณาเลือกโรงเรียน' }
+  const allowed = schoolLevels(await loadSchoolEducationType(db, sid))
+  if (levels.some(row => !allowed.includes(row.level) || !Number.isInteger(row.rooms) || row.rooms < 0 || row.rooms > 100)) return { error: 'ระดับชั้นหรือจำนวนห้องไม่ถูกต้องสำหรับประเภทโรงเรียนนี้' }
+  const { data: year } = await db.from('academic_years').select('id').eq('id', academicYearId).eq('school_id', sid).maybeSingle()
+  if (!year) return { error: 'ไม่พบปีการศึกษาของโรงเรียนนี้' }
+
+  const { data: existing, error: existingError } = await db.from('classrooms')
     .select('id, level, room')
     .eq('school_id', sid)
     .eq('academic_year_id', academicYearId)
+  if (existingError) return { error: 'โหลดชั้นเรียนเดิมไม่สำเร็จ ข้อมูลยังไม่ถูกแก้ไข' }
   const existingList = existing || []
 
   // นับนักเรียนต่อห้อง (กันลบห้องที่มีนักเรียน)
   const ids = existingList.map(c => c.id)
   let countMap: Record<string, number> = {}
   if (ids.length > 0) {
-    const { data: studs } = await db.from('students').select('classroom_id').in('classroom_id', ids)
+    const { data: studs, error: studentError } = await db.from('students').select('classroom_id').in('classroom_id', ids)
+    if (studentError) return { error: 'ตรวจสอบนักเรียนไม่สำเร็จ ข้อมูลยังไม่ถูกแก้ไข' }
     countMap = (studs || []).reduce((m: Record<string, number>, s: { classroom_id: string }) => {
       m[s.classroom_id] = (m[s.classroom_id] || 0) + 1; return m
     }, {})
@@ -154,7 +202,8 @@ export async function applyClassroomLevels(
   const toDelete: string[] = []
   const blocked: string[] = []
 
-  const allLevels = new Set<string>([...desired.keys(), ...byLevel.keys()])
+  // Only edit levels explicitly submitted; hidden legacy levels are preserved.
+  const allLevels = new Set<string>(levels.map(row => row.level))
   for (const level of allLevels) {
     const want = desired.get(level) || 0
     const rows = byLevel.get(level) || []
@@ -175,7 +224,7 @@ export async function applyClassroomLevels(
     if (error) return { error: error.message }
   }
   if (toDelete.length > 0) {
-    const { error } = await db.from('classrooms').delete().in('id', toDelete)
+    const { error } = await db.from('classrooms').delete().in('id', toDelete).eq('school_id', sid).eq('academic_year_id', academicYearId)
     if (error) return { error: error.message }
   }
 
@@ -197,7 +246,7 @@ export async function setupClassroomsForYear(
   yearBe: number,
   levels: { level: string; rooms: number }[],
   academicYearId?: string | null,
-) {
+): Promise<ClassroomSetupResult> {
   const session = await requireSession()
   if (!CAN_MANAGE.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
   const sid = session.schoolId || ''

@@ -2,12 +2,14 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
+import { SCHOOL_LEVEL_GROUPS, schoolLevels, type SchoolEducationType } from '@/lib/school-education-type'
 import {
   fetchClassroomInit,
   fetchClassrooms,
   saveClassroom,
   deleteClassroom,
   setupClassroomsForYear,
+  saveSchoolEducationType,
 } from '@/app/classrooms/actions'
 
 type Teacher = { id: string; prefix: string; full_name: string; is_homeroom: boolean }
@@ -20,12 +22,6 @@ type Classroom = {
 
 type Mode = 'levels' | 'homeroom'
 
-const LEVEL_GROUPS: { title: string; levels: string[] }[] = [
-  { title: 'อนุบาล', levels: ['อ.2', 'อ.3'] },
-  { title: 'ประถมศึกษา', levels: ['ป.1', 'ป.2', 'ป.3', 'ป.4', 'ป.5', 'ป.6'] },
-  { title: 'มัธยมศึกษา', levels: ['ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6'] },
-]
-const ALL_LEVELS = LEVEL_GROUPS.flatMap(g => g.levels)
 const empty = { id: '', level: 'อ.2', room: 1, homeroom_teacher_id: '', homeroom_teacher2_id: '' }
 
 function defaultYearBe() {
@@ -49,6 +45,10 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
   const [yearBeInput, setYearBeInput] = useState(defaultYearBe())
   const [levelRooms, setLevelRooms] = useState<Record<string, number>>({})
   const [savingSetup, setSavingSetup] = useState(false)
+  const [educationType, setEducationType] = useState<SchoolEducationType>('primary')
+  const [savedEducationType, setSavedEducationType] = useState<SchoolEducationType>('primary')
+  const [savingType, setSavingType] = useState(false)
+  const allowedLevels = useMemo(() => schoolLevels(educationType), [educationType])
 
   function notify(type: 'success' | 'error', text: string) {
     setAlertModal({
@@ -95,14 +95,18 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
   }, [isHomeroom, selectedYear, classrooms])
 
   async function init() {
+    try {
     const data = await fetchClassroomInit()
     setYears(data.years as Year[])
     setTeachers(data.teachers as Teacher[])
     setCanManage(data.canManage)
+    setEducationType(data.educationType)
+    setSavedEducationType(data.educationType)
     setClassrooms((data.classrooms || []) as Classroom[])
     skipYearFetch.current = true
     setSelectedYear(data.activeYearId || '')
-    setLoading(false)
+    } catch { notify('error', 'โหลดข้อมูลชั้นเรียนไม่สำเร็จ กรุณาโหลดหน้าใหม่') }
+    finally { setLoading(false) }
   }
 
   async function loadClassrooms(yearId: string) {
@@ -117,18 +121,31 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
   }
 
   const setupSummary = useMemo(() => {
-    const active = ALL_LEVELS.filter(l => (levelRooms[l] || 0) > 0)
+    const active = allowedLevels.filter(l => (levelRooms[l] || 0) > 0)
     const rooms = active.reduce((s, l) => s + (levelRooms[l] || 0), 0)
     return { levels: active.length, rooms }
-  }, [levelRooms])
+  }, [levelRooms, allowedLevels])
+
+  async function saveType() {
+    setSavingType(true)
+    try {
+      const result = await saveSchoolEducationType(educationType)
+      if (result.error) { notify('error', result.error); return }
+      setSavedEducationType(educationType)
+      notify('success', 'บันทึกประเภทโรงเรียนแล้ว')
+    } catch { notify('error', 'บันทึกประเภทโรงเรียนไม่สำเร็จ') }
+    finally { setSavingType(false) }
+  }
 
   async function saveSetup() {
     if (!canManage) return
     setSavingSetup(true)
     setAlertModal(null)
     const yearBe = Number(yearBeInput)
-    const payload = ALL_LEVELS.map(level => ({ level, rooms: levelRooms[level] || 0 }))
-    const res = await setupClassroomsForYear(yearBe, payload, selectedYear || null)
+    const payload = allowedLevels.map(level => ({ level, rooms: levelRooms[level] || 0 }))
+    let res: Awaited<ReturnType<typeof setupClassroomsForYear>>
+    try { res = await setupClassroomsForYear(yearBe, payload, selectedYear || null) }
+    catch { notify('error', 'บันทึกชั้นเรียนไม่สำเร็จ กรุณาลองใหม่'); setSavingSetup(false); return }
     setSavingSetup(false)
     if (res.error) { notify('error', res.error); return }
 
@@ -216,6 +233,26 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
 
         {/* ── โหมดชั้นเรียน: จอเดียว ปี + ติ๊กชั้น ── */}
         {!isHomeroom && canManage && (
+          <section className="control-card" aria-label="ประเภทโรงเรียน">
+            <h2 className="section-title">ประเภทโรงเรียน</h2>
+            <p className="mb-4 text-sm text-slate-600">เลือกประเภทเพื่อกำหนดระดับชั้นที่เปิดสอนได้ ค่านี้ใช้ร่วมกันทุกปีการศึกษา</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {([{ value: 'primary', title: 'ประถมศึกษา', desc: 'อนุบาล 2–3 · ประถม 1–6 · มัธยม 1–3' }, { value: 'secondary', title: 'มัธยมศึกษา', desc: 'มัธยม 1–6' }] as const).map(item => (
+                <label key={item.value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${educationType === item.value ? 'border-amber-600 bg-amber-50' : 'border-slate-200 bg-white'}`}>
+                  <input type="radio" name="education-type" value={item.value} checked={educationType === item.value} disabled={savingType || savingSetup} onChange={() => setEducationType(item.value)} className="mt-1 accent-amber-700" />
+                  <span><span className="block font-semibold text-slate-900">{item.title}</span><span className="text-sm text-slate-600">{item.desc}</span></span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">การเปลี่ยนประเภทไม่ลบชั้นเรียนหรือข้อมูลเดิม</p>
+              <LoadingButton onClick={saveType} loading={savingType} disabled={savingSetup}>บันทึกประเภทโรงเรียน</LoadingButton>
+            </div>
+            {educationType !== savedEducationType && <p className="mt-3 text-sm text-amber-800">กรุณาบันทึกประเภทโรงเรียนก่อนบันทึกชั้นที่เปิดสอน</p>}
+            {classrooms.some(room => !allowedLevels.includes(room.level)) && <p className="mt-3 text-sm text-slate-600">มีชั้นเดิมอยู่นอกช่วงของประเภทที่เลือก ข้อมูลยังอยู่ในรายการชั้นเรียนด้านล่างและจะไม่ถูกลบจากการบันทึกนี้</p>}
+          </section>
+        )}
+        {!isHomeroom && canManage && (
           <div className="control-card classroom-setup-panel">
             <div style={{ marginBottom: 16 }}>
               <div className="section-title" style={{ marginBottom: 4 }}>ตั้งค่าชั้นเรียน</div>
@@ -255,7 +292,7 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
               )}
             </div>
 
-            {LEVEL_GROUPS.map(group => (
+            {SCHOOL_LEVEL_GROUPS[educationType].map(group => (
               <div key={group.title} style={{ marginBottom: 18 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.04em', marginBottom: 8, textTransform: 'uppercase' }}>
                   {group.title}
@@ -317,7 +354,7 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
                 loading={savingSetup}
                 loadingText="กำลังบันทึก..."
                 onClick={saveSetup}
-                disabled={!yearBeInput || yearBeInput.length < 4}
+                disabled={!yearBeInput || yearBeInput.length < 4 || educationType !== savedEducationType || savingType}
               >
                 บันทึกชั้นเรียน
               </LoadingButton>
