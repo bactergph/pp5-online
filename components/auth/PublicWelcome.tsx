@@ -3,16 +3,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { FiArrowRight, FiCheck, FiChevronRight, FiFileText, FiMaximize2, FiMenu, FiX, FiZoomIn, FiZoomOut } from 'react-icons/fi'
-import { audiences, examples, features, navigation, questions } from './landing-content'
+import { FiArrowRight, FiCalendar, FiCheck, FiChevronRight, FiMonitor, FiUsers, FiDownload, FiGrid, FiFileText, FiMaximize2, FiMenu, FiX, FiZoomIn, FiZoomOut } from 'react-icons/fi'
+import { audiences, examples, navigation, questions } from './landing-content'
 import './landing-showcase.css'
 
-const workflow = [
-  ['เตรียมข้อมูล', 'เลือกปีและภาคเรียน จัดรายวิชา นักเรียน และครูผู้สอนให้พร้อม'],
-  ['บันทึกงานรายวิชา', 'ครูกรอกคะแนน เวลาเรียน และผลประเมินตามงานที่รับผิดชอบ'],
-  ['ตรวจสอบผล', 'ตรวจข้อมูลและผลสรุปให้ครบก่อนเลือกจัดทำเอกสาร'],
-  ['จัดทำรายงาน', 'เลือกประเภทและช่วงข้อมูล ปรับรูปแบบ แล้วส่งออก PDF'],
-]
 const schoolTypes = [
   { title: 'โรงเรียนประเภทประถม', levels: 'ตั้งชั้นเรียนได้ตั้งแต่ อ.2–ม.3', description: 'งานรายวิชา พร้อมงานประจำชั้น', items: ['คะแนน เวลาเรียนรายวิชา และการประเมิน', 'ปพ.5 รายวิชา · ปพ.6 นักเรียน', 'ปพ.5 รวมชั้นเรียน', 'ธุรการชั้นเรียน เช่น การมาเรียน นม และเงินออม'] },
   { title: 'โรงเรียนประเภทมัธยม', levels: 'ตั้งชั้นเรียนได้ตั้งแต่ ม.1–ม.6', description: 'เน้นงานรายวิชาและภาคเรียน', items: ['คะแนน เวลาเรียนรายวิชา และการประเมิน', 'ปพ.5 รายวิชา · ปพ.6 นักเรียน', 'กำหนดรายวิชาด้วยหน่วยกิตและชั่วโมงต่อภาคเรียน', 'ไม่แสดง ปพ.5 รวมชั้นเรียน และเมนูธุรการชั้นเรียน'] },
@@ -28,7 +22,6 @@ function tabKeys(event: KeyboardEvent<HTMLButtonElement>, index: number, count: 
 
 export default function PublicWelcome() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [preview, setPreview] = useState(0)
   const [audience, setAudience] = useState(0)
   const [detail, setDetail] = useState<number | null>(null)
   const [zoom, setZoom] = useState(false)
@@ -72,70 +65,50 @@ export default function PublicWelcome() {
           <nav className="jsk-desktop-nav" aria-label="เมนูหลัก">{navigation.map(([id, label]) => <a key={id} href={'#' + id}>{label}</a>)}</nav>
           <div className="jsk-header-actions">
             <Link className="jsk-login" href="/login">เข้าสู่ระบบ</Link>
-            <Link className="jsk-button jsk-primary jsk-header-signup" href="/register">สมัครใช้งานสำหรับโรงเรียน</Link>
+            <Link className="jsk-button jsk-primary jsk-header-signup" href="/register">สมัครใช้งาน</Link>
             <button ref={menuButton} className="jsk-menu" aria-label={menuOpen ? 'ปิดเมนู' : 'เปิดเมนู'} aria-expanded={menuOpen} aria-controls="mobile-menu" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <FiX /> : <FiMenu />}</button>
           </div>
         </div>
         <nav id="mobile-menu" className="jsk-mobile-nav jsk-container" aria-label="เมนูมือถือ" hidden={!menuOpen}>
           {navigation.map(([id, label]) => <a key={id} href={'#' + id} onClick={() => setMenuOpen(false)}>{label}</a>)}
-          <Link href="/register">สมัครใช้งานสำหรับโรงเรียน</Link>
+          <Link href="/login">เข้าสู่ระบบ</Link><Link href="/register">สมัครใช้งานสำหรับโรงเรียน</Link>
         </nav>
       </header>
 
       <main id="main" tabIndex={-1}>
+
         <section className="jsk-hero">
           <div className="jsk-container jsk-hero-grid">
-            <div>
-              <p className="jsk-eyebrow">สำหรับครู ฝ่ายวิชาการ และผู้บริหารโรงเรียน</p>
-              <h1>จัดการคะแนน เวลาเรียน<br className="jsk-desktop-break" /> และ ปพ.5 / ปพ.6 <span>ให้งานวิชาการ<br className="jsk-desktop-break" />ของโรงเรียนเป็นระบบ</span></h1>
-              <p className="jsk-lead">จารย์เสกช่วยครูบันทึกข้อมูลและจัดทำรายงาน พร้อมเครื่องมือสำหรับงานวิชาการของโรงเรียนในพื้นที่เดียว</p>
-              <div className="jsk-actions"><Link className="jsk-button jsk-primary" href="/register">สมัครใช้งานสำหรับโรงเรียน<FiArrowRight aria-hidden /></Link><a className="jsk-button jsk-secondary" href="#examples">ดูตัวอย่างการใช้งาน</a></div>
-              <p className="jsk-hint">สำหรับผู้ดูแลโรงเรียน · บัญชีใหม่ต้องรออนุมัติ</p>
-              <p className="jsk-existing">ครูที่มีบัญชีแล้ว <Link href="/login">เข้าสู่ระบบด้วยบัญชีเดิม<FiArrowRight aria-hidden /></Link></p>
+            <div className="jsk-hero-copy">
+              <p className="jsk-eyebrow">ผู้ช่วยงานวิชาการสำหรับครูและโรงเรียน</p>
+              <h1>จัดการงานวิชาการ<br />ให้คล่องตัว<span>ตั้งแต่คะแนนถึงรายงาน</span></h1>
+              <p className="jsk-lead">บันทึกคะแนน เวลาเรียน และจัดทำ ปพ.5 / ปพ.6 พร้อมเครื่องมือสำหรับงานวิชาการของโรงเรียน ผ่านจารย์เสก</p>
+              <p className="jsk-hero-benefits"><FiCheck aria-hidden /> ใช้ผ่านเบราว์เซอร์ <span>·</span> แบ่งงานตามสิทธิ์</p>
+              <div className="jsk-actions"><Link className="jsk-button jsk-primary" href="/register">สมัครใช้งานสำหรับโรงเรียน<FiArrowRight aria-hidden /></Link><a className="jsk-text-link" href="#examples">ดูตัวอย่างโปรแกรม<FiArrowRight aria-hidden /></a></div>
+              <p className="jsk-hint">บัญชีผู้ดูแลโรงเรียนใหม่ต้องรออนุมัติก่อนใช้งาน</p>
+              <p className="jsk-existing">มีบัญชีจากโรงเรียนแล้ว? <Link href="/login">เข้าสู่ระบบ</Link></p>
             </div>
-            <div className="jsk-product">
-              <div className="jsk-product-label"><span>พื้นที่ทำงานของครู</span><small>ข้อมูลสมมติ</small></div>
-              <div className="jsk-tabs" role="tablist" aria-label="ภาพตัวอย่างระบบ">
-                {examples.slice(0, 3).map((item, index) => <button key={item.key} id={'preview-' + index} role="tab" aria-selected={preview === index} aria-controls="preview-panel" tabIndex={preview === index ? 0 : -1} onClick={() => setPreview(index)} onKeyDown={e => tabKeys(e, index, 3, setPreview)}>{item.tab}</button>)}
-              </div>
-              <div id="preview-panel" role="tabpanel" aria-labelledby={'preview-' + preview}>
-                <button className={'jsk-hero-picture jsk-crop-' + examples[preview].key} onClick={e => openExample(preview, e.currentTarget)} aria-label={'ขยายภาพ ' + examples[preview].title}>
-                  <Image src={'/brand/examples/' + examples[preview].key + '.webp'} alt={examples[preview].alt} width={examples[preview].width} height={examples[preview].height} sizes="(max-width: 900px) 100vw, 750px" loading="eager" fetchPriority={preview === 0 ? 'high' : 'auto'} />
-                  <span className="jsk-expand"><FiMaximize2 aria-hidden />ดูภาพเต็ม</span>
-                </button>
-                <p className="jsk-product-caption">{examples[preview].caption}</p>
-              </div>
+            <div className="jsk-hero-stage">
+              <div className="jsk-browser"><div className="jsk-browser-bar"><span aria-hidden>● ● ●</span><span>จารย์เสก / บันทึกคะแนน</span></div><button className="jsk-hero-picture" onClick={e => openExample(0, e.currentTarget)} aria-label="ขยายภาพ บันทึกคะแนน"><Image src="/brand/examples/scores.webp" alt={examples[0].alt} width={1860} height={1446} sizes="(max-width: 900px) 90vw, 760px" loading="eager" fetchPriority="high" /><span className="jsk-expand"><FiMaximize2 aria-hidden />ดูภาพเต็ม</span></button></div>
+              <button className="jsk-paper-peek" onClick={e => openExample(2, e.currentTarget)} aria-label="ขยายภาพ ปพ.6 รายงานนักเรียน"><Image src="/brand/examples/report.webp" alt="ตัวอย่างผลลัพธ์ ปพ.6 จากข้อมูลสมมติ" width={1588} height={2244} sizes="220px" /><span><FiFileText aria-hidden /> ผลลัพธ์เป็นเอกสาร ปพ.6</span></button>
+              <p className="jsk-visual-note">ภาพสาธิตจากรูปแบบระบบ · ข้อมูลสมมติ</p>
             </div>
           </div>
         </section>
+        <div className="jsk-proof jsk-container">{[[FiMonitor,'ใช้งานผ่านเบราว์เซอร์'],[FiUsers,'แบ่งการใช้งานตามบทบาท'],[FiGrid,'รองรับประถมและมัธยม'],[FiDownload,'ส่งออกเอกสารและข้อมูล']].map(([Icon, text]) => { const Symbol = Icon as typeof FiMonitor; return <div key={String(text)}><Symbol aria-hidden /><span>{String(text)}</span></div> })}</div>
 
-        <section className="jsk-flow jsk-container" aria-labelledby="flow-title">
-          <div className="jsk-section-heading"><p className="jsk-eyebrow">จากข้อมูลในห้องเรียน สู่เอกสารของโรงเรียน</p><h2 id="flow-title">แต่ละงานต่อกันอย่างไร</h2><p>ข้อมูลที่บันทึกใช้ประกอบรายงาน ครูยังเป็นผู้ตรวจสอบและเลือกส่งออกเอกสาร</p></div>
-          <ol>{workflow.map(([title, text], i) => <li key={title}><span className="jsk-step">0{i + 1}</span><h3>{title}</h3><p>{text}</p>{i < 3 && <FiChevronRight className="jsk-flow-arrow" aria-hidden />}</li>)}</ol>
+        <section id="features" className="jsk-section jsk-container">
+          <div className="jsk-section-heading jsk-center"><p className="jsk-eyebrow">งานวิชาการที่เริ่มจากห้องเรียน</p><h2>งานหลักของครู<br />อยู่ในพื้นที่เดียวกัน</h2><p>บันทึกข้อมูล ตรวจสอบผล แล้วเลือกจัดทำรายงานที่ต้องการ</p></div>
+          <div className="jsk-overview">{[{index:0,id:'scores',title:'คะแนนและผลการเรียน',text:'กำหนดสัดส่วน บันทึกคะแนน และตรวจผลรายวิชา'},{index:3,id:'attendance',title:'เวลาเรียนและการประเมิน',text:'ติดตามเวลาเรียนและบันทึกผลประเมินของผู้เรียน'},{index:2,id:'reports',title:'รายงาน ปพ.5 / ปพ.6',text:'เลือกข้อมูล ปรับรูปแบบ และส่งออกเอกสาร PDF'}].map(item=><a key={item.id} href={'#'+item.id}><div className={'jsk-overview-image jsk-overview-'+item.id}><Image src={'/brand/examples/'+examples[item.index].key+'.webp'} alt={item.index===3?'ภาพสาธิตการมาเรียนรายวัน':examples[item.index].alt} width={examples[item.index].width} height={examples[item.index].height} sizes="(max-width:700px) 90vw, 400px" /></div><h3>{item.title}</h3><p>{item.text}</p><span className="jsk-text-link">ดูรายละเอียด<FiArrowRight aria-hidden /></span></a>)}</div>
         </section>
 
-        <section id="features" className="jsk-section jsk-tint">
-          <div className="jsk-container"><div className="jsk-section-heading"><p className="jsk-eyebrow">ความสามารถของระบบ</p><h2>เริ่มจากงานที่ครูใช้ทุกภาคเรียน</h2><p>คะแนน เวลาเรียน และรายงานเป็นแกนหลัก พร้อมเครื่องมือสนับสนุนงานของโรงเรียน</p></div>
-            <div className="jsk-core-features">{features.slice(0, 3).map(({ icon: Icon, title, text, details }) => <article key={title}><Icon className="jsk-feature-icon" aria-hidden /><h3>{title}</h3><p>{text}</p><ul>{details.map(item => <li key={item}>{item}</li>)}</ul></article>)}</div>
-            <div className="jsk-support-features">{features.slice(3).map(({ icon: Icon, title, details }) => <article key={title}><Icon aria-hidden /><div><h3>{title}</h3><ul>{details.map(item => <li key={item}>{item}</li>)}</ul></div></article>)}</div>
-          </div>
-        </section>
+        <div id="examples" className="jsk-stories">
+          <section id="scores" className="jsk-section jsk-tint"><div className="jsk-container jsk-story"><div className="jsk-story-copy"><p className="jsk-eyebrow">01 / คะแนนและผลการเรียน</p><h2>บันทึกคะแนน<br />เห็นผลการเรียน<br />อย่างเป็นระบบ</h2><p>เตรียมสัดส่วนคะแนนให้ตรงกับรายวิชา ครูบันทึกและตรวจสอบผล ก่อนนำข้อมูลไปจัดทำรายงาน</p><ul><li>กำหนดสัดส่วนคะแนนของแต่ละรายวิชา</li><li>นำเข้า–ส่งออกคะแนนด้วยไฟล์ Excel</li><li>เปิด–ปิดการบันทึกตามปีและภาคเรียน</li></ul><button className="jsk-text-link" onClick={e=>openExample(0,e.currentTarget)}>ดูตารางคะแนนตัวอย่าง<FiArrowRight aria-hidden /></button></div><figure className="jsk-story-visual"><button onClick={e=>openExample(0,e.currentTarget)} aria-label="ขยายตารางคะแนน" className="jsk-screen-shot"><Image src="/brand/examples/scores.webp" alt={examples[0].alt} width={1860} height={1446} sizes="(max-width:900px) 90vw, 740px" /><span className="jsk-expand"><FiMaximize2 aria-hidden />ขยายภาพ</span></button><figcaption>ตารางคะแนนรายวิชา · ภาพสาธิต ข้อมูลสมมติ</figcaption></figure></div></section>
+          <section id="attendance" className="jsk-section"><div className="jsk-container jsk-story jsk-story-reverse"><div className="jsk-story-copy"><p className="jsk-eyebrow">02 / เวลาเรียนและการประเมิน</p><h2>ติดตามเวลาเรียน<br />และการประเมิน<br />ได้ต่อเนื่อง</h2><p>ดูแลงานรายวิชาและงานประจำชั้นในเมนูที่แยกตามหน้าที่ เพื่อบันทึกข้อมูลได้ตรงกับงานของครู</p><ul><li>เวลาเรียนรายวิชา สำหรับรายวิชาที่รับผิดชอบ</li><li>การมาเรียนรายวัน ในธุรการชั้นเรียนของประเภทประถม</li><li>ประเมินกิจกรรม คุณลักษณะ และการอ่าน คิดวิเคราะห์ เขียน</li></ul><button className="jsk-text-link" onClick={e=>openExample(3,e.currentTarget)}>ดูตัวอย่างการมาเรียนรายวัน<FiArrowRight aria-hidden /></button></div><figure className="jsk-story-visual"><button onClick={e=>openExample(3,e.currentTarget)} aria-label="ขยายการมาเรียนรายวัน" className="jsk-screen-shot jsk-attendance-shot"><Image src="/brand/examples/attendance.webp" alt={examples[3].alt} width={1860} height={1320} sizes="(max-width:900px) 90vw, 740px" /><span className="jsk-expand"><FiMaximize2 aria-hidden />ขยายภาพ</span></button><figcaption>ภาพสาธิตการมาเรียนรายวัน · ประเภทประถม · ข้อมูลสมมติ</figcaption></figure></div></section>
+          <section id="reports" className="jsk-section jsk-report-section"><div className="jsk-container jsk-story"><div className="jsk-story-copy"><p className="jsk-eyebrow">03 / รายงานของโรงเรียน</p><h2>จากข้อมูลในระบบ<br />สู่รายงาน<br />ที่พร้อมตรวจสอบ</h2><p>เลือกช่วงข้อมูลและประเภทเอกสาร ตรวจตัวอย่าง ปรับรูปแบบ แล้วส่งออก PDF เพื่อใช้งานต่อ</p><ul><li>ปพ.5 รายวิชา และ ปพ.6 นักเรียน</li><li>ปพ.5 รวมชั้นเรียน สำหรับประเภทประถม</li><li>ปรับรูปแบบและเสนอเอกสารลงนามตามสิทธิ์</li></ul><a className="jsk-button jsk-secondary" href="/sample-pp6.pdf" target="_blank" rel="noopener noreferrer"><FiFileText aria-hidden />เปิด PDF ตัวอย่าง ปพ.6<span className="jsk-sr-only"> (แท็บใหม่)</span><FiArrowRight aria-hidden /></a><p className="jsk-hint">ครูตรวจความครบถ้วนของข้อมูลก่อนนำเอกสารไปใช้</p></div><figure className="jsk-document"><button onClick={e=>openExample(2,e.currentTarget)} aria-label="ขยายเอกสาร ปพ.6"><Image src="/brand/examples/report.webp" alt={examples[2].alt} width={1588} height={2244} sizes="(max-width:700px) 85vw, 390px" /><span className="jsk-expand"><FiMaximize2 aria-hidden />อ่านเอกสาร</span></button><figcaption>ปพ.6 นักเรียน · สร้างจากระบบด้วยข้อมูลสมมติ</figcaption></figure></div></section>
+        </div>
 
-        <section id="examples" className="jsk-section jsk-container">
-          <div className="jsk-section-heading"><p className="jsk-eyebrow">ตัวอย่างงานและผลลัพธ์</p><h2>เห็นข้อมูลที่บันทึก เห็นเอกสารที่ได้</h2><p>ภาพจากรูปแบบระบบและตัวสร้างรายงาน ใช้ข้อมูลสมมติทั้งหมด กดขยายเพื่ออ่านรายละเอียด</p></div>
-          <div className="jsk-example-grid">{[0, 2, 1, 3].map(index => {
-            const item = examples[index]
-            return <article key={item.key} className={'jsk-example jsk-example-' + item.key}>
-              <button className={'jsk-example-picture jsk-crop-' + item.key} onClick={e => openExample(index, e.currentTarget)} aria-label={'ขยายภาพ ' + item.title}>
-                <Image src={'/brand/examples/' + item.key + '.webp'} alt={item.alt} width={item.width} height={item.height} sizes="(max-width: 700px) 100vw, 600px" />
-                <span className="jsk-expand"><FiMaximize2 aria-hidden />ขยายภาพ</span>
-              </button>
-              <div className="jsk-example-copy"><p className="jsk-eyebrow">{index === 0 ? '01 / บันทึกข้อมูล' : index === 2 ? '02 / จัดทำเอกสาร' : 'เครื่องมือสนับสนุน'}</p><h3>{item.title}</h3><p>{item.caption}</p>
-                {index === 2 && <a className="jsk-text-link" href="/sample-pp6.pdf" target="_blank" rel="noopener noreferrer"><FiFileText aria-hidden />เปิด PDF ตัวอย่าง ปพ.6 <span className="jsk-sr-only">(แท็บใหม่)</span><FiArrowRight aria-hidden /></a>}
-              </div>
-            </article>
-          })}</div>
-        </section>
+        <section className="jsk-section jsk-container"><div className="jsk-section-heading"><p className="jsk-eyebrow">เครื่องมือสนับสนุน</p><h2>พร้อมสำหรับงานอื่น ๆ<br />ในแต่ละภาคเรียน</h2></div><div className="jsk-tools">{[{icon:FiGrid,title:'ตารางเรียนและตารางสอน',text:'จัดด้วยตนเองหรืออัตโนมัติ ล็อกคาบ กำหนดกิจกรรม และจัดตารางสอนแทน',example:1},{icon:FiCalendar,title:'ธุรการชั้นเรียน',text:'การมาเรียน นม อาหารกลางวัน และเงินออม สำหรับโรงเรียนประเภทประถม',example:3},{icon:FiUsers,title:'ข้อมูลพื้นฐานของโรงเรียน',text:'เตรียมครู นักเรียน ห้องเรียน และรายวิชา พร้อมกำหนดงานตามสิทธิ์',example:null},{icon:FiDownload,title:'นำเข้าและส่งออกข้อมูล',text:'นำเข้าข้อมูลในเมนูที่รองรับ และส่งออก CSV สำหรับ SchoolMIS เพื่อนำไปใช้งานต่อ',example:null}].map(({icon:Icon,title,text,example})=><article key={title}><Icon aria-hidden /><div><h3>{title}</h3><p>{text}</p>{example!==null&&<button className="jsk-text-link" onClick={e=>openExample(example,e.currentTarget)}>ดูตัวอย่าง<FiArrowRight aria-hidden /></button>}</div></article>)}</div></section>
 
         <section id="school-types" className="jsk-section jsk-tint">
           <div className="jsk-container"><div className="jsk-section-heading"><p className="jsk-eyebrow">เลือกให้เหมาะกับโรงเรียน</p><h2>ประถมและมัธยม ใช้งานส่วนไหนได้บ้าง</h2><p>ประเภทโรงเรียนกำหนดชุดเมนู ส่วนบทบาทและงานที่ได้รับมอบหมายกำหนดสิทธิ์ของแต่ละคน</p></div>
@@ -146,13 +119,14 @@ export default function PublicWelcome() {
         </section>
 
         <section id="how-it-works" className="jsk-section jsk-container">
-          <div className="jsk-start-grid"><div className="jsk-section-heading"><p className="jsk-eyebrow">เริ่มใช้งานสำหรับโรงเรียน</p><h2>ผู้ดูแลเตรียมระบบ<br />ครูเริ่มงานด้วยบัญชีของโรงเรียน</h2><p>สมัครในนามผู้ดูแลโรงเรียน เมื่อได้รับอนุมัติแล้วจึงตั้งค่าข้อมูลและจัดสิทธิ์ให้บุคลากร</p><Link className="jsk-button jsk-primary" href="/register">สมัครใช้งานสำหรับโรงเรียน<FiArrowRight aria-hidden /></Link><p className="jsk-hint">ต้องรออนุมัติบัญชีก่อนเริ่มตั้งค่าโรงเรียน</p></div>
-            <ol className="jsk-start-steps">{[['สมัครและรออนุมัติ', 'กรอกข้อมูลผู้ดูแลเพื่อขอใช้งาน บัญชีใหม่ต้องได้รับอนุมัติก่อน'], ['ตั้งค่าโรงเรียน', 'เลือกโรงเรียน ประเภทโรงเรียน และปีการศึกษา เตรียมครู นักเรียน และรายวิชา'], ['เริ่มงานตามสิทธิ์', 'ครูใช้บัญชีที่ได้รับ บันทึกข้อมูล ตรวจผล และจัดทำรายงานในส่วนที่รับผิดชอบ']].map(([title, text], i) => <li key={title}><span className="jsk-step">{i + 1}</span><div><h3>{title}</h3><p>{text}</p></div></li>)}</ol>
+          <div className="jsk-start-grid"><div className="jsk-section-heading"><p className="jsk-eyebrow">เริ่มใช้งานสำหรับโรงเรียน</p><h2>เริ่มต้นให้โรงเรียน<br />แล้วให้ครูทำงานต่อร่วมกัน</h2><p>สมัครในนามผู้ดูแลโรงเรียน เมื่อได้รับอนุมัติแล้วจึงตั้งค่าข้อมูลและจัดสิทธิ์ให้บุคลากร</p><Link className="jsk-button jsk-primary" href="/register">สมัครใช้งานสำหรับโรงเรียน<FiArrowRight aria-hidden /></Link><p className="jsk-hint">ต้องรออนุมัติบัญชีก่อนเริ่มตั้งค่าโรงเรียน</p></div>
+            <ol className="jsk-start-steps">{[['สมัครและรออนุมัติ', 'กรอกข้อมูลผู้ดูแลเพื่อขอใช้งาน บัญชีใหม่ต้องได้รับอนุมัติก่อน'], ['ตั้งค่าโรงเรียน', 'เลือกโรงเรียน ประเภทโรงเรียน และปีการศึกษา เตรียมครู นักเรียน และรายวิชา'], ['เริ่มงานตามสิทธิ์', 'ครูใช้บัญชีที่ได้รับ บันทึกข้อมูล ตรวจผล และจัดทำรายงานในส่วนที่รับผิดชอบ']].map(([title, text], i) => <li key={title}><span className="jsk-step">0{i + 1}</span><div><h3>{title}</h3><p>{text}</p></div></li>)}</ol>
           </div>
           <aside className="jsk-member-note"><div><strong>มีบัญชีจากโรงเรียนแล้ว?</strong><p>ใช้บัญชีเดิมได้เลย หากใช้ชื่อผู้ใช้ ให้เข้าผ่านลิงก์ของโรงเรียน สอบถามเรื่องบัญชีและสิทธิ์จากผู้ดูแลโรงเรียนของคุณ</p></div><Link className="jsk-button jsk-secondary" href="/login">เข้าสู่ระบบ<FiArrowRight aria-hidden /></Link></aside>
         </section>
 
-        <section id="questions" className="jsk-section jsk-tint"><div className="jsk-container jsk-faq"><div className="jsk-section-heading"><p className="jsk-eyebrow">ข้อมูลก่อนเริ่มต้น</p><h2>คำถามที่พบบ่อย</h2><p>ประเภทโรงเรียน การสมัคร และการเตรียมข้อมูล</p></div><div>{questions.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></div></section>
+        <section id="questions" className="jsk-section jsk-tint"><div className="jsk-container jsk-faq"><div className="jsk-section-heading"><p className="jsk-eyebrow">ข้อมูลก่อนเริ่มต้น</p><h2>คำถามก่อนเริ่ม<br />ใช้จารย์เสก</h2><p>ประเภทโรงเรียน การสมัคร และการเตรียมข้อมูล</p></div><div>{questions.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></div></section>
+        <section className="jsk-final"><div className="jsk-container"><p className="jsk-eyebrow">จารย์เสก · งานวิชาการของโรงเรียน</p><h2>เริ่มจัดการงานวิชาการ<br />ให้เป็นระบบไปด้วยกัน</h2><p>เตรียมโรงเรียนให้พร้อม แล้วให้ครูทำงานต่อในส่วนที่รับผิดชอบ</p><div className="jsk-actions"><Link href="/register" className="jsk-button jsk-primary">สมัครใช้งานสำหรับโรงเรียน<FiArrowRight aria-hidden /></Link><Link href="/login" className="jsk-button jsk-secondary">เข้าสู่ระบบ</Link></div><p className="jsk-hint">บัญชีใหม่ต้องรออนุมัติ · ครูที่มีบัญชีแล้วใช้บัญชีเดิมได้</p></div></section>
       </main>
 
       <footer className="jsk-footer jsk-container"><div className="jsk-brand"><Image src="/brand/jarnsek-logo.png" alt="" width={42} height={42} /><span><strong>จารย์เสก</strong><small>ระบบบริหารงานวิชาการโรงเรียน</small></span></div><nav aria-label="เมนูท้ายหน้า"><a href="#school-types">ประเภทโรงเรียน</a><a href="#questions">คำถามที่พบบ่อย</a><Link href="/login">เข้าสู่ระบบ</Link><Link href="/register">สมัครใช้งาน</Link></nav></footer>
