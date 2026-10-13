@@ -1,4 +1,5 @@
 'use client'
+import { fetchScheduleDays } from '@/app/schedules/actions'
 
 import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -46,6 +47,7 @@ const STYLES = `
 `
 
 export default function TeachingScheduleEntry() {
+  const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
   const [loading, setLoading] = useState(true)
   const [years, setYears] = useState<Year[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
@@ -100,6 +102,7 @@ export default function TeachingScheduleEntry() {
     }
   }, [selectedTeacher, selectedYear, semester])
 
+  useEffect(()=>{if(!selectedYear)return;let active=true;fetchScheduleDays(selectedYear,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[selectedYear,semester])
   useEffect(() => { void Promise.resolve().then(init) }, [])
 
   useEffect(() => {
@@ -184,7 +187,7 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-empty">ไม่พบครูในโรงเรียน</div>
         ) : (
           <div className="schedule-grid-card">
-            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<ScheduleGridTable
+            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<ScheduleGridTable days={scheduleDays}
               periodTimes={periodTimes}
               renderCell={(day, period) => {
                 const key = `${day}-${period}`

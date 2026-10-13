@@ -1,4 +1,5 @@
 'use client'
+import { fetchScheduleDays } from '@/app/schedules/actions'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -74,6 +75,7 @@ const STYLES = `
 
 export default function ScheduleExportPage() {
   const [loading, setLoading] = useState(true)
+  const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
   const [years, setYears] = useState<Year[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
@@ -107,6 +109,7 @@ export default function ScheduleExportPage() {
     return new URLSearchParams(window.location.search).get('print') === '1'
   })
 
+  useEffect(()=>{if(!yearId)return;let active=true;fetchScheduleDays(yearId,Number(semester)).then(d=>{if(active)setScheduleDays(d)}).catch(()=>{});return()=>{active=false}},[yearId,semester])
   useEffect(() => {
     printMode.current = isPrintMode
   }, [isPrintMode])
@@ -249,7 +252,7 @@ export default function ScheduleExportPage() {
       fileName,
       label: `ตารางเรียน · ${label}`,
       run: () => buildSchedulePdfBlob({
-        academicHeadName, directorName, directorPosition,
+        days:scheduleDays, academicHeadName, directorName, directorPosition,
         schoolName,
         schoolLogoUrl,
         title,
@@ -370,7 +373,7 @@ export default function ScheduleExportPage() {
               </tr>
             </thead>
             <tbody>
-              {SCHEDULE_DAYS.map(day => (
+              {SCHEDULE_DAYS.filter(d=>scheduleDays.includes(d.value)).map(day => (
                 <tr key={day.value}>
                   <td className="day-col">{day.label}</td>
                   {periods.slice(0, morning).map(p => {

@@ -15,7 +15,7 @@ const GRID_STYLES = `
     font-size: 11px; font-weight: 900; white-space: nowrap;
   }
   .schedule-grid-table th.col-day {
-    min-width: 72px; position: sticky; left: 0; z-index: 2; background: #F5EDE3;
+    min-width: 72px; position: sticky; left: 0; z-index: 2; background: #F4F7FC;
   }
   .schedule-grid-table th.col-period { min-width: 108px; }
   .schedule-grid-table th .period-time {
@@ -26,7 +26,7 @@ const GRID_STYLES = `
     writing-mode: vertical-rl; text-orientation: mixed; padding: 12px 4px;
   }
   .schedule-grid-table td.day-col {
-    position: sticky; left: 0; z-index: 1; background: #F5EDE3;
+    position: sticky; left: 0; z-index: 1; background: #F4F7FC;
     color: #1E3A8A; font-size: 12px; font-weight: 900; padding: 8px 10px;
   }
   .schedule-grid-table td.cell { min-width: 108px; padding: 6px; vertical-align: top; }
@@ -39,10 +39,11 @@ const GRID_STYLES = `
 type Props = {
   renderCell: (day: number, period: number) => ReactNode
   periodTimes?: PeriodTimeRow[]
+  days?: number[]
   compactBreak?: boolean
 }
 
-export default function ScheduleGridTable({ renderCell, periodTimes, compactBreak = false }: Props) {
+export default function ScheduleGridTable({ renderCell, periodTimes, compactBreak = false, days = [1,2,3,4,5] }: Props) {
   const columns: ScheduleColumn[] = (periodTimes?.length ? periodTimes : DEFAULT_PERIOD_TIMES).map(t => t.is_break ? { kind: 'break', header: t.label } : { kind: 'period', period: t.period, header: String(t.period) })
   return (
     <>
@@ -69,7 +70,7 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
           </tr>
         </thead>
         <tbody>
-          {SCHEDULE_DAYS.map(day => (
+          {SCHEDULE_DAYS.filter(d=>days.includes(d.value)).map(day => (
             <tr key={day.value}>
               <td className="day-col">{day.label}</td>
               {columns.map(col => {

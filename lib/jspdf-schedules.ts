@@ -25,6 +25,7 @@ export type SchedulePdfInput = {
   schoolName: string
   schoolLogoUrl?: string | null
   title: string
+  days?: number[]
   periodTimes: PeriodTimeRow[]
   gridData: Record<string, { line1: string; line2: string }>
   fileName?: string
@@ -159,7 +160,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   }
   y += headerH
 
-  for (const day of SCHEDULE_DAYS) {
+  for (const day of SCHEDULE_DAYS.filter(d=>!input.days||input.days.includes(d.value))) {
     x = MARGIN_X
     drawCell(doc, x, y, dayW, rowH, day.label, '', { fill: DAY_BG, line1Size: 11 })
     x += dayW

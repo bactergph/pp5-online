@@ -1,0 +1,11 @@
+'use server'
+import * as planning from '@/lib/schedule-preparation'
+import { scheduleResult } from '@/lib/schedule-action-result'
+import type { SchedulePlan } from '@/lib/schedule-planning'
+export async function fetchPreparation(year:string,term:number){return scheduleResult(()=>planning.preparation(year,term))}
+export async function savePreparation(year:string,term:number,hash:string,plan:SchedulePlan){return scheduleResult(()=>planning.savePlan(year,term,hash,plan))}
+export async function checkPreparation(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.preflight(year,term,rooms,clear).then(r=>r.issues))}
+export async function createScheduleDraft(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.generate(year,term,rooms,clear))}
+export async function createActivityDraft(year:string,term:number,setting:string,rooms:string[],cells:{day:number;period:number}[],remove:boolean){return scheduleResult(()=>planning.activityDraft(year,term,setting,rooms,cells,remove))}
+export async function confirmScheduleDraft(id:string,unlock=false){return scheduleResult(()=>planning.confirmDraft(id,unlock))}
+export async function discardScheduleDraft(id:string){return scheduleResult(()=>planning.cancelDraft(id))}

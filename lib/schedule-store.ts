@@ -21,7 +21,7 @@ export type ScheduleSlot = {
 }
 export type ScheduleLesson = {
   id: string; classroomId: string; teacherId: string | null; count: number; label: string
-  subjectId: string; code: string; name: string; teacherName: string; roomName?: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean
+  sourceHours?: number; subjectId: string; code: string; name: string; teacherName: string; roomName?: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean
 }
 export const slotFields = 'classroom_id,academic_year_id,day_of_week,period,class_subject_id,activity_id,note,locked'
 export const lessonKey = (row: ScheduleSlot) => row.activity_id ? `activity:${row.activity_id}` : row.class_subject_id
@@ -72,8 +72,8 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   const labels = new Map(classrooms.map(c => [c.id, `${c.level}/${c.room}`]))
   const lessons: ScheduleLesson[] = (subjects.data || []).map(row => {
     const s = Array.isArray(row.subjects) ? row.subjects[0] : row.subjects
-    return { id: row.id, classroomId: row.classroom_id, teacherId: row.teacher_id, count: weeklyHoursFromYear(s?.hours_per_year),
-      label: `${labels.get(row.classroom_id)} · ${s?.name || ''}`, subjectId: row.subject_id, code: s?.code || '',
+    return { id: row.id, classroomId: row.classroom_id, teacherId: row.teacher_id, count: s?.hours_per_year > 0 ? weeklyHoursFromYear(s.hours_per_year) : 0,
+      label: `${labels.get(row.classroom_id)} · ${s?.name || ''}`, sourceHours: s?.hours_per_year || 0, subjectId: row.subject_id, code: s?.code || '',
       name: s?.short_name || s?.name || '', teacherName: names.get(row.teacher_id) || '', roomName: row.room_name || "", activity: false }
   })
   for (const row of activities.data || []) {
@@ -83,10 +83,18 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
       label: `${labels.get(row.classroom_id)} · ${name}`, subjectId: row.evaluation_setting_id || LEARNER_DEVELOPMENT_KEY, code: '',
       teacherOptional: true, selectable: !!row.evaluation_setting_id && !!a?.is_active, name, teacherName: names.get(row.teacher_id) || '', activity: true })
   }
+  const planResult = await db.from('schedule_plans').select('config').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',semester).maybeSingle()
+  if (planResult.error && !['42P01','PGRST205'].includes(planResult.error.code)) throw new Error(planResult.error.message)
+  const plan = planResult.data?.config as {rules?:Record<string,{count:number;roomId:string|null}>;rooms?:{id:string;name:string}[]} | undefined
+  for (const lesson of lessons) {
+    const rule=plan?.rules?.[lesson.id]
+    if(rule){lesson.count=rule.count;lesson.roomName=plan?.rooms?.find(r=>r.id===rule.roomId)?.name||lesson.roomName}
+  }
   return { classrooms, lessons, slots: (slots.data || []) as ScheduleSlot[], semesterSupported: !slots.legacy }
 }
 
 export async function persistSchedule(schoolId: string | null, yearId: string, before: ScheduleSlot[], after: ScheduleSlot[], allowUnlock = false, semester = 1) {
+  if(schoolId){const {validateManualPlan}=await import('./schedule-plan-validation');await validateManualPlan(schoolId,yearId,semester,before,after)}
   const { error } = await createServerClient().rpc('save_school_schedule_term', {
     p_school_id: schoolId, p_year_id: yearId, p_expected: before, p_rows: after, p_allow_unlock: allowUnlock, p_semester: semester,
   })

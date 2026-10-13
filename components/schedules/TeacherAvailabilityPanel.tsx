@@ -1,4 +1,5 @@
 'use client'
+import { fetchScheduleDays } from '@/app/schedules/actions'
 
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
@@ -9,6 +10,7 @@ import ScheduleGridTable from './ScheduleGridTable'
 
 type Availability = Awaited<ReturnType<typeof fetchTeacherAvailability>>
 export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded,onChanged}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean;onChanged?:()=>Promise<void>}) {
+  const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
   const [data,setData] = useState<Availability|null>(null)
   const [teacher,setTeacher] = useState('')
   const [error,setError] = useState('')
@@ -33,7 +35,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     }catch(e){await load(true);setError(e instanceof Error?e.message:'ล้างไม่สำเร็จ')}
     finally{setClearing(false)}
   }
-  useEffect(()=>{if(Swal.isVisible())return;if(error||notice)void Swal.fire({icon:error?'error':'success',title:error?'ดำเนินการไม่สำเร็จ':notice,text:error||undefined,toast:!error,position:error?'center':'top-end',timer:error?undefined:2200,showConfirmButton:!!error,confirmButtonText:'ตกลง',confirmButtonColor:'#946b25'})},[error,notice])
+  useEffect(()=>{if(!yearId)return;let active=true;fetchScheduleDays(yearId,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[yearId,semester])
   const request = useRef(0)
   const load = useCallback(async(keepSelection=false)=>{
     const id=++request.current
@@ -70,13 +72,13 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     setEditing({day,period});setError('');setNotice('')
     const title=`${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} · คาบ ${period}`
     if(busy?.locked){
-      const decision=await Swal.fire({icon:'question',title,text:'คาบเรียนนี้ล็อกอยู่ ต้องการปลดล็อกก่อนแก้ไขไหม?',showCancelButton:true,confirmButtonText:'ปลดล็อกคาบเรียน',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25'})
+      const decision=await Swal.fire({icon:'question',title,text:'คาบเรียนนี้ล็อกอยู่ ต้องการปลดล็อกก่อนแก้ไขไหม?',showCancelButton:true,confirmButtonText:'ปลดล็อกคาบเรียน',cancelButtonText:'ยกเลิก',confirmButtonColor:'#245bdb'})
       if(decision.isConfirmed)await editCell(day,period,'',false,true)
       return
     }
     if(!busy){
       const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
-      const decision=await Swal.fire({icon:'question',title,text:blocked?'ต้องการปลดล็อกคาบว่างนี้ไหม?':'ต้องการล็อกคาบว่างนี้ไหม?',showCancelButton:true,showDenyButton:!blocked,confirmButtonText:blocked?'ปลดล็อกคาบว่าง':'ล็อกคาบว่าง',denyButtonText:'เลือกวิชา',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25',denyButtonColor:'#64748b'})
+      const decision=await Swal.fire({icon:'question',title,text:blocked?'ต้องการปลดล็อกคาบว่างนี้ไหม?':'ต้องการล็อกคาบว่างนี้ไหม?',showCancelButton:true,showDenyButton:!blocked,confirmButtonText:blocked?'ปลดล็อกคาบว่าง':'ล็อกคาบว่าง',denyButtonText:'เลือกวิชา',cancelButtonText:'ยกเลิก',confirmButtonColor:'#245bdb',denyButtonColor:'#64748b'})
       if(decision.isConfirmed&&data.supported){void toggle(day,period,blocked);return}
       if(!decision.isDenied)return
     }
@@ -85,7 +87,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       const used=data.slots.filter(slot=>slot.classroomId===l.classroomId&&slot.lessonId===l.id).length+[...reservedLessons.current.values()].filter(id=>id===l.id).length
       return l.teacherId===teacher&&(!busy||l.classroomId===busy.classroomId)&&(l.id===busy?.lessonId||!quota||used<quota.target)&&!data.slots.some(slot=>slot.classroomId===l.classroomId&&slot.day===day&&slot.period===period&&(slot.lessonId!==busy?.lessonId||slot.locked))
     }).map(l=>{const quota=data.quotas.find(q=>q.id===l.id);return [l.id,`${l.label}${quota?` · เหลือ ${Math.max(0,quota.target-quota.used)} คาบ`:''}`]}))
-    const decision=await Swal.fire({title,text:busy?'เปลี่ยนวิชาหรือนำวิชาออกจากคาบนี้':'เลือกรายวิชาและห้องเรียนเพื่อบันทึกลงคาบนี้',input:'select',inputOptions:options,inputValue:busy?.lessonId||'',inputPlaceholder:'เลือกวิชาและห้องเรียน',inputValidator:value=>!value?'กรุณาเลือกวิชา':undefined,showCancelButton:true,showDenyButton:!!busy,confirmButtonText:'บันทึกวิชา',denyButtonText:'เอาวิชาออก',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25',denyButtonColor:'#be3340'})
+    const decision=await Swal.fire({title,text:busy?'เปลี่ยนวิชาหรือนำวิชาออกจากคาบนี้':'เลือกรายวิชาและห้องเรียนเพื่อบันทึกลงคาบนี้',input:'select',inputOptions:options,inputValue:busy?.lessonId||'',inputPlaceholder:'เลือกวิชาและห้องเรียน',inputValidator:value=>!value?'กรุณาเลือกวิชา':undefined,showCancelButton:true,showDenyButton:!!busy,confirmButtonText:'บันทึกวิชา',denyButtonText:'เอาวิชาออก',cancelButtonText:'ยกเลิก',confirmButtonColor:'#245bdb',denyButtonColor:'#be3340'})
     if(decision.isConfirmed)await editCell(day,period,String(decision.value),false,false)
     else if(decision.isDenied)await editCell(day,period,'',true,false)
   }
@@ -119,12 +121,12 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     <style>{`
       .availability-cell{display:flex;flex-direction:column;gap:7px;align-items:center;justify-content:center;width:100%;min-height:90px;padding:8px;border:1px dashed #c4ceca;border-radius:8px;background:#f4f9f6;color:#345341;font:inherit;cursor:pointer;}
       .availability-cell span{font-size:12px;line-height:1.5;}.availability-cell.is-busy{background:#edf1f5;border:1px solid #ced7e0;color:#354859;cursor:pointer!important;}.availability-cell.is-blocked{background:#f9ecd2;border:1px solid #c69742;color:#72501e;}
-      .availability-cell.is-selected{outline:3px solid #946b25;outline-offset:-3px;box-shadow:0 0 0 2px #f5e8ce;}.availability-cell .selected-label{font-weight:700;color:#78501b;font-size:11px;}
+      .availability-cell.is-selected{outline:3px solid #245bdb;outline-offset:-3px;box-shadow:0 0 0 2px #f5e8ce;}.availability-cell .selected-label{font-weight:700;color:#78501b;font-size:11px;}
       .availability-teacher select,.availability-editor select{min-height:44px;width:100%;border:1px solid #b6a58c!important;background:#faf7f1!important;color:#302a23!important;border-radius:6px;padding:10px 12px!important;}.availability-teacher option,.availability-editor option{background:white;color:#302a23;}
       .availability-editor{border:1px solid #c9beae;border-radius:12px;background:#fffdf8;padding:20px;display:grid;gap:12px;margin:16px 0;}.availability-editor h3{margin:0;}.availability-editor select{font:inherit;padding:12px;border:1px solid #bfb6a7;border-radius:8px;max-width:100%;}.availability-editor-actions{display:flex;gap:10px;flex-wrap:wrap;}.availability-editor button{font:inherit;padding:9px 14px;border:1px solid #bfb6a7;border-radius:8px;background:white;cursor:pointer;}.availability-editor button.danger{color:#a32929;}.availability-editor button:disabled{opacity:.5;cursor:not-allowed;}.availability-teacher{display:grid;gap:8px;max-width:360px;margin:16px 0;}.availability-teacher select{font:inherit;padding:10px;}.availability-error{color:#b02525;}
     `}</style>
     <div className="teacher-availability-body">
-      {error&&<p role="alert" className="text-sm text-rose-700">{error}</p>}
+      {error&&<p role="alert" className="text-sm text-rose-700">{error} <button type="button" className="ml-2 min-h-11 underline" onClick={()=>void load(true)}>โหลดข้อมูลล่าสุด</button></p>}
       {notice&&<p role="status" className="text-sm text-emerald-700">{notice}</p>}
       <p>กดคาบเพื่อเลือกวิชา นำวิชาออก หรือล็อกคาบว่าง การแก้ไขจะปรับตารางเรียนของห้องให้ตรงกันด้วย</p>
       {!data?<p>กำลังโหลด...</p>:<>
@@ -150,12 +152,12 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
         </details>
         </div>
 
-        <div className="schedule-grid-scroll overflow-x-auto"><ScheduleGridTable periodTimes={periodTimes} compactBreak renderCell={(day,period)=>{
+        <div className="schedule-grid-scroll overflow-x-auto"><ScheduleGridTable days={scheduleDays} periodTimes={periodTimes} compactBreak renderCell={(day,period)=>{
           const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const selected=editing?.day===day&&editing?.period===period
           const loading=pending.includes(`${teacher}:${day}:${period}`)
-          return <button type="button" className={`availability-cell ${blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||clearing||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-amber-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อกหรือเลือกวิชา':'กดเพื่อเลือกวิชาหรือล็อก'}</span></>}</button>
+          return <button type="button" className={`availability-cell ${blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||clearing||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-blue-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อกหรือเลือกวิชา':'กดเพื่อเลือกวิชาหรือล็อก'}</span></>}</button>
         }}/></div>
       </>}
     </div>

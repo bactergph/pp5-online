@@ -138,8 +138,8 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
   }
 }
 
-export async function saveClassScheduleCell(classroomId: string, yearId: string, day: number, period: number, lesson: string | null, note: string | null = null, semester = 1) {
-  return scheduleResult(() => scheduleOps.saveCell(classroomId, yearId, day, period, lesson, note, semester))
+export async function saveClassScheduleCell(classroomId: string, yearId: string, day: number, period: number, lesson: string | null, note: string | null = null, semester = 1, expectedLesson?:string|null) {
+  return scheduleResult(() => scheduleOps.saveCell(classroomId, yearId, day, period, lesson, note, semester, expectedLesson))
 }
 
 export async function moveClassScheduleCell(roomId:string,yearId:string,fromDay:number,fromPeriod:number,toDay:number,toPeriod:number,expectedLesson:string,semester=1) {
@@ -156,7 +156,7 @@ export async function fetchTeachingScheduleGrid(teacherId: string, yearId: strin
     if(!lesson || lesson.teacherId!==teacherId) continue
     const room=data.classrooms.find(c=>c.id===row.classroom_id)!
     const roomLine=room.level+'/'+room.room
-    const subjectLine=(lesson.code+' '+lesson.name).trim()
+    const subjectLine=[(lesson.code+' '+lesson.name).trim(),lesson.roomName].filter(Boolean).join(' · ')
     const key=row.day_of_week+'-'+row.period
     cells[key]={label:[cells[key]?.label,roomLine+'\n'+subjectLine].filter(Boolean).join('\n'),subject_line:subjectLine,room_line:roomLine}
   }
@@ -301,7 +301,7 @@ export async function getTeacherConflictAt(
   return mod.getTeacherConflictAt(yearId, teacherId, day, period, ignoreClassroomId, semester)
 }
 
-export async function runAutoScheduleSchool(yearId: string, clearFirst = true, semester = 1) { return scheduleResult(() => scheduleOps.autoSchedule(yearId, null, clearFirst, semester)) }
+export async function runAutoScheduleSchool(yearId: string, clearFirst = true, semester = 1) { return scheduleResult(async () => { const p=await import('@/lib/schedule-preparation');const data=await p.preparation(yearId,semester);return p.generate(yearId,semester,data.classrooms.map(c=>c.id),clearFirst) }) }
 export async function fetchScheduleActivities(yearId: string, classroomId: string, semester = 1) { return scheduleOps.activityOptions(yearId, classroomId, semester) }
 export async function saveScheduleActivity(yearId: string, classroomId: string, settingId: string, teacherId: string, count: number, semester = 1) { return scheduleOps.saveActivity(yearId, classroomId, settingId, teacherId, count, semester) }
 
@@ -312,4 +312,15 @@ export async function saveSubstituteDay(dayId: string, expected: import('./exten
 export async function fetchSubstitutePdfContext() {
   const mod = await import('./extended-actions')
   return mod.fetchSubstitutePdfContext()
+}
+
+export async function fetchScheduleDays(yearId:string,semester=1) {
+ const session=await requireScheduleSession()
+ if(!session.schoolId)throw new Error('ไม่พบโรงเรียน')
+ const db=createServerClient()
+ const y=await db.from('academic_years').select('id').eq('id',yearId).eq('school_id',session.schoolId).maybeSingle()
+ if(y.error||!y.data)throw new Error('ไม่พบปีการศึกษา')
+ const r=await db.from('schedule_plans').select('config').eq('school_id',session.schoolId).eq('academic_year_id',yearId).eq('semester',semester).maybeSingle()
+ if(r.error&&!['42P01','PGRST205'].includes(r.error.code))throw new Error('โหลดวันเรียนไม่สำเร็จ')
+ return (r.data?.config?.days||[1,2,3,4,5]) as number[]
 }

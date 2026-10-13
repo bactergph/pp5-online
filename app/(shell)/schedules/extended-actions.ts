@@ -202,7 +202,7 @@ export async function copyClassSchedule(from:string,to:string,yearId:string, sem
 
 export async function clearClassSchedule(classroomId:string,yearId:string, semester = 1) { return scheduleOps.clearRoom(classroomId,yearId, semester) }
 
-export async function runAutoScheduleClass(classroomId:string,yearId:string,mode:'spread'|'random'='spread',clearFirst=false, semester = 1) { if (!['spread','random'].includes(mode)) throw new Error('รูปแบบไม่ถูกต้อง'); return scheduleOps.autoSchedule(yearId,classroomId,clearFirst, semester) }
+export async function runAutoScheduleClass(classroomId:string,yearId:string,mode:'spread'|'random'='spread',clearFirst=false, semester = 1) { if (!['spread','random'].includes(mode)) throw new Error('รูปแบบไม่ถูกต้อง'); const p=await import('@/lib/schedule-preparation'); return p.generate(yearId,semester,[classroomId],clearFirst) }
 
 export async function fetchScheduleExportContext() {
   const session = await requireScheduleSession()
