@@ -33,3 +33,14 @@
 @media(prefers-reduced-motion:reduce){.schedule-prep .prep-steps button{transition:none}}
 @media(max-width:1100px){.prep-steps{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.prep-teacher-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.schedule-prep{padding:16px;border-radius:16px}.prep-heading,.prep-section-heading{gap:12px;flex-direction:column}.schedule-prep .prep-heading h2{font-size:23px}.prep-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-prep .prep-steps button{padding:10px 6px;font-size:13px}.prep-teacher-list{grid-template-columns:1fr}.prep-input-footer{align-items:stretch;flex-direction:column}.prep-input-footer button{width:100%}.prep-import-progress{flex-wrap:wrap}.prep-count{font-size:13px}.prep-section-heading h2{font-size:21px}}
+
+.schedule-prep .prep-pattern-guide { margin: 16px 0; padding: 16px 20px; border: 1px solid #cbdcf6; border-radius: 12px; background: #eff6ff; color: #18365d; }
+.schedule-prep .prep-pattern-guide p { margin: 8px 0; line-height: 1.7; }
+.schedule-prep .prep-pattern-guide small { display: block; color: #475569; line-height: 1.6; }
+.schedule-prep .prep-pattern-picker { min-width: 320px; max-width: 380px; padding: 10px 12px; white-space: normal; }
+.schedule-prep .prep-pattern-picker > select { width: 100%; max-width: none; min-height: 44px; }
+.schedule-prep .prep-pattern-picker > small { display: block; margin-top: 6px; line-height: 1.5; color: #475569; }
+.schedule-prep .prep-pattern-picker summary { cursor: pointer; padding: 10px 0; min-height: 44px; font-size: 14px; color: #245bdb; }
+.schedule-prep .prep-pattern-groups { display: grid; gap: 10px; margin-bottom: 12px; }
+.schedule-prep .prep-pattern-groups label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.schedule-prep .prep-pattern-groups select { min-height: 44px; width: auto; }
