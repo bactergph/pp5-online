@@ -7,26 +7,28 @@ import { loadSchedule, loadScheduleConstraints, lessonKey, lessonColumns, type S
 import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
 import { emptyPlan, validatePlan, checkPlanning, solvePlannedSchedule, type SchedulePlan } from './schedule-planning'
 
-async function actor(){const s=await getSession();if(!s?.schoolId||!SCHEDULE_EDIT_ROLES.includes(s.role as typeof SCHEDULE_EDIT_ROLES[number]))throw Error('ไม่มีสิทธิ์จัดตารางเรียน');return {...s,schoolId:s.schoolId}}
+async function actor(){const s=await getSession();if(!s?.schoolId||s.mustChangePassword||!SCHEDULE_EDIT_ROLES.includes(s.role as typeof SCHEDULE_EDIT_ROLES[number]))throw Error('ไม่มีสิทธิ์จัดตารางเรียน');return {...s,schoolId:s.schoolId}}
 function fail(error:{message:string;code?:string}|null){if(error)throw Error(['42P01','PGRST202','PGRST205'].includes(error.code||'')?'กรุณาติดตั้ง migration 063_schedule_planning_drafts.sql ในสภาพแวดล้อมทดสอบก่อนใช้ขั้นเตรียมและฉบับร่าง':'ดำเนินการไม่สำเร็จ: '+error.message)}
 async function snapshot(school:string,year:string,term:number){const r=await createServerClient().rpc('schedule_snapshot',{p_school:school,p_year:year,p_term:term});fail(r.error);return r.data as string}
 export async function preparation(year:string,term:number){
  const session=await actor(),db=createServerClient(),hash=await snapshot(session.schoolId,year,term)
- const [data,constraints,config,times,activities]=await Promise.all([
+ const [data,constraints,config,times,activities,teachers]=await Promise.all([
  loadSchedule(session.schoolId,year,term),loadScheduleConstraints(session.schoolId,year,term),
  db.from('schedule_plans').select('config').eq('school_id',session.schoolId).eq('academic_year_id',year).eq('semester',term).maybeSingle(),
  db.from('school_period_times').select('period,label,start_time,end_time,is_break,sort_order').eq('school_id',session.schoolId).order('sort_order'),
- db.from('evaluation_settings').select('id,label').eq('school_id',session.schoolId).eq('kind','activities').eq('is_active',true).order('sort_order')])
- for(const r of [config,times,activities])fail(r.error)
+ db.from('evaluation_settings').select('id,label').eq('school_id',session.schoolId).eq('kind','activities').eq('is_active',true).order('sort_order'),
+ db.from('users').select('id,prefix,full_name,position').eq('school_id',session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name').limit(1000)])
+ for(const r of [config,times,activities,teachers])fail(r.error)
  if(hash!==await snapshot(session.schoolId,year,term))throw Error('ข้อมูลเปลี่ยนระหว่างโหลด กรุณาลองใหม่')
  const plan=(config.data?.config||emptyPlan()) as SchedulePlan
  const periods=(times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[]
  const lessons=data.lessons.map(l=>({...l,...plan.rules[l.id],spread:plan.rules[l.id]?.spread??true,roomName:plan.rooms.find(r=>r.id===plan.rules[l.id]?.roomId)?.name||l.roomName,source:plan.rules[l.id]?'กำหนดภาระสอนสำหรับภาคเรียนนี้':`${l.sourceHours||0} ชั่วโมงเทียบรายปี ÷ 40 สัปดาห์`}))
- return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms:data.classrooms,lessons,slots:data.slots,blocks:constraints.blocks,activities:activities.data||[]}
+ return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms:data.classrooms,lessons,slots:data.slots,blocks:constraints.blocks,activities:activities.data||[],teachers:teachers.data||[]}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
 export async function savePlan(year:string,term:number,hash:string,plan:SchedulePlan){
  const s=await actor(),current=await preparation(year,term);validatePlan(plan,current.lessons.filter(l=>!l.activity).map(l=>l.id))
+ if(plan.teacherIds?.some(id=>!current.teachers.some(t=>t.id===id)))throw Error('ครูที่เลือกไม่ได้อยู่ในโรงเรียนนี้')
  const lessons=current.lessons.map(l=>({...l,...plan.rules[l.id],count:l.activity?current.slots.filter(r=>lessonKey(r)===l.id).length:(plan.rules[l.id]?.count??l.count)}))
  const issues=checkPlanning(lessons,current.slots.map(toPlanned),plan.days,current.periods,current.blocks).filter(i=>/คาบเดิม|ชน|นอกวัน/.test(i.message))
  if(issues.length)throw Error(issues.map(i=>i.message).join('\n'))
@@ -41,9 +43,10 @@ function input(data:Preparation,scope:string[],clear:boolean){
  return {retained,lessons}
 }
 export async function preflight(year:string,term:number,scope:string[],clear:boolean){const data=await preparation(year,term),{retained,lessons}=input(data,scope,clear);const issues=checkPlanning(lessons,retained.map(toPlanned),data.plan.days,data.periods,data.blocks)
- for(const id of scope)if(!lessons.some(l=>l.classroomId===id&&!l.activity))issues.push({severity:'error',message:`${data.classrooms.find(c=>c.id===id)?.level}/${data.classrooms.find(c=>c.id===id)?.room} ยังไม่มีรายวิชา`,step:2})
+ for(const l of lessons.filter(l=>!l.activity&&l.count>0))if(data.plan.teacherIds&&!data.plan.teacherIds.includes(l.teacherId||''))issues.push({severity:'error',message:`${l.label} ครูผู้สอนไม่ได้อยู่ในรายการครูที่เลือกจัดตาราง`,step:2})
+ for(const id of scope)if(!lessons.some(l=>l.classroomId===id&&!l.activity))issues.push({severity:'error',message:`${data.classrooms.find(c=>c.id===id)?.level}/${data.classrooms.find(c=>c.id===id)?.room} ยังไม่มีรายวิชา`,step:3})
  if(!data.timesConfigured)issues.push({severity:'error',message:'ยังไม่บันทึกเวลาคาบของโรงเรียน กรุณาตรวจและบันทึกเวลาเริ่ม–จบก่อนจัด',step:1})
- for(const l of lessons.filter(l=>scope.includes(l.classroomId)&&!l.activity&&l.roomName&&!data.plan.rules[l.id]?.roomId))issues.push({severity:'warning',message:`${l.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`,step:2})
+ for(const l of lessons.filter(l=>scope.includes(l.classroomId)&&!l.activity&&l.roomName&&!data.plan.rules[l.id]?.roomId))issues.push({severity:'warning',message:`${l.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`,step:3})
  const timeError=validatePeriodTimes(data.periods);if(timeError)issues.push({severity:'error',message:timeError,step:1})
  return {data,issues,retained,lessons}}
 async function storeDraft(year:string,term:number,data:Preparation,rows:ScheduleSlot[],offerings:{id:string;classroom_id:string;evaluation_setting_id:string}[]=[],unlock:ScheduleSlot[]=[]){const s=await actor();const r=await createServerClient().from('schedule_drafts').insert({school_id:s.schoolId,academic_year_id:year,semester:term,actor_id:s.userId,base_hash:data.hash,before_rows:data.slots,after_rows:rows,offerings,unlock_cells:unlock}).select('id').single();fail(r.error);return r.data!.id as string}

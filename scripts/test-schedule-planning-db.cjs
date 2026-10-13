@@ -190,6 +190,27 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   console.log('PASS: 2 classrooms x 2 activities atomic; repeat confirm idempotent; school/actor isolation; removal does not restore previous subjects; bell change rollback');
   assert.equal((await db.query("select has_function_privilege('authenticated','commit_schedule_draft(uuid,uuid,uuid,boolean)','execute') allowed")).rows[0].allowed,false);
   console.log('PASS: 063 repeatable; draft atomic/idempotent/stale/cancel/explicit unlock; room collision and double lunch validation');
+  await db.exec("alter table users add column email text; alter table subjects alter column id set default gen_random_uuid(); alter table subjects add column code text; alter table subjects add column name text; alter table subjects add column subject_group text; alter table subjects add column type text; alter table subjects add column hours_per_year int; alter table class_subjects alter column id set default gen_random_uuid();");
+  const inputMigration=fs.readFileSync('supabase/migrations/064_schedule_input_subjects.sql','utf8');
+  await db.exec(inputMigration);await db.exec(inputMigration);
+  const hash=async()=>(await db.query('select schedule_snapshot($1,$2,2) h',[id(1),id(10)])).rows[0].h;
+  const inputRow={classroomId:id(20),code:'ค15101',name:'คณิตศาสตร์',teacherId:id(30),count:3,pattern:[2,1],venue:'ห้องคอม',group:'คณิตศาสตร์',type:'พื้นฐาน'};
+  const importInput=async(rows,h)=>db.query('select save_schedule_input_subjects($1,$2,2,$3,$4::jsonb)',[id(1),id(10),h??await hash(),JSON.stringify(rows)]);
+  // Each SQL exception aborts a whole import transaction. Follow-up queries verify rollback.
+  const staleInputHash=await hash();await importInput([inputRow,{...inputRow,classroomId:id(23)}]);
+  assert.equal((await db.query("select count(*)::int n from subjects where code='ค15101'")).rows[0].n,1);
+  assert.equal((await db.query("select count(*)::int n from class_subjects where subject_id in(select id from subjects where code='ค15101')")).rows[0].n,2);
+  await importInput([inputRow,{...inputRow,classroomId:id(23)}]);
+  await assert.rejects(importInput([inputRow],staleInputHash),/ข้อมูลเปลี่ยน/);
+  await assert.rejects(importInput([inputRow,inputRow]),/ซ้ำ/);
+  await assert.rejects(importInput([{...inputRow,code:'ใหม่1',name:'ใหม่'}, {...inputRow,classroomId:id(22)}]),/โรงเรียน/);
+  assert.equal((await db.query("select count(*)::int n from subjects where code='ใหม่1'")).rows[0].n,0);
+  await assert.rejects(importInput([{...inputRow,pattern:[2]}]),/รูปแบบคาบ/);
+  await assert.rejects(importInput([{...inputRow,name:'ชื่อทับข้อมูลเดิม'}]),/ชื่อเดิม/);
+  const importPlan=(await db.query('select config from schedule_plans where school_id=$1 and academic_year_id=$2 and semester=2',[id(1),id(10)])).rows[0].config;
+  assert.equal(importPlan.rooms.filter(r=>r.name==='ห้องคอม').length,1);
+  assert.equal((await db.query("select has_function_privilege('authenticated','save_schedule_input_subjects(uuid,uuid,integer,text,jsonb)','execute') allowed")).rows[0].allowed,false);
+  console.log('PASS: 064 repeatable; atomic import rollback, stale protection, duplicate rejection, reuse subject and venue, curriculum preservation, school isolation');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

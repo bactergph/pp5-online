@@ -325,7 +325,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     }
   }
 
-  function handleAutoSchedule(whole=false) { setPreparationRooms(whole?undefined:[selectedClass]);setPreparationStep(4);setWorkspace('prepare') }
+  function handleAutoSchedule(whole=false) { setPreparationRooms(whole?undefined:[selectedClass]);setPreparationStep(5);setWorkspace('prepare') }
 
   async function handleClear(scope:'room'|'level'|'school'='room') {
     if(blocked)return
@@ -413,7 +413,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </div>
           <div className="flex flex-wrap items-center gap-3">
           {isManage && canEdit ? <div role="tablist" aria-label="จัดตาราง" className="flex flex-wrap gap-1 border-b border-stone-300">
-            <button role="tab" aria-selected={workspace==='prepare'} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})} className="px-4 py-3 font-semibold text-blue-700">เตรียมตาราง · 4 ขั้น</button>
+            <button role="tab" aria-selected={workspace==='prepare'} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})} className="px-4 py-3 font-semibold text-blue-700">เตรียมตาราง · 5 ขั้น</button>
             <button role="tab" aria-selected={workspace==='class'} onClick={()=>void leavePreparation(()=>setWorkspace('class'))} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='class'?'border-blue-700 text-blue-900':'border-transparent text-stone-500'}`}>ตารางเรียน</button>
             <button role="tab" aria-selected={workspace==='teacher'} onClick={()=>void leavePreparation(()=>setWorkspace('teacher'))} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='teacher'?'border-blue-700 text-blue-900':'border-transparent text-stone-500'}`}>ตารางสอน/ล็อคคาบ</button>
             <button role="tab" aria-selected={workspace==='activity'} onClick={()=>void leavePreparation(()=>setWorkspace('activity'))} className={`border-b-2 px-4 py-3 text-sm font-semibold ${workspace==='activity'?'border-emerald-700 text-emerald-900':'border-transparent text-stone-500'}`}>กำหนดกิจกรรมให้ชั้น/ห้อง</button>
@@ -474,7 +474,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <article className={quotas.items.some(q=>q.used>q.target)?'border-rose-300! bg-rose-50!':''}><strong>{quotas.items.reduce((sum,q)=>sum+Math.max(0,q.remaining),0)}</strong><span>คาบรายวิชาที่ยังขาด{quotas.items.some(q=>q.used>q.target)?' · พบวิชาเกินคาบ กรุณานำออก':''}</span></article>
           <article><strong>{Object.values(cells).filter(c=>c.locked).length}</strong><span>คาบที่ล็อก · ระบบอัตโนมัติจะเก็บไว้</span></article>
         </div>}
-        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} initialRooms={preparationRooms} initialStep={workspace==='activity'?3:preparationStep} onChanged={loadGrid} />}
+        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} initialRooms={preparationRooms} initialStep={workspace==='activity'?4:preparationStep} onChanged={loadGrid} />}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
         {(workspace==='activity'||workspace==='prepare')?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (

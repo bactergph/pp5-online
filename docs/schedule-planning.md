@@ -2,7 +2,7 @@
 
 ## Scope and entry points
 
-`/schedules/class/manage` (and school-prefixed equivalent) now has **เตรียมตาราง · 4 ขั้น** and **กำหนดกิจกรรมให้ชั้น/ห้อง**. Existing class/teacher/manual editing and clear scopes remain.
+`/schedules/class/manage` (and school-prefixed equivalent) now has **เตรียมตาราง · 5 ขั้น** and **กำหนดกิจกรรมให้ชั้น/ห้อง**. Existing class/teacher/manual editing and clear scopes remain.
 
 1. Reuse year/semester and bell times. Choose active weekdays within the existing Monday–Friday model. Times remain school-wide; day selection, workload overrides, room references and preferences are school/year/semester scoped.
 2. Reuse existing class subjects/teachers. Correct the teacher/offering through the existing class-subject settings link; this screen edits weekly counts, block patterns and referenced venues. Annual-equivalent hours are divided by 40; the existing secondary subject writer stores credits × 80 annual-equivalent hours (credits × 2 weekly, credits × 40 semester hours). Missing hours are no longer silently given a one-period quota.
@@ -38,3 +38,15 @@ Preferences: morning, spread across days, fewer teacher gaps and a desired maxim
 - Real jsPDF export with synthetic data rendered and inspected; selected weekdays, subjects, activity and venue text checked from the PDF. No real student data or signatures were used.
 
 Screenshots and `checks.json` are under `output/schedule-review/`. Full keyboard/screen-reader audit and authenticated staging integration remain rollout checks. No push/deploy or production changes were performed.
+
+## Spreadsheet input workspace — migration 064
+
+The five steps are bell times, teachers, subjects/workload, activities, and review/draft. Teachers and subjects have independent input tables supporting TSV paste from any cell, quoted Excel cells, keyboard navigation and up to 500 rows. Existing data remains the shared identity source; this is a separate input workflow, not a separate copy of school personnel/curriculum. Teachers can be selected for the term; preflight blocks assignments to teachers outside that roster.
+
+New teachers use the existing personnel service: no username/password/role is requested here, pending personnel retain the existing staff quota and admin-only creation permission. Teacher imports are processed in batches of 50 with actual completed-row progress and failed rows retained. Names matching existing prefix/name are reused; profile/account changes belong to the personnel page.
+
+Apply **064_schedule_input_subjects.sql after 063 in staging**. This task does not apply production SQL. It adds a service-only RPC for atomic subject/assignment imports with school/year validation and snapshot checking. An invalid row rolls back the entire subject batch. Existing curriculum metadata is preserved; code/name mismatches are rejected. New curriculum entries have no inferred annual hours (0); weekly workload is saved in the term plan. Complete annual/semester curriculum hours in subject settings before using those subjects for academic reporting. Teacher assignments are shared for the academic year, so an assignment with scheduled periods cannot change teacher through this import until its existing slots are removed. Venues reuse stable term IDs by exact trimmed name. No scores or timetable slots are deleted by import.
+
+The input buffers stay mounted when switching steps and warn on exit. Unsaved plan changes must be saved before importing; unsaved input blocks drafting. Subject progress is indeterminate during the atomic request, not a simulated percentage. A network retry uses existing subject/assignment IDs and a fresh fingerprint rather than creating duplicate offerings. Full authenticated Supabase staging verification remains required.
+
+Verified this revision: targeted ESLint passed; existing timetable regressions and the expanded planning/input/PGlite suite passed; production build passed. Repository typecheck still reports 64 existing errors outside the scheduling production paths. Browser UI was checked using synthetic data and mock actions (not a live Supabase account): TSV paste into teachers and subjects, reuse/load buttons, subject confirmation, input preservation across steps, arrow-key navigation, and page widths 360/390/768/1024/1440 without document overflow. A clean-load browser run reported no console errors. Screenshots and logs are in output/schedule-input-review/. Disposable preview routes were removed before build.

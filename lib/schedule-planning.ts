@@ -1,6 +1,6 @@
 import type { PeriodTimeRow } from './schedule-helpers'
 export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean }
-export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number }
+export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[] }
 export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; spread?: boolean; fixedOnly?: boolean }
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
 export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number }
@@ -10,6 +10,7 @@ export function validatePlan(plan: SchedulePlan, lessonIds: string[]) {
   if (!Array.isArray(plan.rooms) || plan.rooms.length>500 || new Set(plan.rooms.map(r=>r.id)).size!==plan.rooms.length || plan.rooms.some(r=>!/^[-0-9a-f]{36}$/i.test(r.id)||!r.name.trim()||r.name.length>100)) throw Error('ข้อมูลห้องสถานที่ไม่ถูกต้อง')
   if (typeof plan.reduceGaps!=='boolean' || !Number.isInteger(plan.maxContinuous)||plan.maxContinuous<0||plan.maxContinuous>8) throw Error('เงื่อนไขคาบต่อเนื่องไม่ถูกต้อง')
   if (!plan.rules || typeof plan.rules!=='object') throw Error('ข้อมูลภาระสอนไม่ถูกต้อง')
+  if (plan.teacherIds && (!Array.isArray(plan.teacherIds) || plan.teacherIds.length>1000 || new Set(plan.teacherIds).size!==plan.teacherIds.length || plan.teacherIds.some(id=>!/^[-0-9a-f]{36}$/i.test(id)))) throw Error('รายการครูที่เลือกไม่ถูกต้อง')
   for(const [id,r] of Object.entries(plan.rules)) {
     if (!lessonIds.includes(id) || !Number.isInteger(r.count)||r.count<1||r.count>40 || !Array.isArray(r.pattern)||!r.pattern.length||r.pattern.some(n=>!Number.isInteger(n)||n<1||n>8)||r.pattern.reduce((a,b)=>a+b,0)!==r.count) throw Error('ภาระสอนและผลรวมรูปแบบคาบต้องตรงกัน')
     if (r.roomId && !plan.rooms.some(room=>room.id===r.roomId)) throw Error('ไม่พบห้องสถานที่ที่เลือก')
@@ -28,24 +29,24 @@ export function blocksFor(length: number, days: number[], times: PeriodTimeRow[]
 }
 export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], days:number[], times:PeriodTimeRow[], unavailable:{teacherId:string;day:number;period:number}[]):PlanningIssue[] {
   const issues:PlanningIssue[]=[];const periods=times.filter(t=>!t.is_break).map(t=>t.period),capacity=periods.length*days.length
-  const err=(message:string,step=4)=>issues.push({severity:'error',message,step})
+  const err=(message:string,step=5)=>issues.push({severity:'error',message,step})
   const occupied=new Set<string>(),teachers=new Set<string>(),places=new Set<string>()
   for(const slot of fixed){const l=lessons.find(l=>l.id===slot.lessonId);const key=`${slot.day}:${slot.period}`
     if(!days.includes(slot.day)||!periods.includes(slot.period))err('คาบเดิมอยู่นอกวันหรือเวลาที่เลือก',1)
     if(occupied.has(slot.classroomId+':'+key))err('มีคาบนักเรียนซ้ำ');occupied.add(slot.classroomId+':'+key)
-    if(slot.lessonId&&!l)err('คาบเดิมอ้างถึงรายวิชาที่ไม่พบ',2)
-    if(l?.teacherId){if(teachers.has(l.teacherId+':'+key)||unavailable.some(b=>b.teacherId===l.teacherId&&b.day===slot.day&&b.period===slot.period))err(l.label+' ครูชนหรือไม่ว่าง',3);teachers.add(l.teacherId+':'+key)}
-    if(l?.roomId){if(places.has(l.roomId+':'+key))err(l.label+' ห้องสถานที่ชน',2);places.add(l.roomId+':'+key)}
+    if(slot.lessonId&&!l)err('คาบเดิมอ้างถึงรายวิชาที่ไม่พบ',3)
+    if(l?.teacherId){if(teachers.has(l.teacherId+':'+key)||unavailable.some(b=>b.teacherId===l.teacherId&&b.day===slot.day&&b.period===slot.period))err(l.label+' ครูชนหรือไม่ว่าง',4);teachers.add(l.teacherId+':'+key)}
+    if(l?.roomId){if(places.has(l.roomId+':'+key))err(l.label+' ห้องสถานที่ชน',3);places.add(l.roomId+':'+key)}
   }
   for(const l of lessons){
     if(!l.teacherId&&!l.teacherOptional&&l.count>0)err(l.label+' ยังไม่มีครู',2)
-    if(!Number.isInteger(l.count)||l.count<0||(!l.activity&&l.count===0))err(l.label+' ยังไม่มีภาระสอนที่ถูกต้อง',2)
-    if(l.pattern&&(l.pattern.reduce((a,b)=>a+b,0)!==l.count||l.pattern.some(n=>!Number.isInteger(n)||n<1)))err(l.label+' รูปแบบคาบรวมไม่ตรงภาระสอน',2)
-    if(l.pattern?.some(n=>!blocksFor(n,days,times).some(b=>!b.periods.some(p=>unavailable.some(u=>u.teacherId===l.teacherId&&u.day===b.day&&u.period===p)))))err(l.label+' ไม่มีช่วงว่างต่อเนื่องสำหรับรูปแบบคาบ',3)
-    if(fixed.filter(s=>s.lessonId===l.id).length>l.count)err(l.label+' คาบเดิมเกินเป้าหมาย',2)
+    if(!Number.isInteger(l.count)||l.count<0||(!l.activity&&l.count===0))err(l.label+' ยังไม่มีภาระสอนที่ถูกต้อง',3)
+    if(l.pattern&&(l.pattern.reduce((a,b)=>a+b,0)!==l.count||l.pattern.some(n=>!Number.isInteger(n)||n<1)))err(l.label+' รูปแบบคาบรวมไม่ตรงภาระสอน',3)
+    if(l.pattern?.some(n=>!blocksFor(n,days,times).some(b=>!b.periods.some(p=>unavailable.some(u=>u.teacherId===l.teacherId&&u.day===b.day&&u.period===p)))))err(l.label+' ไม่มีช่วงว่างต่อเนื่องสำหรับรูปแบบคาบ',4)
+    if(fixed.filter(s=>s.lessonId===l.id).length>l.count)err(l.label+' คาบเดิมเกินเป้าหมาย',3)
   }
-  for(const room of new Set(lessons.map(l=>l.classroomId))){const need=lessons.filter(l=>l.classroomId===room).reduce((n,l)=>n+l.count,0)+fixed.filter(s=>s.classroomId===room&&!s.lessonId).length;if(need>capacity)err(`${lessons.find(l=>l.classroomId===room)?.label.split(' · ')[0]} ต้องการ ${need} คาบ แต่มี ${capacity} ช่อง`,2)}
-  for(const teacher of new Set(lessons.map(l=>l.teacherId).filter(Boolean))){const need=lessons.filter(l=>l.teacherId===teacher).reduce((n,l)=>n+l.count,0);const free=capacity-new Set(unavailable.filter(b=>b.teacherId===teacher&&days.includes(b.day)&&periods.includes(b.period)).map(b=>`${b.day}:${b.period}`)).size;if(need>free)err(`ครูของ ${lessons.find(l=>l.teacherId===teacher)?.label} ต้องสอน ${need} คาบ แต่มีเวลาว่าง ${free} คาบ`,3)}
+  for(const room of new Set(lessons.map(l=>l.classroomId))){const need=lessons.filter(l=>l.classroomId===room).reduce((n,l)=>n+l.count,0)+fixed.filter(s=>s.classroomId===room&&!s.lessonId).length;if(need>capacity)err(`${lessons.find(l=>l.classroomId===room)?.label.split(' · ')[0]} ต้องการ ${need} คาบ แต่มี ${capacity} ช่อง`,3)}
+  for(const teacher of new Set(lessons.map(l=>l.teacherId).filter(Boolean))){const need=lessons.filter(l=>l.teacherId===teacher).reduce((n,l)=>n+l.count,0);const free=capacity-new Set(unavailable.filter(b=>b.teacherId===teacher&&days.includes(b.day)&&periods.includes(b.period)).map(b=>`${b.day}:${b.period}`)).size;if(need>free)err(`ครูของ ${lessons.find(l=>l.teacherId===teacher)?.label} ต้องสอน ${need} คาบ แต่มีเวลาว่าง ${free} คาบ`,4)}
   return issues
 }
 /** Bounded block search. Fixed lessons may be completed into a double block. */
