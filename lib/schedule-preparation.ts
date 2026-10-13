@@ -2,7 +2,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { getSession } from './session'
 import { createServerClient } from './supabase'
-import { SCHEDULE_EDIT_ROLES } from './schedules'
+import { SCHEDULE_EDIT_ROLES, isTimetableClassroom } from './schedules'
 import { loadSchedule, loadScheduleConstraints, lessonKey, lessonColumns, type ScheduleSlot } from './schedule-store'
 import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
 import { emptyPlan, validatePlan, checkPlanning, solvePlannedSchedule, type SchedulePlan } from './schedule-planning'
@@ -23,7 +23,9 @@ export async function preparation(year:string,term:number){
  const plan=(config.data?.config||emptyPlan()) as SchedulePlan
  const periods=(times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[]
  const lessons=data.lessons.map(l=>({...l,...plan.rules[l.id],spread:plan.rules[l.id]?.spread??true,roomName:plan.rooms.find(r=>r.id===plan.rules[l.id]?.roomId)?.name||l.roomName,source:plan.rules[l.id]?'กำหนดภาระสอนสำหรับภาคเรียนนี้':`${l.sourceHours||0} ชั่วโมงเทียบรายปี ÷ 40 สัปดาห์`}))
- return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms:data.classrooms,lessons,slots:data.slots,blocks:constraints.blocks,activities:activities.data||[],teachers:teachers.data||[]}
+ // Keep all existing slots/lessons for outside-scope teacher and venue conflicts,
+ // but only offer non-kindergarten classrooms for import, activities and generation.
+ return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms:data.classrooms.filter(c=>isTimetableClassroom(c.level)),lessons,slots:data.slots,blocks:constraints.blocks,activities:activities.data||[],teachers:teachers.data||[]}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
 export async function savePlan(year:string,term:number,hash:string,plan:SchedulePlan){
@@ -37,7 +39,7 @@ export async function savePlan(year:string,term:number,hash:string,plan:Schedule
 }
 const toPlanned=(s:ScheduleSlot)=>({classroomId:s.classroom_id,lessonId:lessonKey(s),day:s.day_of_week,period:s.period})
 function input(data:Preparation,scope:string[],clear:boolean){
- if(!scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id)))throw Error('กรุณาเลือกห้องในปีการศึกษานี้')
+ if(!scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id)))throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล')
  const retained=data.slots.filter(s=>!scope.includes(s.classroom_id)||s.locked||!!s.activity_id||!clear)
  const lessons=data.lessons.map(l=>{const active=scope.includes(l.classroomId)&&!l.activity;const count=active?l.count:retained.filter(s=>lessonKey(s)===l.id).length;return {...l,count,fixedOnly:!active,activity:l.activity||!active,pattern:active?l.pattern:undefined,teacherOptional:!active||l.teacherOptional}})
  return {retained,lessons}
