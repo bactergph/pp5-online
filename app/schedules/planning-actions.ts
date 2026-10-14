@@ -18,4 +18,4 @@ export async function discardScheduleDraft(id:string){return scheduleResult(()=>
 
 import type { ActivityTeam } from '@/lib/schedule-activity-teams'
 export async function previewScheduleActivityTeam(year:string,term:number,hash:string,group:ActivityTeam,remove=false){return scheduleResult(()=>planning.previewActivityTeam(year,term,hash,group,remove))}
-export async function saveScheduleActivityTeam(year:string,term:number,hash:string,group:ActivityTeam,remove=false,unlock=false){return scheduleResult(()=>planning.saveActivityTeam(year,term,hash,group,remove,unlock))}
+export async function saveScheduleActivityTeam(year:string,term:number,hash:string,group:ActivityTeam,remove=false,unlock=false,overwrite=false){return scheduleResult(()=>planning.saveActivityTeam(year,term,hash,group,remove,unlock,overwrite))}

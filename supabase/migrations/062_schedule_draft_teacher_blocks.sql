@@ -23,7 +23,7 @@ begin
   end if;
 end; $$;
 revoke all on function public.set_schedule_teacher_block(uuid,uuid,integer,uuid,integer,integer,boolean) from public,anon,authenticated;
-g
+grant execute on function public.set_schedule_teacher_block(uuid,uuid,integer,uuid,integer,integer,boolean) to service_role;
 notify pgrst, 'reload schema';
 commit;
 
