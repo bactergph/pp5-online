@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useFormStatus } from 'react-dom'
 import Link from 'next/link'
 import { logout } from '@/lib/actions/auth'
@@ -9,6 +9,8 @@ type Props = {
   title: string
   userFullName: string
   userRole: string
+  schoolName?: string | null
+  sidebarOpen?: boolean
   schoolCode?: string | null
   onMenuClick: () => void
 }
@@ -25,32 +27,36 @@ function LogoutButton() {
   )
 }
 
-export default function Navbar({ title, userFullName, userRole, schoolCode, onMenuClick }: Props) {
+export default function Navbar({ title, userFullName, userRole, schoolCode, schoolName, sidebarOpen, onMenuClick }: Props) {
+  const userButton = useRef<HTMLButtonElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const profileHref = schoolCode && userRole !== 'district'
     ? withSchoolPrefix(schoolCode, '/settings/profile')
     : '/settings/profile'
 
   return (
-    <header className="navbar">
+    <header className="navbar" onKeyDown={e => { if (e.key === 'Escape') { setMenuOpen(false); userButton.current?.focus() } }}>
       <div className="navbar-title-group">
         {/* Hamburger — mobile only */}
         <button
           onClick={onMenuClick}
           className="navbar-menu-button lg:hidden"
           aria-label="เปิดเมนู"
+          aria-expanded={sidebarOpen}
+          aria-controls="workspace-navigation"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M3 12h18M3 6h18M3 18h18"/>
           </svg>
         </button>
 
-        <h1 className="navbar-title">{title}</h1>
+        <div className="navbar-context">{schoolName && <span className="navbar-school">{schoolName}</span>}<div className="navbar-title">{title}</div></div>
       </div>
 
       {/* User */}
       <div className="navbar-user">
         <button
+          ref={userButton}
           onClick={() => setMenuOpen(!menuOpen)}
           className={`navbar-user-button ${menuOpen ? 'is-open' : ''}`}
           aria-expanded={menuOpen}

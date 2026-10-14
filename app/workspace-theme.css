@@ -172,3 +172,25 @@
     .workspace-theme *, .workspace-theme *::before, .workspace-theme *::after { transition: none !important; }
   }
 }
+
+/* Shared navigation chrome; does not restyle report contents or printed pages. */
+@media screen {
+  .workspace-theme { --bg: #f3f6fb; --text: #18202f; --text-2: #525e70; }
+  .workspace-theme .sidebar { border-right-color: #dce3ed; }
+  .workspace-theme .sidebar-brand { padding: 20px 16px; }
+  .workspace-theme .sidebar-user-chip { margin: 12px; padding: 12px; border-radius: 12px; background: #f3f6fb; }
+  .workspace-theme .sidebar-section-label { font-size: 12px; font-weight: 700; color: #525e70; letter-spacing: normal; }
+  .workspace-theme .sidebar-link { min-height: 44px; border-radius: 9px; font-size: 15px; }
+  .workspace-theme .sidebar-child-link { min-height: 42px; font-size: 14px; }
+  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-submenu-link.is-active { border-left: 3px solid #245bdb; background: #eaf1ff; font-weight: 700; }
+  .workspace-theme .navbar { box-shadow: 0 2px 12px #18202f05; }
+  .workspace-theme .navbar-title { font-size: 18px; line-height: 1.5; }
+  .workspace-theme .navbar-context { min-width: 0; }
+  .workspace-theme .navbar-school { display: block; color: #525e70; font-size: 12px; max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace-theme .navbar-menu-button { min-width: 44px; min-height: 44px; }
+  .workspace-theme .navbar-user-button { border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: none; }
+  .workspace-theme .content-shell { max-width: 1600px; margin-inline: auto; }
+  .workspace-theme .workspace-skip { position: fixed; top: -100px; left: 16px; z-index: 200; background: white; padding: 12px; border: 2px solid #245bdb; }
+  .workspace-theme .workspace-skip:focus { top: 10px; }
+  @media(max-width:640px) { .workspace-theme .navbar-title { font-size: 16px; } .workspace-theme .navbar-school { max-width: 48vw; } }
+}

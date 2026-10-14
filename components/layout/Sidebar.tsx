@@ -668,7 +668,7 @@ export default function Sidebar({
   }
 
   return (
-    <aside className={`sidebar ${isOpen ? 'sidebar-open' : ''}`}>
+    <aside id="workspace-navigation" aria-label="เมนูงานโรงเรียน" className={`sidebar ${isOpen ? 'sidebar-open' : ''}`}>
       {/* Logo — โรงเรียน: โลโก้ + ชื่อโปรแกรม / Super Admin: จารย์เสก */}
       <div className="sidebar-brand">
         <div className="sidebar-brand-main">
@@ -694,7 +694,7 @@ export default function Sidebar({
             )}
           </div>
         </div>
-        <button onClick={onClose} className="sidebar-close lg:hidden">
+        <button aria-label="ปิดเมนู" onClick={onClose} className="sidebar-close lg:hidden">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
         </button>
       </div>

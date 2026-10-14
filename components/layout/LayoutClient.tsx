@@ -97,7 +97,8 @@ function LayoutClientInner({
   }
 
   return (
-    <div className="app-shell workspace-theme">
+    <div className="app-shell workspace-theme" onKeyDown={e => { if (e.key === 'Escape' && sidebarOpen) { setSidebarOpen(false); document.querySelector<HTMLButtonElement>('.navbar-menu-button')?.focus() } }}>
+      <a href="#workspace-main" className="workspace-skip">ข้ามไปยังเนื้อหา</a>
       <NavigationProgress />
       <Sidebar
         educationType={educationType}
@@ -126,10 +127,12 @@ function LayoutClientInner({
         userRole={userRole}
         userFullName={userFullName}
         schoolCode={schoolCode}
+        schoolName={schoolName}
+        sidebarOpen={sidebarOpen}
         onMenuClick={() => setSidebarOpen(true)}
       />
 
-      <main className="main-content">
+      <main id="workspace-main" tabIndex={-1} className="main-content">
         <div className="content-shell">
           {children}
         </div>

@@ -2,19 +2,21 @@
 import { useState } from 'react'
 import { login } from '@/lib/actions/auth'
 import { resolveSchoolLoginEmail } from '@/lib/schoolAuth'
-import ScoutAuthLayout from '@/components/auth/ScoutAuthLayout'
+import AuthScreen from '@/components/auth/AuthScreen'
+import { FiArrowRight } from 'react-icons/fi'
 import PasswordInput from '@/components/auth/PasswordInput'
 
 const PREFIXES = ['นาย', 'นาง', 'นางสาว', 'อื่นๆ'] as const
 
 type Props = {
   schoolId: string
+  schoolName: string
   logoUrl: string | null
   programName: string
   createdBy: string | null
 }
 
-export default function SchoolLoginForm({ schoolId, logoUrl, programName, createdBy }: Props) {
+export default function SchoolLoginForm({ schoolId, schoolName, logoUrl, programName, createdBy }: Props) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,36 +81,19 @@ export default function SchoolLoginForm({ schoolId, logoUrl, programName, create
   }
 
   return (
-    <ScoutAuthLayout
-      variant="school"
-      brandTitle={programName?.trim() || 'ระบบ ปพ.5 ออนไลน์'}
-      brandSubtitle=""
-      logoUrl={logoUrl}
-      cardTitle={mode === 'login' ? '' : 'สมัครสมาชิก'}
-      cardSubtitle={
-        mode === 'login'
-          ? (createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกชื่อผู้ใช้ หรืออีเมล และรหัสผ่าน')
-          : (createdBy ? `ผู้ดูแล: ${createdBy}` : 'กรอกข้อมูลเพื่อสมัครใช้งาน')
-      }
-      footer={(
-        <p className="auth-scout-footer auth-scout-footer--school">
-          {mode === 'login' ? (
-            <>ยังไม่มีบัญชี? <button type="button" onClick={() => { setMode('register'); setError(null) }} className="auth-scout-footer__btn">สมัครใช้งาน</button></>
-          ) : (
-            <>มีบัญชีแล้ว? <button type="button" onClick={() => { setMode('login'); setError(null) }} className="auth-scout-footer__btn">เข้าสู่ระบบ</button></>
-          )}
-        </p>
-      )}
-    >
-      {error && <div className="auth-scout-error" role="alert">{error}</div>}
+    <AuthScreen mode={mode} school={{ name: schoolName, logoUrl, programName }}>
+      <h2>{mode === 'login' ? 'เข้าสู่ระบบโรงเรียน' : 'สมัครบัญชีบุคลากร'}</h2>
+      <p>{schoolName}</p>
+      {createdBy && <p className="auth-field-hint">ผู้ดูแล: {createdBy}</p>}
+      {error && <div className="welcome-login-error auth-school-message" role="alert">{error}</div>}
       {registered && mode === 'login' && (
-        <div className="alert alert-success" style={{ marginBottom: 14, fontSize: 13 }}>สมัครสำเร็จ — รอผู้ดูแลโรงเรียนอนุมัติก่อนเข้าใช้งาน</div>
+        <div className="auth-school-success" role="status">สมัครสำเร็จ — รอผู้ดูแลโรงเรียนอนุมัติก่อนเข้าใช้งาน</div>
       )}
 
       {mode === 'login' ? (
-        <form onSubmit={handleLogin}>
-          <div className="auth-scout-field">
-            <label className="auth-scout-label" htmlFor="username">ชื่อผู้ใช้ หรืออีเมล</label>
+        <form onSubmit={handleLogin} className="welcome-login-form" aria-busy={loading}>
+          <div className="auth-school-field">
+            <label className="auth-school-label" htmlFor="username">ชื่อผู้ใช้ หรืออีเมล</label>
             <input
               id="username"
               name="username"
@@ -116,46 +101,45 @@ export default function SchoolLoginForm({ schoolId, logoUrl, programName, create
               placeholder="username หรือ email"
               required
               autoComplete="username"
-              inputMode="email"
+              autoCapitalize="none"
+              spellCheck={false}
             />
           </div>
-          <div className="auth-scout-field">
-            <label className="auth-scout-label" htmlFor="school-password">รหัสผ่าน</label>
+          <div className="auth-school-field">
+            <label className="auth-school-label" htmlFor="school-password">รหัสผ่าน</label>
             <PasswordInput id="school-password" name="password" placeholder="รหัสผ่าน" />
           </div>
-          <div className="auth-scout-links" style={{ justifyContent: 'flex-end' }}>
-            <a href="/forgot-password">ผู้ดูแลโรงเรียนลืมรหัส?</a>
+          <div>
+            <a href="/forgot-password" className="welcome-forgot">ผู้ดูแลโรงเรียนลืมรหัส?</a>
           </div>
-          <button type="submit" className="auth-scout-submit" disabled={loading}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
+          <button type="submit" className="welcome-button welcome-button-primary" disabled={loading}>
+
+            {loading ? <><span className="welcome-spinner" aria-hidden />กำลังเข้าสู่ระบบ...</> : <>เข้าสู่ระบบ<FiArrowRight aria-hidden /></>}
           </button>
         </form>
       ) : (
-        <form onSubmit={handleRegister}>
-          <div className="auth-scout-register-grid">
-            <div className="auth-scout-field" style={{ marginBottom: 0 }}>
-              <label className="auth-scout-label" htmlFor="reg-prefix">คำนำหน้า</label>
+        <form onSubmit={handleRegister} className="welcome-login-form" aria-busy={loading}>
+          <div className="auth-field-grid auth-field-grid--name">
+            <div className="auth-school-field" style={{ marginBottom: 0 }}>
+              <label className="auth-school-label" htmlFor="reg-prefix">คำนำหน้า</label>
               <select
                 id="reg-prefix"
                 name="prefix"
-                className="auth-scout-select"
+                className="auth-school-select"
                 value={prefixChoice}
                 onChange={e => setPrefixChoice(e.target.value)}
               >
                 {PREFIXES.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
-            <div className="auth-scout-field" style={{ marginBottom: 0 }}>
-              <label className="auth-scout-label" htmlFor="reg-full-name">ชื่อ-นามสกุล *</label>
+            <div className="auth-school-field" style={{ marginBottom: 0 }}>
+              <label className="auth-school-label" htmlFor="reg-full-name">ชื่อ-นามสกุล *</label>
               <input id="reg-full-name" name="full_name" required className="auth-scout-input" placeholder="สมชาย ใจดี" autoComplete="name" />
             </div>
           </div>
           {prefixChoice === 'อื่นๆ' && (
-            <div className="auth-scout-field">
-              <label className="auth-scout-label" htmlFor="reg-prefix-custom">ระบุคำนำหน้า *</label>
+            <div className="auth-school-field">
+              <label className="auth-school-label" htmlFor="reg-prefix-custom">ระบุคำนำหน้า *</label>
               <input
                 id="reg-prefix-custom"
                 className="auth-scout-input"
@@ -168,8 +152,8 @@ export default function SchoolLoginForm({ schoolId, logoUrl, programName, create
               />
             </div>
           )}
-          <div className="auth-scout-field">
-            <label className="auth-scout-label" htmlFor="reg-position">ตำแหน่ง</label>
+          <div className="auth-school-field">
+            <label className="auth-school-label" htmlFor="reg-position">ตำแหน่ง</label>
             <input
               id="reg-position"
               name="position"
@@ -179,28 +163,29 @@ export default function SchoolLoginForm({ schoolId, logoUrl, programName, create
               autoComplete="organization-title"
             />
           </div>
-          <div className="auth-scout-field">
-            <label className="auth-scout-label" htmlFor="reg-username">ชื่อผู้ใช้ (username) *</label>
-            <input id="reg-username" name="username" required className="auth-scout-input" placeholder="username" pattern="[A-Za-z0-9._]+" autoComplete="username" />
+          <div className="auth-school-field">
+            <label className="auth-school-label" htmlFor="reg-username">ชื่อผู้ใช้ (username) *</label>
+            <input id="reg-username" name="username" required className="auth-scout-input" placeholder="username" pattern="[A-Za-z0-9._]+" title="ใช้ตัวอักษรภาษาอังกฤษ ตัวเลข จุด หรือขีดล่าง" autoCapitalize="none" spellCheck={false} autoComplete="username" />
           </div>
-          <div className="auth-scout-password-grid">
-            <div className="auth-scout-field" style={{ marginBottom: 0 }}>
-              <label className="auth-scout-label">รหัสผ่าน *</label>
-              <PasswordInput name="password" placeholder="≥ 6 ตัว" autoComplete="new-password" />
+          <div className="auth-field-grid">
+            <div className="auth-school-field" style={{ marginBottom: 0 }}>
+              <label className="auth-school-label" htmlFor="reg-password">รหัสผ่าน *</label>
+              <PasswordInput id="reg-password" name="password" placeholder="≥ 6 ตัว" autoComplete="new-password" />
             </div>
-            <div className="auth-scout-field" style={{ marginBottom: 0 }}>
-              <label className="auth-scout-label">ยืนยันรหัสผ่าน *</label>
-              <PasswordInput name="password2" placeholder="ยืนยันรหัสผ่าน" autoComplete="new-password" />
+            <div className="auth-school-field" style={{ marginBottom: 0 }}>
+              <label className="auth-school-label" htmlFor="reg-password2">ยืนยันรหัสผ่าน *</label>
+              <PasswordInput id="reg-password2" name="password2" placeholder="ยืนยันรหัสผ่าน" autoComplete="new-password" />
             </div>
           </div>
-          <button type="submit" className="auth-scout-submit" disabled={loading} style={{ marginTop: 8 }}>
+          <button type="submit" className="welcome-button welcome-button-primary" disabled={loading} style={{ marginTop: 8 }}>
             {loading ? 'กำลังสมัคร...' : 'สมัครสมาชิก'}
           </button>
-          <p style={{ fontSize: 12, color: '#9A8B72', textAlign: 'center', marginTop: 12 }}>
+          <p className="auth-form-notice">
             สมัครแล้วต้องรอผู้ดูแลโรงเรียนอนุมัติก่อนเข้าใช้งาน
           </p>
         </form>
       )}
-    </ScoutAuthLayout>
+          <div className="welcome-login-bottom">{mode === 'login' ? <>ยังไม่มีบัญชี? <button type="button" disabled={loading} onClick={() => { setMode('register'); setError(null) }}>สมัครบัญชีบุคลากร</button></> : <>มีบัญชีแล้ว? <button type="button" disabled={loading} onClick={() => { setMode('login'); setError(null) }}>เข้าสู่ระบบ</button></>}</div>
+    </AuthScreen>
   )
 }

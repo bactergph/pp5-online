@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import Swal from 'sweetalert2'
+import './score-entry.css'
 import { usePathname } from 'next/navigation'
 import {
   fetchScoreInit, fetchScoreClassrooms, fetchScoreSubjects, fetchScoreEntryData, saveScores,
@@ -26,126 +28,6 @@ function clampScoreInput(raw: string, max: number): number | null {
   return Math.min(Math.max(0, val), max)
 }
 
-const SCORE_ENTRY_STYLES = `
-  .score-entry-page { gap: 14px; }
-  .score-entry-head {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  }
-  .score-entry-title { display: flex; align-items: center; gap: 12px; }
-  .score-entry-title-mark {
-    display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px;
-    color: #C49212; background: #F3E8FF;
-  }
-  .score-entry-title h1 { margin: 0; color: #111827; font-size: 22px; font-weight: 900; line-height: 1.1; }
-  .score-entry-title p { margin: 4px 0 0; color: #64748B; font-size: 12.5px; font-weight: 700; }
-  .score-entry-filter-card {
-    display: grid; grid-template-columns: 140px 160px minmax(280px, 1fr);
-    gap: 12px; align-items: end; padding: 14px;
-    border: 1px solid #E5E7EB; border-radius: 14px; background: #FFFFFF;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
-  }
-  .score-entry-field { display: grid; gap: 5px; }
-  .score-entry-field label { color: #475569; font-size: 11px; font-weight: 900; }
-  .score-entry-field select {
-    min-height: 36px; border: 1px solid #CBD5E1; border-radius: 8px; padding: 0 10px;
-    background: #FFFFFF; color: #0F172A; font-size: 13px; font-weight: 800;
-  }
-  .score-entry-tabs {
-    display: flex; align-items: center; gap: 18px; padding: 6px 0 0; border-bottom: 1px solid #E5E7EB;
-  }
-  .score-entry-tab {
-    border: 0; background: transparent; padding: 10px 4px; color: #64748B;
-    font-size: 13px; font-weight: 900; cursor: pointer; border-bottom: 2px solid transparent;
-  }
-  .score-entry-tab.is-active { color: #6D28D9; border-bottom-color: #C49212; }
-  .score-summary-pills { display: flex; gap: 8px; flex-wrap: wrap; }
-  .score-summary-pills span {
-    display: inline-flex; align-items: center; gap: 4px; padding: 7px 10px;
-    border-radius: 999px; background: #F8FAFC; color: #475569;
-    font-size: 12px; font-weight: 800; border: 1px solid #E2E8F0;
-  }
-  .score-grid-card {
-    overflow: hidden; border: 1px solid #E5E7EB; border-radius: 14px;
-    background: #FFFFFF; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
-  }
-  .score-grid-top {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 12px 14px; border-bottom: 1px solid #E5E7EB; background: #FFFFFF;
-  }
-  .score-grid-top strong { color: #334155; font-size: 13px; font-weight: 900; }
-  .score-grid-top span { color: #64748B; font-size: 12px; font-weight: 700; }
-  .score-hint {
-    margin: 0; padding: 10px 14px; border-bottom: 1px solid #FDE68A;
-    background: #FEFCE8; color: #92400E; font-size: 12px; font-weight: 800;
-  }
-  .score-table-wrap { overflow: auto; max-width: 100%; }
-  .score-entry-table { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0; white-space: nowrap; }
-  .score-entry-table th, .score-entry-table td {
-    border-right: 1px solid #E5E7EB; border-bottom: 1px solid #E5E7EB;
-    padding: 8px 8px; font-size: 12px; color: #334155; background: #FFFFFF;
-  }
-  .score-entry-table th { text-align: center; font-weight: 900; background: #F8FAFC; }
-  .score-entry-table .score-sticky-no { position: sticky; left: 0; z-index: 3; width: 46px; min-width: 46px; text-align: center; background: #FFFFFF; box-shadow: 1px 0 0 #E2E8F0; }
-  .score-entry-table .score-sticky-name {
-    position: sticky; left: 46px; z-index: 3; min-width: 148px; max-width: 190px;
-    text-align: left; background: #FFFFFF; box-shadow: 1px 0 0 #E2E8F0, 10px 0 18px rgba(15,23,42,0.03);
-  }
-  .score-entry-table thead .score-sticky-no,
-  .score-entry-table thead .score-sticky-name { z-index: 5; background: #F8FAFC; }
-  .score-max-label { color: #C49212 !important; font-weight: 900; }
-  .score-unit-head { background: #ECFDF5 !important; color: #047857 !important; }
-  .score-mid-head { background: #FEF3C7 !important; color: #92400E !important; }
-  .score-final-head { background: #F5EDE3 !important; color: #6B4F32 !important; }
-  .score-total-head { background: #EDE9FE !important; color: #5B21B6 !important; }
-  .score-year-head { background: #FCE7F3 !important; color: #BE185D !important; }
-  .score-input {
-    width: 50px; border: 1px solid #E5E7EB; border-radius: 6px; padding: 5px 3px;
-    text-align: center; color: #581C87; background: #FFFFFF; font: inherit; font-size: 12px;
-  }
-  .score-input.is-error { border-color: #DC2626; background: #FEF2F2; }
-  .score-result-select {
-    border: 1px solid #E5E7EB; border-radius: 6px; padding: 5px; color: #334155; background: #FFFFFF; font: inherit; font-size: 12px;
-  }
-  .score-save-bar {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 12px 14px; border-top: 1px solid #E5E7EB; background: #F8FAFC;
-  }
-  .score-config-cta {
-    display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
-  }
-  .score-config-cta-text { flex: 1; min-width: 220px; }
-  @media (max-width: 900px) {
-    .score-entry-filter-card { grid-template-columns: 1fr; }
-    .score-entry-head { align-items: flex-start; flex-direction: column; }
-  }
-  /* มือถือ: คอลัมน์เลขที่/ชื่อ ให้เท่ากับเวลาเรียนธุรการชั้น (36px / 88px) */
-  @media (max-width: 760px) {
-    .score-entry-table { min-width: 720px; }
-    .score-entry-table th, .score-entry-table td { padding: 6px 4px; font-size: 11px; }
-    .score-entry-table .score-sticky-no {
-      left: 0;
-      width: 36px;
-      min-width: 36px;
-      max-width: 36px;
-      padding-left: 4px !important;
-      padding-right: 4px !important;
-    }
-    .score-entry-table .score-sticky-name {
-      left: 36px;
-      width: 88px;
-      min-width: 88px;
-      max-width: 88px;
-      padding-left: 6px !important;
-      padding-right: 6px !important;
-      font-size: 11px;
-      white-space: normal;
-      line-height: 1.25;
-      overflow-wrap: anywhere;
-    }
-    .score-input { width: 42px; min-height: 34px; font-size: 12px; padding: 4px 2px; }
-  }
-`
-
 export default function ScoreEntryPage() {
   const pathname = usePathname()
   const [roleCanEdit, setCanEdit] = useState(false)
@@ -169,6 +51,7 @@ export default function ScoreEntryPage() {
   const [loadingGrid, setLoadingGrid] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('')
   const [transferBusy, setTransferBusy] = useState(false)
   const [importPreview, setImportPreview] = useState<{ rows: Record<string, Row>; context: string; filename: string } | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
@@ -206,7 +89,7 @@ export default function ScoreEntryPage() {
         setRows({})
       }
       setLoading(false)
-    })
+    }).catch(() => { setLoading(false); setAlertModal({ type: 'error', title: 'โหลดข้อมูลไม่สำเร็จ', message: 'กรุณาโหลดหน้าใหม่เพื่อลองอีกครั้ง' }) })
   }, [])
 
   useEffect(() => {
@@ -254,6 +137,23 @@ export default function ScoreEntryPage() {
     return () => { cancelled = true }
   }, [selectedClass])
 
+  async function changeSelection(update: () => void) {
+    if (saving || transferBusy) return
+    if (dirty) {
+      const result = await Swal.fire({ title: 'ยังมีคะแนนที่ไม่ได้บันทึก', text: 'เปลี่ยนรายการจะทิ้งคะแนนที่แก้ไขในหน้านี้ ต้องการเปลี่ยนหรือไม่?', icon: 'warning', showCancelButton: true, confirmButtonText: 'เปลี่ยนและทิ้งการแก้ไข', cancelButtonText: 'กลับไปบันทึก', confirmButtonColor: '#b91c1c', reverseButtons: true })
+      if (!result.isConfirmed) return
+    }
+    setSaveStatus('')
+    update()
+  }
+
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
   function notify(type: 'success' | 'error', text: string) {
     setAlertModal({
       type,
@@ -266,8 +166,12 @@ export default function ScoreEntryPage() {
     if (!selectedClass || !selectedCS || !items.some(item => item.id === selectedCS && item.classroom_id === selectedClass)) return
     let cancelled = false
 
-    void fetchScoreEntryData(selectedClass, selectedCS, term).then(d => {
-      if (cancelled) return
+    void Promise.resolve().then(() => {
+      if (cancelled) return null
+      setLoadingGrid(true)
+      return fetchScoreEntryData(selectedClass, selectedCS, term)
+    }).then(d => {
+      if (cancelled || !d) return
       setEntryOpen(d.entryOpen)
       setEntryMessage(d.entryMessage)
       setLoadedEntry(`${selectedClass}:${selectedCS}:${term}`)
@@ -309,9 +213,6 @@ export default function ScoreEntryPage() {
       setLoadingGrid(false)
     })
 
-    void Promise.resolve().then(() => {
-      if (!cancelled) setLoadingGrid(true)
-    })
     return () => { cancelled = true }
   }, [selectedClass, selectedCS, term, items])
 
@@ -331,40 +232,40 @@ export default function ScoreEntryPage() {
     const max = config?.between_scores[idx] ?? 0
     if (raw === '') {
       setRows(prev => { const r = prev[sid]; const u = [...r.unit_scores]; u[idx] = NaN; return { ...prev, [sid]: { ...r, unit_scores: u } } })
-      setDirty(true)
+      setDirty(true); setSaveStatus('')
       return
     }
     const val = clampScoreInput(raw, max)
     if (val === null) return
     setRows(prev => { const r = prev[sid]; const u = [...r.unit_scores]; u[idx] = val; return { ...prev, [sid]: { ...r, unit_scores: u } } })
-    setDirty(true)
+    setDirty(true); setSaveStatus('')
   }
   function setMid(sid: string, raw: string) {
     const max = config?.midterm_max ?? 0
     if (raw === '') {
       setRows(prev => ({ ...prev, [sid]: { ...prev[sid], midterm: null } }))
-      setDirty(true)
+      setDirty(true); setSaveStatus('')
       return
     }
     const val = clampScoreInput(raw, max)
     if (val === null) return
     setRows(prev => ({ ...prev, [sid]: { ...prev[sid], midterm: val } }))
-    setDirty(true)
+    setDirty(true); setSaveStatus('')
   }
   function setFin(sid: string, raw: string) {
     const max = config?.final_max ?? 0
     if (raw === '') {
       setRows(prev => ({ ...prev, [sid]: { ...prev[sid], final: null } }))
-      setDirty(true)
+      setDirty(true); setSaveStatus('')
       return
     }
     const val = clampScoreInput(raw, max)
     if (val === null) return
     setRows(prev => ({ ...prev, [sid]: { ...prev[sid], final: val } }))
-    setDirty(true)
+    setDirty(true); setSaveStatus('')
   }
   function setResult(sid: string, val: string) {
-    setRows(prev => ({ ...prev, [sid]: { ...prev[sid], result: val } })); setDirty(true)
+    setRows(prev => ({ ...prev, [sid]: { ...prev[sid], result: val } })); setDirty(true); setSaveStatus('')
   }
 
   function rowCalc(r: Row) {
@@ -427,12 +328,12 @@ export default function ScoreEntryPage() {
   function applyImportedScores() {
     if (!importPreview || !canEdit || saving || importPreview.context !== transferContext) return
     setRows(previous => ({ ...previous, ...importPreview.rows }))
-    setDirty(true)
+    setDirty(true); setSaveStatus('')
     setImportPreview(null)
   }
 
   async function handleSave() {
-    if (!config || !canEdit) return
+    if (!config || !canEdit || saving) return
     const showMidtermOnSave = (config.midterm_max ?? 0) > 0
     for (const st of students) {
       const r = rows[st.id]
@@ -473,11 +374,14 @@ export default function ScoreEntryPage() {
         result: term === 1 ? 'เรียน' : r.result,
       }
     })
-    const { error } = await saveScores(selectedCS, term, payload)
-    setSaving(false)
-    if (error) { notify('error', error); return }
-    setDirty(false)
-    notify('success', `บันทึกคะแนน ${payload.length} คน · ภาคเรียนที่ ${term} เรียบร้อยแล้ว`)
+    try {
+      const { error } = await saveScores(selectedCS, term, payload)
+      if (error) { setSaveStatus('บันทึกไม่สำเร็จ คะแนนที่แก้ไขยังอยู่ กรุณาลองอีกครั้ง'); notify('error', error); return }
+      setDirty(false)
+      setSaveStatus('บันทึกแล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false }))
+    } catch {
+      setSaveStatus('บันทึกไม่สำเร็จ คะแนนที่แก้ไขยังอยู่ กรุณาลองอีกครั้ง')
+    } finally { setSaving(false) }
   }
 
   if (loading) return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
@@ -526,7 +430,7 @@ export default function ScoreEntryPage() {
         </div>
       )}
     <div className="page-stack score-entry-page">
-      <style>{SCORE_ENTRY_STYLES}</style>
+
       {entryMessage && !loadingGrid && (
         <div className="control-card" role="status" style={{ color: '#92400E', background: '#FFFBEB' }}>
           {entryMessage} · ดูคะแนนเดิมได้ แต่ไม่สามารถแก้ไขหรือบันทึกคะแนน
@@ -541,7 +445,7 @@ export default function ScoreEntryPage() {
           </div>
           <div>
             <h1>บันทึกคะแนน</h1>
-            <p>ตั้งคะแนนเต็มจากสัดส่วนคะแนนที่ตั้งไว้ · ปีปัจจุบัน {years.find(y => y.id === selectedYear)?.year_be || ''}</p>
+            <p>กรอกคะแนนตามสัดส่วนที่กำหนด · ปีการศึกษา {years.find(y => y.id === selectedYear)?.year_be || ''}</p>
           </div>
         </div>
       </div>
@@ -552,21 +456,22 @@ export default function ScoreEntryPage() {
         <>
           <div className="score-entry-filter-card">
             <div className="score-entry-field">
-              <label>ปีการศึกษา</label>
-              <select value={selectedYear} onChange={e => { setSelectedYear(e.target.value); setSelectedClass(''); setSelectedCS(''); setClassrooms([]); setItems([]); setStudents([]); setConfig(null); setRows({}); setDirty(false); }}>
+              <label htmlFor="score-year">ปีการศึกษา</label>
+              <select id="score-year" disabled={saving || transferBusy} value={selectedYear} onChange={e => { const value = e.target.value; void changeSelection(() => { setSelectedYear(value); setSelectedClass(''); setSelectedCS(''); setClassrooms([]); setItems([]); setStudents([]); setConfig(null); setRows({}); setDirty(false); }); }}>
                 {years.map(y => <option key={y.id} value={y.id}>{y.year_be}{y.is_active ? ' (ปัจจุบัน)' : ''}</option>)}
               </select>
             </div>
+            <div className="score-entry-field"><label htmlFor="score-term">ภาคเรียน</label><select id="score-term" value={term} disabled={saving || transferBusy} onChange={e => { const value = Number(e.target.value) as 1 | 2; void changeSelection(() => setTerm(value)) }}><option value={1}>ภาคเรียนที่ 1</option><option value={2}>ภาคเรียนที่ 2</option></select></div>
             <div className="score-entry-field">
-              <label>ห้องเรียน</label>
-              <select value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedCS(''); setItems([]); setStudents([]); setConfig(null); setRows({}); setDirty(false); }} disabled={classrooms.length === 0}>
+              <label htmlFor="score-class">ห้องเรียน</label>
+              <select id="score-class" value={selectedClass} onChange={e => { const value = e.target.value; void changeSelection(() => { setSelectedClass(value); setSelectedCS(''); setItems([]); setStudents([]); setConfig(null); setRows({}); setDirty(false); }); }} disabled={saving || transferBusy || classrooms.length === 0}>
                 <option value="">{classrooms.length === 0 ? '— ไม่มีห้องที่บันทึกได้ —' : '— เลือกห้อง —'}</option>
                 {classrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room}</option>)}
               </select>
             </div>
             <div className="score-entry-field">
-              <label>รายวิชา</label>
-              <select value={selectedCS} onChange={e => setSelectedCS(e.target.value)} disabled={items.length === 0}>
+              <label htmlFor="score-subject">รายวิชา</label>
+              <select id="score-subject" value={selectedCS} onChange={e => { const value = e.target.value; void changeSelection(() => setSelectedCS(value)) }} disabled={saving || transferBusy || items.length === 0}>
                 {items.length === 0 ? <option>— ไม่มีวิชา —</option> : items.map(it => {
                   const s = subjectMap[it.subject_id]
                   return <option key={it.id} value={it.id}>[{s?.code}] {s?.name}</option>
@@ -574,15 +479,6 @@ export default function ScoreEntryPage() {
               </select>
             </div>
           </div>
-
-          <div className="score-entry-tabs">
-            {([1, 2] as const).map(t => (
-              <button key={t} onClick={() => setTerm(t)} className={`score-entry-tab ${term === t ? 'is-active' : ''}`}>
-                ภาคเรียนที่ {t}
-              </button>
-            ))}
-          </div>
-
 
           {classrooms.length === 0 ? (
             <div className="alert alert-error">
@@ -619,11 +515,11 @@ export default function ScoreEntryPage() {
                 {showYearTotal && yearTotalMax > 0 && <span>รวมทั้งปีการศึกษา <b>{yearTotalMax}</b></span>}
               </div>
 
-              <div className="control-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div className="control-card score-transfer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div><strong>นำเข้า / ส่งออกคะแนน</strong><p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>ดาวน์โหลด Excel ของห้อง วิชา และภาคเรียนที่เลือก กรอกคะแนนแล้วนำกลับเข้า</p></div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button className="btn btn-secondary" disabled={transferBusy || saving || loadedEntry !== `${selectedClass}:${selectedCS}:${term}`} onClick={() => void exportScores()}>ส่งออก Excel</button>
-                  <button className="btn btn-primary" disabled={!canEdit || transferBusy || saving} onClick={() => importInput.current?.click()}>{transferBusy ? 'กำลังจัดการไฟล์…' : 'นำเข้าคะแนน'}</button>
+                  <button className="btn btn-secondary" disabled={!canEdit || transferBusy || saving} onClick={() => importInput.current?.click()}>{transferBusy ? 'กำลังจัดการไฟล์…' : 'นำเข้าคะแนน'}</button>
                   <input ref={importInput} type="file" accept=".xlsx" hidden aria-label="เลือกไฟล์คะแนน Excel" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importScores(file) }} />
                 </div>
               </div>
@@ -645,7 +541,8 @@ export default function ScoreEntryPage() {
                     <span> · ห้อง {selectedClassroom ? `${selectedClassroom.level}/${selectedClassroom.room}` : '-'}</span>
                   </div>
                 </div>
-                <div className="score-table-wrap">
+                <p className="score-keyboard-hint" id="score-grid-help">คลิกช่องเพื่อกรอกคะแนน · กด Tab ไปช่องถัดไป · เลื่อนตารางเพื่อดูคอลัมน์เพิ่มเติม</p>
+                <div className="score-table-wrap" tabIndex={0} role="region" aria-label="ตารางคะแนนนักเรียน" aria-describedby="score-grid-help">
                 <table className="score-entry-table">
                   <thead>
                     <tr>
@@ -693,7 +590,7 @@ export default function ScoreEntryPage() {
                             const max = config.between_scores[i]
                             return (
                               <td key={i} style={{ textAlign: 'center' }}>
-                                <input type="number" min={0} max={max} disabled={!canEdit} value={Number.isFinite(u) ? u : ''}
+                                <input aria-label={`${st.first_name} ${st.last_name} หน่วยที่ ${i + 1} เต็ม ${max}`} type="number" min={0} max={max} disabled={!canEdit || saving} value={Number.isFinite(u) ? u : ''}
                                   onChange={e => setUnit(st.id, i, e.target.value)} className={`score-input ${overMax(u, max) ? 'is-error' : ''}`} />
                               </td>
                             )
@@ -701,12 +598,12 @@ export default function ScoreEntryPage() {
                           <td style={{ textAlign: 'center', background: '#ECFDF5', fontWeight: 900, color: '#047857' }}>{rowCalc(r).between}</td>
                           {showMidterm && (
                             <td style={{ textAlign: 'center', background: '#EFF6FF' }}>
-                              <input type="number" min={0} max={config.midterm_max} disabled={!canEdit} value={r.midterm ?? ''}
+                              <input aria-label={`${st.first_name} ${st.last_name} กลางภาค`} type="number" min={0} max={config.midterm_max} disabled={!canEdit || saving} value={r.midterm ?? ''}
                                 onChange={e => setMid(st.id, e.target.value)} className={`score-input ${overMax(r.midterm ?? NaN, config.midterm_max) ? 'is-error' : ''}`} />
                             </td>
                           )}
                           <td style={{ textAlign: 'center', background: '#EFF6FF' }}>
-                            <input type="number" min={0} max={config.final_max} disabled={!canEdit} value={r.final ?? ''}
+                            <input aria-label={`${st.first_name} ${st.last_name} ปลายภาค`} type="number" min={0} max={config.final_max} disabled={!canEdit || saving} value={r.final ?? ''}
                               onChange={e => setFin(st.id, e.target.value)} className={`score-input ${overMax(r.final ?? NaN, config.final_max) ? 'is-error' : ''}`} />
                           </td>
                           <td style={{ textAlign: 'center', fontWeight: 900 }}>{total}</td>
@@ -722,7 +619,7 @@ export default function ScoreEntryPage() {
                           )}
                           {showGradeResult && (
                             <td style={{ textAlign: 'center' }}>
-                              <select value={r.result} disabled={!canEdit} onChange={e => setResult(st.id, e.target.value)}
+                              <select aria-label={`${st.first_name} ${st.last_name} ผลการเรียน`} value={r.result} disabled={!canEdit || saving} onChange={e => setResult(st.id, e.target.value)}
                                 className="score-result-select">
                                 {RESULT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                               </select>
@@ -736,8 +633,8 @@ export default function ScoreEntryPage() {
                 </div>
                 {canEdit && (
                   <div className="score-save-bar">
-                    <span style={{ fontSize: 13, color: dirty ? '#D97706' : '#64748B', fontWeight: 800 }}>
-                      {dirty ? '● มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกล่าสุดแล้ว'}
+                    <span role="status" aria-live="polite" style={{ fontSize: 14, color: dirty ? '#D97706' : '#64748B', fontWeight: 800 }}>
+                      {saving ? 'กำลังบันทึกคะแนน…' : saveStatus || (dirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'ข้อมูลพร้อมแก้ไข')}
                     </span>
                     <LoadingButton loading={saving} onClick={handleSave} disabled={!dirty}>
                       บันทึกคะแนน ภาคเรียนที่ {term}
