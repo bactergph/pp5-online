@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
-const exportsObject={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:()=>({})});
+const exportsObject={},legacySolver={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-solver.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:legacySolver,require:()=>({})});vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-solver'?legacySolver:{}});
 const {solvePlannedSchedule:solve,emptyPlan,checkPlanning,blocksFor}=exportsObject
 const times=[1,2,0,3,4].map((period,i)=>({period,is_break:period===0,sort_order:i+1,start_time:`${8+i}:00`,end_time:`${9+i}:00`,label:''}))
 const plan=emptyPlan();plan.days=[1,2];
@@ -40,3 +40,31 @@ result=solve([...joint,lesson('math','T2','A',1)],jointSlots,plan,times,[]);asse
 assert.ok(checkPlanning(joint.map(l=>({...l,activityGroupId:undefined})),jointSlots,plan.days,times,[]).some(i=>i.message.includes('ครูชน')));
 assert.ok(checkPlanning(joint,jointSlots,plan.days,times,[{teacherId:'T2',day:1,period:1}]).some(i=>i.message.includes('ไม่ว่าง')));
 console.log('PASS: joint multi-teacher activity occupies every teacher once; subject solver preserves joint fixed cells; separate-room and blocked-teacher conflicts');
+// Dense six-room schedule: each room has 25 subject periods and five fixed
+// activity periods. The ordinary wizard path must finish this in one solve.
+const schoolPlan=emptyPlan();schoolPlan.days=[1,2,3,4,5];schoolPlan.spread=true;
+const schoolTimes=[1,2,3,0,4,5,6].map((period,i)=>({period,is_break:period===0,sort_order:i+1,start_time:`${8+i}:00`,end_time:`${9+i}:00`,label:period===0?'พักกลางวัน':`คาบ ${period}`}));
+const schoolLessons=[],schoolFixed=[],schoolTeacherLoad=Array(8).fill(0);
+for(let room=0;room<6;room++){
+  for(let subject=0;subject<12;subject++){const count=subject===0?3:2,teacher=schoolTeacherLoad.indexOf(Math.min(...schoolTeacherLoad));schoolTeacherLoad[teacher]+=count;schoolLessons.push(lesson(`R${room}S${subject}`,`T${teacher}`,`R${room}`,count));}
+  for(let day=1;day<=5;day++){
+    const id=`R${room}A${day}`;schoolLessons.push(lesson(id,null,`R${room}`,1,{activity:true,teacherOptional:true,fixedOnly:true,teacherIds:[`T${day+1}`],activityGroupId:`A${day}`}));
+    schoolFixed.push(slot(id,`R${room}`,day,6));
+  }
+}
+const schoolStart=Date.now();result=solve(schoolLessons,schoolFixed,schoolPlan,schoolTimes,[]);
+assert.equal(result.status,'complete',`dense six-room schedule should complete; got ${result.status} (${result.limitReason||'no limit'}): ${result.message||''}`);
+assert.equal(result.assignments.length,150);
+assert.ok(Date.now()-schoolStart<8000,`dense six-room solve took ${Date.now()-schoolStart}ms`);
+const schoolTeacherByLesson=new Map(schoolLessons.map(l=>[l.id,l.teacherId])),schoolClassCells=new Map(),schoolTeacherCells=new Set(),schoolCounts=new Map();
+for(const s of [...schoolFixed,...result.assignments]){const time=`${s.day}:${s.period}`,classCell=`${s.classroomId}:${time}`;assert.ok(!schoolClassCells.has(classCell),`class collision at ${classCell}: ${schoolClassCells.get(classCell)} / ${s.lessonId}`);schoolClassCells.set(classCell,s.lessonId);if(s.period!==6){const teacher=schoolTeacherByLesson.get(s.lessonId),teacherCell=`${teacher}:${time}`;assert.ok(!schoolTeacherCells.has(teacherCell),`teacher collision at ${teacherCell}`);schoolTeacherCells.add(teacherCell);schoolCounts.set(s.lessonId,(schoolCounts.get(s.lessonId)||0)+1)}}
+for(const l of schoolLessons.filter(l=>!l.activity))assert.equal(schoolCounts.get(l.id),l.count,`${l.id} target periods must be met`);
+console.log(`PASS: dense six-room wizard case completed in ${Date.now()-schoolStart}ms (${result.assignments.length} subjects; activities and lunch-free slots preserved)`);
+const partiallyRetained=[...schoolFixed,...result.assignments.filter(s=>s.classroomId==='R4'||s.classroomId==='R5')],retainedStart=Date.now();
+const retainedResult=solve(schoolLessons,partiallyRetained,schoolPlan,schoolTimes,[]);
+assert.equal(retainedResult.status,'complete',`six-room schedule with two already-filled rooms should complete; got ${retainedResult.status} (${retainedResult.message||''})`);
+assert.equal(retainedResult.assignments.length,100);
+const retainedClassCells=new Set(),retainedTeacherCells=new Set(),retainedCounts=new Map();
+for(const s of [...partiallyRetained,...retainedResult.assignments]){const key=`${s.classroomId}:${s.day}:${s.period}`;assert.ok(!retainedClassCells.has(key),`retained class collision at ${key}`);retainedClassCells.add(key);if(s.period!==6){const teacher=schoolTeacherByLesson.get(s.lessonId),teacherCell=`${teacher}:${s.day}:${s.period}`;assert.ok(!retainedTeacherCells.has(teacherCell),`retained teacher collision at ${teacherCell}`);retainedTeacherCells.add(teacherCell);retainedCounts.set(s.lessonId,(retainedCounts.get(s.lessonId)||0)+1)}}
+for(const l of schoolLessons.filter(l=>!l.activity))assert.equal(retainedCounts.get(l.id),l.count,`${l.id} retained and generated periods must meet target`);
+console.log(`PASS: six-room wizard case with two retained rooms completed in ${Date.now()-retainedStart}ms`);

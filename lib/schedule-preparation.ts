@@ -48,7 +48,7 @@ const toPlanned=(s:ScheduleSlot)=>({classroomId:s.classroom_id,lessonId:lessonKe
 function input(data:Preparation,scope:string[],clear:boolean){
  if(!scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id)))throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล')
  const retained=data.slots.filter(s=>!scope.includes(s.classroom_id)||s.locked||!!s.activity_id||!clear)
- const lessons=data.lessons.map(l=>{const active=scope.includes(l.classroomId)&&!l.activity;const count=active?l.count:retained.filter(s=>lessonKey(s)===l.id).length;return {...l,count,fixedOnly:!active,activity:l.activity||!active,pattern:active?l.pattern:undefined,teacherOptional:!active||l.teacherOptional}})
+ const lessons=data.lessons.map(l=>{const active=scope.includes(l.classroomId)&&!l.activity;const count=active?l.count:retained.filter(s=>lessonKey(s)===l.id).length;return {...l,count,fixedOnly:!active,pattern:active?l.pattern:undefined,teacherOptional:!active||l.teacherOptional}})
  return {retained,lessons}
 }
 export async function preflight(year:string,term:number,scope:string[],clear:boolean){const data=await preparation(year,term),{retained,lessons}=input(data,scope,clear);const issues=checkPlanning(lessons,retained.map(toPlanned),data.plan.days,data.periods,data.blocks)

@@ -20,7 +20,7 @@ import { FiArrowLeft, FiArrowRight, FiCheck, FiZap } from 'react-icons/fi'
 const titles=['วันและเวลา','กำหนดครู','รายวิชา','กิจกรรม','ภาระสอน','ตรวจและจัดตาราง']
 const descriptions=['ตั้งวันเรียนและตรวจช่วงพัก','เลือกครูหรือวางรายชื่อจาก Excel','เตรียมรายวิชาแต่ละห้อง','กำหนดกิจกรรม ชั้น/ห้อง และทีมครู','กำหนดครูประจำวิชาและคาบต่อสัปดาห์','ตรวจข้อขัดแย้งและสร้างฉบับร่าง']
 const alert=Swal.mixin({confirmButtonColor:'#245bdb',cancelButtonText:'ยกเลิก',confirmButtonText:'ยืนยัน',reverseButtons:true})
-type Draft=NonNullable<Awaited<ReturnType<typeof createScheduleDraft>>['data']>
+type Draft=Omit<NonNullable<Awaited<ReturnType<typeof createScheduleDraft>>['data']>,'limitReason'> & {limitReason?:'node_limit'|'time_limit'|null}
 function countPlacedSlots(slots:Preparation['slots'], lessonIds:Set<string>, classroomIds?:Set<string>){
  const cells=new Set<string>()
  for(const slot of slots){
