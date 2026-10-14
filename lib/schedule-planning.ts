@@ -53,7 +53,7 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
   return issues
 }
 /** Bounded block search. Fixed lessons may be completed into a double block. */
-export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],maxNodes=150000,timeLimitMs=8000){
+export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],maxNodes=500000,timeLimitMs=30000){
   const issues=checkPlanning(lessons,fixed,plan.days,times,unavailable)
   if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,assignments:[] as PlannedSlot[],issues,nodes:0}
   const deadline=Date.now()+timeLimitMs;let nodes=0,limited=false
@@ -63,8 +63,8 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   for(const s of fixed){const owner=s.lessonId||'locked';occupied.set(cell(s.classroomId,s.day,s.period),owner);const l=byId.get(owner);if(l)for(const id of lessonTeachers(l))teacherBusy.set(cell(id,s.day,s.period),l.activityGroupId||owner);if(l?.roomId)roomBusy.set(cell(l.roomId,s.day,s.period),owner)}
   for(const b of unavailable)teacherBusy.set(cell(b.teacherId,b.day,b.period),'unavailable')
   const tasks=lessons.flatMap(l=>(l.pattern||Array(l.count).fill(1)).map((length:number,index:number)=>({l,length,index}))).sort((a,b)=>b.length-a.length||Number(!!b.l.roomId)-Number(!!a.l.roomId))
-  const usedTask=new Set<number>();const chosen=new Map<string,number>()
-  function candidates(task:typeof tasks[number]){const {l,length}=task;return blocksFor(length,plan.days,times).filter(b=>b.periods.every(p=>{
+  const usedTask=new Set<number>();const chosen=new Map<string,number>();const chosenEquivalentBlock=new Map<string,number>()
+  function candidates(task:typeof tasks[number]){const {l,length}=task,group=l.id+':'+length,last=chosenEquivalentBlock.get(group);return blocksFor(length,plan.days,times).map((b,ordinal)=>({ ...b,ordinal })).filter(b=>(last===undefined||b.ordinal>last)&&b.periods.every(p=>{
     const k=cell(l.classroomId,b.day,p),o=occupied.get(k),busy=lessonTeachers(l).map(id=>teacherBusy.get(cell(id,b.day,p))),r=l.roomId?roomBusy.get(cell(l.roomId,b.day,p)):null
     return (!l.fixedOnly||o===l.id)&&!covered.has(k)&&(!o||o===l.id)&&busy.every(t=>!t||t===(l.activityGroupId||l.id))&&(!r||r===l.id)
   })).sort((a,b)=>rank(l,a)-rank(l,b))}
@@ -76,11 +76,11 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
     let best=-1,options:ReturnType<typeof candidates>=[]
     for(let i=0;i<tasks.length;i++){if(usedTask.has(i))continue;const c=candidates(tasks[i]);if(!c.length)return false;if(best<0||c.length<options.length){best=i;options=c}}
     const {l}=tasks[best];usedTask.add(best)
-    for(const b of options){const changes:{map:Map<string,string>;key:string}[]=[];const added:PlannedSlot[]=[]
+    for(const b of options){const changes:{map:Map<string,string>;key:string}[]=[];const added:PlannedSlot[]=[],group=l.id+':'+tasks[best].length,previousBlock=chosenEquivalentBlock.get(group);chosenEquivalentBlock.set(group,b.ordinal)
       for(const p of b.periods){const k=cell(l.classroomId,b.day,p);covered.add(k);if(!occupied.has(k)){occupied.set(k,l.id);changes.push({map:occupied,key:k});added.push({classroomId:l.classroomId,lessonId:l.id,day:b.day,period:p})}for(const [map,id] of [...lessonTeachers(l).map(id=>[teacherBusy,id] as const),[roomBusy,l.roomId] as const]){if(id){const key=cell(id,b.day,p);if(!map.has(key)){map.set(key,map===teacherBusy?(l.activityGroupId||l.id):l.id);changes.push({map,key})}}}}
       result.push(...added);const dk=l.id+':'+b.day;chosen.set(dk,(chosen.get(dk)||0)+1)
       if(search())return true
-      chosen.set(dk,chosen.get(dk)!-1);result.splice(result.length-added.length,added.length);for(const p of b.periods)covered.delete(cell(l.classroomId,b.day,p));for(const c of changes)c.map.delete(c.key);if(limited)break
+      chosen.set(dk,chosen.get(dk)!-1);if(previousBlock===undefined)chosenEquivalentBlock.delete(group);else chosenEquivalentBlock.set(group,previousBlock);result.splice(result.length-added.length,added.length);for(const p of b.periods)covered.delete(cell(l.classroomId,b.day,p));for(const c of changes)c.map.delete(c.key);if(limited)break
     }usedTask.delete(best);return false
   }
   const solved=search();return {status:solved?'complete' as const:limited?'timeout' as const:'conflict' as const,assignments:solved?result:[],issues,nodes}
