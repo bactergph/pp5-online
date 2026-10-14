@@ -96,7 +96,7 @@ export async function previewActivityTeam(year:string,term:number,hash:string,gr
  if(data.hash!==hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุด')
  const old=data.plan.activityGroups?.find(g=>g.id===group.id)
  if(remove&&!old)throw Error('ไม่พบทีมกิจกรรม')
- if(!remove)validateActivityTeam(group,data.classrooms.map(c=>c.id),data.teachers.map(t=>t.id),data.activities.map(a=>a.id),data.plan.days,data.periods)
+ if(!remove)validateActivityTeam(group,data.classrooms.map(c=>c.id),data.plan.teacherIds??data.teachers.map(t=>t.id),data.activities.map(a=>a.id),data.plan.days,data.periods)
  const target=remove?old!:group
  const affected=data.slots.filter(s=>{const l=data.lessons.find(l=>l.id===lessonKey(s));return !!old&&old.roomIds.includes(s.classroom_id)&&l?.activity&&l.subjectId===old.settingId||!remove&&target.roomIds.includes(s.classroom_id)&&(target.cells.some(c=>c.day===s.day_of_week&&c.period===s.period)||l?.activity&&l.subjectId===target.settingId)})
  return {affected:affected.length,locked:affected.filter(s=>s.locked).length,hash:data.hash}
