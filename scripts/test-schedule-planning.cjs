@@ -12,7 +12,8 @@ result=solve([lesson('A','T','A',2,{pattern:[2]})],[slot('A','A',1,2)],plan,time
 result=solve([lesson('A','T','A',2,{pattern:[2]})],[slot('A','A',1,2),slot('A','A',1,3)],plan,times,[]);assert.equal(result.status,'conflict')
 result=solve([lesson('A','T','A',1),lesson('outside','T','B',1,{fixedOnly:true})],[slot('outside','B',1,1)],plan,times,[{teacherId:'T',day:1,period:2}]);assert.equal(result.status,'complete');assert.ok(result.assignments.every(s=>s.period>2||s.day===2));assert.ok(result.assignments.every(s=>s.classroomId==='A'))
 assert.equal(solve([lesson('A','T','A',9)],[],plan,times,[]).status,'invalid')
-assert.equal(solve([lesson('A','T','A',2)],[],plan,times,[],0).status,'timeout')
+const nodeLimited=solve([lesson('A','T','A',2)],[],plan,times,[],0);assert.equal(nodeLimited.status,'timeout');assert.equal(nodeLimited.limitReason,'node_limit')
+const timeLimited=solve([lesson('A','T','A',2)],[],plan,times,[],500000,0);assert.equal(timeLimited.status,'timeout');assert.equal(timeLimited.limitReason,'time_limit')
 assert.ok(checkPlanning([lesson('A',null)],[],plan.days,times,[]).some(i=>i.message.includes('ครู')))
 assert.ok(checkPlanning([lesson('A','T','A',2,{pattern:[3]})],[],plan.days,times,[]).some(i=>i.message.includes('รูปแบบ')))
 const activities=[lesson('act',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true}),lesson('actB',null,'B',1,{activity:true,teacherOptional:true,fixedOnly:true})];result=solve([...activities,lesson('A','T','A',2),lesson('B','T','B',2)],[slot('act','A',1,1),slot('actB','B',1,1)],plan,times,[]);assert.equal(result.status,'complete');assert.ok(result.assignments.every(s=>s.day!==1||s.period!==1));

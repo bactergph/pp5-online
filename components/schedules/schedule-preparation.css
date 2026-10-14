@@ -111,6 +111,12 @@
 .schedule-prep .prep-code-search { display:flex; flex-direction:column; align-items:flex-start; width:100%; gap:8px; }
 .schedule-prep .prep-code-search input { width:100%; max-width:460px; min-height:48px; }
 .schedule-prep .prep-view-help { margin:0 0 12px; color:#334155; }
+.schedule-prep .prep-count-help { margin:0 0 12px; padding:10px 12px; border-left:3px solid #245bdb; border-radius:6px; background:#f4f7fc; color:#334155; font-size:14px; line-height:1.6; }
+.schedule-prep .prep-counts { display:flex; gap:10px; align-items:center; min-width:150px; }
+.schedule-prep .prep-counts span { display:grid; justify-items:center; min-width:38px; }
+.schedule-prep .prep-counts small { color:#525e70; font-size:11px; }
+.schedule-prep .prep-counts b { color:#18202f; font-size:15px; }
+.schedule-prep .prep-timeout-detail { padding:14px 16px; border:1px solid #f0c891; border-radius:10px; background:#fff8ed; color:#61451f; line-height:1.65; }
 .schedule-prep .prep-teacher-lessons h3 { margin-top:0; }
 @media(max-width:640px){.schedule-prep .prep-view-switch button{font-size:13px;white-space:normal;min-width:0}}
 
