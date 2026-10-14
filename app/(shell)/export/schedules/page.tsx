@@ -11,7 +11,7 @@ import {
   fetchScheduleExportContext,
 } from '@/app/schedules/actions'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
-import { periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTeacherLabel, periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
@@ -21,6 +21,17 @@ type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; label: string }
 type Teacher = { id: string; prefix: string; full_name: string }
 type ExportType = 'class' | 'teaching'
+
+function teachingLines(roomLine: string, subjectLine: string) {
+  const [subjectPart, place = ''] = (subjectLine || '').split(/\s*·\s*/)
+  const match = subjectPart.trim().match(/^(\S+)\s+(.+)$/)
+  return {
+    line1: roomLine || '—',
+    line2: match?.[2] || subjectPart,
+    line3: match ? `(${match[1]})` : '',
+    line4: place,
+  }
+}
 
 const STYLES = `
   .sched-export-page { display: grid; gap: 14px; }
@@ -173,7 +184,7 @@ export default function ScheduleExportPage() {
       data[key] = subj ? {
         line1: subj.subject_name || subj.label || (activity ? 'กิจกรรม' : '—'),
         line2: subj.subject_code ? `(${subj.subject_code})` : activity ? '(กิจกรรม)' : '',
-        line3: teacherGivenName(subj.teacher_name),
+        line3: activity ? activityTeacherLabel(subj.teacher_name) : teacherGivenName(subj.teacher_name),
         line4: subj.room_name || '',
       } : { line1: cell.note || '—', line2: '' }
     }
@@ -188,12 +199,9 @@ export default function ScheduleExportPage() {
     const request = ++gridRequest.current
     const grid = await fetchTeachingScheduleGrid(teacherId, yearId, Number(semester))
 
-    const data: Record<string, { line1: string; line2: string }> = {}
+    const data: Record<string, { line1: string; line2: string; line3?: string; line4?: string }> = {}
     for (const [key, cell] of Object.entries(grid as Record<string, { room_line: string; subject_line: string }>)) {
-      data[key] = {
-        line1: cell.room_line || '—',
-        line2: cell.subject_line || '',
-      }
+      data[key] = teachingLines(cell.room_line, cell.subject_line)
     }
     if (request !== gridRequest.current) return
     setError('')
@@ -268,14 +276,14 @@ export default function ScheduleExportPage() {
             const gridData = Object.fromEntries(Object.entries(grid).map(([key, cell]) => {
               const subject = cell.class_subject_id ? map[cell.class_subject_id] : undefined
               const activity = !!cell.class_subject_id?.startsWith('activity:')
-              return [key, subject ? { line1: subject.subject_name || subject.label || '—', line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: teacherGivenName(subject.teacher_name), line4: subject.room_name || '' } : { line1: cell.note || '—', line2: '' }]
+              return [key, subject ? { line1: subject.subject_name || subject.label || '—', line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: activity ? activityTeacherLabel(subject.teacher_name) : teacherGivenName(subject.teacher_name), line4: subject.room_name || '' } : { line1: cell.note || '—', line2: '' }]
             }))
             const room = classrooms.find(c => c.id === id)
             const label = (room?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
             pages.push({ title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData })
           } else {
             const grid = await fetchTeachingScheduleGrid(id, yearId, Number(semester))
-            const gridData = Object.fromEntries(Object.entries(grid).map(([key, cell]) => [key, { line1: cell.room_line || '—', line2: cell.subject_line || '' }]))
+            const gridData = Object.fromEntries(Object.entries(grid).map(([key, cell]) => [key, teachingLines(cell.room_line, cell.subject_line)]))
             const teacher = teachers.find(t => t.id === id)
             pages.push({ title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix} ${teacher.full_name}` : ''}`, gridData })
           }

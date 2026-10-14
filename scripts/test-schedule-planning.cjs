@@ -38,6 +38,7 @@ const storedTimes=helpers.DEFAULT_PERIOD_TIMES.map(t=>({...t,start_time:t.start_
 const editorTimes=helpers.normalizePeriodTimes(storedTimes);assert.equal(helpers.validatePeriodTimes(editorTimes),null);assert.equal(storedTimes[0].start_time,'08:30:00');assert.equal(editorTimes[0].start_time,'08:30');
 assert.equal(helpers.validatePeriodTimes(helpers.moveLunchBreak(editorTimes,4)),null);
 assert.equal(helpers.teacherGivenName('นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน'),'สมชาย, สมหญิง');
+assert.equal(helpers.activityTeacherLabel('นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน, ว่าที่ ร.ต. สมศักดิ์ มีสุข'),'สมชาย, สมหญิง');
 console.log('PASS: April/October term boundaries in Bangkok, January term 2, database time seconds normalized without mutating data, lunch editor validation');
 
 const joint=[lesson('act1',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true,teacherIds:['T1','T2'],activityGroupId:'joint'}),lesson('act2',null,'B',1,{activity:true,teacherOptional:true,fixedOnly:true,teacherIds:['T1','T2'],activityGroupId:'joint'})];

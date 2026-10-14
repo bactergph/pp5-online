@@ -14,7 +14,7 @@ import TeacherLessonSelector from './TeacherLessonSelector'
 import TeacherSubjectSelector from './TeacherSubjectSelector'
 import ActivityTeamEditor from './ActivityTeamEditor'
 import { activityTeachers, activityTeamWorkload } from '@/lib/schedule-activity-teams'
-import { teacherGivenName } from '@/lib/schedule-helpers'
+import { activityTeacherLabel, teacherGivenName } from '@/lib/schedule-helpers'
 import { savePeriodTimes } from '@/app/schedules/actions'
 import './schedule-preparation.css'
 import { FiArrowLeft, FiArrowRight, FiCheck, FiZap } from 'react-icons/fi'
@@ -88,7 +88,7 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
    const lesson=slot?.activity_id?data.lessons.find(l=>l.id==='activity:'+slot.activity_id):data.lessons.find(l=>l.activity&&l.classroomId===previewRoom&&l.subjectId===group?.settingId)
    const label=lesson?.name||data.activities.find(a=>a.id===group?.settingId)?.label||'กิจกรรม'
    const teachers=lesson?.teacherName||(group?teacherNames(activityTeachers(group,previewRoom)):'')
-   return <div className="prep-slot prep-slot-activity"><b>{label}</b>{lesson?.code ? <small>({lesson.code})</small> : <small>(กิจกรรม)</small>}{teachers ? <small>{teacherGivenName(teachers)}</small> : null}{slot?.locked ? <small>ล็อก</small> : null}</div>
+   return <div className="prep-slot prep-slot-activity"><b>{label}</b>{lesson?.code ? <small>({lesson.code})</small> : <small>(กิจกรรม)</small>}{teachers ? <small>{activityTeacherLabel(teachers)}</small> : null}{slot?.locked ? <small>ล็อก</small> : null}</div>
   }
   if(!slot?.class_subject_id)return <div className="prep-slot prep-slot-empty">ว่าง</div>
   const lesson=data.lessons.find(l=>l.id===slot.class_subject_id)

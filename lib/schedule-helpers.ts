@@ -69,6 +69,10 @@ const THAI_NAME_PREFIX = /^(?:ว่าที่\s*)?(?:ร\.ต\.|ด\.ช\.|�
 export function teacherGivenName(name: string) {
   return name.split(/[,、]/).map(part => part.trim().replace(THAI_NAME_PREFIX, '').split(/\s+/).filter(Boolean)[0] || '').filter(Boolean).join(', ')
 }
+/** ช่องกิจกรรมแสดงครูได้สองคนแรก เป็นชื่อ ไม่เอานามสกุล คั่นด้วยจุลภาค */
+export function activityTeacherLabel(name: string) {
+  return teacherGivenName(name).split(',').map(part => part.trim()).filter(Boolean).slice(0, 2).join(', ')
+}
 export function workloadLabel(status: ReturnType<typeof workloadStatus>) {
   if (status === 'over') return 'เกินมาตรฐาน'
   if (status === 'warn') return 'ค่อนข้างมาก'

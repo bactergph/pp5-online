@@ -24,7 +24,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
-import { currentScheduleSemester, periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTeacherLabel, currentScheduleSemester, periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import ScheduleLessonPicker from './ScheduleLessonPicker'
 import ScheduleLessonPalette from './ScheduleLessonPalette'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -120,7 +120,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
       activity,
       name: subject.subject_name || (activity ? 'กิจกรรม' : 'รายวิชา'),
       code: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '',
-      teacher: teacherGivenName(subject.teacher_name) || (activity ? 'ยังไม่กำหนดทีมครู' : 'ยังไม่กำหนดครู'),
+      teacher: (activity ? activityTeacherLabel(subject.teacher_name) : teacherGivenName(subject.teacher_name)) || (activity ? 'ยังไม่กำหนดทีมครู' : 'ยังไม่กำหนดครู'),
       room: subject.room_name || '',
     }
   }
@@ -131,7 +131,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   }
   function gridLines(subject: { subject_name: string; subject_code: string; teacher_name: string; room_name?: string } | undefined, note: string | null, activity: boolean) {
     if (!subject) return { line1: note || '—', line2: '' }
-    return { line1: subject.subject_name || (activity ? 'กิจกรรม' : '—'), line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: teacherGivenName(subject.teacher_name), line4: subject.room_name || '' }
+    return { line1: subject.subject_name || (activity ? 'กิจกรรม' : '—'), line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: activity ? activityTeacherLabel(subject.teacher_name) : teacherGivenName(subject.teacher_name), line4: subject.room_name || '' }
   }
   function classTitle(room: Classroom) {
     const classLabel = room.label.replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
