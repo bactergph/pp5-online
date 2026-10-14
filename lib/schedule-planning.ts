@@ -62,21 +62,36 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   const cell=(r:string,d:number,p:number)=>`${r}:${d}:${p}`
   const occupied=new Map<string,string>(),teacherBusy=new Map<string,string>(),roomBusy=new Map<string,string>(),covered=new Set<string>()
   const byId=new Map(lessons.map(l=>[l.id,l]));const result:PlannedSlot[]=[]
+  // Candidate positions depend only on the requested block length and school
+  // period layout. Building them inside the recursive search dominated the
+  // cost for large plans (hundreds of rooms), so prepare each length once.
+  const blocksByLength=new Map<number,{day:number;periods:number[];ordinal:number}[]>()
+  for(const length of new Set(lessons.flatMap(l=>l.pattern||Array(l.count).fill(1))))
+    blocksByLength.set(length,blocksFor(length,plan.days,times).map((b,ordinal)=>({...b,ordinal})))
+  const teachersByLesson=new Map(lessons.map(l=>[l.id,lessonTeachers(l)]))
   for(const s of fixed){const owner=s.lessonId||'locked';occupied.set(cell(s.classroomId,s.day,s.period),owner);const l=byId.get(owner);if(l)for(const id of lessonTeachers(l))teacherBusy.set(cell(id,s.day,s.period),l.activityGroupId||owner);if(l?.roomId)roomBusy.set(cell(l.roomId,s.day,s.period),owner)}
   for(const b of unavailable)teacherBusy.set(cell(b.teacherId,b.day,b.period),'unavailable')
   const tasks=lessons.flatMap(l=>(l.pattern||Array(l.count).fill(1)).map((length:number,index:number)=>({l,length,index}))).sort((a,b)=>b.length-a.length||Number(!!b.l.roomId)-Number(!!a.l.roomId))
   const usedTask=new Set<number>();const chosen=new Map<string,number>();const chosenEquivalentBlock=new Map<string,number>()
-  function candidates(task:typeof tasks[number]){const {l,length}=task,group=l.id+':'+length,last=chosenEquivalentBlock.get(group);return blocksFor(length,plan.days,times).map((b,ordinal)=>({ ...b,ordinal })).filter(b=>(last===undefined||b.ordinal>last)&&b.periods.every(p=>{
-    const k=cell(l.classroomId,b.day,p),o=occupied.get(k),busy=lessonTeachers(l).map(id=>teacherBusy.get(cell(id,b.day,p))),r=l.roomId?roomBusy.get(cell(l.roomId,b.day,p)):null
-    return (!l.fixedOnly||o===l.id)&&!covered.has(k)&&(!o||o===l.id)&&busy.every(t=>!t||t===(l.activityGroupId||l.id))&&(!r||r===l.id)
-  })).sort((a,b)=>rank(l,a)-rank(l,b))}
+  function candidates(task:typeof tasks[number]){const {l,length}=task,group=l.id+':'+length,last=chosenEquivalentBlock.get(group),teachers=teachersByLesson.get(l.id)||[],owner=l.activityGroupId||l.id,available:{day:number;periods:number[];ordinal:number}[]=[]
+    for(const b of blocksByLength.get(length)||[]){if(last!==undefined&&b.ordinal<=last)continue;let valid=true
+      for(const p of b.periods){const k=cell(l.classroomId,b.day,p),o=occupied.get(k);if((l.fixedOnly&&o!==l.id)||covered.has(k)||(o&&o!==l.id)){valid=false;break}
+        for(const id of teachers){const busy=teacherBusy.get(cell(id,b.day,p));if(busy&&busy!==owner){valid=false;break}}if(!valid)break
+        if(l.roomId){const roomOwner=roomBusy.get(cell(l.roomId,b.day,p));if(roomOwner&&roomOwner!==l.id){valid=false;break}}
+      }
+      if(valid)available.push(b)
+    }return available
+  }
   function rank(l:PlannedLesson,b:{day:number;periods:number[]}){let value=b.periods[0]/100-b.periods.filter(p=>occupied.get(cell(l.classroomId,b.day,p))===l.id).length*100;const lunch=times.findIndex(t=>t.is_break);if(l.morning&&times.findIndex(t=>t.period===b.periods[0]&&!t.is_break)>lunch)value+=20;if(l.spread)value+=(chosen.get(l.id+':'+b.day)||0)*10
     const occupiedPeriods=times.filter(t=>!t.is_break&&l.teacherId&&teacherBusy.has(cell(l.teacherId,b.day,t.period))).map(t=>t.period)
     if(plan.reduceGaps&&occupiedPeriods.length){const all=[...occupiedPeriods,...b.periods];value+=Math.max(...all)-Math.min(...all)+1-all.length}
     if(plan.maxContinuous&&l.teacherId){let run=0,max=0;for(const t of times){run=!t.is_break&&(occupiedPeriods.includes(t.period)||b.periods.includes(t.period))?run+1:0;max=Math.max(max,run)}value+=Math.max(0,max-plan.maxContinuous)*20}return value}
-  function search():boolean{nodes++;if(nodes>maxNodes){limitReason='node_limit';return false}if(Date.now()>deadline){limitReason='time_limit';return false}if(usedTask.size===tasks.length)return fixed.every(s=>!s.lessonId||covered.has(cell(s.classroomId,s.day,s.period)))
+  function search():boolean{nodes++;if(nodes>maxNodes){limitReason='node_limit';return false}if(Date.now()>=deadline){limitReason='time_limit';return false}if(usedTask.size===tasks.length)return fixed.every(s=>!s.lessonId||covered.has(cell(s.classroomId,s.day,s.period)))
     let best=-1,options:ReturnType<typeof candidates>=[]
     for(let i=0;i<tasks.length;i++){if(usedTask.has(i))continue;const c=candidates(tasks[i]);if(!c.length)return false;if(best<0||c.length<options.length){best=i;options=c}}
+    // MRV needs only domain sizes while comparing tasks. Rank (which consults
+    // current teacher occupancy) only the chosen task's options.
+    options.sort((a,b)=>rank(tasks[best].l,a)-rank(tasks[best].l,b))
     const {l}=tasks[best];usedTask.add(best)
     for(const b of options){const changes:{map:Map<string,string>;key:string}[]=[];const added:PlannedSlot[]=[],group=l.id+':'+tasks[best].length,previousBlock=chosenEquivalentBlock.get(group);chosenEquivalentBlock.set(group,b.ordinal)
       for(const p of b.periods){const k=cell(l.classroomId,b.day,p);covered.add(k);if(!occupied.has(k)){occupied.set(k,l.id);changes.push({map:occupied,key:k});added.push({classroomId:l.classroomId,lessonId:l.id,day:b.day,period:p})}for(const [map,id] of [...lessonTeachers(l).map(id=>[teacherBusy,id] as const),[roomBusy,l.roomId] as const]){if(id){const key=cell(id,b.day,p);if(!map.has(key)){map.set(key,map===teacherBusy?(l.activityGroupId||l.id):l.id);changes.push({map,key})}}}}
