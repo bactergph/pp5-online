@@ -41,3 +41,20 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
   if (error) throw Error(error.code === 'PGRST202' ? 'กรุณาติดตั้ง migration 064_schedule_input_subjects.sql ก่อนบันทึกรายวิชาจากตาราง' : error.message)
   return preparation(year, term)
 }
+
+/** Update existing offerings only; curriculum metadata comes from the server. */
+export async function saveTeachingAssignments(year: string, term: number, hash: string, assignments: { lessonId: string; teacherId: string }[]) {
+  const current = await preparation(year, term)
+  if (current.hash !== hash) throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
+  if (!Array.isArray(assignments) || !assignments.length || assignments.length > 500 || new Set(assignments.map(r=>r.lessonId)).size !== assignments.length) throw Error('เลือกได้ครั้งละ 1–500 รายวิชาและห้ามซ้ำ')
+  const eligible = current.plan.teacherIds ?? current.teachers.map(t=>t.id)
+  const rows = assignments.map(row => {
+    const lesson = current.lessons.find(l=>l.id===row.lessonId && !l.activity && current.classrooms.some(c=>c.id===l.classroomId))
+    if (!lesson || !eligible.includes(row.teacherId) || !current.teachers.some(t=>t.id===row.teacherId)) throw Error('รายวิชาหรือครูไม่ได้อยู่ในขอบเขตจัดตารางของโรงเรียน')
+    const rule = current.plan.rules[lesson.id]
+    return {classroomId:lesson.classroomId, code:lesson.code, name:lesson.fullName || lesson.name, teacherId:row.teacherId,
+      count:rule?.count ?? lesson.count, pattern:rule?.pattern ?? Array(lesson.count).fill(1),
+      venue:current.plan.rooms.find(r=>r.id===rule?.roomId)?.name || lesson.roomName || '', group:lesson.subjectGroup || '', type:lesson.subjectType || 'พื้นฐาน'}
+  })
+  return importScheduleSubjects(year, term, hash, rows)
+}

@@ -89,3 +89,8 @@
 @media(max-width:640px){.schedule-prep .prep-steps li:last-child{grid-column:auto}.schedule-prep .prep-steps strong{font-size:12px;font-weight:600}}
 
 .schedule-prep .prep-steps button[aria-current=step], .schedule-prep .prep-steps button[aria-current=step]:hover { background:#245bdb; color:#fff; border-color:#245bdb; box-shadow:none; }
+
+.schedule-prep .prep-steps { grid-template-columns:repeat(6,minmax(0,1fr)); }
+.schedule-prep .prep-workload > .prep-checks { padding:12px; border-radius:12px; background:#f4f8ff; }
+.schedule-prep .prep-workload select { max-width:260px; min-width:150px; }
+@media(max-width:640px){.schedule-prep .prep-steps{grid-template-columns:repeat(3,minmax(0,1fr))}.schedule-prep .prep-steps li:last-child{grid-column:auto}.schedule-prep .prep-steps button{min-height:70px}.schedule-prep .prep-workload > .prep-checks{align-items:stretch;flex-direction:column}}

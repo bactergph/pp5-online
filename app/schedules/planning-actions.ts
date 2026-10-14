@@ -2,10 +2,11 @@
 import * as planning from '@/lib/schedule-preparation'
 import { scheduleResult } from '@/lib/schedule-action-result'
 import type { SchedulePlan } from '@/lib/schedule-planning'
-import { importScheduleTeachers, importScheduleSubjects } from '@/lib/schedule-input-server'
+import { importScheduleTeachers, importScheduleSubjects, saveTeachingAssignments } from '@/lib/schedule-input-server'
 import type { SubjectInputRow } from '@/lib/schedule-input'
 export async function saveScheduleInputTeachers(year:string,term:number,rows:{key:string;prefix:string;name:string;position:string}[]){return scheduleResult(()=>importScheduleTeachers(year,term,rows))}
 export async function saveScheduleInputSubjects(year:string,term:number,hash:string,rows:SubjectInputRow[]){return scheduleResult(()=>importScheduleSubjects(year,term,hash,rows))}
+export async function saveScheduleTeachingAssignments(year:string,term:number,hash:string,rows:{lessonId:string;teacherId:string}[]){return scheduleResult(()=>saveTeachingAssignments(year,term,hash,rows))}
 export async function fetchPreparation(year:string,term:number){return scheduleResult(()=>planning.preparation(year,term))}
 export async function savePreparation(year:string,term:number,hash:string,plan:SchedulePlan){return scheduleResult(()=>planning.savePlan(year,term,hash,plan))}
 export async function checkPreparation(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.preflight(year,term,rooms,clear).then(r=>r.issues))}

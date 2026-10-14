@@ -328,7 +328,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     }
   }
 
-  function handleAutoSchedule(whole=false) { setPreparationRooms(whole?undefined:[selectedClass]);setPreparationStep(5);setWorkspace('prepare') }
+  function handleAutoSchedule(whole=false) { setPreparationRooms(whole?undefined:[selectedClass]);setPreparationStep(6);setWorkspace('prepare') }
 
   async function handleClear(scope:'room'|'level'|'school'='room') {
     if(blocked)return
@@ -416,7 +416,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-          {isManage && canEdit ? <button type="button" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})} className="schedule-quick-button"><FiZap aria-hidden="true"/><span>Quick wizard<small>เตรียมข้อมูลและจัดตาราง 5 ขั้น</small></span></button> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-blue-900">จัดการตารางเรียน</Link>}
+          {isManage && canEdit ? <button type="button" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})} className="schedule-quick-button"><FiZap aria-hidden="true"/><span>Quick wizard<small>เตรียมข้อมูลและจัดตาราง 6 ขั้น</small></span></button> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-blue-900">จัดการตารางเรียน</Link>}
           {workspace==='class' && selectedClass && <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked} onClick={downloadClassPdf}><FiDownload aria-hidden="true"/>ดาวน์โหลด PDF</button>}
           </div>
         </div>
@@ -478,7 +478,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <article className={quotas.items.some(q=>q.used>q.target)?'border-rose-300! bg-rose-50!':''}><strong>{quotas.items.reduce((sum,q)=>sum+Math.max(0,q.remaining),0)}</strong><span>คาบรายวิชาที่ยังขาด{quotas.items.some(q=>q.used>q.target)?' · พบวิชาเกินคาบ กรุณานำออก':''}</span></article>
           <article><strong>{Object.values(cells).filter(c=>c.locked).length}</strong><span>คาบที่ล็อก · ระบบอัตโนมัติจะเก็บไว้</span></article>
         </div>}
-        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} initialRooms={preparationRooms} initialStep={workspace==='activity'?4:preparationStep} onChanged={loadGrid} />}
+        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} initialRooms={preparationRooms} initialStep={workspace==='activity'?5:preparationStep} onChanged={loadGrid} />}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
         {(workspace==='activity'||workspace==='prepare')?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
