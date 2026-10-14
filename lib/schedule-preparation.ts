@@ -29,6 +29,11 @@ export async function preparation(year:string,term:number){
  return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms:data.classrooms.filter(c=>isTimetableClassroom(c.level)),lessons,slots:data.slots,blocks:constraints.blocks,activities:activities.data||[],teachers:teachers.data||[]}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
+export async function activityCatalog(){
+ const session=await actor(),result=await createServerClient().from('evaluation_settings').select('id,label').eq('school_id',session.schoolId).eq('kind','activities').eq('is_active',true).order('sort_order')
+ if(result.error)throw Error('โหลดรายการกิจกรรมไม่สำเร็จ กรุณาลองใหม่')
+ return result.data||[]
+}
 export async function savePlan(year:string,term:number,hash:string,plan:SchedulePlan){
  const s=await actor(),current=await preparation(year,term);validatePlan(plan,current.lessons.filter(l=>!l.activity).map(l=>l.id))
  if(JSON.stringify(plan.activityGroups||[])!==JSON.stringify(current.plan.activityGroups||[]))throw Error('แก้ทีมครูผ่านเมนูกิจกรรมและครูผู้รับผิดชอบ')

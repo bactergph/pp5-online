@@ -8,6 +8,7 @@ export async function saveScheduleInputTeachers(year:string,term:number,rows:{ke
 export async function saveScheduleInputSubjects(year:string,term:number,hash:string,rows:SubjectInputRow[]){return scheduleResult(()=>importScheduleSubjects(year,term,hash,rows))}
 export async function saveScheduleTeachingAssignments(year:string,term:number,hash:string,rows:{lessonId:string;teacherId:string}[]){return scheduleResult(()=>saveTeachingAssignments(year,term,hash,rows))}
 export async function fetchPreparation(year:string,term:number){return scheduleResult(()=>planning.preparation(year,term))}
+export async function fetchScheduleActivityCatalog(){return scheduleResult(()=>planning.activityCatalog())}
 export async function savePreparation(year:string,term:number,hash:string,plan:SchedulePlan){return scheduleResult(()=>planning.savePlan(year,term,hash,plan))}
 export async function checkPreparation(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.preflight(year,term,rooms,clear).then(r=>r.issues))}
 export async function createScheduleDraft(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.generate(year,term,rooms,clear))}
