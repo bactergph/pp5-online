@@ -73,6 +73,9 @@ export function teacherGivenName(name: string) {
 export function activityTeacherLabel(name: string) {
   return teacherGivenName(name).split(',').map(part => part.trim()).filter(Boolean).slice(0, 2).join(', ')
 }
+export function isActivityLessonId(id: string | null | undefined) {
+  return !!id && (id.startsWith('activity:') || id.startsWith('activity-team:'))
+}
 export function workloadLabel(status: ReturnType<typeof workloadStatus>) {
   if (status === 'over') return 'เกินมาตรฐาน'
   if (status === 'warn') return 'ค่อนข้างมาก'

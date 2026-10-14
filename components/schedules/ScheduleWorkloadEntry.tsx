@@ -21,51 +21,32 @@ type WorkloadRow = {
 const STYLES = `
   .schedule-page { display: grid; gap: 14px; }
   .schedule-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
-  .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
-  .schedule-head button { min-height:44px; padding:0 16px; border:0; border-radius:10px; background:#245bdb; color:#fff; font-weight:700; cursor:pointer; }
+  .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 700; color: #182b49; }
+  .schedule-head button { min-height:40px; padding:0 16px; border:0; border-radius:8px; background:#2563eb; color:#fff; font-weight:700; cursor:pointer; }
   .schedule-head button:disabled { opacity:.5; cursor:not-allowed; }
-  .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
+  .schedule-head p { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: #52647c; }
   .schedule-filters {
     display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: end;
-    padding: 14px; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
+    padding: 14px; border: 1px solid #dce6f2; border-radius: 14px; background: #fff;
   }
   .schedule-field { display: grid; gap: 5px; }
-  .schedule-field label { font-size: 11px; font-weight: 900; color: #475569; }
+  .schedule-field label { font-size: 13px; font-weight: 600; color: #52647c; }
   .schedule-field select {
-    min-height: 36px; border: 1px solid #CBD5E1; border-radius: 8px; padding: 0 10px;
-    background: #fff; color: #0F172A; font-size: 13px; font-weight: 800;
+    min-height: 40px; border: 1px solid #d8dee8; border-radius: 8px; padding: 0 10px;
+    background: #fff; color: #1f2937; font-size: 14px; font-weight: 600;
   }
-  .workload-legend {
-    display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; font-weight: 700; color: #64748B;
-  }
-  .workload-legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .workload-dot { width: 10px; height: 10px; border-radius: 999px; }
-  .workload-dot.ok { background: #10B981; }
-  .workload-dot.warn { background: #F59E0B; }
-  .workload-dot.over { background: #EF4444; }
   .workload-table-wrap {
-    overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
+    overflow: auto; border: 1px solid #dce6f2; border-radius: 14px; background: #fff;
   }
-  .workload-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .workload-table { width: 100%; border-collapse: collapse; font-size: 14px; color: #1f2937; }
   .workload-table th, .workload-table td {
-    padding: 10px 12px; border-bottom: 1px solid #F1F5F9; text-align: left;
+    padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left;
   }
   .workload-table th {
-    background: #F8FAFC; font-size: 10px; font-weight: 900; color: #64748B;
-    text-transform: uppercase; letter-spacing: 0.03em;
+    background: #eef2f6; font-size: 13px; font-weight: 700; color: #182b49;
   }
-  .workload-table td.num { text-align: center; font-weight: 900; font-variant-numeric: tabular-nums; }
-  .workload-badge {
-    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
-    border-radius: 999px; font-size: 11px; font-weight: 800;
-  }
-  .workload-badge.ok { background: #D1FAE5; color: #065F46; }
-  .workload-badge.warn { background: #FEF3C7; color: #92400E; }
-  .workload-badge.over { background: #FEE2E2; color: #991B1B; }
-  .workload-row.ok td { background: rgba(16, 185, 129, 0.04); }
-  .workload-row.warn td { background: rgba(245, 158, 11, 0.06); }
-  .workload-row.over td { background: rgba(239, 68, 68, 0.06); }
-  .schedule-empty { padding: 28px; text-align: center; color: #64748B; font-size: 13px; font-weight: 700; }
+  .workload-table td.num { text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .schedule-empty { padding: 28px; text-align: center; color: #52647c; font-size: 14px; font-weight: 600; }
 `
 
 export default function ScheduleWorkloadEntry() {
@@ -117,7 +98,7 @@ export default function ScheduleWorkloadEntry() {
         <div className="schedule-head">
           <div>
             <h1>ภาระงานสอนรายสัปดาห์</h1>
-            <p>จำนวนคาบสอนต่อสัปดาห์ของครูแต่ละท่าน</p>
+            <p>แสดงเฉพาะครูที่มีภาระสอนในตารางเรียนหรือกิจกรรม</p>
           </div>
           <button type="button" disabled={!rows.length} onClick={() => {
             const year = years.find(item => item.id === selectedYear)?.year_be || ''
@@ -157,37 +138,29 @@ export default function ScheduleWorkloadEntry() {
 
         </div>
 
-        <div className="workload-legend">
-          <span><i className="workload-dot ok" /> ปกติ (≤18 คาบ)</span>
-          <span><i className="workload-dot warn" /> ค่อนข้างมาก (19–20 คาบ)</span>
-          <span><i className="workload-dot over" /> เกินมาตรฐาน (&gt;20 คาบ)</span>
-        </div>
-
         <div className="workload-table-wrap">
           <table className="workload-table">
             <thead>
               <tr>
                 <th>ครูผู้สอน</th>
                 <th>ตำแหน่ง</th>
-                <th style={{ width: 80 }}>คาบ/สัปดาห์</th>
-                <th style={{ width: 140 }}>สถานะ</th>
+                <th style={{ width: 120 }}>คาบ/สัปดาห์</th>
+                <th style={{ width: 160 }}>หมายเหตุ</th>
               </tr>
             </thead>
             <tbody>
               {rows.map(row => (
-                <tr key={row.id} className={`workload-row ${row.status}`}>
+                <tr key={row.id}>
                   <td>{row.name}</td>
                   <td>{row.position || '—'}</td>
                   <td className="num">{row.hours}</td>
-                  <td>
-                    <span className={`workload-badge ${row.status}`}>{row.status_label}</span>
-                  </td>
+                  <td />
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', color: '#64748B', padding: 24 }}>
-                    ไม่พบข้อมูลบุคลากร
+                  <td colSpan={4} style={{ textAlign: 'center', color: '#52647c', padding: 24 }}>
+                    ยังไม่มีครูที่มีภาระสอน
                   </td>
                 </tr>
               )}

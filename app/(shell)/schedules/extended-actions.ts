@@ -1,5 +1,5 @@
 import 'server-only'
-import { lessonTeachers } from '@/lib/schedule-activity-teams'
+import { activityTeachers, lessonTeachers } from '@/lib/schedule-activity-teams'
 import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import * as scheduleOps from '@/lib/schedule-operations'
 
@@ -157,13 +157,24 @@ export async function fetchScheduleWorkload(yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
 
-  const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
+  const data = await loadSchedule(session.schoolId, yearId, semester)
   const hoursMap: Record<string, number> = {}
-
-  for (const row of slots) {
-    const cs = Array.isArray(row.class_subjects) ? row.class_subjects[0] : row.class_subjects
-    if (!cs?.teacher_id || !row.class_subject_id) continue
-    hoursMap[cs.teacher_id] = (hoursMap[cs.teacher_id] || 0) + 1
+  const seen = new Set<string>()
+  const addHour = (teacherId: string, day: number, period: number) => {
+    if (!teacherId) return
+    const key = `${teacherId}:${day}:${period}`
+    if (seen.has(key)) return
+    seen.add(key)
+    hoursMap[teacherId] = (hoursMap[teacherId] || 0) + 1
+  }
+  for (const row of data.slots) {
+    const lesson = data.lessons.find(item => item.id === lessonKey(row))
+    if (!lesson || lesson.activity) continue
+    for (const teacherId of lessonTeachers(lesson)) addHour(teacherId, row.day_of_week, row.period)
+  }
+  for (const group of data.activityGroups || []) {
+    const rooms = group.mode === 'joint' ? group.roomIds.slice(0, 1) : group.roomIds
+    for (const roomId of rooms) for (const cell of group.cells || []) for (const teacherId of activityTeachers(group, roomId)) addHour(teacherId, Number(cell.day), Number(cell.period))
   }
 
   const db = createServerClient()
@@ -173,18 +184,19 @@ export async function fetchScheduleWorkload(yearId: string, semester = 1) {
     .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin', 'principal'])
     .order('full_name')
 
-  return (teachers || []).map(t => {
+  return (teachers || []).flatMap(t => {
     const hours = hoursMap[t.id] || 0
+    if (hours <= 0) return []
     const status = workloadStatus(hours)
-    return {
+    return [{
       id: t.id,
       name: `${t.prefix} ${t.full_name}`.trim(),
       position: t.position,
       hours,
       status,
       status_label: workloadLabel(status),
-    }
-  }).sort((a, b) => b.hours - a.hours)
+    }]
+  }).sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name, 'th'))
 }
 
 export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: string, semester = 1) {

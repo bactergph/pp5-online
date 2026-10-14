@@ -6,32 +6,32 @@ import { SCHEDULE_DAYS, type ScheduleColumn } from '@/lib/schedules'
 import { DEFAULT_PERIOD_TIMES } from '@/lib/schedule-helpers'
 
 const GRID_STYLES = `
-  .schedule-grid-table { width: 100%; min-width: 960px; border-collapse: collapse; }
+  .schedule-grid-table { width: 100%; min-width: 880px; border-collapse: collapse; background: #fff; }
   .schedule-grid-table th, .schedule-grid-table td {
-    border: 1px solid #E5E7EB; text-align: center; vertical-align: middle;
+    border: 1px solid #dce6f2; text-align: center; vertical-align: middle;
   }
   .schedule-grid-table th {
-    padding: 10px 6px; background: #F8FAFC; color: #334155;
-    font-size: 11px; font-weight: 900; white-space: nowrap;
+    padding: 8px 6px; background: #eef2f6; color: #182b49;
+    font-size: 13px; font-weight: 600; white-space: nowrap;
   }
   .schedule-grid-table th.col-day {
-    min-width: 72px; position: sticky; left: 0; z-index: 2; background: #F4F7FC;
+    min-width: 72px; position: sticky; left: 0; z-index: 2; background: #eef2f6;
   }
   .schedule-grid-table th.col-period { min-width: 108px; }
   .schedule-grid-table th .period-time {
-    display: block; margin-top: 3px; font-size: 9px; font-weight: 700; color: #94A3B8;
+    display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: #52647c;
   }
   .schedule-grid-table th.col-break {
-    min-width: 52px; background: #FFF8E1; color: #B45309;
+    min-width: 36px; background: #f3f6fb; color: #52647c;
     writing-mode: vertical-rl; text-orientation: mixed; padding: 12px 4px;
   }
   .schedule-grid-table td.day-col {
-    position: sticky; left: 0; z-index: 1; background: #F4F7FC;
-    color: #1E3A8A; font-size: 12px; font-weight: 900; padding: 8px 10px;
+    position: sticky; left: 0; z-index: 1; background: #f8fafc;
+    color: #182b49; font-size: 13px; font-weight: 700; padding: 8px 10px;
   }
-  .schedule-grid-table td.cell { min-width: 108px; padding: 6px; vertical-align: top; }
+  .schedule-grid-table td.cell { min-width: 108px; padding: 6px; height: auto; min-height: 8rem; vertical-align: top; }
   .schedule-grid-table td.break-col {
-    background: #FFFBEB; color: #B45309; font-size: 10px; font-weight: 800;
+    background: #f3f6fb; color: #52647c; font-size: 12px; font-weight: 600;
     writing-mode: vertical-rl; text-orientation: mixed; padding: 10px 4px;
   }
 `

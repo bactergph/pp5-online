@@ -15,3 +15,34 @@ export function activityTeamWorkload(groups:ActivityTeam[]){
  for(const g of groups){const teams=g.mode==='joint'?[g.teacherIds]:g.roomIds.map(id=>activityTeachers(g,id));for(const ids of teams)for(const id of ids)result[id]=(result[id]||0)+g.weeklyPeriods}
  return result
 }
+
+type RoomLesson = { id:string; classroomId:string; subjectId:string; activity?:boolean; name:string; code?:string; teacherName:string; teacherId:string|null; roomName?:string; teacherIds?:string[]; activityGroupId?:string; selectable?:boolean; count?:number; label?:string }
+export type ActivityCellPlacement = { day:number; period:number; lessonId:string }
+/** Cells defined in an activity team stay on that room's timetable, even when the saved slot was replaced. */
+export function roomActivityDisplay(groups:ActivityTeam[], roomId:string, lessons:RoomLesson[], teacherNames:Record<string,string> = {}) {
+ const extras:RoomLesson[] = []
+ const cells:ActivityCellPlacement[] = []
+ for (const group of groups || []) {
+  if (!group.roomIds?.includes(roomId)) continue
+  let lesson = lessons.find(item => item.activity && item.classroomId === roomId && item.subjectId === group.settingId)
+  if (!lesson) {
+   const sibling = lessons.find(item => item.activity && item.subjectId === group.settingId)
+   const teacherIds = activityTeachers(group, roomId)
+   const name = sibling?.name || 'กิจกรรม'
+   lesson = { id:`activity-team:${group.id}:${roomId}`, classroomId:roomId, subjectId:group.settingId, activity:true, selectable:false, name, code:'', teacherId:null, teacherIds, teacherName:teacherIds.map(id => teacherNames[id] || '').filter(Boolean).join(', '), roomName:'', activityGroupId:group.mode === 'joint' ? group.id : undefined, count:group.weeklyPeriods, label:name }
+   extras.push(lesson)
+  }
+  for (const cell of group.cells || []) cells.push({ day:Number(cell.day), period:Number(cell.period), lessonId:lesson.id })
+ }
+ return { lessons:extras, cells }
+}
+export function applyActivityDisplay<T extends { class_subject_id:string|null }>(grid:Record<string,T>, cells:ActivityCellPlacement[], blank?:T) {
+ const next = { ...grid }
+ for (const cell of cells) {
+  const key = `${cell.day}-${cell.period}`
+  const current = next[key] || blank
+  if (!current) continue
+  next[key] = { ...current, class_subject_id:cell.lessonId }
+ }
+ return next
+}

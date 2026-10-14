@@ -57,7 +57,7 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   const rooms = await readAll(db.from('classrooms').select('id,level,room').eq('school_id', schoolId).eq('academic_year_id', yearId).order('level').order('room').order('id'))
   if (rooms.error) throw new Error(rooms.error.message)
   const classrooms = rooms.data || []
-  if (!classrooms.length) return { classrooms, lessons: [] as ScheduleLesson[], slots: [] as ScheduleSlot[] }
+  if (!classrooms.length) return { classrooms, lessons: [] as ScheduleLesson[], slots: [] as ScheduleSlot[], activityGroups: [] as ActivityTeam[], teacherNames: {} as Record<string, string> }
   const ids = classrooms.map(c => c.id)
   const [subjects, activities, slots, teachers] = await Promise.all([
     readAll(db.from('class_subjects').select('*,subjects(code,name,short_name,hours_per_year,subject_group,type)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
@@ -93,7 +93,7 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
     const rule=plan?.rules?.[lesson.id]
     if(rule){lesson.count=rule.count;lesson.roomName=plan?.rooms?.find(r=>r.id===rule.roomId)?.name||lesson.roomName}
   }
-  return { classrooms, lessons, slots: (slots.data || []) as ScheduleSlot[], semesterSupported: !slots.legacy }
+  return { classrooms, lessons, slots: (slots.data || []) as ScheduleSlot[], activityGroups: plan?.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
 }
 
 export async function persistSchedule(schoolId: string | null, yearId: string, before: ScheduleSlot[], after: ScheduleSlot[], allowUnlock = false, semester = 1) {

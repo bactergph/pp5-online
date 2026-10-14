@@ -11,7 +11,7 @@ import {
   fetchScheduleExportContext,
 } from '@/app/schedules/actions'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
-import { activityTeacherLabel, periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTeacherLabel, isActivityLessonId, periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
@@ -180,7 +180,7 @@ export default function ScheduleExportPage() {
     const data: Record<string, { line1: string; line2: string; line3?: string; line4?: string }> = {}
     for (const [key, cell] of Object.entries(grid as Record<string, { class_subject_id: string | null; note: string | null }>)) {
       const subj = cell.class_subject_id ? subjMap[cell.class_subject_id] : undefined
-      const activity = !!cell.class_subject_id?.startsWith('activity:')
+      const activity = isActivityLessonId(cell.class_subject_id)
       data[key] = subj ? {
         line1: subj.subject_name || subj.label || (activity ? 'กิจกรรม' : '—'),
         line2: subj.subject_code ? `(${subj.subject_code})` : activity ? '(กิจกรรม)' : '',
@@ -275,7 +275,7 @@ export default function ScheduleExportPage() {
             const map = Object.fromEntries((subs as { id: string; label: string; subject_name?: string; subject_code?: string; teacher_name: string; room_name?: string }[]).map(s => [s.id, s]))
             const gridData = Object.fromEntries(Object.entries(grid).map(([key, cell]) => {
               const subject = cell.class_subject_id ? map[cell.class_subject_id] : undefined
-              const activity = !!cell.class_subject_id?.startsWith('activity:')
+              const activity = isActivityLessonId(cell.class_subject_id)
               return [key, subject ? { line1: subject.subject_name || subject.label || '—', line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: activity ? activityTeacherLabel(subject.teacher_name) : teacherGivenName(subject.teacher_name), line4: subject.room_name || '' } : { line1: cell.note || '—', line2: '' }]
             }))
             const room = classrooms.find(c => c.id === id)

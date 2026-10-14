@@ -278,7 +278,7 @@ export async function buildWorkloadPdfBlob(input: {
   academicHeadName?: string
   directorName?: string
   directorPosition?: string
-  rows: { name: string; position: string | null; hours: number; status_label: string }[]
+  rows: { name: string; position: string | null; hours: number; note?: string }[]
 }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
   await applyThaiFonts(doc)
@@ -295,7 +295,7 @@ export async function buildWorkloadPdfBlob(input: {
   }
   let y = drawHeader()
   const widths = [14, 68, 46, 28, 26]
-  const headers = ['ที่', 'ครูผู้สอน', 'ตำแหน่ง', 'คาบ/สัปดาห์', 'สถานะ']
+  const headers = ['ที่', 'ครูผู้สอน', 'ตำแหน่ง', 'คาบ/สัปดาห์', 'หมายเหตุ']
   const drawHead = () => {
     let x = margin
     headers.forEach((label, i) => { drawCell(doc, x, y, widths[i], 10, label, '', { fill: HEADER_BG, line1Size: 14 }); x += widths[i] })
@@ -304,7 +304,7 @@ export async function buildWorkloadPdfBlob(input: {
   drawHead()
   input.rows.forEach((row, index) => {
     if (y > 250) { doc.addPage(); y = drawHeader(); drawHead() }
-    const values = [String(index + 1), row.name, row.position || '—', String(row.hours), row.status_label]
+    const values = [String(index + 1), row.name, row.position || '—', String(row.hours), row.note || '']
     let x = margin
     values.forEach((value, i) => { drawCell(doc, x, y, widths[i], 9, value, '', { line1Size: 13, line1Bold: i === 0 || i === 3 }); x += widths[i] })
     y += 9

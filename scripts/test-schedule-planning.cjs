@@ -39,6 +39,15 @@ const editorTimes=helpers.normalizePeriodTimes(storedTimes);assert.equal(helpers
 assert.equal(helpers.validatePeriodTimes(helpers.moveLunchBreak(editorTimes,4)),null);
 assert.equal(helpers.teacherGivenName('นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน'),'สมชาย, สมหญิง');
 assert.equal(helpers.activityTeacherLabel('นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน, ว่าที่ ร.ต. สมศักดิ์ มีสุข'),'สมชาย, สมหญิง');
+assert.equal(helpers.isActivityLessonId('activity:abc'),true);assert.equal(helpers.isActivityLessonId('activity-team:g:r'),true);assert.equal(helpers.isActivityLessonId('subject'),false);
+const teams={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-activity-teams.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:teams,require:()=>({})});
+const activityGroup={id:'g1',settingId:'set1',mode:'joint',roomIds:['roomA'],teacherIds:['t1','t2'],roomTeachers:{},weeklyPeriods:1,cells:[{day:1,period:6}]};
+const stamped=teams.roomActivityDisplay([activityGroup],'roomA',[{id:'activity:real',classroomId:'roomA',subjectId:'set1',activity:true,name:'ลูกเสือ',teacherName:'นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน',teacherId:null}],{});
+assert.equal(stamped.cells[0].lessonId,'activity:real');assert.equal(stamped.cells[0].period,6);
+const missing=teams.roomActivityDisplay([activityGroup],'roomA',[],{t1:'นายสมชาย ใจดี',t2:'นางสาวสมหญิง รักเรียน'});
+assert.equal(missing.lessons[0].teacherName,'นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน');
+const grid=teams.applyActivityDisplay({'1-6':{class_subject_id:'math',note:null,locked:false,expected_lesson_id:'math'}},missing.cells);
+assert.equal(grid['1-6'].class_subject_id,missing.lessons[0].id);assert.equal(grid['1-6'].expected_lesson_id,'math');
 console.log('PASS: April/October term boundaries in Bangkok, January term 2, database time seconds normalized without mutating data, lunch editor validation');
 
 const joint=[lesson('act1',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true,teacherIds:['T1','T2'],activityGroupId:'joint'}),lesson('act2',null,'B',1,{activity:true,teacherOptional:true,fixedOnly:true,teacherIds:['T1','T2'],activityGroupId:'joint'})];

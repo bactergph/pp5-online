@@ -1,6 +1,6 @@
 'use server'
 
-import { lessonTeachers } from '@/lib/schedule-activity-teams'
+import { activityTeachers, applyActivityDisplay, lessonTeachers, roomActivityDisplay } from '@/lib/schedule-activity-teams'
 import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import { scheduleResult } from '@/lib/schedule-action-result'
 import * as scheduleOps from '@/lib/schedule-operations'
@@ -95,53 +95,80 @@ export async function fetchScheduleClassrooms(yearId: string) {
   }))
 }
 
+type ScheduleData = Awaited<ReturnType<typeof loadSchedule>>
+type GridCell = { class_subject_id: string | null; note: string | null; locked: boolean; expected_lesson_id: string | null }
+
+function subjectRow(lesson: { id: string; teacherId: string | null; code?: string; name: string; teacherName: string; roomName?: string; activity?: boolean }) {
+  return { id: lesson.id, teacher_id: lesson.teacherId, subject_code: lesson.code || '', subject_name: lesson.name, teacher_name: lesson.teacherName, room_name: lesson.roomName || '', label: `${lesson.code || ''} ${lesson.name}`.trim(), activity: !!lesson.activity }
+}
+
+function classRoomView(data: ScheduleData, classroomId: string) {
+  const grid: Record<string, GridCell> = {}
+  for (const day of SCHEDULE_DAYS) for (let period = 1; period <= SCHEDULE_PERIOD_COUNT; period++) grid[`${day.value}-${period}`] = { class_subject_id: null, note: null, locked: false, expected_lesson_id: null }
+  for (const row of data.slots.filter(slot => slot.classroom_id === classroomId)) {
+    const id = lessonKey(row)
+    grid[`${row.day_of_week}-${row.period}`] = { class_subject_id: id, note: row.note, locked: row.locked, expected_lesson_id: id }
+  }
+  const display = roomActivityDisplay(data.activityGroups || [], classroomId, data.lessons, data.teacherNames || {})
+  return { grid: applyActivityDisplay(grid, display.cells, { class_subject_id: null, note: null, locked: false, expected_lesson_id: null }), lessons: [...data.lessons.filter(lesson => lesson.classroomId === classroomId), ...display.lessons] }
+}
+
+function lessonAt(data: ScheduleData, roomId: string, day: number, period: number) {
+  const group = (data.activityGroups || []).find(item => item.roomIds?.includes(roomId) && item.cells?.some(cell => Number(cell.day) === day && Number(cell.period) === period))
+  if (group) {
+    const lesson = data.lessons.find(item => item.activity && item.classroomId === roomId && item.subjectId === group.settingId)
+    if (lesson) return lesson
+    return { teacherId: null, teacherIds: activityTeachers(group, roomId), activityGroupId: group.mode === 'joint' ? group.id : undefined }
+  }
+  const slot = data.slots.find(item => item.classroom_id === roomId && item.day_of_week === day && item.period === period)
+  return slot ? data.lessons.find(item => item.id === lessonKey(slot)) : undefined
+}
+
 export async function fetchClassScheduleSubjects(classroomId: string, semester = 1) {
   const session = await requireScheduleSession()
   const { data: room, error } = await createServerClient().from('classrooms').select('academic_year_id').eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
   if (error || !room) throw new Error('ไม่พบห้องเรียน')
   const data = await loadSchedule(session.schoolId, room.academic_year_id, semester)
-  return data.lessons.filter(l => l.classroomId === classroomId && l.selectable !== false).map(l => ({ id:l.id,teacher_id:l.teacherId,subject_code:l.code,subject_name:l.name,teacher_name:l.teacherName,room_name:l.roomName || "",label:(l.code+' '+l.name).trim(),activity:l.activity }))
+  const view = classRoomView(data, classroomId)
+  const used = new Set(Object.values(view.grid).map(cell => cell.class_subject_id).filter(Boolean))
+  return view.lessons.filter(lesson => lesson.selectable !== false || used.has(lesson.id)).map(subjectRow)
 }
 
 export async function fetchClassScheduleGrid(classroomId: string, yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   const data = await loadSchedule(session.schoolId, yearId, semester)
   requireScheduleClass(data, classroomId)
-  const cells: Record<string, { class_subject_id: string | null; note: string | null; locked: boolean }> = {}
-  for (const day of SCHEDULE_DAYS) for (let period=1; period<=SCHEDULE_PERIOD_COUNT; period++) cells[day.value+'-'+period]={class_subject_id:null,note:null,locked:false}
-  for (const row of data.slots.filter(s=>s.classroom_id===classroomId)) cells[row.day_of_week+'-'+row.period]={class_subject_id:lessonKey(row),note:row.note,locked:row.locked}
-  return cells
+  return classRoomView(data, classroomId).grid
 }
 
 export async function fetchClassScheduleBundle(classroomId: string, yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   const data = await loadSchedule(session.schoolId, yearId, semester)
   requireScheduleClass(data, classroomId)
-  const lessons = data.lessons.filter(l => l.classroomId === classroomId)
-  const grid: Record<string, { class_subject_id: string | null; note: string | null; locked: boolean }> = {}
-  for (const day of SCHEDULE_DAYS) for (let p = 1; p <= SCHEDULE_PERIOD_COUNT; p++) grid[`${day.value}-${p}`] = { class_subject_id: null, note: null, locked: false }
+  const view = classRoomView(data, classroomId)
   const warnings: Record<string, string[]> = {}
-  for (const s of data.slots.filter(s => s.classroom_id === classroomId)) {
-    const key = `${s.day_of_week}-${s.period}`
-    grid[key] = { class_subject_id: lessonKey(s), note: s.note, locked: s.locked }
-    const lesson = lessons.find(l => l.id === lessonKey(s))
+  for (const [key, cell] of Object.entries(view.grid)) {
+    if (!cell.class_subject_id) continue
+    const [day, period] = key.split('-').map(Number)
+    const lesson = view.lessons.find(item => item.id === cell.class_subject_id)
     const teachers = lesson ? lessonTeachers(lesson) : []
     if (!teachers.length) continue
-    const busy = data.slots.filter(other => {
-      if (other.classroom_id === classroomId || other.day_of_week !== s.day_of_week || other.period !== s.period) return false
-      const otherLesson = data.lessons.find(l => l.id === lessonKey(other))
-      if (!otherLesson || lesson?.activityGroupId && lesson.activityGroupId === otherLesson.activityGroupId) return false
-      return lessonTeachers(otherLesson).some(id => teachers.includes(id))
+    const busy = data.classrooms.filter(room => {
+      if (room.id === classroomId) return false
+      const other = lessonAt(data, room.id, day, period)
+      if (!other || lesson?.activityGroupId && lesson.activityGroupId === other.activityGroupId) return false
+      return lessonTeachers(other).some(id => teachers.includes(id))
     })
-    if (busy.length) warnings[key] = busy.map(s => { const c = data.classrooms.find(c => c.id === s.classroom_id)!; return `${c.level}/${c.room}` })
+    if (busy.length) warnings[key] = busy.map(room => `${room.level}/${room.room}`)
   }
-  const items = lessons.filter(l => !l.activity).map(l => {
-    const used = data.slots.filter(s => lessonKey(s) === l.id).length
-    return { class_subject_id: l.id, code: l.code, name: l.name, target: l.count, used, remaining: l.count - used }
+  const items = view.lessons.filter(lesson => !lesson.activity).map(lesson => {
+    const used = data.slots.filter(slot => lessonKey(slot) === lesson.id).length
+    return { class_subject_id: lesson.id, code: lesson.code || '', name: lesson.name, target: lesson.count || 0, used, remaining: (lesson.count || 0) - used }
   })
-  return { grid, warnings,
-    subjects: lessons.filter(l => l.selectable !== false || data.slots.some(s => lessonKey(s) === l.id)).map(l => ({ id:l.id, teacher_id:l.teacherId, subject_code:l.code, subject_name:l.name, teacher_name:l.teacherName,room_name:l.roomName || "", label:`${l.code} ${l.name}`.trim() })),
-    quotas: { items, filled: items.reduce((n,l) => n+l.used,0), totalTarget: items.reduce((n,l) => n+l.target,0) },
+  const used = new Set(Object.values(view.grid).map(cell => cell.class_subject_id).filter(Boolean))
+  return { grid: view.grid, warnings,
+    subjects: view.lessons.filter(lesson => lesson.selectable !== false || used.has(lesson.id)).map(subjectRow),
+    quotas: { items, filled: items.reduce((sum, lesson) => sum + lesson.used, 0), totalTarget: items.reduce((sum, lesson) => sum + lesson.target, 0) },
   }
 }
 
@@ -160,12 +187,33 @@ export async function fetchTeachingScheduleGrid(teacherId: string, yearId: strin
   for (const d of SCHEDULE_DAYS) for(let p=1;p<=SCHEDULE_PERIOD_COUNT;p++) cells[d.value+'-'+p]={label:'',subject_line:'',room_line:''}
   for(const row of data.slots) {
     const lesson=data.lessons.find(l=>l.id===lessonKey(row))
-    if(!lesson || !lessonTeachers(lesson).includes(teacherId)) continue
+    if(!lesson || lesson.activity || !lessonTeachers(lesson).includes(teacherId)) continue
     const room=data.classrooms.find(c=>c.id===row.classroom_id)!
     const roomLine=room.level+'/'+room.room
     const subjectLine=[(lesson.code+' '+lesson.name).trim(),lesson.roomName].filter(Boolean).join(' · ')
     const key=row.day_of_week+'-'+row.period
     cells[key]={label:[cells[key]?.label,roomLine+'\n'+subjectLine].filter(Boolean).join('\n'),subject_line:subjectLine,room_line:roomLine}
+  }
+  const activityCells: Record<string, { rooms: string[]; subjectLine: string }> = {}
+  for (const group of data.activityGroups || []) {
+    for (const roomId of group.roomIds || []) {
+      if (!activityTeachers(group, roomId).includes(teacherId)) continue
+      const lesson = data.lessons.find(item => item.activity && item.classroomId === roomId && item.subjectId === group.settingId)
+      const room = data.classrooms.find(item => item.id === roomId)
+      const roomLine = room ? `${room.level}/${room.room}` : ''
+      const subjectLine = [((lesson?.code || '') + ' ' + (lesson?.name || 'กิจกรรม')).trim(), lesson?.roomName].filter(Boolean).join(' · ')
+      for (const cell of group.cells || []) {
+        const key = `${Number(cell.day)}-${Number(cell.period)}`
+        const entry = activityCells[key] || { rooms: [], subjectLine: '' }
+        if (roomLine && !entry.rooms.includes(roomLine)) entry.rooms.push(roomLine)
+        if (subjectLine && !entry.subjectLine.split(' · ').includes(subjectLine)) entry.subjectLine = [entry.subjectLine, subjectLine].filter(Boolean).join(' · ')
+        activityCells[key] = entry
+      }
+    }
+  }
+  for (const [key, entry] of Object.entries(activityCells)) {
+    const roomLine = entry.rooms.join('\n')
+    cells[key] = { label: entry.rooms.map(room => `${room}\n${entry.subjectLine}`).join('\n'), subject_line: entry.subjectLine, room_line: roomLine }
   }
   return cells
 }
