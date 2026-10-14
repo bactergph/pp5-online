@@ -61,3 +61,12 @@ Changing the school-wide scope now removes the previously displayed draft and ch
 Regression suites `test:schedules` and `test:schedule-planning` passed. Targeted ESLint passed. Browser review used copied current components with synthetic data and mock actions: opening the wizard, keyboard step navigation, Excel paste, blocking draft generation for unsaved input, draft creation, and invalidating the displayed draft on scope change. Step 5 document overflow was checked at 360/390/768/1024/1440 pixels; desktop and mobile screenshots were inspected. This does not verify authenticated production writes, a full accessibility audit, or every browser/device. Review screenshots and build/typecheck logs are in `output/quick-wizard-review/`; temporary review routes were removed from the app before build.
 
 Migration 064 was separately applied to the production Supabase project with owner authorization before this UI revision. Its function exists and EXECUTE is granted to service_role while authenticated/anon remain denied. No new migration is needed for this UI revision.
+
+
+### Activity teams (065)
+
+The wizard now uses days → teachers → subjects → activities → teaching workloads → draft review. `schedule_plans.config.activityGroups` stores activity staffing per school/year/term. Joint groups reserve every participating teacher once per scheduled period; separate room teams reserve teachers individually. Activity groups use fixed days/periods and are preserved during automatic scheduling.
+
+Apply `065_schedule_activity_teams.sql` after 064. It wraps the existing atomic timetable writer and teacher-block RPC, adds an atomic group save/remove endpoint, and checks substitute staffing. Installation changes functions/triggers only; it does not rewrite existing timetable rows. Existing teacherless activities can be adopted. A legacy activity with a single teacher must be cleared/reconfigured before adopting it as a team; the migration does not rewrite its year-wide teacher.
+
+All group writes check authorization, school/year/term, the latest snapshot, activity/teacher membership, weekly period totals, lunch/day validity, teacher collisions and explicit locked-cell replacement. Removal deletes only the group's own activity cells and does not restore previously replaced subjects. New team endpoints are unavailable to browser roles.

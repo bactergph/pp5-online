@@ -1,4 +1,5 @@
 import 'server-only'
+import { activityTeachers, type ActivityTeam } from './schedule-activity-teams'
 import { createServerClient } from '@/lib/supabase'
 import { weeklyHoursFromYear } from '@/lib/schedule-helpers'
 
@@ -21,7 +22,7 @@ export type ScheduleSlot = {
 }
 export type ScheduleLesson = {
   id: string; classroomId: string; teacherId: string | null; count: number; label: string
-  sourceHours?: number; subjectId: string; code: string; name: string; fullName?: string; subjectGroup?: string; subjectType?: string; teacherName: string; roomName?: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean
+  sourceHours?: number; subjectId: string; code: string; name: string; fullName?: string; subjectGroup?: string; subjectType?: string; teacherName: string; roomName?: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean; teacherIds?:string[]; activityGroupId?:string
 }
 export const slotFields = 'classroom_id,academic_year_id,day_of_week,period,class_subject_id,activity_id,note,locked'
 export const lessonKey = (row: ScheduleSlot) => row.activity_id ? `activity:${row.activity_id}` : row.class_subject_id
@@ -85,8 +86,10 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   }
   const planResult = await db.from('schedule_plans').select('config').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',semester).maybeSingle()
   if (planResult.error && !['42P01','PGRST205'].includes(planResult.error.code)) throw new Error(planResult.error.message)
-  const plan = planResult.data?.config as {rules?:Record<string,{count:number;roomId:string|null}>;rooms?:{id:string;name:string}[]} | undefined
+  const plan = planResult.data?.config as {rules?:Record<string,{count:number;roomId:string|null}>;rooms?:{id:string;name:string}[];activityGroups?:ActivityTeam[]} | undefined
   for (const lesson of lessons) {
+    const group=lesson.activity?plan?.activityGroups?.find(g=>g.settingId===lesson.subjectId&&g.roomIds.includes(lesson.classroomId)):undefined
+    if(group){lesson.teacherIds=activityTeachers(group,lesson.classroomId);lesson.teacherId=null;lesson.teacherName=lesson.teacherIds.map(id=>names.get(id)||'').join(', ');lesson.activityGroupId=group.mode==='joint'?group.id:undefined;lesson.count=group.weeklyPeriods;lesson.selectable=false}
     const rule=plan?.rules?.[lesson.id]
     if(rule){lesson.count=rule.count;lesson.roomName=plan?.rooms?.find(r=>r.id===rule.roomId)?.name||lesson.roomName}
   }

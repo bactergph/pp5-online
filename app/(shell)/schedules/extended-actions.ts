@@ -1,4 +1,5 @@
 import 'server-only'
+import { lessonTeachers } from '@/lib/schedule-activity-teams'
 import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import * as scheduleOps from '@/lib/schedule-operations'
 
@@ -277,8 +278,8 @@ export async function fetchSubstituteDay(date: string, yearId: string, semester 
     day: dayRow,
     day_label: SCHEDULE_DAYS.find(d => d.value === dayRow!.day_of_week)?.label || '',
     busy: [...(await loadScheduleConstraints(session.schoolId!, yearId, semester)).blocks.filter(b=>b.day===dayOfWeek).map(b=>({teacherId:b.teacherId,period:b.period})), ...schedule.slots.filter(s => s.day_of_week === dayOfWeek).flatMap(s => {
-      const teacherId = schedule.lessons.find(l => l.id === lessonKey(s))?.teacherId
-      return teacherId ? [{ teacherId, period: s.period }] : []
+      const lesson = schedule.lessons.find(l => l.id === lessonKey(s))
+      return lesson ? lessonTeachers(lesson).map(teacherId=>({teacherId,period:s.period})) : []
     })],
     entries: entries || [],
   }

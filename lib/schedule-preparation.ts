@@ -1,4 +1,5 @@
 import 'server-only'
+import { validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { randomUUID } from 'node:crypto'
 import { getSession } from './session'
 import { createServerClient } from './supabase'
@@ -30,6 +31,7 @@ export async function preparation(year:string,term:number){
 export type Preparation = Awaited<ReturnType<typeof preparation>>
 export async function savePlan(year:string,term:number,hash:string,plan:SchedulePlan){
  const s=await actor(),current=await preparation(year,term);validatePlan(plan,current.lessons.filter(l=>!l.activity).map(l=>l.id))
+ if(JSON.stringify(plan.activityGroups||[])!==JSON.stringify(current.plan.activityGroups||[]))throw Error('แก้ทีมครูผ่านเมนูกิจกรรมและครูผู้รับผิดชอบ')
  if(plan.teacherIds?.some(id=>!current.teachers.some(t=>t.id===id)))throw Error('ครูที่เลือกไม่ได้อยู่ในโรงเรียนนี้')
  const lessons=current.lessons.map(l=>({...l,...plan.rules[l.id],count:l.activity?current.slots.filter(r=>lessonKey(r)===l.id).length:(plan.rules[l.id]?.count??l.count)}))
  const issues=checkPlanning(lessons,current.slots.map(toPlanned),plan.days,current.periods,current.blocks).filter(i=>/คาบเดิม|ชน|นอกวัน/.test(i.message))
@@ -48,7 +50,7 @@ export async function preflight(year:string,term:number,scope:string[],clear:boo
  for(const l of lessons.filter(l=>!l.activity&&l.count>0))if(data.plan.teacherIds&&!data.plan.teacherIds.includes(l.teacherId||''))issues.push({severity:'error',message:`${l.label} ครูผู้สอนไม่ได้อยู่ในรายการครูที่เลือกจัดตาราง`,step:2})
  for(const id of scope)if(!lessons.some(l=>l.classroomId===id&&!l.activity))issues.push({severity:'error',message:`${data.classrooms.find(c=>c.id===id)?.level}/${data.classrooms.find(c=>c.id===id)?.room} ยังไม่มีรายวิชา`,step:3})
  if(!data.timesConfigured)issues.push({severity:'error',message:'ยังไม่บันทึกเวลาคาบของโรงเรียน กรุณาตรวจและบันทึกเวลาเริ่ม–จบก่อนจัด',step:1})
- for(const l of lessons.filter(l=>scope.includes(l.classroomId)&&!l.activity&&l.roomName&&!data.plan.rules[l.id]?.roomId))issues.push({severity:'warning',message:`${l.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`,step:4})
+ for(const l of lessons.filter(l=>scope.includes(l.classroomId)&&!l.activity&&l.roomName&&!data.plan.rules[l.id]?.roomId))issues.push({severity:'warning',message:`${l.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`,step:5})
  const timeError=validatePeriodTimes(data.periods);if(timeError)issues.push({severity:'error',message:timeError,step:1})
  return {data,issues,retained,lessons}}
 async function storeDraft(year:string,term:number,data:Preparation,rows:ScheduleSlot[],offerings:{id:string;classroom_id:string;evaluation_setting_id:string}[]=[],unlock:ScheduleSlot[]=[]){const s=await actor();const r=await createServerClient().from('schedule_drafts').insert({school_id:s.schoolId,academic_year_id:year,semester:term,actor_id:s.userId,base_hash:data.hash,before_rows:data.slots,after_rows:rows,offerings,unlock_cells:unlock}).select('id').single();fail(r.error);return r.data!.id as string}
@@ -83,3 +85,21 @@ export async function activityDraft(year:string,term:number,setting:string,rooms
 }
 export async function confirmDraft(id:string,unlock=false){const s=await actor();const r=await createServerClient().rpc('commit_schedule_draft',{p_id:id,p_school:s.schoolId,p_actor:s.userId,p_unlock:unlock});fail(r.error);return {committed:!!r.data}}
 export async function cancelDraft(id:string){const s=await actor();const r=await createServerClient().from('schedule_drafts').update({cancelled_at:new Date().toISOString()}).eq('id',id).eq('school_id',s.schoolId).eq('actor_id',s.userId).is('committed_at',null);fail(r.error);return {ok:true}}
+
+export async function previewActivityTeam(year:string,term:number,hash:string,group:ActivityTeam,remove=false){
+ const data=await preparation(year,term)
+ if(data.hash!==hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุด')
+ const old=data.plan.activityGroups?.find(g=>g.id===group.id)
+ if(remove&&!old)throw Error('ไม่พบทีมกิจกรรม')
+ if(!remove)validateActivityTeam(group,data.classrooms.map(c=>c.id),data.teachers.map(t=>t.id),data.activities.map(a=>a.id),data.plan.days,data.periods)
+ const target=remove?old!:group
+ const affected=data.slots.filter(s=>{const l=data.lessons.find(l=>l.id===lessonKey(s));return !!old&&old.roomIds.includes(s.classroom_id)&&l?.activity&&l.subjectId===old.settingId||!remove&&target.roomIds.includes(s.classroom_id)&&(target.cells.some(c=>c.day===s.day_of_week&&c.period===s.period)||l?.activity&&l.subjectId===target.settingId)})
+ return {affected:affected.length,locked:affected.filter(s=>s.locked).length,hash:data.hash}
+}
+export async function saveActivityTeam(year:string,term:number,hash:string,group:ActivityTeam,remove=false,unlock=false){
+ const impact=await previewActivityTeam(year,term,hash,group,remove)
+ if(impact.locked&&!unlock)throw Error('ต้องยืนยันแทนที่คาบล็อกโดยเฉพาะ')
+ const session=await actor(),r=await createServerClient().rpc('save_schedule_activity_team',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:hash,p_group:group,p_remove:remove,p_unlock:unlock})
+ if(r.error)throw Error(r.error.code==='PGRST202'?'ต้องติดตั้ง migration 065_schedule_activity_teams.sql ก่อนบันทึกทีมครูกิจกรรม':r.error.message)
+ return preparation(year,term)
+}

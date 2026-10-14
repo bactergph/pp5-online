@@ -1,4 +1,5 @@
 import 'server-only'
+const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import { getSession } from '@/lib/session'
 import { createServerClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/audit'
@@ -77,7 +78,9 @@ export async function teacherAvailability(year: string, semester = 1) {
   const ctx = await context(year,semester)
   const {data,error} = await createServerClient().from('users').select('id,prefix,full_name').eq('school_id',ctx.session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name')
   if (error) throw new Error(error.message)
-  return {quotas:ctx.data.lessons.filter(l=>l.teacherId).map(l=>({id:l.id,teacherId:l.teacherId,label:l.label,activity:l.activity,target:l.activity?Math.max(1,ctx.data.slots.filter(s=>lessonKey(s)===l.id).length):l.count,used:ctx.data.slots.filter(s=>s.classroom_id===l.classroomId&&lessonKey(s)===l.id).length})),teachers:(data||[]).map(t=>({id:t.id,name:`${t.prefix||''} ${t.full_name}`.trim()})),blocks:ctx.constraints.blocks,supported:ctx.constraints.blocksSupported,lessons:ctx.data.lessons.filter(l=>!l.activity&&l.selectable!==false).map(l=>({id:l.id,teacherId:l.teacherId,classroomId:l.classroomId,label:l.label})),slots:ctx.data.slots.map(s=>({classroomId:s.classroom_id,day:s.day_of_week,period:s.period,lessonId:lessonKey(s),locked:s.locked})),busy:ctx.data.slots.flatMap(s=>{const l=ctx.data.lessons.find(l=>l.id===lessonKey(s));return l?.teacherId?[{teacherId:l.teacherId,day:s.day_of_week,period:s.period,label:[l.label,l.roomName].filter(Boolean).join(' · '),classroomId:s.classroom_id,lessonId:l.id,locked:s.locked}]:[]})}
+  const quotaMap=new Map<string,{id:string;teacherId:string;label:string;activity:boolean;target:number;used:number}>()
+  for(const l of ctx.data.lessons)for(const teacherId of lessonTeachers(l)){const id=l.activityGroupId||l.id,key=id+':'+teacherId,used=ctx.data.slots.filter(s=>lessonKey(s)===l.id).length,target=l.activity?Math.max(l.count,used,1):l.count,existing=quotaMap.get(key);if(existing){existing.target=Math.max(existing.target,target);existing.used=Math.max(existing.used,used);existing.label+=' / '+l.label}else quotaMap.set(key,{id,teacherId,label:l.label,activity:l.activity,target,used})}
+  return {quotas:[...quotaMap.values()],teachers:(data||[]).map(t=>({id:t.id,name:`${t.prefix||''} ${t.full_name}`.trim()})),blocks:ctx.constraints.blocks,supported:ctx.constraints.blocksSupported,lessons:ctx.data.lessons.filter(l=>!l.activity&&l.selectable!==false).map(l=>({id:l.id,teacherId:l.teacherId,classroomId:l.classroomId,label:l.label})),slots:ctx.data.slots.map(s=>({classroomId:s.classroom_id,day:s.day_of_week,period:s.period,lessonId:lessonKey(s),locked:s.locked})),busy:ctx.data.slots.flatMap(s=>{const l=ctx.data.lessons.find(l=>l.id===lessonKey(s));return l?lessonTeachers(l).map(teacherId=>({teacherId,day:s.day_of_week,period:s.period,label:[l.label,l.roomName].filter(Boolean).join(' · '),classroomId:s.classroom_id,lessonId:l.id,locked:s.locked})):[]})}
 }
 export async function editTeacherCell(year: string, semester: number, teacherId: string, roomId: string, day: number, period: number, expectedLesson: string|null, lessonId: string|null) {
   cell(day,period)

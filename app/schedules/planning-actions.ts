@@ -14,3 +14,7 @@ export async function createScheduleDraft(year:string,term:number,rooms:string[]
 export async function createActivityDraft(year:string,term:number,setting:string,rooms:string[],cells:{day:number;period:number}[],remove:boolean){return scheduleResult(()=>planning.activityDraft(year,term,setting,rooms,cells,remove))}
 export async function confirmScheduleDraft(id:string,unlock=false){return scheduleResult(()=>planning.confirmDraft(id,unlock))}
 export async function discardScheduleDraft(id:string){return scheduleResult(()=>planning.cancelDraft(id))}
+
+import type { ActivityTeam } from '@/lib/schedule-activity-teams'
+export async function previewScheduleActivityTeam(year:string,term:number,hash:string,group:ActivityTeam,remove=false){return scheduleResult(()=>planning.previewActivityTeam(year,term,hash,group,remove))}
+export async function saveScheduleActivityTeam(year:string,term:number,hash:string,group:ActivityTeam,remove=false,unlock=false){return scheduleResult(()=>planning.saveActivityTeam(year,term,hash,group,remove,unlock))}

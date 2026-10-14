@@ -24,3 +24,10 @@ const storedTimes=helpers.DEFAULT_PERIOD_TIMES.map(t=>({...t,start_time:t.start_
 const editorTimes=helpers.normalizePeriodTimes(storedTimes);assert.equal(helpers.validatePeriodTimes(editorTimes),null);assert.equal(storedTimes[0].start_time,'08:30:00');assert.equal(editorTimes[0].start_time,'08:30');
 assert.equal(helpers.validatePeriodTimes(helpers.moveLunchBreak(editorTimes,4)),null);
 console.log('PASS: April/October term boundaries in Bangkok, January term 2, database time seconds normalized without mutating data, lunch editor validation');
+
+const joint=[lesson('act1',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true,teacherIds:['T1','T2'],activityGroupId:'joint'}),lesson('act2',null,'B',1,{activity:true,teacherOptional:true,fixedOnly:true,teacherIds:['T1','T2'],activityGroupId:'joint'})];
+const jointSlots=[slot('act1','A',1,1),slot('act2','B',1,1)];
+result=solve([...joint,lesson('math','T2','A',1)],jointSlots,plan,times,[]);assert.equal(result.status,'complete');assert.ok(result.assignments.every(s=>s.day!==1||s.period!==1));
+assert.ok(checkPlanning(joint.map(l=>({...l,activityGroupId:undefined})),jointSlots,plan.days,times,[]).some(i=>i.message.includes('ครูชน')));
+assert.ok(checkPlanning(joint,jointSlots,plan.days,times,[{teacherId:'T2',day:1,period:1}]).some(i=>i.message.includes('ไม่ว่าง')));
+console.log('PASS: joint multi-teacher activity occupies every teacher once; subject solver preserves joint fixed cells; separate-room and blocked-teacher conflicts');
