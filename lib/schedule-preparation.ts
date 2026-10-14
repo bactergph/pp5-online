@@ -100,6 +100,6 @@ export async function saveActivityTeam(year:string,term:number,hash:string,group
  const impact=await previewActivityTeam(year,term,hash,group,remove)
  if(impact.locked&&!unlock)throw Error('ต้องยืนยันแทนที่คาบล็อกโดยเฉพาะ')
  const session=await actor(),r=await createServerClient().rpc('save_schedule_activity_team',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:hash,p_group:group,p_remove:remove,p_unlock:unlock})
- if(r.error)throw Error(r.error.code==='PGRST202'?'ต้องติดตั้ง migration 065_schedule_activity_teams.sql ก่อนบันทึกทีมครูกิจกรรม':r.error.message)
+ if(r.error){console.error('[activity-team]',r.error);const message=r.error.message;throw Error(r.error.code==='PGRST202'?'ต้องติดตั้ง migration 065_schedule_activity_teams.sql ก่อนบันทึกทีมครูกิจกรรม':/^[\u0E00-\u0E7F]/.test(message)?message:`ระบบบันทึกกิจกรรมพบข้อผิดพลาด (${r.error.code||'ไม่ทราบรหัส'}) กรุณาแจ้งผู้ดูแลระบบ`)}
  return preparation(year,term)
 }

@@ -211,12 +211,17 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   assert.equal(importPlan.rooms.filter(r=>r.name==='ห้องคอม').length,1);
   assert.equal((await db.query("select has_function_privilege('authenticated','save_schedule_input_subjects(uuid,uuid,integer,text,jsonb)','execute') allowed")).rows[0].allowed,false);
   console.log('PASS: 064 repeatable; atomic import rollback, stale protection, duplicate rejection, reuse subject and venue, curriculum preservation, school isolation');
-  await db.exec("alter table classrooms add column if not exists level text default 'ป.5'");
+  await db.exec("alter table classrooms add column if not exists level text default 'ป.5'; alter table classrooms add column if not exists room integer default 1");
   const teamsMigration=fs.readFileSync('supabase/migrations/065_schedule_activity_teams.sql','utf8');await db.exec(teamsMigration);await db.exec(teamsMigration);
   // Use a clean term: a group owns the same teachers across multiple rooms.
   const team={id:id(800),settingId:id(60),mode:'joint',roomIds:[id(20),id(23)],teacherIds:[id(30),id(31)],roomTeachers:{},weeklyPeriods:1,cells:[{day:2,period:1}]};
   const teamHash=async()=>(await db.query('select schedule_snapshot($1,$2,1) h',[id(1),id(10)])).rows[0].h;
   const saveTeam=async(g,remove=false,unlock=false,h)=>db.query('select save_schedule_activity_team($1,$2,1,$3,$4::jsonb,$5,$6)',[id(1),id(10),h??await teamHash(),JSON.stringify(g),remove,unlock]);
+  const roomFix=fs.readFileSync('supabase/migrations/066_schedule_activity_room_variable.sql','utf8');
+  // The production schema has classrooms.room: reproduce the old function failure.
+  await db.exec(roomFix.replace(/v_room_id/g,'room'));
+  await assert.rejects(saveTeam(team),/room.*ambiguous/);
+  await db.exec(roomFix);await db.exec(roomFix);
   await saveTeam(team);
   assert.equal((await db.query("select count(*)::int n from class_schedule_slots where semester=1 and day_of_week=2 and period=1")).rows[0].n,2);
   const teamRows=(await db.query("select coalesce(jsonb_agg(to_jsonb(s)),'[]') rows from class_schedule_slots s join classrooms c on c.id=s.classroom_id where c.school_id=$1 and s.academic_year_id=$2 and s.semester=1",[id(1),id(10)])).rows[0].rows;
@@ -231,7 +236,7 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   await assert.rejects(db.query('insert into schedule_substitute_entries(substitute_day_id,substitute_teacher_id,period,absent_teacher_id,classroom_id) values($1,$2,1,$3,$4)',[id(900),id(31),id(30),id(20)]),/กิจกรรม|รายวิชา/);
   await saveTeam(team,true);
   assert.equal((await db.query('select count(*)::int n from class_schedule_slots where semester=1 and day_of_week=2 and period=1')).rows[0].n,0);
-  console.log('PASS: 065 repeatable, joint team counted once, separate-room collision rollback, foreign teacher/room rejection, lunch rejection, stale guard, teacher block rejection, group removal');
+  console.log('PASS: production room-column ambiguity reproduced, 066 repeatable fix; 065 repeatable, joint team counted once, separate-room collision rollback, foreign teacher/room rejection, lunch rejection, stale guard, teacher block rejection, group removal');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

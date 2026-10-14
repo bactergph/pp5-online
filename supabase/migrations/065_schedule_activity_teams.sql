@@ -14,7 +14,7 @@ returns table(teacher_id uuid,day_of_week int,period int,event_id text) language
 $$;
 create or replace function public.validate_activity_teams(p_school uuid,p_year uuid,p_term int,p_rows jsonb) returns void
 language plpgsql security definer set search_path=public as $$
-declare cfg jsonb; g jsonb; room text; team jsonb; c jsonb;
+declare cfg jsonb; g jsonb; v_room_id text; team jsonb; c jsonb;
 begin
  select config into cfg from schedule_plans where school_id=p_school and academic_year_id=p_year and semester=p_term;
  if cfg is null or cfg->'activityGroups' is null then return; end if;
@@ -26,16 +26,16 @@ begin
  or jsonb_typeof(g->'roomIds') is distinct from 'array' or jsonb_array_length(g->'roomIds')<1
  or (g->>'weeklyPeriods')::int not between 1 and 8 or jsonb_array_length(g->'cells') is distinct from (g->>'weeklyPeriods')::int then raise exception 'ข้อมูลกิจกรรมหรือจำนวนคาบไม่ถูกต้อง'; end if;
  if exists(select 1 from jsonb_array_elements(g->'cells') x group by x->>'day',x->>'period' having count(*)>1) then raise exception 'คาบกิจกรรมซ้ำ'; end if;
- for room in select value from jsonb_array_elements_text(g->'roomIds') loop
- if not exists(select 1 from classrooms where id=room::uuid and school_id=p_school and academic_year_id=p_year and level !~ '^(อ\.?\s*[1-3]$|อนุบาล)') then raise exception 'ห้องกิจกรรมไม่อยู่ในโรงเรียนนี้'; end if;
- team=case when g->>'mode'='joint' then g->'teacherIds' else g->'roomTeachers'->room end;
+ for v_room_id in select value from jsonb_array_elements_text(g->'roomIds') loop
+ if not exists(select 1 from classrooms where id=v_room_id::uuid and school_id=p_school and academic_year_id=p_year and level !~ '^(อ\.?\s*[1-3]$|อนุบาล)') then raise exception 'ห้องกิจกรรมไม่อยู่ในโรงเรียนนี้'; end if;
+ team=case when g->>'mode'='joint' then g->'teacherIds' else g->'roomTeachers'->v_room_id end;
  if jsonb_typeof(team) is distinct from 'array' or jsonb_array_length(team)<1 or exists(select 1 from jsonb_array_elements_text(team) t where not exists(select 1 from users where id=t::uuid and school_id=p_school and (is_active or email like 'pending-%') and role in('teacher','academic_head','deputy_principal','principal','admin'))) then raise exception 'ครูผู้รับผิดชอบไม่ถูกต้อง'; end if;
  if exists(select 1 from jsonb_array_elements_text(team) t group by t having count(*)>1) then raise exception 'ครูกิจกรรมซ้ำ'; end if;
  for c in select value from jsonb_array_elements(g->'cells') loop
  if not cfg->'days' @> to_jsonb((c->>'day')::int) or not exists(select 1 from school_period_times where school_id=p_school and period=(c->>'period')::int and not is_break) then raise exception 'กิจกรรมอยู่นอกวันเรียนหรือใช้คาบพัก'; end if;
- if not exists(select 1 from jsonb_to_recordset(p_rows) s(classroom_id uuid,activity_id uuid,day_of_week int,period int) join class_schedule_activities a on a.id=s.activity_id where s.classroom_id=room::uuid and a.evaluation_setting_id=(g->>'settingId')::uuid and s.day_of_week=(c->>'day')::int and s.period=(c->>'period')::int) then raise exception 'กิจกรรมกำหนดตายตัว กรุณาแก้ในเมนูกิจกรรมและครูผู้รับผิดชอบ'; end if;
+ if not exists(select 1 from jsonb_to_recordset(p_rows) s(classroom_id uuid,activity_id uuid,day_of_week int,period int) join class_schedule_activities a on a.id=s.activity_id where s.classroom_id=v_room_id::uuid and a.evaluation_setting_id=(g->>'settingId')::uuid and s.day_of_week=(c->>'day')::int and s.period=(c->>'period')::int) then raise exception 'กิจกรรมกำหนดตายตัว กรุณาแก้ในเมนูกิจกรรมและครูผู้รับผิดชอบ'; end if;
  end loop;
- if (select count(*) from jsonb_to_recordset(p_rows) s(classroom_id uuid,activity_id uuid) join class_schedule_activities a on a.id=s.activity_id where s.classroom_id=room::uuid and a.evaluation_setting_id=(g->>'settingId')::uuid)<>(g->>'weeklyPeriods')::int then raise exception 'จำนวนคาบกิจกรรมไม่ตรงกับทีมครู'; end if;
+ if (select count(*) from jsonb_to_recordset(p_rows) s(classroom_id uuid,activity_id uuid) join class_schedule_activities a on a.id=s.activity_id where s.classroom_id=v_room_id::uuid and a.evaluation_setting_id=(g->>'settingId')::uuid)<>(g->>'weeklyPeriods')::int then raise exception 'จำนวนคาบกิจกรรมไม่ตรงกับทีมครู'; end if;
  end loop;
  end loop;
  if exists(select 1 from activity_team_teaching(p_school,p_year,p_term,p_rows) group by teacher_id,day_of_week,period having count(distinct event_id)>1) then raise exception 'ครูผู้รับผิดชอบกิจกรรมมีคาบสอนชนกัน'; end if;
@@ -52,7 +52,7 @@ begin
  perform save_school_schedule_term_before_065(p_school_id,p_year_id,p_expected,p_rows,p_allow_unlock,p_semester);
 end $$;
 create or replace function public.save_schedule_activity_team(p_school uuid,p_year uuid,p_term int,p_hash text,p_group jsonb,p_remove boolean default false,p_unlock boolean default false) returns void language plpgsql security definer set search_path=public as $$
-declare cfg jsonb; old_group jsonb; before_rows jsonb; rows jsonb; room text; c jsonb; aid uuid; gid uuid; affected jsonb; unlocked jsonb;
+declare cfg jsonb; old_group jsonb; before_rows jsonb; rows jsonb; v_room_id text; c jsonb; aid uuid; gid uuid; affected jsonb; unlocked jsonb;
 begin
  perform pg_advisory_xact_lock(hashtextextended(p_school::text||':periods',0));perform pg_advisory_xact_lock(hashtextextended(p_school::text||p_year::text,0));
  lock table classrooms,class_subjects,subjects,users,evaluation_settings,class_schedule_activities in share row exclusive mode;
@@ -70,15 +70,15 @@ begin
  select coalesce(jsonb_agg(x),'[]') into rows from jsonb_array_elements(rows) x where not exists(select 1 from class_schedule_activities a where a.id=nullif(x->>'activity_id','')::uuid and a.evaluation_setting_id=(old_group->>'settingId')::uuid and old_group->'roomIds' @> to_jsonb(x->>'classroom_id'));
  end if;
  if not p_remove then
- for room in select value from jsonb_array_elements_text(p_group->'roomIds') loop
- if not exists(select 1 from classrooms where id=room::uuid and school_id=p_school and academic_year_id=p_year) then raise exception 'ห้องไม่อยู่ในโรงเรียนนี้'; end if;
- select id into aid from class_schedule_activities where classroom_id=room::uuid and academic_year_id=p_year and evaluation_setting_id=(p_group->>'settingId')::uuid;
- if aid is null then insert into class_schedule_activities(classroom_id,academic_year_id,evaluation_setting_id,teacher_id,weekly_periods) values(room::uuid,p_year,(p_group->>'settingId')::uuid,null,1) returning id into aid;
+ for v_room_id in select value from jsonb_array_elements_text(p_group->'roomIds') loop
+ if not exists(select 1 from classrooms where id=v_room_id::uuid and school_id=p_school and academic_year_id=p_year) then raise exception 'ห้องไม่อยู่ในโรงเรียนนี้'; end if;
+ select id into aid from class_schedule_activities where classroom_id=v_room_id::uuid and academic_year_id=p_year and evaluation_setting_id=(p_group->>'settingId')::uuid;
+ if aid is null then insert into class_schedule_activities(classroom_id,academic_year_id,evaluation_setting_id,teacher_id,weekly_periods) values(v_room_id::uuid,p_year,(p_group->>'settingId')::uuid,null,1) returning id into aid;
  elsif exists(select 1 from class_schedule_activities where id=aid and teacher_id is not null) then raise exception 'กิจกรรมเดิมมีครูรายคน กรุณานำคาบออกก่อนย้ายมาใช้ทีมครู'; end if;
- select coalesce(jsonb_agg(x),'[]') into rows from jsonb_array_elements(rows) x where not(x->>'classroom_id'=room and x->>'activity_id'=aid::text);
+ select coalesce(jsonb_agg(x),'[]') into rows from jsonb_array_elements(rows) x where not(x->>'classroom_id'=v_room_id and x->>'activity_id'=aid::text);
  for c in select value from jsonb_array_elements(p_group->'cells') loop
- select coalesce(jsonb_agg(x),'[]') into rows from jsonb_array_elements(rows) x where not(x->>'classroom_id'=room and x->>'day_of_week'=c->>'day' and x->>'period'=c->>'period');
- rows=rows||jsonb_build_array(jsonb_build_object('classroom_id',room,'academic_year_id',p_year,'day_of_week',(c->>'day')::int,'period',(c->>'period')::int,'class_subject_id',null,'activity_id',aid,'note',null,'locked',false));
+ select coalesce(jsonb_agg(x),'[]') into rows from jsonb_array_elements(rows) x where not(x->>'classroom_id'=v_room_id and x->>'day_of_week'=c->>'day' and x->>'period'=c->>'period');
+ rows=rows||jsonb_build_array(jsonb_build_object('classroom_id',v_room_id,'academic_year_id',p_year,'day_of_week',(c->>'day')::int,'period',(c->>'period')::int,'class_subject_id',null,'activity_id',aid,'note',null,'locked',false));
  end loop;
  end loop;
  end if;
