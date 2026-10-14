@@ -18,6 +18,8 @@ const BREAK_TEXT: [number, number, number] = [0, 0, 0]
 const TEXT: [number, number, number] = [0, 0, 0]
 const MUTED: [number, number, number] = [0, 0, 0]
 
+export type SchedulePdfCell = { line1: string; line2: string; line3?: string; line4?: string }
+export type SchedulePdfPage = { title: string; gridData: Record<string, SchedulePdfCell> }
 export type SchedulePdfInput = {
   academicHeadName?: string
   directorName?: string
@@ -27,8 +29,9 @@ export type SchedulePdfInput = {
   title: string
   days?: number[]
   periodTimes: PeriodTimeRow[]
-  gridData: Record<string, { line1: string; line2: string }>
+  gridData: Record<string, SchedulePdfCell>
   fileName?: string
+  pages?: SchedulePdfPage[]
 }
 
 function fitText(doc: jsPDF, text: string, maxW: number) {
@@ -68,6 +71,8 @@ function drawCell(
     line1Bold?: boolean
     line1Size?: number
     line2Size?: number
+    line3?: string
+    line4?: string
   },
 ) {
   if (opts?.fill) {
@@ -78,22 +83,19 @@ function drawCell(
   doc.setLineWidth(0.3)
   doc.rect(x, y, w, h, 'S')
 
+  const lines = [line1, line2, opts?.line3, opts?.line4].filter((line): line is string => !!line)
+  if (!lines.length) return
   const maxW = w - 2
-  const hasLine2 = !!line2
-  const line1Size = opts?.line1Size ?? 12
-
-  doc.setFont('THSarabunNew', opts?.line1Bold === false ? 'normal' : 'bold')
-  doc.setFontSize(line1Size)
-  doc.setTextColor(...TEXT)
-  const l1Y = hasLine2 ? y + h / 2 - 1.4 : y + h / 2
-  doc.text(fitText(doc, line1, maxW), x + w / 2, l1Y, { align: 'center', baseline: 'middle' })
-
-  if (hasLine2) {
-    doc.setFont('THSarabunNew', 'normal')
-    doc.setFontSize(opts?.line2Size ?? 10)
-    doc.setTextColor(...(opts?.line2Color ?? MUTED))
-    doc.text(fitText(doc, line2, maxW), x + w / 2, y + h / 2 + 3.2, { align: 'center', baseline: 'middle' })
-  }
+  const sizes = lines.length > 2 ? [10, 8, 8, 7] : [opts?.line1Size ?? 12, opts?.line2Size ?? 10]
+  const step = lines.length > 2 ? 3.6 : 4.6
+  let baseline = y + h / 2 - ((lines.length - 1) * step) / 2
+  lines.forEach((text, index) => {
+    doc.setFont('THSarabunNew', index === 0 && opts?.line1Bold !== false ? 'bold' : 'normal')
+    doc.setFontSize(sizes[index] || 8)
+    doc.setTextColor(...(index === 0 ? TEXT : opts?.line2Color ?? MUTED))
+    doc.text(fitText(doc, text, maxW), x + w / 2, baseline, { align: 'center', baseline: 'middle' })
+    baseline += step
+  })
   doc.setTextColor(...TEXT)
 }
 
@@ -106,7 +108,9 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   await applyThaiFonts(doc)
 
   const logo = await loadImageDataUrl(input.schoolLogoUrl, 200, 0.8)
-
+  const pages = input.pages?.length ? input.pages : [{ title: input.title, gridData: input.gridData }]
+  for (const [index, sheet] of pages.entries()) {
+  if (index) doc.addPage()
   let y = 14
   if (logo) {
     try {
@@ -128,7 +132,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   doc.setFont('THSarabunNew', 'normal')
   doc.setFontSize(15)
   doc.setTextColor(...TEXT)
-  doc.text(input.title || '', textX, y + 14, { align: 'center' })
+  doc.text(sheet.title || '', textX, y + 14, { align: 'center' })
   doc.setTextColor(...TEXT)
 
   y += LOGO_SIZE + 4
@@ -138,8 +142,9 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   y += 6
 
   const { dayW, breakW, periodW } = columnWidths(PERIODS.length)
+  const detailed = Object.values(sheet.gridData).some(cell => cell.line3 || cell.line4)
   const headerH = 12
-  const rowH = 16
+  const rowH = detailed ? 20 : 16
 
   let x = MARGIN_X
   drawCell(doc, x, y, dayW, headerH, 'วัน', '', { fill: HEADER_BG, line1Size: 12 })
@@ -165,15 +170,15 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
     drawCell(doc, x, y, dayW, rowH, day.label, '', { fill: DAY_BG, line1Size: 11 })
     x += dayW
     for (const p of PERIODS.slice(0, MORNING)) {
-      const cell = input.gridData[`${day.value}-${p}`]
-      drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '')
+      const cell = sheet.gridData[`${day.value}-${p}`]
+      drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '', { line3: cell?.line3, line4: cell?.line4 })
       x += periodW
     }
     drawCell(doc, x, y, breakW, rowH, 'พัก', '', { fill: BREAK_BG, line2Color: BREAK_TEXT, line1Size: 9 })
     x += breakW
     for (const p of PERIODS.slice(MORNING)) {
-      const cell = input.gridData[`${day.value}-${p}`]
-      drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '')
+      const cell = sheet.gridData[`${day.value}-${p}`]
+      drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '', { line3: cell?.line3, line4: cell?.line4 })
       x += periodW
     }
     y += rowH
@@ -191,6 +196,61 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
     doc.text(signer.role, signer.x, y + 14, { align: 'center' })
     doc.text('วันที่ ........../........../..........', signer.x, y + 21, { align: 'center' })
   }
+  }
   const fileName = (input.fileName || scheduleFileName(input.title)).replace(/[\\/:*?"<>|]/g, '-')
   return { blob: doc.output('blob'), fileName }
+}
+
+export async function buildWorkloadPdfBlob(input: {
+  schoolName: string
+  schoolLogoUrl?: string | null
+  title: string
+  fileName: string
+  academicHeadName?: string
+  directorName?: string
+  directorPosition?: string
+  rows: { name: string; position: string | null; hours: number; status_label: string }[]
+}) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
+  await applyThaiFonts(doc)
+  const logo = await loadImageDataUrl(input.schoolLogoUrl, 200, 0.8)
+  const pageW = 210
+  const margin = 14
+  const drawHeader = () => {
+    let y = 14
+    if (logo) { try { doc.addImage(logo, 'JPEG', (pageW - 16) / 2, y, 16, 16) } catch { /* ignore */ } }
+    y += 20
+    doc.setFont('THSarabunNew', 'bold'); doc.setFontSize(18); doc.text(scheduleSchoolName(input.schoolName), pageW / 2, y, { align: 'center' })
+    doc.setFont('THSarabunNew', 'normal'); doc.setFontSize(16); doc.text(input.title, pageW / 2, y + 8, { align: 'center' })
+    return y + 16
+  }
+  let y = drawHeader()
+  const widths = [14, 68, 46, 28, 26]
+  const headers = ['ที่', 'ครูผู้สอน', 'ตำแหน่ง', 'คาบ/สัปดาห์', 'สถานะ']
+  const drawHead = () => {
+    let x = margin
+    headers.forEach((label, i) => { drawCell(doc, x, y, widths[i], 10, label, '', { fill: HEADER_BG, line1Size: 14 }); x += widths[i] })
+    y += 10
+  }
+  drawHead()
+  input.rows.forEach((row, index) => {
+    if (y > 250) { doc.addPage(); y = drawHeader(); drawHead() }
+    const values = [String(index + 1), row.name, row.position || '—', String(row.hours), row.status_label]
+    let x = margin
+    values.forEach((value, i) => { drawCell(doc, x, y, widths[i], 9, value, '', { line1Size: 13, line1Bold: i === 0 || i === 3 }); x += widths[i] })
+    y += 9
+  })
+  if (y > 240) { doc.addPage(); y = 24 }
+  y += 16
+  for (const signer of [
+    { x: 58, name: input.academicHeadName, role: 'หัวหน้าวิชาการ' },
+    { x: 152, name: input.directorName, role: input.directorPosition || 'ผู้อำนวยการสถานศึกษา' },
+  ]) {
+    doc.setFont('THSarabunNew', 'normal'); doc.setFontSize(14)
+    doc.text('ลงชื่อ ........................................', signer.x, y, { align: 'center' })
+    doc.text('(' + (signer.name || '........................................') + ')', signer.x, y + 7, { align: 'center' })
+    doc.text(signer.role, signer.x, y + 14, { align: 'center' })
+    doc.text('วันที่ ........../........../..........', signer.x, y + 21, { align: 'center' })
+  }
+  return { blob: doc.output('blob'), fileName: input.fileName.replace(/[\\/:*?"<>|]/g, '-') }
 }

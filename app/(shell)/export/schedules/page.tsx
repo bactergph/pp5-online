@@ -11,7 +11,7 @@ import {
   fetchScheduleExportContext,
 } from '@/app/schedules/actions'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
-import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
@@ -66,7 +66,9 @@ const STYLES = `
   .sched-print-table td.day-col { background: #fff; color: #000; font-weight: 700; }
   .sched-print-table td.break-col { background: #E5E5E5; color: #000; font-size: 12px; }
   .sched-print-cell { min-height: 32px; font-weight: 700; line-height: 1.3; }
-  .sched-print-cell .sub { font-size: 11px; color: #000; font-weight: 400; }
+  .sched-export-picks { display:flex; flex-wrap:wrap; gap:8px; grid-column:1 / -1; max-height:180px; overflow:auto; }
+  .sched-export-picks label { display:flex; align-items:center; gap:6px; min-height:40px; padding:4px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; font-size:13px; font-weight:700; }
+  .sched-print-cell .meta { font-size:10px; font-weight:500; }
   @media print {
     .sched-export-filters, .sched-export-actions, .sched-export-head { display: none !important; }
     .sched-export-preview { border: none; padding: 0; }
@@ -89,7 +91,9 @@ export default function ScheduleExportPage() {
   const [exportType, setExportType] = useState<ExportType>('class')
   const [classroomId, setClassroomId] = useState('')
   const [teacherId, setTeacherId] = useState('')
-  const [gridData, setGridData] = useState<Record<string, { line1: string; line2: string }>>({})
+  const [classIds, setClassIds] = useState<string[]>([])
+  const [teacherIds, setTeacherIds] = useState<string[]>([])
+  const [gridData, setGridData] = useState<Record<string, { line1: string; line2: string; line3?: string; line4?: string }>>({})
   const [semester, setSemester] = useState('1')
   const selectedClass = classrooms.find(c => c.id === classroomId)
   const classLabel = (selectedClass?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
@@ -139,11 +143,11 @@ export default function ScheduleExportPage() {
         if (type === 'class' || type === 'teaching') setExportType(type)
         if (params.get('year')) setYearId(params.get('year')!)
         else if (active) setYearId(active.id)
-        if (params.get('classroom')) setClassroomId(params.get('classroom')!)
-        if (params.get('teacher')) setTeacherId(params.get('teacher')!)
+        if (params.get('classroom')) { setClassroomId(params.get('classroom')!); setClassIds([params.get('classroom')!]) }
+        if (params.get('teacher')) { setTeacherId(params.get('teacher')!); setTeacherIds([params.get('teacher')!]) }
       } else {
         if (active) setYearId(active.id)
-        if (initData.defaultTeacherId) setTeacherId(initData.defaultTeacherId)
+        if (initData.defaultTeacherId) { setTeacherId(initData.defaultTeacherId); setTeacherIds([initData.defaultTeacherId]) }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'โหลดไม่สำเร็จ')
@@ -159,20 +163,19 @@ export default function ScheduleExportPage() {
       fetchClassScheduleSubjects(classroomId, Number(semester)),
     ])
     const subjMap = Object.fromEntries(
-      (subs as { id: string; label: string; teacher_name: string; room_name?: string }[]).map(s => [s.id, s]),
+      (subs as { id: string; label: string; subject_name?: string; subject_code?: string; teacher_name: string; room_name?: string }[]).map(s => [s.id, s]),
     )
 
-    const data: Record<string, { line1: string; line2: string }> = {}
+    const data: Record<string, { line1: string; line2: string; line3?: string; line4?: string }> = {}
     for (const [key, cell] of Object.entries(grid as Record<string, { class_subject_id: string | null; note: string | null }>)) {
-      if (!cell.class_subject_id) {
-        data[key] = { line1: cell.note || '—', line2: '' }
-        continue
-      }
-      const subj = subjMap[cell.class_subject_id]
-      data[key] = {
-        line1: subj?.label || '—',
-        line2: [subj?.teacher_name,subj?.room_name].filter(Boolean).join(' · '),
-      }
+      const subj = cell.class_subject_id ? subjMap[cell.class_subject_id] : undefined
+      const activity = !!cell.class_subject_id?.startsWith('activity:')
+      data[key] = subj ? {
+        line1: subj.subject_name || subj.label || (activity ? 'กิจกรรม' : '—'),
+        line2: subj.subject_code ? `(${subj.subject_code})` : activity ? '(กิจกรรม)' : '',
+        line3: teacherGivenName(subj.teacher_name),
+        line4: subj.room_name || '',
+      } : { line1: cell.note || '—', line2: '' }
     }
     if (request !== gridRequest.current) return
     setError('')
@@ -209,6 +212,13 @@ export default function ScheduleExportPage() {
       if (cancelled) return
       setClassrooms(list as Classroom[])
       setClassroomId(current => list.some(c => c.id === current) ? current : list[0]?.id || '')
+      setClassIds(current => {
+        const kept = current.filter(id => list.some(c => c.id === id))
+        if (kept.length) return kept
+        const preset = new URLSearchParams(window.location.search).get('classroom')
+        const first = list.find(c => c.id === preset)?.id || list[0]?.id
+        return first ? [first] : []
+      })
     }).catch(() => { if (!cancelled) setError('โหลดห้องเรียนไม่สำเร็จ') })
     return () => { cancelled = true }
   }, [yearId])
@@ -240,26 +250,38 @@ export default function ScheduleExportPage() {
   }, [previewReady, loadedContext, currentContext])
 
   function exportPdf() {
-    if (loadedContext !== currentContext) return
+    const ids = exportType === 'class' ? classIds : teacherIds
+    if (!ids.length || !yearId) return
     setError('')
-    const label = exportType === 'class'
-      ? classrooms.find(c => c.id === classroomId)?.label || 'class'
-      : teachers.find(t => t.id === teacherId)?.full_name || 'teacher'
-    const fileName = `ตารางเรียน_${label}.pdf`.replace(/[\\/:*?"<>|]/g, '-')
-
-    // สร้างด้วย jsPDF บนเครื่องผู้ใช้ แล้วใส่คิวมุมขวาล่าง (ไม่ผ่าน Puppeteer)
+    const fileName = (exportType === 'class'
+      ? ids.length === 1 ? `ตารางเรียน_${classrooms.find(c => c.id === ids[0])?.label || 'ห้อง'}` : `ตารางเรียน_${ids.length}_ห้อง`
+      : ids.length === 1 ? `ตารางสอน_${teachers.find(t => t.id === ids[0])?.full_name || 'ครู'}` : `ตารางสอน_${ids.length}_คน`).replace(/[\\/:*?"<>|]/g, '-') + '.pdf'
     enqueueFileExport({
       fileName,
-      label: `ตารางเรียน · ${label}`,
-      run: () => buildSchedulePdfBlob({
-        days:scheduleDays, academicHeadName, directorName, directorPosition,
-        schoolName,
-        schoolLogoUrl,
-        title,
-        periodTimes,
-        gridData,
-        fileName,
-      }),
+      label: exportType === 'class' ? `ตารางเรียน · ${ids.length} ห้อง` : `ตารางสอน · ${ids.length} คน`,
+      run: async () => {
+        const pages = []
+        for (const id of ids) {
+          if (exportType === 'class') {
+            const [grid, subs] = await Promise.all([fetchClassScheduleGrid(id, yearId, Number(semester)), fetchClassScheduleSubjects(id, Number(semester))])
+            const map = Object.fromEntries((subs as { id: string; label: string; subject_name?: string; subject_code?: string; teacher_name: string; room_name?: string }[]).map(s => [s.id, s]))
+            const gridData = Object.fromEntries(Object.entries(grid).map(([key, cell]) => {
+              const subject = cell.class_subject_id ? map[cell.class_subject_id] : undefined
+              const activity = !!cell.class_subject_id?.startsWith('activity:')
+              return [key, subject ? { line1: subject.subject_name || subject.label || '—', line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: teacherGivenName(subject.teacher_name), line4: subject.room_name || '' } : { line1: cell.note || '—', line2: '' }]
+            }))
+            const room = classrooms.find(c => c.id === id)
+            const label = (room?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
+            pages.push({ title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData })
+          } else {
+            const grid = await fetchTeachingScheduleGrid(id, yearId, Number(semester))
+            const gridData = Object.fromEntries(Object.entries(grid).map(([key, cell]) => [key, { line1: cell.room_line || '—', line2: cell.subject_line || '' }]))
+            const teacher = teachers.find(t => t.id === id)
+            pages.push({ title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix} ${teacher.full_name}` : ''}`, gridData })
+          }
+        }
+        return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, directorName, directorPosition, fileName })
+      },
     })
   }
 
@@ -302,28 +324,33 @@ export default function ScheduleExportPage() {
           </div>
           {exportType === 'class' ? (
             <div className="sched-export-field">
-              <label>ห้องเรียน</label>
+              <label>ดูตัวอย่างห้อง</label>
               <select value={classroomId} onChange={e => setClassroomId(e.target.value)}>
-                {classrooms.map(c => (
+                {classrooms.filter(c => classIds.includes(c.id)).map(c => (
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
               </select>
             </div>
           ) : (
             <div className="sched-export-field">
-              <label>ครูผู้สอน</label>
+              <label>ดูตัวอย่างครู</label>
               <select value={teacherId} onChange={e => setTeacherId(e.target.value)}>
-                {teachers.map(t => (
+                {teachers.filter(t => teacherIds.includes(t.id)).map(t => (
                   <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>
                 ))}
               </select>
             </div>
           )}
+          <div className="sched-export-picks">
+            <button type="button" className="sched-export-btn" onClick={() => exportType === 'class' ? setClassIds(classrooms.map(c => c.id)) : setTeacherIds(teachers.map(t => t.id))}>เลือกทั้งหมด</button>
+            <button type="button" className="sched-export-btn" onClick={() => exportType === 'class' ? setClassIds(classroomId ? [classroomId] : []) : setTeacherIds(teacherId ? [teacherId] : [])}>เหลือรายการที่ดูอยู่</button>
+            {exportType === 'class' ? classrooms.map(c => <label key={c.id}><input type="checkbox" checked={classIds.includes(c.id)} onChange={() => { const next = classIds.includes(c.id) ? classIds.filter(id => id !== c.id) : [...classIds, c.id]; setClassIds(next); if (!next.includes(classroomId)) setClassroomId(next[0] || '') }} />{c.label}</label>) : teachers.map(t => <label key={t.id}><input type="checkbox" checked={teacherIds.includes(t.id)} onChange={() => { const next = teacherIds.includes(t.id) ? teacherIds.filter(id => id !== t.id) : [...teacherIds, t.id]; setTeacherIds(next); if (!next.includes(teacherId)) setTeacherId(next[0] || '') }} />{t.prefix} {t.full_name}</label>)}
+          </div>
         </div>
 
         <div className="sched-export-actions">
-          <button type="button" className="sched-export-btn" disabled={loading || !previewReady || loadedContext !== currentContext || !!error} onClick={exportPdf}>
-            บันทึก PDF
+          <button type="button" className="sched-export-btn" disabled={loading || !previewReady || loadedContext !== currentContext || !!error || (exportType === 'class' ? !classIds.length : !teacherIds.length)} onClick={exportPdf}>
+            บันทึก PDF {exportType === 'class' ? `${classIds.length} ห้อง` : `${teacherIds.length} คน`}
           </button>
         </div>
 
@@ -383,6 +410,8 @@ export default function ScheduleExportPage() {
                         <div className="sched-print-cell">
                           {cell?.line1 || '—'}
                           {cell?.line2 ? <div className="sub">{cell.line2}</div> : null}
+                          {cell?.line3 ? <div className="meta">{cell.line3}</div> : null}
+                          {cell?.line4 ? <div className="meta">{cell.line4}</div> : null}
                         </div>
                       </td>
                     )
@@ -395,6 +424,8 @@ export default function ScheduleExportPage() {
                         <div className="sched-print-cell">
                           {cell?.line1 || '—'}
                           {cell?.line2 ? <div className="sub">{cell.line2}</div> : null}
+                          {cell?.line3 ? <div className="meta">{cell.line3}</div> : null}
+                          {cell?.line4 ? <div className="meta">{cell.line4}</div> : null}
                         </div>
                       </td>
                     )

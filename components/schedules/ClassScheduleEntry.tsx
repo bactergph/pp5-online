@@ -24,7 +24,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
-import { currentScheduleSemester, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { currentScheduleSemester, periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import ScheduleLessonPicker from './ScheduleLessonPicker'
 import ScheduleLessonPalette from './ScheduleLessonPalette'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -102,6 +102,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const cellBlocked = !!busyAction || gridLoading || loadedContext !== `${selectedYear}:${semester}:${selectedClass}`
   const [copyOpen, setCopyOpen] = useState(false)
   const [copyFromClass, setCopyFromClass] = useState('')
+  const [pdfOpen, setPdfOpen] = useState(false)
+  const [pdfRooms, setPdfRooms] = useState<string[]>([])
+  const [mobileDay, setMobileDay] = useState(1)
 
   const subjectMap = useMemo(
     () => Object.fromEntries(subjects.map(s => [s.id, s])),
@@ -109,20 +112,54 @@ export default function ClassScheduleEntry({ mode }: Props) {
   )
 
   const selectedClassroom = classrooms.find(c => c.id === selectedClass)
+  function classLines(id: string | null | undefined, note?: string | null) {
+    const subject = id ? subjectMap[id] : undefined
+    if (!subject) return null
+    const activity = id!.startsWith('activity:')
+    return {
+      activity,
+      name: subject.subject_name || (activity ? 'กิจกรรม' : 'รายวิชา'),
+      code: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '',
+      teacher: teacherGivenName(subject.teacher_name) || (activity ? 'ยังไม่กำหนดทีมครู' : 'ยังไม่กำหนดครู'),
+      room: subject.room_name || '',
+    }
+  }
+  function subjectBlock(id: string | null | undefined, note?: string | null) {
+    const lines = classLines(id, note)
+    if (!lines) return <span className="text-sm text-stone-400">{note || '+ เพิ่มวิชา'}</span>
+    return <span className="sched-lines"><b>{lines.name}</b>{lines.code && <span className="code">{lines.code}</span>}<span className="teacher">{lines.teacher}</span>{lines.room && <span className="room">{lines.room}</span>}</span>
+  }
+  function gridLines(subject: { subject_name: string; subject_code: string; teacher_name: string; room_name?: string } | undefined, note: string | null, activity: boolean) {
+    if (!subject) return { line1: note || '—', line2: '' }
+    return { line1: subject.subject_name || (activity ? 'กิจกรรม' : '—'), line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: teacherGivenName(subject.teacher_name), line4: subject.room_name || '' }
+  }
+  function classTitle(room: Classroom) {
+    const classLabel = room.label.replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
+    const year = years.find(y => y.id === selectedYear)?.year_be || ''
+    return `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${year} ${classLabel}`
+  }
+  function openClassPdf() {
+    if (blocked || !selectedClass) return
+    setPdfRooms([selectedClass])
+    setPdfOpen(true)
+  }
   function downloadClassPdf() {
-    if (blocked || !selectedClassroom) return
-    const classLabel = selectedClassroom.label.replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
-    const year = years.find(y=>y.id===selectedYear)?.year_be || ''
-    const title = `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${year} ${classLabel}`
-    const fileName = `${title}.pdf`.replace(/[\\/:*?"<>|]/g,'-')
-    const gridData = Object.fromEntries(Object.entries(cells).map(([key,cell])=>{
-      const subject = cell.class_subject_id ? subjectMap[cell.class_subject_id] : null
-      return [key,{line1:subject?.label || cell.note || '—',line2:[subject?.teacher_name,subject?.room_name].filter(Boolean).join(' · ')}]
-    }))
+    const rooms = classrooms.filter(room => pdfRooms.includes(room.id))
+    if (!rooms.length) return
+    setPdfOpen(false)
+    const fileName = (rooms.length === 1 ? classTitle(rooms[0]) : `ตารางเรียน ${rooms.length} ห้อง`).replace(/[\\/:*?"<>|]/g, '-') + '.pdf'
     const times = [...periodTimes]
-    enqueueFileExport({fileName,label:`ตารางเรียน · ${selectedClassroom.label}`,run:async()=>{
+    const days = [...scheduleDays]
+    enqueueFileExport({ fileName, label: rooms.length === 1 ? `ตารางเรียน · ${rooms[0].label}` : `ตารางเรียน · ${rooms.length} ห้อง`, run: async () => {
       const ctx = await fetchScheduleExportContext()
-      return buildSchedulePdfBlob({days:scheduleDays,title,fileName,gridData,periodTimes:times,schoolName:scheduleSchoolName(ctx.school?.name),schoolLogoUrl:ctx.school?.logo_url,academicHeadName:ctx.school?.academic_head_name || '',directorName:directorDisplayName(ctx.school,''),directorPosition:ctx.school?.acting_director?'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา':ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา'})
+      const pages = []
+      for (const room of rooms) {
+        const bundle = await fetchClassScheduleBundle(room.id, selectedYear, semester)
+        const map = Object.fromEntries(bundle.subjects.map(subject => [subject.id, subject]))
+        const gridData = Object.fromEntries(Object.entries(bundle.grid).map(([key, cell]) => [key, gridLines(cell.class_subject_id ? map[cell.class_subject_id] : undefined, cell.note, !!cell.class_subject_id?.startsWith('activity:'))]))
+        pages.push({ title: classTitle(room), gridData })
+      }
+      return buildSchedulePdfBlob({ days, pages, title: pages[0].title, fileName, gridData: pages[0].gridData, periodTimes: times, schoolName: scheduleSchoolName(ctx.school?.name), schoolLogoUrl: ctx.school?.logo_url, academicHeadName: ctx.school?.academic_head_name || '', directorName: directorDisplayName(ctx.school, ''), directorPosition: ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา' })
     }})
   }
   const quotaOptions = subjects.map(s=>{
@@ -367,30 +404,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
 
   function renderCellView(cell: Cell | undefined) {
     if (!cell?.class_subject_id) return <span>{cell?.note || 'คาบว่าง'}</span>
-    const subj = subjectMap[cell.class_subject_id]
-    if (!subj) return <span>—</span>
-    const activity = cell.class_subject_id.startsWith('activity:')
-    return (
-      <>
-        <span className="text-xs font-normal text-stone-500">{activity ? 'กิจกรรมพัฒนาผู้เรียน' : subj.subject_code}</span>
-        <span className="line-clamp-2 text-[13px] font-semibold leading-5" title={subj.label}>{subj.subject_name || (activity ? 'กิจกรรม' : 'รายวิชา')}</span>
-        {subj.room_name&&<span className="cell-tchr">สถานที่: {subj.room_name}</span>}
-        <span className="cell-tchr" title={subj.teacher_name}>{subj.teacher_name || (activity ? 'ยังไม่กำหนดทีมครู' : 'ยังไม่กำหนดครูผู้สอน')}</span>
-      </>
-    )
-  }
-
-  function teacherLine(classSubjectId: string | null | undefined) {
-    if (!classSubjectId) return null
-    const subj = subjectMap[classSubjectId]
-    if (!subj || classSubjectId.startsWith('activity:')) return null
-    const missing = !subj.teacher_name
-    return (
-      <div className={`mt-2 truncate px-1 text-xs ${missing?'text-blue-700':'text-stone-500'}`}>
-        {subj.teacher_name || 'ยังไม่กำหนดครู — ไปที่จัดครูเข้าสอน'}
-        {subj.room_name&&<span className="block">สถานที่: {subj.room_name}</span>}
-      </div>
-    )
+    return subjectBlock(cell.class_subject_id, cell.note)
   }
 
   const manageHref = '/schedules/class/manage'
@@ -419,7 +433,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           </div>
           <div className="flex flex-wrap items-center gap-3">
           {isManage && canEdit ? <button type="button" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})} className="schedule-quick-button"><FiZap aria-hidden="true"/><span>จัดตาราง<small>เตรียมข้อมูลและสร้างฉบับร่าง</small></span></button> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-blue-900">จัดการตารางเรียน</Link>}
-          {workspace==='class' && selectedClass && <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked} onClick={downloadClassPdf}><FiDownload aria-hidden="true"/>ดาวน์โหลด PDF</button>}
+          {workspace==='class' && selectedClass && <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked} onClick={openClassPdf}><FiDownload aria-hidden="true"/>ดาวน์โหลด PDF</button>}
           </div>
         </div>
 
@@ -495,7 +509,17 @@ export default function ClassScheduleEntry({ mode }: Props) {
           {isManage&&canEdit&&<ScheduleLessonPalette lessons={remainingLessons} filter={paletteFilter} onFilter={setPaletteFilter} showCompleted={showCompleted} onShowCompleted={setShowCompleted} selected={paletteSelection} onSelect={setPaletteSelection} disabled={cellBlocked} onDrag={id=>{setPaletteSelection(null);setDragLesson({id,context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}}/>}
           <section className="min-w-0 overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-sm" aria-label="ตารางเรียนรายสัปดาห์">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-4 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mt-1 [&_p]:text-xs [&_p]:text-stone-500"><div><h2>ห้อง {selectedClassroom?.label}</h2><p>ภาคเรียนที่ {semester} · ปีการศึกษา {selectedYearObj?.year_be}</p></div><span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">จัดแล้ว {Object.values(cells).filter(c => c.class_subject_id).length} / {periodTimes.filter(t=>!t.is_break).length*scheduleDays.length} คาบ</span></div>
-            <div className="overflow-x-auto [&_table]:w-full [&_table]:table-fixed [&_table]:min-w-[880px]! [&_th]:border-stone-300! [&_td]:border-stone-200! [&_th]:bg-stone-100! [&_th]:py-2! [&_th]:text-sm! [&_th]:font-semibold! [&_th]:text-black! [&_.period-time]:text-xs! [&_.period-time]:font-normal! [&_.period-time]:text-stone-500! [&_.col-day]:w-20 [&_.day-col]:bg-stone-100! [&_.day-col]:text-stone-700! [&_.col-break]:w-9 [&_.col-break]:min-w-9! [&_.break-col]:bg-blue-50! [&_.cell]:p-1.5! [&_.cell]:h-28 [&_.cell]:align-top">
+            <div className="schedule-day-switch" role="tablist" aria-label="เลือกวันบนมือถือ">{SCHEDULE_DAYS.filter(day => scheduleDays.includes(day.value)).map(day => <button key={day.value} type="button" aria-pressed={(scheduleDays.includes(mobileDay) ? mobileDay : scheduleDays[0]) === day.value} onClick={() => setMobileDay(day.value)}>{day.label}</button>)}</div>
+            <div className="schedule-mobile-board">{periodTimes.map((slot, index) => {
+              const day = scheduleDays.includes(mobileDay) ? mobileDay : scheduleDays[0]
+              if (slot.is_break) return <p key={`break-${index}`} className="schedule-mobile-break">{slot.label}</p>
+              return <article key={slot.period}><header>คาบ {slot.period}<small>{periodTimeLabel(periodTimes, slot.period)}</small></header>{(() => {
+                const key = `${day}-${slot.period}`
+                const cell = cells[key]
+                return <div className={cell?.class_subject_id?.startsWith('activity:') ? 'rounded-lg bg-emerald-50 p-2' : 'rounded-lg bg-white p-1'}>{subjectBlock(cell?.class_subject_id, cell?.note)}{isManage && canEdit && <div className="mt-2 flex flex-wrap gap-2"><button type="button" className="rounded-md border border-stone-300 px-3 py-1.5 text-xs" onClick={() => setPicker({ day, period: slot.period })}>แก้คาบ</button>{cell?.class_subject_id && !cell.locked && <button type="button" className="rounded-md px-3 py-1.5 text-xs text-rose-700" onClick={() => { void handleCellChange(day, slot.period, '') }}>เอาออก</button>}<button type="button" className="rounded-md border border-stone-300 px-3 py-1.5 text-xs" onClick={() => handleToggleLock(day, slot.period)}>{cell?.locked ? 'ปลดล็อก' : 'ล็อก'}</button></div>}</div>
+              })()}</article>
+            })}</div>
+            <div className="schedule-desktop-board overflow-x-auto [&_table]:w-full [&_table]:table-fixed [&_table]:min-w-[880px]! [&_th]:border-stone-300! [&_td]:border-stone-200! [&_th]:bg-stone-100! [&_th]:py-2! [&_th]:text-sm! [&_th]:font-semibold! [&_th]:text-black! [&_.period-time]:text-xs! [&_.period-time]:font-normal! [&_.period-time]:text-stone-500! [&_.col-day]:w-20 [&_.day-col]:bg-stone-100! [&_.day-col]:text-stone-700! [&_.col-break]:w-9 [&_.col-break]:min-w-9! [&_.break-col]:bg-blue-50! [&_.cell]:p-1.5! [&_.cell]:h-auto [&_.cell]:min-h-32 [&_.cell]:align-top">
             <ScheduleGridTable days={scheduleDays} compactBreak
               periodTimes={periodTimes}
               renderCell={(day, period) => {
@@ -512,7 +536,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
                           title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={cellBlocked || pending || locked} aria-busy={pending}
                           draggable={!!cell?.class_subject_id&&!locked&&!pending&&!cellBlocked} onDragStart={e=>{if(!cell?.class_subject_id)return;e.dataTransfer.setData('application/x-jarnsek-lesson',cell.class_subject_id);e.dataTransfer.effectAllowed='move';setPaletteSelection(null);setDragLesson({id:cell.class_subject_id,from:{day,period},context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}} onClick={()=>paletteSelection?placePaletteLesson(day,period):setPicker({day,period})}
                           aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`}>
-                          {cell?.class_subject_id ? <><span className="text-xs font-normal text-stone-500">{subjectMap[cell.class_subject_id]?.subject_code || 'กิจกรรม'}</span><span className="line-clamp-2 text-[13px] font-semibold leading-5">{subjectMap[cell.class_subject_id]?.subject_name || 'กิจกรรม'}</span>{cell.class_subject_id.startsWith('activity:')&&<span className="line-clamp-2 text-[11px] font-medium leading-4 text-emerald-800">{subjectMap[cell.class_subject_id]?.teacher_name || 'ยังไม่กำหนดทีมครู'}</span>}</> : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
+                          {cell?.class_subject_id ? subjectBlock(cell.class_subject_id) : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
 
                         </button>
                         <button
@@ -530,7 +554,6 @@ export default function ClassScheduleEntry({ mode }: Props) {
                         {cell?.class_subject_id && !locked && <button type="button" disabled={cellBlocked || pending} className="w-fit rounded-md px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50" aria-label={`เอาวิชาออก วัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`} onClick={()=>{void handleCellChange(day,period,'')}}>เอาวิชาออก</button>}
                         {pending && <span role="status" className="flex items-center gap-1.5 text-xs text-blue-800"><span className="size-3 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" aria-hidden="true" />กำลังบันทึก…</span>}
                       </div>
-                      {teacherLine(cell?.class_subject_id)}
                       {cell?.note && !cell.class_subject_id && <div className="mt-2 truncate px-1 text-xs text-stone-500">{cell.note}</div>}
                       {conflictRooms?.length ? (
                         <div className="mt-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-700">
@@ -553,6 +576,25 @@ export default function ClassScheduleEntry({ mode }: Props) {
       </div>
 
       {picker && <ScheduleLessonPicker title={`วัน${SCHEDULE_DAYS.find(d=>d.value===picker.day)?.label} · คาบ ${picker.period}`} options={workspace==='activity'?quotaOptions.filter(s=>s.id.startsWith('activity:')):quotaOptions} selected={cells[`${picker.day}-${picker.period}`]?.class_subject_id || null} onClose={()=>setPicker(null)} onChoose={id=>{const {day,period}=picker;setPicker(null);void handleCellChange(day,period,id)}} />}
+      {pdfOpen && (
+        <div className="fixed inset-0 z-[9000] grid place-items-center bg-stone-950/40 p-5 backdrop-blur-sm" onClick={() => setPdfOpen(false)}>
+          <div className="grid max-h-[80vh] w-full max-w-lg gap-4 overflow-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold">เลือกห้องสำหรับ PDF ตารางเรียน</h3>
+            <p className="text-sm text-stone-500">เลือกได้มากกว่าหนึ่งห้อง ระบบรวมทุกห้องในไฟล์เดียว ห้องละหนึ่งหน้า</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="rounded-md border border-stone-300 px-3 py-2 text-sm" onClick={() => setPdfRooms(classrooms.map(room => room.id))}>ทุกห้อง</button>
+              <button type="button" className="rounded-md border border-stone-300 px-3 py-2 text-sm" onClick={() => setPdfRooms(selectedClass ? [selectedClass] : [])}>เฉพาะห้องนี้</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {classrooms.map(room => <label key={room.id} className="flex min-h-11 items-center gap-2 rounded-lg border border-stone-200 px-3 text-sm"><input type="checkbox" checked={pdfRooms.includes(room.id)} onChange={() => setPdfRooms(current => current.includes(room.id) ? current.filter(id => id !== room.id) : [...current, room.id])} />{room.label}</label>)}
+            </div>
+            <div className="flex justify-end gap-3">
+              <button type="button" className="rounded-xl border border-stone-300 px-4 py-2 text-sm" onClick={() => setPdfOpen(false)}>ยกเลิก</button>
+              <button type="button" className="rounded-xl bg-blue-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={!pdfRooms.length} onClick={downloadClassPdf}>สร้าง PDF {pdfRooms.length} ห้อง</button>
+            </div>
+          </div>
+        </div>
+      )}
       {copyOpen && (
         <div className="fixed inset-0 z-[9000] grid place-items-center bg-stone-950/40 p-5 backdrop-blur-sm" onClick={() => setCopyOpen(false)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl [&_h3]:mb-5 [&_h3]:text-lg [&_h3]:font-semibold" onClick={e => e.stopPropagation()}>

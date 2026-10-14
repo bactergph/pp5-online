@@ -65,6 +65,10 @@ export function workloadStatus(hours: number): 'ok' | 'warn' | 'over' {
   return 'ok'
 }
 
+const THAI_NAME_PREFIX = /^(?:ว่าที่\s*)?(?:ร\.ต\.|ด\.ช\.|ด\.ญ\.|นางสาว|นาง|นาย|ครู)\s*/
+export function teacherGivenName(name: string) {
+  return name.split(/[,、]/).map(part => part.trim().replace(THAI_NAME_PREFIX, '').split(/\s+/).filter(Boolean)[0] || '').filter(Boolean).join(', ')
+}
 export function workloadLabel(status: ReturnType<typeof workloadStatus>) {
   if (status === 'over') return 'เกินมาตรฐาน'
   if (status === 'warn') return 'ค่อนข้างมาก'

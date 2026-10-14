@@ -6,7 +6,7 @@ import { createServerClient } from './supabase'
 import { SCHEDULE_EDIT_ROLES, isTimetableClassroom } from './schedules'
 import { loadSchedule, loadScheduleConstraints, lessonKey, lessonColumns, type ScheduleSlot } from './schedule-store'
 import { DEFAULT_PERIOD_TIMES, normalizePeriodTimes, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
-import { emptyPlan, validatePlan, checkPlanning, solvePlannedSchedule, type SchedulePlan } from './schedule-planning'
+import { emptyPlan, validatePlan, checkPlanning, solvePlannedSchedule, lessonPrefersMorning, type SchedulePlan } from './schedule-planning'
 
 async function actor(){const s=await getSession();if(!s?.schoolId||s.mustChangePassword||!SCHEDULE_EDIT_ROLES.includes(s.role as typeof SCHEDULE_EDIT_ROLES[number]))throw Error('ไม่มีสิทธิ์จัดตารางเรียน');return {...s,schoolId:s.schoolId}}
 function fail(error:{message:string;code?:string}|null){if(error)throw Error(['42P01','PGRST202','PGRST205'].includes(error.code||'')?'กรุณาติดตั้ง migration 063_schedule_planning_drafts.sql ในสภาพแวดล้อมทดสอบก่อนใช้ขั้นเตรียมและฉบับร่าง':'ดำเนินการไม่สำเร็จ: '+error.message)}
@@ -77,7 +77,7 @@ function input(data:Preparation,scope:string[],clear:boolean,year:string){
  if(!scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id)))throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล')
  const placed=activityPlacement(data,year),cellKey=(s:{classroom_id:string;day_of_week:number;period:number})=>`${s.classroom_id}:${s.day_of_week}:${s.period}`,pinned=new Set(placed.slots.map(cellKey))
  const retained=[...data.slots.filter(s=>!pinned.has(cellKey(s))&&(!scope.includes(s.classroom_id)||s.locked||!!s.activity_id||!clear)),...placed.slots]
- const lessons=[...data.lessons,...placed.extra].map(l=>{const active=scope.includes(l.classroomId)&&!l.activity;const count=active?l.count:retained.filter(s=>lessonKey(s)===l.id).length;return {...l,...placed.patch.get(l.id),count,fixedOnly:!active,pattern:active?l.pattern:undefined,teacherOptional:!active||l.teacherOptional}})
+ const lessons=[...data.lessons,...placed.extra].map(l=>{const active=scope.includes(l.classroomId)&&!l.activity;const count=active?l.count:retained.filter(s=>lessonKey(s)===l.id).length;return {...l,...placed.patch.get(l.id),count,fixedOnly:!active,pattern:active?l.pattern:undefined,teacherOptional:!active||l.teacherOptional,preferMorning:active&&lessonPrefersMorning(l)}})
  return {retained,lessons,offerings:placed.offerings,unlock:placed.unlock}
 }
 export async function preflight(year:string,term:number,scope:string[],clear:boolean){const data=await preparation(year,term),{retained,lessons,offerings,unlock}=input(data,scope,clear,year);const issues=checkPlanning(lessons,retained.map(toPlanned),data.plan.days,data.periods,data.blocks)

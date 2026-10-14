@@ -1,7 +1,11 @@
 'use client'
 
 import { useCallback, useRef, useEffect, useState } from 'react'
-import { fetchScheduleInit, fetchScheduleWorkload } from '@/app/schedules/actions'
+import { fetchScheduleExportContext, fetchScheduleInit, fetchScheduleWorkload } from '@/app/schedules/actions'
+import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
+import { buildWorkloadPdfBlob } from '@/lib/jspdf-schedules'
+import { scheduleSchoolName } from '@/lib/schedule-school-name'
+import { directorDisplayName } from '@/lib/school-director'
 import AppAlertModal from '@/components/AppAlertModal'
 
 type Year = { id: string; year_be: number; is_active: boolean }
@@ -16,7 +20,10 @@ type WorkloadRow = {
 
 const STYLES = `
   .schedule-page { display: grid; gap: 14px; }
+  .schedule-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
+  .schedule-head button { min-height:44px; padding:0 16px; border:0; border-radius:10px; background:#245bdb; color:#fff; font-weight:700; cursor:pointer; }
+  .schedule-head button:disabled { opacity:.5; cursor:not-allowed; }
   .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
   .schedule-filters {
     display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: end;
@@ -108,8 +115,27 @@ export default function ScheduleWorkloadEntry() {
       <style>{STYLES}</style>
       <div className="schedule-page">
         <div className="schedule-head">
-          <h1>ภาระงานสอนรายสัปดาห์</h1>
-          <p>จำนวนคาบสอนต่อสัปดาห์ของครูแต่ละท่าน</p>
+          <div>
+            <h1>ภาระงานสอนรายสัปดาห์</h1>
+            <p>จำนวนคาบสอนต่อสัปดาห์ของครูแต่ละท่าน</p>
+          </div>
+          <button type="button" disabled={!rows.length} onClick={() => {
+            const year = years.find(item => item.id === selectedYear)?.year_be || ''
+            const fileName = `สรุปภาระงานสอน_ภาค${semester}_${year}.pdf`
+            enqueueFileExport({ fileName, label: 'สรุปภาระงานสอน', run: async () => {
+              const ctx = await fetchScheduleExportContext()
+              return buildWorkloadPdfBlob({
+                schoolName: scheduleSchoolName(ctx.school?.name),
+                schoolLogoUrl: ctx.school?.logo_url,
+                title: `สรุปภาระงานสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,
+                fileName,
+                academicHeadName: ctx.school?.academic_head_name || '',
+                directorName: directorDisplayName(ctx.school, ''),
+                directorPosition: ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : 'ผู้อำนวยการสถานศึกษา',
+                rows,
+              })
+            }})
+          }}>ส่งออก PDF</button>
         </div>
 
         <div className="schedule-filters">

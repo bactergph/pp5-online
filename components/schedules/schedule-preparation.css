@@ -72,6 +72,7 @@
 .schedule-prep .prep-slot small{font-size:11px;line-height:1.4;color:#52647c}
 .schedule-prep .prep-slot-activity{background:#ecfdf3;border-color:#86efac;color:#14532d}
 .schedule-prep .prep-slot-activity b,.schedule-prep .prep-slot-activity small{color:#14532d}
+.schedule-prep .prep-slot-room{font-size:10px}
 .schedule-prep .prep-slot-empty{background:#f8fafc;border-style:dashed;color:#94a3b8;justify-content:center;font-size:13px}
 .schedule-prep .prep-slot-locked{box-shadow:inset 3px 0 0 #245bdb}
 .schedule-prep .prep-draft-legend{display:flex;flex-wrap:wrap;gap:14px;margin:8px 0 0;font-size:13px;color:#334155}

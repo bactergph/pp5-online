@@ -4,7 +4,16 @@ const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacher
 import type { PeriodTimeRow } from './schedule-helpers'
 export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean }
 export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[] }
-export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string }
+export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; subjectGroup?: string; fullName?: string; name?: string }
+export function lessonPrefersMorning(lesson: { subjectGroup?: string; fullName?: string; name?: string; label?: string }) {
+  return /ภาษาไทย|คณิต|วิทยาศาสตร์|สังคมศึกษา|ภาษาอังกฤษ|ภาษาต่างประเทศ/.test(`${lesson.subjectGroup || ''} ${lesson.fullName || ''} ${lesson.name || ''}`)
+}
+function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
+  const breakAt = times.findIndex(t => t.is_break)
+  const index = times.findIndex(t => !t.is_break && t.period === period)
+  if (breakAt < 0) return index >= 0 && index < Math.ceil(times.filter(t => !t.is_break).length / 2)
+  return index >= 0 && index < breakAt
+}
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
 export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number }
 export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking';elapsedMs?:number;timeLimitMs?:number}
@@ -90,21 +99,30 @@ function solveSinglePeriodMatching(lessons:PlannedLesson[],fixed:PlannedSlot[],p
   for(let round=0;round<maxDegree;round++){
     let matched:Map<string,{left:string;edge:{left:string;right:string;lessonId:string|null;serial:number}}>|null=null
     let color=''
+    const stillPrefers=edges.some(e=>!!(e.lessonId&&byId.get(e.lessonId)?.preferMorning))
+    if(stillPrefers)colors.sort((a,b)=>Number(isMorningPeriod(Number(b.split(':')[1]),times))-Number(isMorningPeriod(Number(a.split(':')[1]),times)))
     for(let ci=0;ci<colors.length;ci++){
       const candidate=colors[ci]
-      const allowed=edges.filter(e=>e.right.startsWith('__dummy_teacher_')||!blocked.has(`${e.right}:${candidate}`))
-      const adj=new Map<string,typeof allowed>()
-      for(const edge of allowed){const list=adj.get(edge.left)||[];list.push(edge);adj.set(edge.left,list)}
-      const trial=new Map<string,{left:string;edge:typeof allowed[number]}>()
-      function augment(room:string,seen:Set<string>):boolean{for(const edge of adj.get(room)||[]){if(seen.has(edge.right))continue;seen.add(edge.right);const old=trial.get(edge.right);if(!old||augment(old.left,seen)){trial.set(edge.right,{left:room,edge});return true}}return false}
-      if(left.every(room=>augment(room,new Set()))){matched=trial;color=candidate;colors.splice(ci,1);break}
+      const morningSlot=isMorningPeriod(Number(candidate.split(':')[1]),times)
+      const pools=morningSlot&&stillPrefers?[true,false]:[false]
+      for(const restrict of pools){
+        const allowed=edges.filter(e=>(e.right.startsWith('__dummy_teacher_')||!blocked.has(`${e.right}:${candidate}`))&&(!restrict||!e.lessonId||!!byId.get(e.lessonId)?.preferMorning))
+        const adj=new Map<string,typeof allowed>()
+        for(const edge of allowed){const list=adj.get(edge.left)||[];list.push(edge);adj.set(edge.left,list)}
+        for(const list of adj.values())list.sort((a,b)=>{const pa=!!(a.lessonId&&byId.get(a.lessonId)?.preferMorning),pb=!!(b.lessonId&&byId.get(b.lessonId)?.preferMorning);if(pa!==pb)return morningSlot?Number(pb)-Number(pa):Number(pa)-Number(pb);return Number(!a.lessonId)-Number(!b.lessonId)||a.serial-b.serial})
+        const trial=new Map<string,{left:string;edge:typeof allowed[number]}>()
+        function augment(room:string,seen:Set<string>):boolean{for(const edge of adj.get(room)||[]){if(seen.has(edge.right))continue;seen.add(edge.right);const old=trial.get(edge.right);if(!old||augment(old.left,seen)){trial.set(edge.right,{left:room,edge});return true}}return false}
+        if(left.every(room=>augment(room,new Set()))){matched=trial;color=candidate;colors.splice(ci,1);break}
+      }
+      if(matched)break
     }
     if(!matched)return null
     const [day,period]=color.split(':').map(Number)
     for(const room of left){const pair=[...matched.values()].find(x=>x.left===room);if(!pair)return null
       const alternatives=edges.filter(e=>e.left===room&&e.right===pair.edge.right)
       if(!alternatives.length)return null
-      const real=alternatives.filter(e=>e.lessonId).sort((a,b)=>{const la=byId.get(a.lessonId!)!,lb=byId.get(b.lessonId!)!;if(la.spread!==lb.spread)return Number(!!lb.spread)-Number(!!la.spread);return (dayUse.get(`${a.lessonId}:${day}`)||0)-(dayUse.get(`${b.lessonId}:${day}`)||0)||a.serial-b.serial})
+      const morningSlot=isMorningPeriod(period,times)
+      const real=alternatives.filter(e=>e.lessonId).sort((a,b)=>{const la=byId.get(a.lessonId!)!,lb=byId.get(b.lessonId!)!;if(!!la.preferMorning!==!!lb.preferMorning)return morningSlot?Number(!!lb.preferMorning)-Number(!!la.preferMorning):Number(!!la.preferMorning)-Number(!!lb.preferMorning);if(la.spread!==lb.spread)return Number(!!lb.spread)-Number(!!la.spread);return (dayUse.get(`${a.lessonId}:${day}`)||0)-(dayUse.get(`${b.lessonId}:${day}`)||0)||a.serial-b.serial})
       const chosen=real[0]||alternatives[0],index=edges.findIndex(e=>e.serial===chosen.serial);edges.splice(index,1)
       if(chosen.lessonId){allAssignments.push({classroomId:chosen.left,lessonId:chosen.lessonId,day,period});const key=`${chosen.lessonId}:${day}`;dayUse.set(key,(dayUse.get(key)||0)+1)}
     }
@@ -157,7 +175,7 @@ function solveDenseWithRetainedRooms(lessons:PlannedLesson[],fixed:PlannedSlot[]
       if(++nodes>maxNodes){limited='node_limit';return false}if(Date.now()>=deadline){limited='time_limit';return false}
       if(picked.length===slotRooms.length){for(const x of picked){const id=x.lesson.id;remainingByLesson.set(id,remainingByLesson.get(id)!-1);const teacherCell=`${x.lesson.teacherId}:${day}:${period}`;assignedTeacher.add(teacherCell);if(x.lesson.roomId)venueBusy.add(`${x.lesson.roomId}:${day}:${period}`);assignments.push({classroomId:x.room,lessonId:id,day,period});const dk=`${id}:${day}`;dayUse.set(dk,(dayUse.get(dk)||0)+1)}if(feasible(index+1)&&searchSlot(index+1))return true;for(const x of picked){const id=x.lesson.id;remainingByLesson.set(id,remainingByLesson.get(id)!+1);const teacherCell=`${x.lesson.teacherId}:${day}:${period}`;assignedTeacher.delete(teacherCell);if(x.lesson.roomId)venueBusy.delete(`${x.lesson.roomId}:${day}:${period}`);assignments.pop();const dk=`${id}:${day}`;dayUse.set(dk,dayUse.get(dk)!-1)}return false}
       const usedRooms=new Set(picked.map(x=>x.room)),usedTeachers=new Set(picked.map(x=>x.lesson.teacherId)),usedVenues=new Set(picked.flatMap(x=>x.lesson.roomId?[x.lesson.roomId]:[])),options:{room:string;lesson:PlannedLesson;rank:number}[]=[]
-      for(const room of slotRooms){if(usedRooms.has(room))continue;for(const t of tasks){const l=t.lesson;if(l.classroomId!==room||!l.teacherId||usedTeachers.has(l.teacherId)||(l.roomId&&(usedVenues.has(l.roomId)||venueBusy.has(`${l.roomId}:${day}:${period}`)))||(remainingByLesson.get(l.id)||0)<=0)continue;const teacherCell=`${l.teacherId}:${day}:${period}`;if(teacherBlocked.has(teacherCell)||assignedTeacher.has(teacherCell))continue;const spreadPenalty=l.spread?(dayUse.get(`${l.id}:${day}`)||0)*100:0;options.push({room,lesson:l,rank:spreadPenalty-(remainingByLesson.get(l.id)||0)})}}
+      for(const room of slotRooms){if(usedRooms.has(room))continue;for(const t of tasks){const l=t.lesson;if(l.classroomId!==room||!l.teacherId||usedTeachers.has(l.teacherId)||(l.roomId&&(usedVenues.has(l.roomId)||venueBusy.has(`${l.roomId}:${day}:${period}`)))||(remainingByLesson.get(l.id)||0)<=0)continue;const teacherCell=`${l.teacherId}:${day}:${period}`;if(teacherBlocked.has(teacherCell)||assignedTeacher.has(teacherCell))continue;const spreadPenalty=l.spread?(dayUse.get(`${l.id}:${day}`)||0)*100:0;const morningPenalty=isMorningPeriod(period,times)===!!l.preferMorning?0:40;options.push({room,lesson:l,rank:spreadPenalty+morningPenalty-(remainingByLesson.get(l.id)||0)})}}
       // Choose the next classroom with the fewest eligible teachers (MRV).
       const byRoom=new Map<string,typeof options>();for(const o of options){const list=byRoom.get(o.room)||[];list.push(o);byRoom.set(o.room,list)}
       const nextRoom=[...byRoom].sort((a,b)=>a[1].length-b[1].length)[0];if(!nextRoom)return false
@@ -178,7 +196,8 @@ function solveDenseWithRetainedRooms(lessons:PlannedLesson[],fixed:PlannedSlot[]
         let best=0,options:PlannedLesson[]=[]
         for(let i=0;i<pending.length;i++){const opts=(lessonsByRoom.get(pending[i])||[]).filter(l=>!!l.teacherId&&(rem.get(l.id)||0)>0&&!pickedTeachers.has(l.teacherId)&&!teacherBlocked.has(`${l.teacherId}:${day}:${period}`)&&!usedTeacher.has(`${l.teacherId}:${day}:${period}`)&&(!l.roomId||!pickedVenues.has(l.roomId)&&!usedVenue.has(`${l.roomId}:${day}:${period}`)));if(!options.length||opts.length<options.length){best=i;options=opts}}
         if(!options.length)return null
-        options.sort((a,b)=>Number(a.id.startsWith('__free__:'))-Number(b.id.startsWith('__free__:'))||(rem.get(b.id)||0)-(rem.get(a.id)||0))
+        const morningSlot=isMorningPeriod(period,times)
+        options.sort((a,b)=>Number(a.id.startsWith('__free__:'))-Number(b.id.startsWith('__free__:'))||Number(morningSlot!==!!b.preferMorning)-Number(morningSlot!==!!a.preferMorning)||(rem.get(b.id)||0)-(rem.get(a.id)||0))
         const lesson=options[0];chosen.push({room:pending[best],lesson});pending.splice(best,1);pickedTeachers.add(lesson.teacherId!);if(lesson.roomId)pickedVenues.add(lesson.roomId)
       }
       for(const choice of chosen){rem.set(choice.lesson.id,(rem.get(choice.lesson.id)||0)-1);usedTeacher.add(`${choice.lesson.teacherId}:${day}:${period}`);if(choice.lesson.roomId)usedVenue.add(`${choice.lesson.roomId}:${day}:${period}`);if(!choice.lesson.id.startsWith('__free__:'))out.push({classroomId:choice.room,lessonId:choice.lesson.id,day,period})}
@@ -261,7 +280,7 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
       if(valid)available.push(b)
     }return available
   }
-  function rank(l:PlannedLesson,b:{day:number;periods:number[]}){let value=b.periods[0]/100-b.periods.filter(p=>occupied.get(cell(l.classroomId,b.day,p))===l.id).length*100;const lunch=times.findIndex(t=>t.is_break);if(l.morning&&times.findIndex(t=>t.period===b.periods[0]&&!t.is_break)>lunch)value+=20;if(l.spread)value+=(chosen.get(l.id+':'+b.day)||0)*10
+  function rank(l:PlannedLesson,b:{day:number;periods:number[]}){let value=b.periods[0]/100-b.periods.filter(p=>occupied.get(cell(l.classroomId,b.day,p))===l.id).length*100;const lunch=times.findIndex(t=>t.is_break);const afterLunch=times.findIndex(t=>t.period===b.periods[0]&&!t.is_break)>lunch;if((l.morning||l.preferMorning)&&afterLunch)value+=l.morning?20:12;if(l.spread)value+=(chosen.get(l.id+':'+b.day)||0)*10
     const occupiedPeriods=times.filter(t=>!t.is_break&&l.teacherId&&teacherBusy.has(cell(l.teacherId,b.day,t.period))).map(t=>t.period)
     if(plan.reduceGaps&&occupiedPeriods.length){const all=[...occupiedPeriods,...b.periods];value+=Math.max(...all)-Math.min(...all)+1-all.length}
     if(plan.maxContinuous&&l.teacherId){let run=0,max=0;for(const t of times){run=!t.is_break&&(occupiedPeriods.includes(t.period)||b.periods.includes(t.period))?run+1:0;max=Math.max(max,run)}value+=Math.max(0,max-plan.maxContinuous)*20}return value}
