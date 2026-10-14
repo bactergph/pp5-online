@@ -50,10 +50,10 @@
 .schedule-prep .prep-heading { margin-bottom:18px; }
 .schedule-prep .prep-heading h2 { font-size:24px; }
 .schedule-prep .prep-steps button { min-height:68px; padding:10px; background:#f4f8ff; border-color:#dbe5f3; }
-.schedule-prep .prep-steps small { display:none; }
+.schedule-prep .prep-steps small { display:block; }
 .schedule-prep .prep-steps [aria-current=step] { background:#245bdb; color:white; border-color:#245bdb; }
 .schedule-prep .prep-steps [aria-current=step] b { background:#fff; color:#245bdb; }
-.schedule-prep .prep-step-context { display:none; }
+.schedule-prep .prep-step-context { display:block; }
 .schedule-prep h2 { font-size:22px; line-height:1.5; }
 .schedule-prep p { font-size:15px; }
 .schedule-prep .prep-checks { gap:10px; }
@@ -67,14 +67,33 @@
 .schedule-prep .prep-result { scroll-margin-top:110px; }
 .schedule-prep .prep-empty-result { padding:20px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px; }
 .schedule-prep .prep-draft { border:1px solid #b9d2f6; border-radius:14px; padding:20px; background:#f8fbff; }
+.schedule-prep .prep-slot{display:flex;flex-direction:column;gap:2px;min-height:64px;padding:8px;border-radius:8px;background:#fff;border:1px solid #dbe3ee;text-align:left}
+.schedule-prep .prep-slot b{font-size:13px;line-height:1.4;font-weight:700;color:#182b49}
+.schedule-prep .prep-slot small{font-size:11px;line-height:1.4;color:#52647c}
+.schedule-prep .prep-slot-activity{background:#ecfdf3;border-color:#86efac;color:#14532d}
+.schedule-prep .prep-slot-activity b,.schedule-prep .prep-slot-activity small{color:#14532d}
+.schedule-prep .prep-slot-empty{background:#f8fafc;border-style:dashed;color:#94a3b8;justify-content:center;font-size:13px}
+.schedule-prep .prep-slot-locked{box-shadow:inset 3px 0 0 #245bdb}
+.schedule-prep .prep-draft-legend{display:flex;flex-wrap:wrap;gap:14px;margin:8px 0 0;font-size:13px;color:#334155}
+.schedule-prep .prep-draft-legend span{display:inline-flex;align-items:center;gap:6px}
+.schedule-prep .prep-swatch{width:12px;height:12px;border-radius:3px;display:inline-block}
+.schedule-prep .prep-swatch-activity{background:#86efac}
+.schedule-prep .prep-swatch-subject{background:#fff;border:1px solid #94a3b8}
+.schedule-prep .prep-swatch-empty{background:#f8fafc;border:1px dashed #94a3b8}
+.schedule-prep .prep-activity-summary{margin:12px 0;padding:12px 14px;border:1px solid #86efac;border-radius:12px;background:#f0fdf4}
+.schedule-prep .prep-activity-summary p{margin:0 0 8px;color:#14532d;font-weight:700}
+.schedule-prep .prep-activity-summary ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.schedule-prep .prep-activity-summary li{display:grid;gap:2px}
+.schedule-prep .prep-activity-summary span{color:#166534;font-size:13px;line-height:1.5}
+.schedule-prep .prep-room-groups{display:grid;gap:4px;margin:8px 0 16px}
 .schedule-prep .prep-draft h3 { margin-top:0; font-size:20px; }
 .schedule-prep .prep-result summary { padding:12px 0; cursor:pointer; color:#334155; }
 .schedule-prep .prep-working { padding:14px; background:#eff6ff; border-radius:10px; color:#17429f; }
 @media(max-width:640px) {
  .schedule-prep { padding:16px; }
  .schedule-prep .prep-heading h2 { font-size:21px; }
- .schedule-prep .prep-steps { grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; }
- .schedule-prep .prep-steps button { flex-direction:column; align-items:center; text-align:center; font-size:12px; padding:8px 2px; min-height:80px; gap:4px; }
+ .schedule-prep .prep-steps { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+ .schedule-prep .prep-steps button { align-items:flex-start; text-align:left; font-size:13px; padding:10px; min-height:72px; gap:8px; }
  .schedule-prep .prep-steps b { width:26px; height:26px; }
  .schedule-prep .prep-steps em { display:none; }
  .schedule-prep .prep-count { display:none; }
@@ -93,7 +112,7 @@
 .schedule-prep .prep-steps { grid-template-columns:repeat(6,minmax(0,1fr)); }
 .schedule-prep .prep-workload > .prep-checks { padding:12px; border-radius:12px; background:#f4f8ff; }
 .schedule-prep .prep-workload select { max-width:260px; min-width:150px; }
-@media(max-width:640px){.schedule-prep .prep-steps{grid-template-columns:repeat(3,minmax(0,1fr))}.schedule-prep .prep-steps li:last-child{grid-column:auto}.schedule-prep .prep-steps button{min-height:70px}.schedule-prep .prep-workload > .prep-checks{align-items:stretch;flex-direction:column}}
+@media(max-width:640px){.schedule-prep .prep-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-prep .prep-steps li:last-child{grid-column:auto}.schedule-prep .prep-steps button{min-height:76px;align-items:flex-start;text-align:left;flex-direction:row}.schedule-prep .prep-steps small{display:none}.schedule-prep .prep-workload > .prep-checks{align-items:stretch;flex-direction:column}}
 
 .schedule-prep .prep-view-switch { display:inline-flex; flex-wrap:wrap; gap:4px; padding:4px; background:#eef2f7; border-radius:12px; margin:4px 0 16px; }
 .schedule-prep .prep-view-switch button { min-height:44px; border:0; background:transparent; color:#334155; padding:10px 18px; border-radius:9px; }

@@ -45,27 +45,57 @@ export async function savePlan(year:string,term:number,hash:string,plan:Schedule
  return preparation(year,term)
 }
 const toPlanned=(s:ScheduleSlot)=>({classroomId:s.classroom_id,lessonId:lessonKey(s),day:s.day_of_week,period:s.period})
-function input(data:Preparation,scope:string[],clear:boolean){
- if(!scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id)))throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล')
- const retained=data.slots.filter(s=>!scope.includes(s.classroom_id)||s.locked||!!s.activity_id||!clear)
- const lessons=data.lessons.map(l=>{const active=scope.includes(l.classroomId)&&!l.activity;const count=active?l.count:retained.filter(s=>lessonKey(s)===l.id).length;return {...l,count,fixedOnly:!active,pattern:active?l.pattern:undefined,teacherOptional:!active||l.teacherOptional}})
- return {retained,lessons}
+function activityPlacement(data:Preparation,year:string){
+ const offerings:{id:string;classroom_id:string;evaluation_setting_id:string}[]=[],slots:ScheduleSlot[]=[],extra:Preparation['lessons']=[],unlock:ScheduleSlot[]=[],seen=new Set<string>()
+ const patch=new Map<string,{teacherIds:string[];teacherId:null;activityGroupId?:string;name:string;teacherName:string}>()
+ for(const group of data.plan.activityGroups||[]){
+  const label=data.activities.find(a=>a.id===group.settingId)?.label||'กิจกรรม'
+  for(const roomId of group.roomIds){
+   if(!data.classrooms.some(c=>c.id===roomId))continue
+   const teachers=activityTeachers(group,roomId)
+   const teacherName=teachers.map(id=>{const t=data.teachers.find(t=>t.id===id);return t?`${t.prefix||''} ${t.full_name}`.trim():''}).filter(Boolean).join(', ')
+   let lesson=data.lessons.find(l=>l.activity&&l.classroomId===roomId&&l.subjectId===group.settingId)
+   if(!lesson){
+    const id=randomUUID(),room=data.classrooms.find(c=>c.id===roomId)
+    offerings.push({id,classroom_id:roomId,evaluation_setting_id:group.settingId})
+    lesson={id:'activity:'+id,classroomId:roomId,teacherId:null,teacherIds:teachers,count:group.cells.length,label:`${room?.level}/${room?.room} · ${label}`,subjectId:group.settingId,code:'',name:label,fullName:label,teacherName,activity:true,teacherOptional:true,selectable:false,activityGroupId:group.mode==='joint'?group.id:undefined,sourceHours:0,roomName:'',spread:true,source:'กิจกรรมที่กำหนดไว้'} as Preparation['lessons'][number]
+    extra.push(lesson)
+   }else patch.set(lesson.id,{teacherIds:teachers,teacherId:null,activityGroupId:group.mode==='joint'?group.id:undefined,name:lesson.name||label,teacherName:teacherName||lesson.teacherName})
+   for(const cell of group.cells){
+    const key=`${roomId}:${cell.day}:${cell.period}`
+    if(seen.has(key))throw Error('มีกิจกรรมมากกว่าหนึ่งรายการในคาบเดียวกัน กรุณาแก้ที่ขั้นกิจกรรม')
+    seen.add(key)
+    const previous=data.slots.find(s=>s.classroom_id===roomId&&s.day_of_week===cell.day&&s.period===cell.period)
+    if(previous?.locked&&lessonKey(previous)!==lesson.id)unlock.push(previous)
+    slots.push({classroom_id:roomId,academic_year_id:year,day_of_week:cell.day,period:cell.period,...lessonColumns(lesson.id),note:null,locked:!!(previous&&lessonKey(previous)===lesson.id&&previous.locked)})
+   }
+  }
+ }
+ return {slots,offerings,extra,patch,unlock}
 }
-export async function preflight(year:string,term:number,scope:string[],clear:boolean){const data=await preparation(year,term),{retained,lessons}=input(data,scope,clear);const issues=checkPlanning(lessons,retained.map(toPlanned),data.plan.days,data.periods,data.blocks)
+function input(data:Preparation,scope:string[],clear:boolean,year:string){
+ if(!scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id)))throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล')
+ const placed=activityPlacement(data,year),cellKey=(s:{classroom_id:string;day_of_week:number;period:number})=>`${s.classroom_id}:${s.day_of_week}:${s.period}`,pinned=new Set(placed.slots.map(cellKey))
+ const retained=[...data.slots.filter(s=>!pinned.has(cellKey(s))&&(!scope.includes(s.classroom_id)||s.locked||!!s.activity_id||!clear)),...placed.slots]
+ const lessons=[...data.lessons,...placed.extra].map(l=>{const active=scope.includes(l.classroomId)&&!l.activity;const count=active?l.count:retained.filter(s=>lessonKey(s)===l.id).length;return {...l,...placed.patch.get(l.id),count,fixedOnly:!active,pattern:active?l.pattern:undefined,teacherOptional:!active||l.teacherOptional}})
+ return {retained,lessons,offerings:placed.offerings,unlock:placed.unlock}
+}
+export async function preflight(year:string,term:number,scope:string[],clear:boolean){const data=await preparation(year,term),{retained,lessons,offerings,unlock}=input(data,scope,clear,year);const issues=checkPlanning(lessons,retained.map(toPlanned),data.plan.days,data.periods,data.blocks)
  for(const l of lessons.filter(l=>!l.activity&&l.count>0))if(data.plan.teacherIds&&!data.plan.teacherIds.includes(l.teacherId||''))issues.push({severity:'error',message:`${l.label} ครูผู้สอนไม่ได้อยู่ในรายการครูที่เลือกจัดตาราง`,step:2})
  for(const id of scope)if(!lessons.some(l=>l.classroomId===id&&!l.activity))issues.push({severity:'error',message:`${data.classrooms.find(c=>c.id===id)?.level}/${data.classrooms.find(c=>c.id===id)?.room} ยังไม่มีรายวิชา`,step:3})
  if(!data.timesConfigured)issues.push({severity:'error',message:'ยังไม่บันทึกเวลาคาบของโรงเรียน กรุณาตรวจและบันทึกเวลาเริ่ม–จบก่อนจัด',step:1})
  for(const l of lessons.filter(l=>scope.includes(l.classroomId)&&!l.activity&&l.roomName&&!data.plan.rules[l.id]?.roomId))issues.push({severity:'warning',message:`${l.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`,step:5})
  const timeError=validatePeriodTimes(data.periods);if(timeError)issues.push({severity:'error',message:timeError,step:1})
- return {data,issues,retained,lessons}}
+ return {data,issues,retained,lessons,offerings,unlock}}
 async function storeDraft(year:string,term:number,data:Preparation,rows:ScheduleSlot[],offerings:{id:string;classroom_id:string;evaluation_setting_id:string}[]=[],unlock:ScheduleSlot[]=[]){const s=await actor();const r=await createServerClient().from('schedule_drafts').insert({school_id:s.schoolId,academic_year_id:year,semester:term,actor_id:s.userId,base_hash:data.hash,before_rows:data.slots,after_rows:rows,offerings,unlock_cells:unlock}).select('id').single();fail(r.error);return r.data!.id as string}
 export async function generate(year:string,term:number,scope:string[],clear:boolean){
- const {data,issues,retained,lessons}=await preflight(year,term,scope,clear)
- if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,issues,id:null,rows:[] as ScheduleSlot[],assigned:0}
+ const {data,issues,retained,lessons,offerings,unlock}=await preflight(year,term,scope,clear)
+ if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,issues,id:null,rows:[] as ScheduleSlot[],assigned:0,locked:0}
  const result=solvePlannedSchedule(lessons,retained.map(toPlanned),data.plan,data.periods,data.blocks)
- if(result.status!=='complete')return {...result,id:null,rows:[] as ScheduleSlot[],assigned:0}
- const rows=[...retained,...result.assignments.map(a=>({classroom_id:a.classroomId,academic_year_id:year,day_of_week:a.day,period:a.period,...lessonColumns(a.lessonId),note:null,locked:false}))]
- const id=await storeDraft(year,term,data,rows);return {status:'complete' as const,issues:result.issues,id,rows,assigned:result.assignments.length}
+ if(result.status!=='complete')return {...result,id:null,rows:[] as ScheduleSlot[],assigned:0,locked:0}
+ const covered=new Set(retained.map(s=>`${s.classroom_id}:${s.day_of_week}:${s.period}`))
+ const rows=[...retained,...result.assignments.filter(a=>!covered.has(`${a.classroomId}:${a.day}:${a.period}`)).map(a=>({classroom_id:a.classroomId,academic_year_id:year,day_of_week:a.day,period:a.period,...lessonColumns(a.lessonId),note:null,locked:false}))]
+ const id=await storeDraft(year,term,data,rows,offerings,unlock);return {status:'complete' as const,issues:result.issues,id,rows,assigned:result.assignments.length,locked:unlock.length}
 }
 export async function activityDraft(year:string,term:number,setting:string,rooms:string[],cells:{day:number;period:number}[],remove:boolean){
  const data=await preparation(year,term)

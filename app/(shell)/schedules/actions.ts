@@ -1,5 +1,6 @@
 'use server'
 
+import { lessonTeachers } from '@/lib/schedule-activity-teams'
 import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import { scheduleResult } from '@/lib/schedule-action-result'
 import * as scheduleOps from '@/lib/schedule-operations'
@@ -124,8 +125,14 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
     const key = `${s.day_of_week}-${s.period}`
     grid[key] = { class_subject_id: lessonKey(s), note: s.note, locked: s.locked }
     const lesson = lessons.find(l => l.id === lessonKey(s))
-    if (!lesson?.teacherId) continue
-    const busy = data.slots.filter(other => other.classroom_id !== classroomId && other.day_of_week === s.day_of_week && other.period === s.period && data.lessons.find(l => l.id === lessonKey(other))?.teacherId === lesson.teacherId)
+    const teachers = lesson ? lessonTeachers(lesson) : []
+    if (!teachers.length) continue
+    const busy = data.slots.filter(other => {
+      if (other.classroom_id === classroomId || other.day_of_week !== s.day_of_week || other.period !== s.period) return false
+      const otherLesson = data.lessons.find(l => l.id === lessonKey(other))
+      if (!otherLesson || lesson?.activityGroupId && lesson.activityGroupId === otherLesson.activityGroupId) return false
+      return lessonTeachers(otherLesson).some(id => teachers.includes(id))
+    })
     if (busy.length) warnings[key] = busy.map(s => { const c = data.classrooms.find(c => c.id === s.classroom_id)!; return `${c.level}/${c.room}` })
   }
   const items = lessons.filter(l => !l.activity).map(l => {
@@ -153,7 +160,7 @@ export async function fetchTeachingScheduleGrid(teacherId: string, yearId: strin
   for (const d of SCHEDULE_DAYS) for(let p=1;p<=SCHEDULE_PERIOD_COUNT;p++) cells[d.value+'-'+p]={label:'',subject_line:'',room_line:''}
   for(const row of data.slots) {
     const lesson=data.lessons.find(l=>l.id===lessonKey(row))
-    if(!lesson || lesson.teacherId!==teacherId) continue
+    if(!lesson || !lessonTeachers(lesson).includes(teacherId)) continue
     const room=data.classrooms.find(c=>c.id===row.classroom_id)!
     const roomLine=room.level+'/'+room.room
     const subjectLine=[(lesson.code+' '+lesson.name).trim(),lesson.roomName].filter(Boolean).join(' · ')

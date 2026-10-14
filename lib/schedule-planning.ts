@@ -61,7 +61,8 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
  * timetable slot. Bipartite multigraphs can be coloured in max-degree rounds. */
 function solveSinglePeriodMatching(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[]):{assignments:PlannedSlot[];message?:string}|null{
   const active=lessons.filter(l=>!l.fixedOnly&&!l.activity&&l.count>0)
-  if(!active.length||active.some(l=>!l.teacherId||l.roomId||l.morning||l.teacherIds&&l.teacherIds.length>1||l.pattern?.some(n=>n!==1)))return null
+  if(!active.length)return {assignments:[]}
+  if(active.some(l=>!l.teacherId||l.roomId||l.morning||l.teacherIds&&l.teacherIds.length>1||l.pattern?.some(n=>n!==1)))return null
   const rooms=[...new Set(active.map(l=>l.classroomId))],roomSet=new Set(rooms),byId=new Map(lessons.map(l=>[l.id,l]))
   if(fixed.some(s=>roomSet.has(s.classroomId)&&s.lessonId&&(!byId.get(s.lessonId)?.activity)))return null
   const allSlots=plan.days.flatMap(day=>times.filter(t=>!t.is_break).map(t=>`${day}:${t.period}`))
@@ -70,7 +71,6 @@ function solveSinglePeriodMatching(lessons:PlannedLesson[],fixed:PlannedSlot[],p
   if(roomDomains.some(domain=>domain.size!==common.length)||!common.length)return null
   const teacherIds=[...new Set(active.map(l=>l.teacherId!))],blocked=new Set(unavailable.map(b=>`${b.teacherId}:${b.day}:${b.period}`))
   for(const s of fixed){const l=s.lessonId?byId.get(s.lessonId):undefined;if(l)for(const id of lessonTeachers(l))blocked.add(`${id}:${s.day}:${s.period}`)}
-  for(const id of teacherIds)if(common.some(key=>blocked.has(`${id}:${key}`)))return null
   const retained=new Map<string,number>();for(const s of fixed)if(s.lessonId)retained.set(s.lessonId,(retained.get(s.lessonId)||0)+1)
   const edges:{left:string;right:string;lessonId:string|null;serial:number}[]=[];let serial=0
   for(const l of active)for(let n=0;n<Math.max(0,l.count-(retained.get(l.id)||0));n++)edges.push({left:l.classroomId,right:l.teacherId!,lessonId:l.id,serial:serial++})
@@ -86,11 +86,21 @@ function solveSinglePeriodMatching(lessons:PlannedLesson[],fixed:PlannedSlot[],p
   while(li<leftDef.length&&ri<rightDef.length){const count=Math.min(leftDef[li].missing,rightDef[ri].missing);for(let i=0;i<count;i++)edges.push({left:leftDef[li].id,right:rightDef[ri].id,lessonId:null,serial:serial++});leftDef[li].missing-=count;rightDef[ri].missing-=count;if(!leftDef[li].missing)li++;if(!rightDef[ri].missing)ri++}
   if(leftDef.some(x=>x.missing)||rightDef.some(x=>x.missing))return null
   const dayUse=new Map<string,number>(),allAssignments:PlannedSlot[]=[]
+  const colors=[...common]
   for(let round=0;round<maxDegree;round++){
-    const matched=new Map<string,{left:string;edge:{left:string;right:string;lessonId:string|null;serial:number}}>()
-    function augment(room:string,seen:Set<string>):boolean{for(const edge of edges){if(edge.left!==room||seen.has(edge.right))continue;seen.add(edge.right);const old=matched.get(edge.right);if(!old||augment(old.left,seen)){matched.set(edge.right,{left:room,edge});return true}}return false}
-    for(const room of left)if(!augment(room,new Set()))return null
-    const [day,period]=common[round].split(':').map(Number)
+    let matched:Map<string,{left:string;edge:{left:string;right:string;lessonId:string|null;serial:number}}>|null=null
+    let color=''
+    for(let ci=0;ci<colors.length;ci++){
+      const candidate=colors[ci]
+      const allowed=edges.filter(e=>e.right.startsWith('__dummy_teacher_')||!blocked.has(`${e.right}:${candidate}`))
+      const adj=new Map<string,typeof allowed>()
+      for(const edge of allowed){const list=adj.get(edge.left)||[];list.push(edge);adj.set(edge.left,list)}
+      const trial=new Map<string,{left:string;edge:typeof allowed[number]}>()
+      function augment(room:string,seen:Set<string>):boolean{for(const edge of adj.get(room)||[]){if(seen.has(edge.right))continue;seen.add(edge.right);const old=trial.get(edge.right);if(!old||augment(old.left,seen)){trial.set(edge.right,{left:room,edge});return true}}return false}
+      if(left.every(room=>augment(room,new Set()))){matched=trial;color=candidate;colors.splice(ci,1);break}
+    }
+    if(!matched)return null
+    const [day,period]=color.split(':').map(Number)
     for(const room of left){const pair=[...matched.values()].find(x=>x.left===room);if(!pair)return null
       const alternatives=edges.filter(e=>e.left===room&&e.right===pair.edge.right)
       if(!alternatives.length)return null
@@ -112,7 +122,8 @@ function solveDenseWithRetainedRooms(lessons:PlannedLesson[],fixed:PlannedSlot[]
   const occupiedByRoom=new Map<string,Set<string>>(),roomSlots=new Map<string,string[]>()
   for(const room of rooms){const occupied=new Set(fixed.filter(s=>s.classroomId===room).map(s=>`${s.day}:${s.period}`));occupiedByRoom.set(room,occupied);roomSlots.set(room,allSlots.filter(key=>!occupied.has(key)))}
   const remainingByRoom=new Map<string,number>();for(const room of rooms)remainingByRoom.set(room,tasks.filter(t=>t.lesson.classroomId===room).reduce((n,t)=>n+t.remaining,0))
-  if(rooms.some(room=>remainingByRoom.get(room)!==roomSlots.get(room)!.length))return null
+  if(rooms.some(room=>(remainingByRoom.get(room)||0)>(roomSlots.get(room)?.length||0)))return null
+  for(const room of rooms){const slack=(roomSlots.get(room)?.length||0)-(remainingByRoom.get(room)||0);for(let i=0;i<slack;i++)tasks.push({lesson:{id:`__free__:${room}:${i}`,classroomId:room,teacherId:`__free_teacher__:${room}:${i}`,count:1,label:'ว่าง'},remaining:1})}
   const teacherBlocked=new Set(unavailable.map(b=>`${b.teacherId}:${b.day}:${b.period}`)),venueBusy=new Set<string>()
   for(const s of fixed){const l=s.lessonId?byId.get(s.lessonId):undefined;if(l){for(const id of lessonTeachers(l))teacherBlocked.add(`${id}:${s.day}:${s.period}`);if(l.roomId)venueBusy.add(`${l.roomId}:${s.day}:${s.period}`)}}
   // Schedule the most constrained periods first. Chronological order is a poor
@@ -124,7 +135,7 @@ function solveDenseWithRetainedRooms(lessons:PlannedLesson[],fixed:PlannedSlot[]
     const options=rooms.flatMap(room=>occupiedByRoom.get(room)!.has(key)?[]:tasks.filter(({lesson,remaining})=>lesson.classroomId===room&&remaining>0&&!teacherBlocked.has(`${lesson.teacherId}:${day}:${period}`)&&(!lesson.roomId||!venueBusy.has(`${lesson.roomId}:${day}:${period}`))).map(({lesson})=>`${room}:${lesson.teacherId}:${lesson.roomId||''}`))
     return {key,index,optionCount:options.length,teacherChoices:new Set(options).size}
   }).sort((a,b)=>a.optionCount-b.optionCount||a.teacherChoices-b.teacherChoices||a.index-b.index).map(slot=>slot.key)
-  const teacherIds=[...new Set(tasks.map(t=>t.lesson.teacherId!))],venueIds=[...new Set(tasks.map(t=>t.lesson.roomId).filter((id):id is string=>!!id))],assignedTeacher=new Set<string>(),remainingByLesson=new Map(tasks.map(t=>[t.lesson.id,t.remaining])),dayUse=new Map<string,number>(),assignments:PlannedSlot[]=[]
+  const teacherIds=[...new Set(tasks.map(t=>t.lesson.teacherId!).filter(id=>!id.startsWith('__free_teacher__')))],venueIds=[...new Set(tasks.map(t=>t.lesson.roomId).filter((id):id is string=>!!id))],assignedTeacher=new Set<string>(),remainingByLesson=new Map(tasks.map(t=>[t.lesson.id,t.remaining])),dayUse=new Map<string,number>(),assignments:PlannedSlot[]=[]
   const started=Date.now(),searchLimitMs=Math.min(timeLimitMs,8000),deadline=started+searchLimitMs;let nodes=0,limited:'node_limit'|'time_limit'|null=null
   function feasible(next:number){
     const future=searchSlots.slice(next)
@@ -155,8 +166,29 @@ function solveDenseWithRetainedRooms(lessons:PlannedLesson[],fixed:PlannedSlot[]
     if(matchRoom())return true
     return false
   }
+  const lessonsByRoom=new Map<string,PlannedLesson[]>()
+  for(const task of tasks){const list=lessonsByRoom.get(task.lesson.classroomId)||[];list.push(task.lesson);lessonsByRoom.set(task.lesson.classroomId,list)}
+  function greedyFill():PlannedSlot[]|null{
+    const rem=new Map(remainingByLesson),usedTeacher=new Set<string>(),usedVenue=new Set(venueBusy),out:PlannedSlot[]=[]
+    for(const key of searchSlots){
+      const [day,period]=key.split(':').map(Number),must=rooms.filter(room=>!occupiedByRoom.get(room)!.has(key))
+      if(!must.length)continue
+      const pending=[...must],pickedTeachers=new Set<string>(),pickedVenues=new Set<string>(),chosen:{room:string;lesson:PlannedLesson}[]=[]
+      while(pending.length){
+        let best=0,options:PlannedLesson[]=[]
+        for(let i=0;i<pending.length;i++){const opts=(lessonsByRoom.get(pending[i])||[]).filter(l=>!!l.teacherId&&(rem.get(l.id)||0)>0&&!pickedTeachers.has(l.teacherId)&&!teacherBlocked.has(`${l.teacherId}:${day}:${period}`)&&!usedTeacher.has(`${l.teacherId}:${day}:${period}`)&&(!l.roomId||!pickedVenues.has(l.roomId)&&!usedVenue.has(`${l.roomId}:${day}:${period}`)));if(!options.length||opts.length<options.length){best=i;options=opts}}
+        if(!options.length)return null
+        options.sort((a,b)=>Number(a.id.startsWith('__free__:'))-Number(b.id.startsWith('__free__:'))||(rem.get(b.id)||0)-(rem.get(a.id)||0))
+        const lesson=options[0];chosen.push({room:pending[best],lesson});pending.splice(best,1);pickedTeachers.add(lesson.teacherId!);if(lesson.roomId)pickedVenues.add(lesson.roomId)
+      }
+      for(const choice of chosen){rem.set(choice.lesson.id,(rem.get(choice.lesson.id)||0)-1);usedTeacher.add(`${choice.lesson.teacherId}:${day}:${period}`);if(choice.lesson.roomId)usedVenue.add(`${choice.lesson.roomId}:${day}:${period}`);if(!choice.lesson.id.startsWith('__free__:'))out.push({classroomId:choice.room,lessonId:choice.lesson.id,day,period})}
+    }
+    return tasks.every(task=>task.lesson.id.startsWith('__free__:')||(rem.get(task.lesson.id)||0)===0)?out:null
+  }
+  const greedy=greedyFill()
+  if(greedy)return {status:'complete' as const,assignments:greedy,issues:[],nodes:0,solver:'dense_slot_matching' as const,elapsedMs:Date.now()-started,timeLimitMs:searchLimitMs}
   const solved=searchSlot(0)
-  return {status:solved?'complete' as const:limited?'timeout' as const:'conflict' as const,limitReason:limited,assignments:solved?assignments:[],issues:[],nodes,message:solved?undefined:'ครูผู้สอนที่ยังว่างไม่พอสำหรับห้องที่เลือก หรือใช้เวลาค้นหาเกินกำหนด',solver:'dense_slot_matching' as const,elapsedMs:Date.now()-started,timeLimitMs:searchLimitMs}
+  return {status:solved?'complete' as const:limited?'timeout' as const:'conflict' as const,limitReason:limited,assignments:solved?assignments.filter(slot=>!String(slot.lessonId).startsWith('__free__:')):[],issues:[],nodes,message:solved?undefined:'ครูผู้สอนที่ยังว่างไม่พอสำหรับห้องที่เลือก หรือใช้เวลาค้นหาเกินกำหนด',solver:'dense_slot_matching' as const,elapsedMs:Date.now()-started,timeLimitMs:searchLimitMs}
 }
 /** Bounded block search. Fixed lessons may be completed into a double block. */
 export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],maxNodes=SCHEDULE_SEARCH_MAX_NODES,timeLimitMs=SCHEDULE_SEARCH_TIME_LIMIT_MS):PlannedScheduleResult{
@@ -169,21 +201,23 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   // entire search budget rediscovering combinations the legacy solver handles
   // quickly. Keep advanced plans on the block solver below.
   const teachingPeriods=times.filter(t=>!t.is_break).map(t=>t.period)
-  const simple=plan.days.length===5&&[1,2,3,4,5].every((d,i)=>plan.days[i]===d)
-    &&teachingPeriods.length>0&&teachingPeriods.every((p,i)=>p===i+1)
-    &&!plan.reduceGaps&&plan.maxContinuous===0
+  const singlePeriod=!plan.reduceGaps&&plan.maxContinuous===0
     &&lessons.every(l=>!l.morning&&(!l.pattern||l.pattern.every(n=>n===1))&&(!l.teacherIds||l.teacherIds.length<=1||l.activity))
-  if(simple){
+  const fullWeek=plan.days.length===5&&[1,2,3,4,5].every((d,i)=>plan.days[i]===d)
+    &&teachingPeriods.length>0&&teachingPeriods.every((p,i)=>p===i+1)
+  if(singlePeriod&&maxNodes>0&&timeLimitMs>0){
     const matched=solveSinglePeriodMatching(lessons,fixed,plan,times,unavailable)
     if(matched!==null)return matched.message?{status:'conflict' as const,message:matched.message,assignments:[] as PlannedSlot[],issues,nodes:0,solver:'edge_coloring',elapsedMs:Date.now()-started}:{status:'complete' as const,assignments:matched.assignments,issues,nodes:0,solver:'edge_coloring',elapsedMs:Date.now()-started}
     const dense=solveDenseWithRetainedRooms(lessons,fixed,plan,times,unavailable,maxNodes,timeLimitMs)
     if(dense)return {...dense,issues}
-    const activityBlocks=fixed.flatMap(s=>{const l=s.lessonId?lessons.find(x=>x.id===s.lessonId):undefined;return l?.activity?lessonTeachers(l).map(teacherId=>({teacherId,day:s.day,period:s.period})):[]})
-    const teacherBlocks=[...unavailable,...activityBlocks]
-    const legacy=solveSchoolSchedule(lessons.map(l=>({id:l.id,classroomId:l.classroomId,teacherId:l.activity?null:l.teacherId,count:l.count,label:l.label,teacherOptional:l.teacherOptional||l.activity})),fixed,Math.min(maxNodes,1_000_000),teachingPeriods.length,teacherBlocks)
-    if(!legacy.error)return {status:'complete' as const,assignments:legacy.assignments,issues,nodes:0,solver:'legacy_backtracking',elapsedMs:Date.now()-started,timeLimitMs:8000}
-    const timedOut=legacy.error.includes('ค้นหาไม่ทัน')
-    return {status:timedOut?'timeout' as const:'conflict' as const,limitReason:timedOut?'time_limit' as const:null,message:legacy.error,assignments:[] as PlannedSlot[],issues,nodes:0,solver:'legacy_backtracking',elapsedMs:Date.now()-started,timeLimitMs:8000}
+    if(fullWeek){
+      const activityBlocks=fixed.flatMap(s=>{const l=s.lessonId?lessons.find(x=>x.id===s.lessonId):undefined;return l?.activity?lessonTeachers(l).map(teacherId=>({teacherId,day:s.day,period:s.period})):[]})
+      const teacherBlocks=[...unavailable,...activityBlocks]
+      const legacy=solveSchoolSchedule(lessons.map(l=>({id:l.id,classroomId:l.classroomId,teacherId:l.activity?null:l.teacherId,count:l.count,label:l.label,teacherOptional:l.teacherOptional||l.activity})),fixed,Math.min(maxNodes,1_000_000),teachingPeriods.length,teacherBlocks)
+      if(!legacy.error)return {status:'complete' as const,assignments:legacy.assignments,issues,nodes:0,solver:'legacy_backtracking',elapsedMs:Date.now()-started,timeLimitMs:8000}
+      const timedOut=legacy.error.includes('ค้นหาไม่ทัน')
+      return {status:timedOut?'timeout' as const:'conflict' as const,limitReason:timedOut?'time_limit' as const:null,message:legacy.error,assignments:[] as PlannedSlot[],issues,nodes:0,solver:'legacy_backtracking',elapsedMs:Date.now()-started,timeLimitMs:8000}
+    }
   }
   const deadline=Date.now()+timeLimitMs;let nodes=0,limitReason:'node_limit'|'time_limit'|null=null
   const cell=(r:string,d:number,p:number)=>`${r}:${d}:${p}`

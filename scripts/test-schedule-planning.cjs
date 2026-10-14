@@ -17,7 +17,7 @@ const retainedSubject=lesson('retained-subject','T1','A',2)
 result=solve([retainedActivity,retainedSubject],[slot('retained-activity','A',1,1),slot('retained-subject','A',1,2)],plan,times,[])
 assert.equal(result.status,'complete');assert.equal(result.assignments.length,1);assert.ok(!result.assignments.some(s=>s.day===1&&s.period===1||s.day===1&&s.period===2))
 const onlyRetained=solve([retainedActivity,lesson('fixed-only','T1','B',1,{fixedOnly:true})],[slot('retained-activity','A',1,1),slot('fixed-only','B',1,2)],plan,times,[])
-assert.equal(onlyRetained.status,'complete');assert.equal(onlyRetained.assignments.length,0);assert.equal(onlyRetained.nodes,1)
+assert.equal(onlyRetained.status,'complete');assert.equal(onlyRetained.assignments.length,0);assert.ok(onlyRetained.nodes<=1)
 result=solve([lesson('A','T','A',1),lesson('outside','T','B',1,{fixedOnly:true})],[slot('outside','B',1,1)],plan,times,[{teacherId:'T',day:1,period:2}]);assert.equal(result.status,'complete');assert.ok(result.assignments.every(s=>s.period>2||s.day===2));assert.ok(result.assignments.every(s=>s.classroomId==='A'))
 assert.equal(solve([lesson('A','T','A',9)],[],plan,times,[]).status,'invalid')
 const nodeLimited=solve([lesson('A','T','A',2)],[],plan,times,[],0);assert.equal(nodeLimited.status,'timeout');assert.equal(nodeLimited.limitReason,'node_limit')
@@ -129,3 +129,13 @@ assert.equal(pinnedVenueDraft.solver,'dense_slot_matching');
 const pinnedVenueCells=new Set(pinnedVenueRows.flatMap(s=>venueById.get(s.lessonId)?[`${venueById.get(s.lessonId)}:${s.day}:${s.period}`]:[]));
 assert.ok(pinnedVenueDraft.assignments.every(s=>!venueById.get(s.lessonId)||!pinnedVenueCells.has(`${venueById.get(s.lessonId)}:${s.day}:${s.period}`)),'rebuilt lessons cannot collide with venues reserved by fixed rooms');
 console.log(`PASS: production-shaped six-room case via ${venueFull.solver} in ${venueFull.elapsedMs}ms/${venueFull.nodes} nodes; P5/P6-style retained rebuild in ${venuePartial.elapsedMs}ms/${venuePartial.nodes} nodes; fixed venue exclusion in ${pinnedVenueDraft.elapsedMs}ms`);
+const slackPlan=emptyPlan();slackPlan.days=[1,2,3,4];
+const slackLessons=[];
+for(let room=0;room<8;room++)for(let subject=0;subject<5;subject++)slackLessons.push(lesson(`S${room}-${subject}`,`ST${subject}`,`SR${room}`,2));
+const slackStart=Date.now(),slack=solve(slackLessons,[],slackPlan,schoolTimes,[{teacherId:'ST0',day:1,period:1}]);
+assert.equal(slack.status,'complete',`slack timetable should complete quickly; got ${slack.status} (${slack.limitReason||''}) ${slack.message||''}`);
+assert.equal(slack.assignments.length,80);
+assert.ok(Date.now()-slackStart<2000,`8-room slack timetable took ${Date.now()-slackStart}ms`);
+const slackClass=new Set(),slackTeacher=new Set(),slackTeacherById=new Map(slackLessons.map(l=>[l.id,l.teacherId]));
+for(const s of slack.assignments){const classKey=`${s.classroomId}:${s.day}:${s.period}`,teacher=slackTeacherById.get(s.lessonId),teacherKey=`${teacher}:${s.day}:${s.period}`;assert.ok(!slackClass.has(classKey));slackClass.add(classKey);assert.ok(!slackTeacher.has(teacherKey));slackTeacher.add(teacherKey);assert.ok(!(teacher==='ST0'&&s.day===1&&s.period===1))}
+console.log(`PASS: 8-room timetable with empty slots and a blocked teacher via ${slack.solver} in ${Date.now()-slackStart}ms`);

@@ -373,9 +373,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
     return (
       <>
         <span className="text-xs font-normal text-stone-500">{activity ? 'กิจกรรมพัฒนาผู้เรียน' : subj.subject_code}</span>
-        <span className="line-clamp-2 text-[13px] font-semibold leading-5" title={subj.label}>{subj.subject_name}</span>
+        <span className="line-clamp-2 text-[13px] font-semibold leading-5" title={subj.label}>{subj.subject_name || (activity ? 'กิจกรรม' : 'รายวิชา')}</span>
         {subj.room_name&&<span className="cell-tchr">สถานที่: {subj.room_name}</span>}
-        {!activity && <span className="cell-tchr" title={subj.teacher_name}>{subj.teacher_name || 'ยังไม่กำหนดครูผู้สอน'}</span>}
+        <span className="cell-tchr" title={subj.teacher_name}>{subj.teacher_name || (activity ? 'ยังไม่กำหนดทีมครู' : 'ยังไม่กำหนดครูผู้สอน')}</span>
       </>
     )
   }
@@ -383,8 +383,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   function teacherLine(classSubjectId: string | null | undefined) {
     if (!classSubjectId) return null
     const subj = subjectMap[classSubjectId]
-    if (!subj) return null
-    if (classSubjectId.startsWith('activity:')) return null
+    if (!subj || classSubjectId.startsWith('activity:')) return null
     const missing = !subj.teacher_name
     return (
       <div className={`mt-2 truncate px-1 text-xs ${missing?'text-blue-700':'text-stone-500'}`}>
@@ -406,17 +405,20 @@ export default function ClassScheduleEntry({ mode }: Props) {
         <div className="schedule-workspace-heading flex flex-wrap items-center justify-between gap-5 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm [&_h1]:text-2xl [&_h1]:font-bold [&_p]:mt-2 [&_p]:text-sm [&_p]:text-stone-500">
           <div>
             <span className="schedule-workspace-kicker">ตารางเรียนและตารางสอน</span>
-            <h1>{workspace==='prepare'?'Quick wizard':workspace==='teacher'?'ตารางสอน/ล็อคคาบ':workspace==='activity'?'ตารางกิจกรรมพัฒนาผู้เรียน':isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
+            <h1>{workspace==='prepare'?'เตรียมและจัดตาราง':workspace==='teacher'?'ตารางสอนและคาบที่ล็อก':workspace==='activity'?'กิจกรรมและครูประจำชั้น':isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
             <p>
-              {workspace!=='class' ? `ภาคเรียนที่ ${semester} · ปีการศึกษา ${selectedYearObj?.year_be || ''}` : selectedClassroom && selectedYearObj
+              {workspace==='activity' ? 'กำหนดกิจกรรม วัน คาบ และทีมครู แล้วสร้างฉบับร่างเพื่อให้ลงในตาราง'
+                : workspace==='prepare' ? 'ตรวจข้อมูลทั้ง 6 ขั้น กิจกรรมที่กำหนดไว้จะอยู่ในช่องสีเขียวของฉบับร่าง'
+                : workspace==='teacher' ? `ภาคเรียนที่ ${semester} · ปีการศึกษา ${selectedYearObj?.year_be || ''}`
+                : selectedClassroom && selectedYearObj
                 ? `ห้อง ${selectedClassroom.label} · ภาคเรียนที่ ${semester} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
                 : isManage
-                  ? 'กำหนดวิชาในแต่ละคาบ — ครูผู้สอนดึงจากข้อมูลจัดครูเข้าสอน'
+                  ? 'คลิกคาบเพื่อใส่รายวิชา กิจกรรมแสดงชื่อและครูที่กำหนดไว้'
                   : 'ดูตารางเรียนรายห้อง'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-          {isManage && canEdit ? <button type="button" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})} className="schedule-quick-button"><FiZap aria-hidden="true"/><span>Quick wizard<small>เตรียมข้อมูลและจัดตาราง 6 ขั้น</small></span></button> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-blue-900">จัดการตารางเรียน</Link>}
+          {isManage && canEdit ? <button type="button" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})} className="schedule-quick-button"><FiZap aria-hidden="true"/><span>จัดตาราง<small>เตรียมข้อมูลและสร้างฉบับร่าง</small></span></button> : canEdit && <Link href={manageHref} className="text-sm font-semibold text-blue-900">จัดการตารางเรียน</Link>}
           {workspace==='class' && selectedClass && <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked} onClick={downloadClassPdf}><FiDownload aria-hidden="true"/>ดาวน์โหลด PDF</button>}
           </div>
         </div>
@@ -424,7 +426,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
         {isManage && canEdit && <nav className="schedule-workspace-nav" aria-label="พื้นที่จัดตาราง">
           <button type="button" aria-pressed={workspace==='class'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('class'))}><FiGrid aria-hidden="true"/>ตารางเรียน</button>
           <button type="button" aria-pressed={workspace==='teacher'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('teacher'))}><FiUsers aria-hidden="true"/>ตารางสอน / ล็อกคาบ</button>
-          <button type="button" aria-pressed={workspace==='activity'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('activity'))}><FiCalendar aria-hidden="true"/>กำหนดกิจกรรมให้ชั้น / ห้อง</button>
+          <button type="button" aria-pressed={workspace==='activity'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('activity'))}><FiCalendar aria-hidden="true"/>กิจกรรมและครู</button>
         </nav>}
         <div className={`schedule-workspace-filters grid gap-4 rounded-lg border border-stone-200 bg-white p-5 shadow-sm ${workspace!=='class'?'sm:grid-cols-2':'sm:grid-cols-3'}`}>
           <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
@@ -456,8 +458,8 @@ export default function ClassScheduleEntry({ mode }: Props) {
         {workspace==='class' && isManage && canEdit && selectedClass && (
           <div className="schedule-workspace-actions flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
-              <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 border-blue-700! bg-blue-800! text-white! hover:bg-blue-900!" disabled={blocked} onClick={() => handleAutoSchedule()}>{busyAction === 'auto' ? 'กำลังจัดตาราง...' : 'จัดอัตโนมัติห้องนี้'}</button>
-              <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked} onClick={() => handleAutoSchedule(true)}>จัดทั้งโรงเรียน</button>
+              <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-700 bg-blue-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked} onClick={() => handleAutoSchedule()}>สร้างฉบับร่างห้องนี้</button>
+              <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked} onClick={() => handleAutoSchedule(true)}>สร้างฉบับร่างทั้งโรงเรียน</button>
               <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700" role="status">{savingKey ? 'กำลังบันทึก...' : busyAction ? 'กำลังดำเนินการ...' : gridLoading ? 'กำลังโหลด...' : blocked ? 'รอข้อมูลตาราง' : 'บันทึกอัตโนมัติ'}</span>
             </div>
             <details className="relative">
@@ -510,7 +512,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
                           title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={cellBlocked || pending || locked} aria-busy={pending}
                           draggable={!!cell?.class_subject_id&&!locked&&!pending&&!cellBlocked} onDragStart={e=>{if(!cell?.class_subject_id)return;e.dataTransfer.setData('application/x-jarnsek-lesson',cell.class_subject_id);e.dataTransfer.effectAllowed='move';setPaletteSelection(null);setDragLesson({id:cell.class_subject_id,from:{day,period},context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}} onClick={()=>paletteSelection?placePaletteLesson(day,period):setPicker({day,period})}
                           aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`}>
-                          {cell?.class_subject_id ? <><span className="text-xs font-normal text-stone-500">{subjectMap[cell.class_subject_id]?.subject_code || 'กิจกรรม'}</span><span className="line-clamp-2 text-[13px] font-semibold leading-5">{subjectMap[cell.class_subject_id]?.subject_name || 'รายวิชา'}</span></> : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
+                          {cell?.class_subject_id ? <><span className="text-xs font-normal text-stone-500">{subjectMap[cell.class_subject_id]?.subject_code || 'กิจกรรม'}</span><span className="line-clamp-2 text-[13px] font-semibold leading-5">{subjectMap[cell.class_subject_id]?.subject_name || 'กิจกรรม'}</span>{cell.class_subject_id.startsWith('activity:')&&<span className="line-clamp-2 text-[11px] font-medium leading-4 text-emerald-800">{subjectMap[cell.class_subject_id]?.teacher_name || 'ยังไม่กำหนดทีมครู'}</span>}</> : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
 
                         </button>
                         <button
