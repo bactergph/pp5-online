@@ -7,6 +7,7 @@ import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
 import {
   DEFAULT_PERIOD_TIMES,
+  normalizePeriodTimes,
   type PeriodTimeRow,
   workloadStatus,
   workloadLabel,
@@ -58,7 +59,7 @@ export async function fetchPeriodTimes() {
   if (teachingCount < 1 || teachingCount > 8) {
     return { times: DEFAULT_PERIOD_TIMES, isDefault: true }
   }
-  return { times: data as PeriodTimeRow[], isDefault: false }
+  return { times: normalizePeriodTimes(data as PeriodTimeRow[]), isDefault: false }
 }
 
 export async function savePeriodTimes(times: PeriodTimeRow[]) {

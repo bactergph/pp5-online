@@ -132,3 +132,14 @@ export function periodTimeLabel(times: PeriodTimeRow[], period: number) {
   if (!row) return `คาบ ${period}`
   return `${row.start_time}–${row.end_time}`
 }
+
+/** School term default follows the Bangkok calendar; users can still change it. */
+export function currentScheduleSemester(date = new Date()): 1 | 2 {
+  const month = Number(new Intl.DateTimeFormat('en-US', {timeZone:'Asia/Bangkok', month:'numeric'}).format(date))
+  return month >= 4 && month < 10 ? 1 : 2
+}
+
+/** PostgreSQL time values include seconds, while the editor uses HH:mm. */
+export function normalizePeriodTimes(times: PeriodTimeRow[]): PeriodTimeRow[] {
+  return times.map(row => ({...row, start_time:row.start_time.slice(0,5), end_time:row.end_time.slice(0,5)}))
+}

@@ -24,7 +24,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
-import type { PeriodTimeRow } from '@/lib/schedule-helpers'
+import { currentScheduleSemester, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import ScheduleLessonPicker from './ScheduleLessonPicker'
 import ScheduleLessonPalette from './ScheduleLessonPalette'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -86,7 +86,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [conflicts, setConflicts] = useState<Record<string, string[]>>({})
   const [selectedYear, setSelectedYear] = useState('')
-  const [semester, setSemester] = useState(1)
+  const [semester, setSemester] = useState<number>(() => currentScheduleSemester())
   const [selectedClass, setSelectedClass] = useState('')
   const [canEdit, setCanEdit] = useState(false)
   const [pendingCells, setPendingCells] = useState<Set<string>>(new Set())

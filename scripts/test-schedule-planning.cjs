@@ -17,3 +17,10 @@ assert.ok(checkPlanning([lesson('A',null)],[],plan.days,times,[]).some(i=>i.mess
 assert.ok(checkPlanning([lesson('A','T','A',2,{pattern:[3]})],[],plan.days,times,[]).some(i=>i.message.includes('รูปแบบ')))
 const activities=[lesson('act',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true}),lesson('actB',null,'B',1,{activity:true,teacherOptional:true,fixedOnly:true})];result=solve([...activities,lesson('A','T','A',2),lesson('B','T','B',2)],[slot('act','A',1,1),slot('actB','B',1,1)],plan,times,[]);assert.equal(result.status,'complete');assert.ok(result.assignments.every(s=>s.day!==1||s.period!==1));
 console.log('PASS: shared teacher/venue; actual lunch boundaries; locked doubles; outside scope; teacher unavailable; capacity; timeout; activity preservation')
+
+const helpers={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-helpers.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:helpers,require:()=>({})});
+for(const [date,term] of [['2026-03-31T16:59:00Z',2],['2026-03-31T17:00:00Z',1],['2026-09-30T16:59:00Z',1],['2026-09-30T17:00:00Z',2],['2027-01-15T00:00:00Z',2]])assert.equal(helpers.currentScheduleSemester(new Date(date)),term);
+const storedTimes=helpers.DEFAULT_PERIOD_TIMES.map(t=>({...t,start_time:t.start_time+':00',end_time:t.end_time+':00'}));
+const editorTimes=helpers.normalizePeriodTimes(storedTimes);assert.equal(helpers.validatePeriodTimes(editorTimes),null);assert.equal(storedTimes[0].start_time,'08:30:00');assert.equal(editorTimes[0].start_time,'08:30');
+assert.equal(helpers.validatePeriodTimes(helpers.moveLunchBreak(editorTimes,4)),null);
+console.log('PASS: April/October term boundaries in Bangkok, January term 2, database time seconds normalized without mutating data, lunch editor validation');

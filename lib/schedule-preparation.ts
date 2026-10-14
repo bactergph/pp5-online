@@ -4,7 +4,7 @@ import { getSession } from './session'
 import { createServerClient } from './supabase'
 import { SCHEDULE_EDIT_ROLES, isTimetableClassroom } from './schedules'
 import { loadSchedule, loadScheduleConstraints, lessonKey, lessonColumns, type ScheduleSlot } from './schedule-store'
-import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
+import { DEFAULT_PERIOD_TIMES, normalizePeriodTimes, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
 import { emptyPlan, validatePlan, checkPlanning, solvePlannedSchedule, type SchedulePlan } from './schedule-planning'
 
 async function actor(){const s=await getSession();if(!s?.schoolId||s.mustChangePassword||!SCHEDULE_EDIT_ROLES.includes(s.role as typeof SCHEDULE_EDIT_ROLES[number]))throw Error('ไม่มีสิทธิ์จัดตารางเรียน');return {...s,schoolId:s.schoolId}}
@@ -21,7 +21,7 @@ export async function preparation(year:string,term:number){
  for(const r of [config,times,activities,teachers])fail(r.error)
  if(hash!==await snapshot(session.schoolId,year,term))throw Error('ข้อมูลเปลี่ยนระหว่างโหลด กรุณาลองใหม่')
  const plan=(config.data?.config||emptyPlan()) as SchedulePlan
- const periods=(times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[]
+ const periods=normalizePeriodTimes((times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[])
  const lessons=data.lessons.map(l=>({...l,...plan.rules[l.id],spread:plan.rules[l.id]?.spread??true,roomName:plan.rooms.find(r=>r.id===plan.rules[l.id]?.roomId)?.name||l.roomName,source:plan.rules[l.id]?'กำหนดภาระสอนสำหรับภาคเรียนนี้':`${l.sourceHours||0} ชั่วโมงเทียบรายปี ÷ 40 สัปดาห์`}))
  // Keep all existing slots/lessons for outside-scope teacher and venue conflicts,
  // but only offer non-kindergarten classrooms for import, activities and generation.
