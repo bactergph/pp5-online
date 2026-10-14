@@ -10,6 +10,14 @@ result=solve([lesson('A','T1','A',2,{roomId:'lab'}),lesson('B','T2','B',2,{roomI
 assert.ok(blocksFor(2,[1],times).every(b=>!b.periods.includes(2)||!b.periods.includes(3)))
 result=solve([lesson('A','T','A',2,{pattern:[2]})],[slot('A','A',1,2)],plan,times,[]);assert.equal(result.status,'complete');assert.ok(result.assignments.some(s=>s.day===1&&s.period===1))
 result=solve([lesson('A','T','A',2,{pattern:[2]})],[slot('A','A',1,2),slot('A','A',1,3)],plan,times,[]);assert.equal(result.status,'conflict')
+// Retained single lessons and activities are fixed starting data, not search
+// tasks to rediscover. Only the missing subject period should be generated.
+const retainedActivity=lesson('retained-activity',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true})
+const retainedSubject=lesson('retained-subject','T1','A',2)
+result=solve([retainedActivity,retainedSubject],[slot('retained-activity','A',1,1),slot('retained-subject','A',1,2)],plan,times,[])
+assert.equal(result.status,'complete');assert.equal(result.assignments.length,1);assert.ok(!result.assignments.some(s=>s.day===1&&s.period===1||s.day===1&&s.period===2))
+const onlyRetained=solve([retainedActivity,lesson('fixed-only','T1','B',1,{fixedOnly:true})],[slot('retained-activity','A',1,1),slot('fixed-only','B',1,2)],plan,times,[])
+assert.equal(onlyRetained.status,'complete');assert.equal(onlyRetained.assignments.length,0);assert.equal(onlyRetained.nodes,1)
 result=solve([lesson('A','T','A',1),lesson('outside','T','B',1,{fixedOnly:true})],[slot('outside','B',1,1)],plan,times,[{teacherId:'T',day:1,period:2}]);assert.equal(result.status,'complete');assert.ok(result.assignments.every(s=>s.period>2||s.day===2));assert.ok(result.assignments.every(s=>s.classroomId==='A'))
 assert.equal(solve([lesson('A','T','A',9)],[],plan,times,[]).status,'invalid')
 const nodeLimited=solve([lesson('A','T','A',2)],[],plan,times,[],0);assert.equal(nodeLimited.status,'timeout');assert.equal(nodeLimited.limitReason,'node_limit')

@@ -71,7 +71,25 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   const teachersByLesson=new Map(lessons.map(l=>[l.id,lessonTeachers(l)]))
   for(const s of fixed){const owner=s.lessonId||'locked';occupied.set(cell(s.classroomId,s.day,s.period),owner);const l=byId.get(owner);if(l)for(const id of lessonTeachers(l))teacherBusy.set(cell(id,s.day,s.period),l.activityGroupId||owner);if(l?.roomId)roomBusy.set(cell(l.roomId,s.day,s.period),owner)}
   for(const b of unavailable)teacherBusy.set(cell(b.teacherId,b.day,b.period),'unavailable')
-  const tasks=lessons.flatMap(l=>(l.pattern||Array(l.count).fill(1)).map((length:number,index:number)=>({l,length,index}))).sort((a,b)=>b.length-a.length||Number(!!b.l.roomId)-Number(!!a.l.roomId))
+  // Existing retained placements are already the answer for those periods.
+  // Do not ask the backtracking search to rediscover them: in a six-room plan,
+  // that needlessly adds every retained activity and subject period to every
+  // recursive MRV scan. Single-period lessons can safely consume their current
+  // placements directly. Keep the existing block search for mixed/double
+  // patterns, where a retained slot must still be matched to a valid block.
+  const fixedCounts=new Map<string,number>()
+  for(const s of fixed)if(s.lessonId)fixedCounts.set(s.lessonId,(fixedCounts.get(s.lessonId)||0)+1)
+  for(const s of fixed){
+    const l=s.lessonId?byId.get(s.lessonId):undefined
+    const pattern=l?.pattern||Array(l?.count||0).fill(1)
+    if(l&&(l.fixedOnly||l.activity||pattern.every(length=>length===1)))covered.add(cell(s.classroomId,s.day,s.period))
+  }
+  const tasks=lessons.flatMap(l=>{
+    if(l.fixedOnly||l.activity)return []
+    const pattern=l.pattern||Array(l.count).fill(1)
+    const retained=pattern.every(length=>length===1)?(fixedCounts.get(l.id)||0):0
+    return pattern.slice(0,Math.max(0,pattern.length-retained)).map((length:number,index:number)=>({l,length,index}))
+  }).sort((a,b)=>b.length-a.length||Number(!!b.l.roomId)-Number(!!a.l.roomId))
   const usedTask=new Set<number>();const chosen=new Map<string,number>();const chosenEquivalentBlock=new Map<string,number>()
   function candidates(task:typeof tasks[number]){const {l,length}=task,group=l.id+':'+length,last=chosenEquivalentBlock.get(group),teachers=teachersByLesson.get(l.id)||[],owner=l.activityGroupId||l.id,available:{day:number;periods:number[];ordinal:number}[]=[]
     for(const b of blocksByLength.get(length)||[]){if(last!==undefined&&b.ordinal<=last)continue;let valid=true
