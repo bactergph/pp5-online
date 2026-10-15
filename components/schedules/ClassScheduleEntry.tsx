@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import {
   fetchClassScheduleBundle,
+  fetchSchedulePdfGrids,
   fetchScheduleExportContext,
   fetchScheduleClassrooms,
   fetchScheduleInit,
@@ -129,10 +130,6 @@ export default function ClassScheduleEntry({ mode }: Props) {
     if (!lines) return <span className="text-sm text-stone-400">{note || '+ เพิ่มวิชา'}</span>
     return <span className="sched-lines"><b>{lines.name}</b>{lines.code && <span className="code">{lines.code}</span>}<span className="teacher">{lines.teacher}</span>{lines.room && <span className="room">{lines.room}</span>}</span>
   }
-  function gridLines(subject: { subject_name: string; subject_code: string; teacher_name: string; room_name?: string } | undefined, note: string | null, activity: boolean) {
-    if (!subject) return { line1: note || '—', line2: '' }
-    return { line1: subject.subject_name || (activity ? 'กิจกรรม' : '—'), line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: activity ? activityTeacherLabel(subject.teacher_name) : teacherGivenName(subject.teacher_name), line4: subject.room_name || '' }
-  }
   function classTitle(room: Classroom) {
     const classLabel = room.label.replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
     const year = years.find(y => y.id === selectedYear)?.year_be || ''
@@ -151,14 +148,11 @@ export default function ClassScheduleEntry({ mode }: Props) {
     const times = [...periodTimes]
     const days = [...scheduleDays]
     enqueueFileExport({ fileName, label: rooms.length === 1 ? `ตารางเรียน · ${rooms[0].label}` : `ตารางเรียน · ${rooms.length} ห้อง`, run: async () => {
-      const ctx = await fetchScheduleExportContext()
-      const pages = []
-      for (const room of rooms) {
-        const bundle = await fetchClassScheduleBundle(room.id, selectedYear, semester)
-        const map = Object.fromEntries(bundle.subjects.map(subject => [subject.id, subject]))
-        const gridData = Object.fromEntries(Object.entries(bundle.grid).map(([key, cell]) => [key, gridLines(cell.class_subject_id ? map[cell.class_subject_id] : undefined, cell.note, isActivityLessonId(cell.class_subject_id))]))
-        pages.push({ title: classTitle(room), gridData })
-      }
+      const [ctx, grids] = await Promise.all([
+        fetchScheduleExportContext(),
+        fetchSchedulePdfGrids(selectedYear, semester, 'class', rooms.map(room => room.id)),
+      ])
+      const pages = rooms.map(room => ({ title: classTitle(room), gridData: grids[room.id] }))
       return buildSchedulePdfBlob({ days, pages, title: pages[0].title, fileName, gridData: pages[0].gridData, periodTimes: times, schoolName: scheduleSchoolName(ctx.school?.name), schoolLogoUrl: ctx.school?.logo_url, academicHeadName: ctx.school?.academic_head_name || '', directorName: directorDisplayName(ctx.school, ''), directorPosition: ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา' })
     }})
   }

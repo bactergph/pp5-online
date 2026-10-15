@@ -12,7 +12,7 @@ import {
   SCHEDULE_PERIOD_COUNT,
   SCHEDULE_VIEW_ROLES,
 } from '@/lib/schedules'
-import type { PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTeacherLabel, isActivityLessonId, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 
 type ScheduleSession = {
   userId: string
@@ -179,16 +179,16 @@ export async function saveClassScheduleCell(classroomId: string, yearId: string,
 export async function moveClassScheduleCell(roomId:string,yearId:string,fromDay:number,fromPeriod:number,toDay:number,toPeriod:number,expectedLesson:string,semester=1) {
   return scheduleResult(()=>scheduleOps.moveCell(roomId,yearId,fromDay,fromPeriod,toDay,toPeriod,expectedLesson,semester))
 }
-export async function fetchTeachingScheduleGrid(teacherId: string, yearId: string, semester = 1) {
-  const session = await requireScheduleSession()
-  if (session.role === 'teacher' && teacherId !== session.userId) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
-  const data = await loadSchedule(session.schoolId, yearId, semester)
+function teachingCells(data: ScheduleData, teacherId: string) {
+  const lessons = new Map(data.lessons.map(lesson => [lesson.id, lesson]))
+  const rooms = new Map(data.classrooms.map(room => [room.id, room]))
   const cells: Record<string,{label:string;subject_line:string;room_line:string}> = {}
   for (const d of SCHEDULE_DAYS) for(let p=1;p<=SCHEDULE_PERIOD_COUNT;p++) cells[d.value+'-'+p]={label:'',subject_line:'',room_line:''}
   for(const row of data.slots) {
-    const lesson=data.lessons.find(l=>l.id===lessonKey(row))
+    const lesson=lessons.get(lessonKey(row) || '')
     if(!lesson || lesson.activity || !lessonTeachers(lesson).includes(teacherId)) continue
-    const room=data.classrooms.find(c=>c.id===row.classroom_id)!
+    const room=rooms.get(row.classroom_id)
+    if (!room) continue
     const roomLine=room.level+'/'+room.room
     const subjectLine=[(lesson.code+' '+lesson.name).trim(),lesson.roomName].filter(Boolean).join(' · ')
     const key=row.day_of_week+'-'+row.period
@@ -199,7 +199,7 @@ export async function fetchTeachingScheduleGrid(teacherId: string, yearId: strin
     for (const roomId of group.roomIds || []) {
       if (!activityTeachers(group, roomId).includes(teacherId)) continue
       const lesson = data.lessons.find(item => item.activity && item.classroomId === roomId && item.subjectId === group.settingId)
-      const room = data.classrooms.find(item => item.id === roomId)
+      const room = rooms.get(roomId)
       const roomLine = room ? `${room.level}/${room.room}` : ''
       const subjectLine = [((lesson?.code || '') + ' ' + (lesson?.name || 'กิจกรรม')).trim(), lesson?.roomName].filter(Boolean).join(' · ')
       for (const cell of group.cells || []) {
@@ -216,6 +216,63 @@ export async function fetchTeachingScheduleGrid(teacherId: string, yearId: strin
     cells[key] = { label: entry.rooms.map(room => `${room}\n${entry.subjectLine}`).join('\n'), subject_line: entry.subjectLine, room_line: roomLine }
   }
   return cells
+}
+
+function classPdfGrid(data: ScheduleData, classroomId: string) {
+  const view = classRoomView(data, classroomId)
+  const lessons = new Map(view.lessons.map(lesson => [lesson.id, lesson]))
+  const grid: Record<string, { line1: string; line2: string; line3?: string; line4?: string }> = {}
+  for (const [key, cell] of Object.entries(view.grid)) {
+    const lesson = cell.class_subject_id ? lessons.get(cell.class_subject_id) : undefined
+    const activity = isActivityLessonId(cell.class_subject_id) || !!lesson?.activity
+    grid[key] = lesson
+      ? {
+        line1: lesson.name || (activity ? 'กิจกรรม' : '—'),
+        line2: lesson.code ? `(${lesson.code})` : activity ? '(กิจกรรม)' : '',
+        line3: activity ? activityTeacherLabel(lesson.teacherName) : teacherGivenName(lesson.teacherName),
+        line4: lesson.roomName || '',
+      }
+      : { line1: cell.note || '—', line2: '' }
+  }
+  return grid
+}
+
+function teachingPdfGrid(cells: Record<string, { subject_line: string; room_line: string }>) {
+  const grid: Record<string, { line1: string; line2: string; line3?: string; line4?: string }> = {}
+  for (const [key, cell] of Object.entries(cells)) {
+    const [subjectPart, place = ''] = (cell.subject_line || '').split(/\s*·\s*/)
+    const match = subjectPart.trim().match(/^(\S+)\s+(.+)$/)
+    grid[key] = {
+      line1: cell.room_line || '—',
+      line2: match?.[2] || subjectPart,
+      line3: match ? `(${match[1]})` : '',
+      line4: place,
+    }
+  }
+  return grid
+}
+
+export async function fetchTeachingScheduleGrid(teacherId: string, yearId: string, semester = 1) {
+  const session = await requireScheduleSession()
+  if (session.role === 'teacher' && teacherId !== session.userId) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
+  const data = await loadSchedule(session.schoolId, yearId, semester)
+  return teachingCells(data, teacherId)
+}
+
+/** โหลดตารางทั้งภาคครั้งเดียว แล้วตัดเป็นหน้า PDF ตามห้องหรือครูที่เลือก */
+export async function fetchSchedulePdfGrids(yearId: string, semester: number, kind: 'class' | 'teaching', ids: string[]) {
+  const session = await requireScheduleSession()
+  if (!ids.length || ids.length > 200) throw new Error('เลือกห้องหรือครูได้ครั้งละ 1–200 รายการ')
+  if (kind === 'teaching' && session.role === 'teacher' && ids.some(id => id !== session.userId)) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
+  const data = await loadSchedule(session.schoolId, yearId, semester)
+  const result: Record<string, Record<string, { line1: string; line2: string; line3?: string; line4?: string }>> = {}
+  for (const id of ids) {
+    if (kind === 'class') {
+      requireScheduleClass(data, id)
+      result[id] = classPdfGrid(data, id)
+    } else result[id] = teachingPdfGrid(teachingCells(data, id))
+  }
+  return result
 }
 
 export async function fetchPeriodTimes() {

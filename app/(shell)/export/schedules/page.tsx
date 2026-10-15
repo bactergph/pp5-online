@@ -7,6 +7,7 @@ import {
   fetchClassScheduleSubjects,
   fetchScheduleClassrooms,
   fetchScheduleInit,
+  fetchSchedulePdfGrids,
   fetchTeachingScheduleGrid,
   fetchScheduleExportContext,
 } from '@/app/schedules/actions'
@@ -268,26 +269,16 @@ export default function ScheduleExportPage() {
       fileName,
       label: exportType === 'class' ? `ตารางเรียน · ${ids.length} ห้อง` : `ตารางสอน · ${ids.length} คน`,
       run: async () => {
-        const pages = []
-        for (const id of ids) {
+        const grids = await fetchSchedulePdfGrids(yearId, Number(semester), exportType, ids)
+        const pages = ids.map(id => {
           if (exportType === 'class') {
-            const [grid, subs] = await Promise.all([fetchClassScheduleGrid(id, yearId, Number(semester)), fetchClassScheduleSubjects(id, Number(semester))])
-            const map = Object.fromEntries((subs as { id: string; label: string; subject_name?: string; subject_code?: string; teacher_name: string; room_name?: string }[]).map(s => [s.id, s]))
-            const gridData = Object.fromEntries(Object.entries(grid).map(([key, cell]) => {
-              const subject = cell.class_subject_id ? map[cell.class_subject_id] : undefined
-              const activity = isActivityLessonId(cell.class_subject_id)
-              return [key, subject ? { line1: subject.subject_name || subject.label || '—', line2: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '', line3: activity ? activityTeacherLabel(subject.teacher_name) : teacherGivenName(subject.teacher_name), line4: subject.room_name || '' } : { line1: cell.note || '—', line2: '' }]
-            }))
             const room = classrooms.find(c => c.id === id)
             const label = (room?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
-            pages.push({ title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData })
-          } else {
-            const grid = await fetchTeachingScheduleGrid(id, yearId, Number(semester))
-            const gridData = Object.fromEntries(Object.entries(grid).map(([key, cell]) => [key, teachingLines(cell.room_line, cell.subject_line)]))
-            const teacher = teachers.find(t => t.id === id)
-            pages.push({ title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix} ${teacher.full_name}` : ''}`, gridData })
+            return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id] }
           }
-        }
+          const teacher = teachers.find(t => t.id === id)
+          return { title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix} ${teacher.full_name}` : ''}`, gridData: grids[id] }
+        })
         return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, directorName, directorPosition, fileName })
       },
     })
