@@ -5906,7 +5906,7 @@ body.staff-picker-menu-open .school-save-bar {
 }
 
 .staff-picker__option:active {
-  background: #F5EDE3;
+  background: #dbeafe;
   transform: scale(0.99);
 }
 
