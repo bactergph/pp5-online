@@ -123,11 +123,11 @@ export default function ScoreEntryPage() {
       return
     }
     let cancelled = false
-    void fetchScoreSubjects(selectedClass).then(data => {
+    void fetchScoreSubjects(selectedClass, term).then(data => {
       if (cancelled) return
       const list = data as CS[]
       setItems(list)
-      setSelectedCS(list[0]?.id || '')
+      setSelectedCS(current => list.some(item => item.id === current) ? current : (list[0]?.id || ''))
       if (list.length === 0) {
         setStudents([])
         setConfig(null)
@@ -135,7 +135,7 @@ export default function ScoreEntryPage() {
       }
     }).catch(() => { if (!cancelled) setEntryMessage('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่') })
     return () => { cancelled = true }
-  }, [selectedClass])
+  }, [selectedClass, term])
 
   async function changeSelection(update: () => void) {
     if (saving || transferBusy) return

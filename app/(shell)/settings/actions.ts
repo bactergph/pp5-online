@@ -5,6 +5,7 @@ import { getSession, createSession } from '@/lib/session'
 import { clearUserFromLeaderSlots, syncSchoolLeaderSlot, syncUserRoleToSchoolLeaders } from '@/lib/school-leaders'
 import { formatStaffName } from '@/lib/roles'
 import { logActivity, resolveClassroomSchoolId, resolveClassSubjectContext } from '@/lib/audit'
+import { classSubjectSemesterForLevel, type ClassSubjectSemester } from '@/lib/class-subject-term'
 import {
   characterDefaultSettingsForBand,
   EVALUATION_DEFAULT_SETTINGS,
@@ -1499,8 +1500,14 @@ export async function fetchSubjects() {
 
 export async function fetchSubjectSettingsInit() {
   const session = await requireSchoolSession()
+  const db = createServerClient()
   const [subjects, school] = await Promise.all([fetchSubjects(), session.schoolId ? getSchoolShell(session.schoolId) : Promise.resolve(null)])
-  return { subjects, educationType: resolveSchoolEducationType(school?.education_type) }
+  let levels: string[] = []
+  if (session.schoolId && school?.education_type !== 'primary' && school?.education_type !== 'secondary') {
+    const rooms = await db.from('classrooms').select('level').eq('school_id', session.schoolId).in('level', ['ม.4', 'ม.5', 'ม.6']).limit(1)
+    levels = (rooms.data || []).map(row => row.level)
+  }
+  return { subjects, educationType: resolveSchoolEducationType(school?.education_type, levels) }
 }
 
 export async function saveSubject(id: string | null, payload: Record<string, unknown>) {
@@ -2432,13 +2439,21 @@ export async function fetchClassroomsLite(yearId: string) {
   return data || []
 }
 
-export async function fetchClassSubjects(classroomId: string) {
+export async function fetchClassSubjects(classroomId: string, semester?: ClassSubjectSemester) {
   const session = await requireSchoolSession()
   const db = createServerClient()
-  const { data } = await db.from('class_subjects')
+  let query = db.from('class_subjects')
     .select('*,classrooms!inner(school_id)')
     .eq('classroom_id', classroomId).eq('classrooms.school_id', session.schoolId).order('order_number')
-  return data || []
+  if (semester !== undefined) query = query.eq('semester', semester)
+  const result = await query
+  if (result.error && /semester/.test(result.error.message) && semester !== undefined) {
+    const fallback = await db.from('class_subjects')
+      .select('*,classrooms!inner(school_id)')
+      .eq('classroom_id', classroomId).eq('classrooms.school_id', session.schoolId).order('order_number')
+    return fallback.data || []
+  }
+  return result.data || []
 }
 
 const CURRICULUM_GROUP_ORDER: Record<string, number> = {
@@ -2454,7 +2469,11 @@ const CURRICULUM_GROUP_ORDER: Record<string, number> = {
 
 function subjectLevelRank(subject: DbRow | null | undefined) {
   const codeDigits = asText(subject?.code).replace(/\D/g, '')
-  if (codeDigits.length >= 2) return Number(codeDigits[1])
+  if (codeDigits.length >= 2) {
+    const grade = Number(codeDigits[1])
+    const band = codeDigits[0] === '3' ? 30 : codeDigits[0] === '2' ? 20 : 0
+    if (grade >= 1 && grade <= 6) return band + grade
+  }
   const nameMatch = asText(subject?.name).match(/(\d+)\s*$/)
   return nameMatch ? Number(nameMatch[1]) : 99
 }
@@ -2471,10 +2490,19 @@ function curriculumSubjectRank(subject: DbRow | null | undefined) {
   return (levelRank * 1000) + typeOffset + groupRank + historyOffset + antiCorruptionOffset
 }
 
-async function normalizeClassSubjectOrder(db: ReturnType<typeof createServerClient>, classroomId: string) {
-  const { data, error: rowsError } = await db.from('class_subjects')
+async function normalizeClassSubjectOrder(db: ReturnType<typeof createServerClient>, classroomId: string, semester?: ClassSubjectSemester) {
+  let query = db.from('class_subjects')
     .select('id, subject_id, order_number, subjects(code, name, subject_group, type)')
     .eq('classroom_id', classroomId)
+  if (semester !== undefined) query = query.eq('semester', semester)
+  let { data, error: rowsError } = await query
+  if (rowsError && /semester/.test(rowsError.message) && semester !== undefined) {
+    const fallback = await db.from('class_subjects')
+      .select('id, subject_id, order_number, subjects(code, name, subject_group, type)')
+      .eq('classroom_id', classroomId)
+    data = fallback.data
+    rowsError = fallback.error
+  }
   if (rowsError) throw new Error(rowsError.message)
   const rows = ((data || []) as DbRow[]).slice().sort((a, b) => {
     const firstSubject = Array.isArray(a.subjects) ? a.subjects[0] : a.subjects
@@ -2495,25 +2523,35 @@ async function normalizeClassSubjectOrder(db: ReturnType<typeof createServerClie
   }
 }
 
-export async function addClassSubjects(classroomId: string, academicYearId: string, subjectIds: string[]) {
+export async function addClassSubjects(classroomId: string, academicYearId: string, subjectIds: string[], semester?: ClassSubjectSemester) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', added: 0 }
   if (subjectIds.length === 0) return { error: 'ไม่ได้เลือกวิชา', added: 0 }
   const db = createServerClient()
-  const { data: existing } = await db.from('class_subjects').select('subject_id, order_number').eq('classroom_id', classroomId)
+  const room = await db.from('classrooms').select('level').eq('id', classroomId).maybeSingle()
+  const term = semester ?? classSubjectSemesterForLevel(room.data?.level, 1)
+  let existingQuery = db.from('class_subjects').select('subject_id, order_number').eq('classroom_id', classroomId)
+  if (term !== undefined) existingQuery = existingQuery.eq('semester', term)
+  let existingResult = await existingQuery
+  if (existingResult.error && /semester/.test(existingResult.error.message)) existingResult = await db.from('class_subjects').select('subject_id, order_number').eq('classroom_id', classroomId)
+  const existing = existingResult.data
   const have = new Set((existing || []).map((e: { subject_id: string }) => e.subject_id))
   let order = Math.max(0, ...((existing || []).map((e: { order_number: number }) => e.order_number || 0)))
   const rows = subjectIds.filter(id => !have.has(id)).map(id => ({
-    classroom_id: classroomId, subject_id: id, academic_year_id: academicYearId,
+    classroom_id: classroomId, subject_id: id, academic_year_id: academicYearId, semester: term,
     order_number: ++order, teacher_id: null,
   }))
   if (rows.length === 0) {
-    await normalizeClassSubjectOrder(db, classroomId)
+    await normalizeClassSubjectOrder(db, classroomId, term)
     return { error: null, added: 0 }
   }
-  const { error } = await db.from('class_subjects').insert(rows)
+  let { error } = await db.from('class_subjects').insert(rows)
+  if (error && /semester/.test(error.message)) {
+    const fallback = await db.from('class_subjects').insert(rows.map(({ semester: _semester, ...row }) => row))
+    error = fallback.error
+  }
   if (!error) {
-    await normalizeClassSubjectOrder(db, classroomId)
+    await normalizeClassSubjectOrder(db, classroomId, term)
     await logActivity({
       actor: session,
       schoolId: await resolveClassroomSchoolId(classroomId),
@@ -2528,12 +2566,12 @@ export async function addClassSubjects(classroomId: string, academicYearId: stri
   return { error: error?.message, added: rows.length }
 }
 
-export async function reorderClassSubjects(classroomId: string) {
+export async function reorderClassSubjects(classroomId: string, semester?: ClassSubjectSemester) {
   try {
     const session = await requireSchoolSession()
     if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
     const db = createServerClient()
-    await normalizeClassSubjectOrder(db, classroomId)
+    await normalizeClassSubjectOrder(db, classroomId, semester)
     await logActivity({
       actor: session,
       schoolId: await resolveClassroomSchoolId(classroomId),
@@ -2590,12 +2628,12 @@ export async function removeClassSubject(id: string) {
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
   const context = await resolveClassSubjectContext(id)
-  const { data: classSubjectRow } = await db.from('class_subjects').select('classroom_id').eq('id', id).maybeSingle()
+  const { data: classSubjectRow } = await db.from('class_subjects').select('classroom_id, semester').eq('id', id).maybeSingle()
   const { count } = await db.from('scores').select('id', { count: 'exact', head: true }).eq('class_subject_id', id)
   if ((count ?? 0) > 0) return { error: 'ลบไม่ได้ — วิชานี้มีการกรอกคะแนนแล้ว' }
   const { error } = await db.from('class_subjects').delete().eq('id', id)
   if (!error) {
-    if (classSubjectRow?.classroom_id) await normalizeClassSubjectOrder(db, String(classSubjectRow.classroom_id))
+    if (classSubjectRow?.classroom_id) await normalizeClassSubjectOrder(db, String(classSubjectRow.classroom_id), classSubjectRow.semester as ClassSubjectSemester | undefined)
     await logActivity({
       actor: session,
       schoolId: context.schoolId ?? session.schoolId,
@@ -2610,17 +2648,23 @@ export async function removeClassSubject(id: string) {
   return { error: error?.message }
 }
 
-export async function removeAllClassSubjects(classroomId: string) {
+export async function removeAllClassSubjects(classroomId: string, semester?: ClassSubjectSemester) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', deleted: 0 }
   if (!classroomId) return { error: 'ยังไม่ได้เลือกห้องเรียน', deleted: 0 }
   const db = createServerClient()
-  const { data: rows } = await db.from('class_subjects').select('id').eq('classroom_id', classroomId)
-  const ids = (rows || []).map(row => row.id as string)
+  let list = db.from('class_subjects').select('id').eq('classroom_id', classroomId)
+  if (semester !== undefined) list = list.eq('semester', semester)
+  let listed = await list
+  if (listed.error && /semester/.test(listed.error.message)) {
+    if (semester === 1 || semester === 2) return { error: 'กรุณารันไฟล์ฐานข้อมูล 068_class_subject_semester.sql ก่อนลบรายวิชาแยกภาคเรียน', deleted: 0 }
+    listed = await db.from('class_subjects').select('id').eq('classroom_id', classroomId)
+  }
+  const ids = (listed.data || []).map(row => row.id as string)
   if (ids.length === 0) return { error: null, deleted: 0 }
   const { count } = await db.from('scores').select('id', { count: 'exact', head: true }).in('class_subject_id', ids)
   if ((count ?? 0) > 0) return { error: 'ลบทั้งหมดไม่ได้ — มีรายวิชาที่กรอกคะแนนแล้ว', deleted: 0 }
-  const { error } = await db.from('class_subjects').delete().eq('classroom_id', classroomId)
+  const { error } = await db.from('class_subjects').delete().in('id', ids)
   if (!error) {
     await logActivity({
       actor: session,

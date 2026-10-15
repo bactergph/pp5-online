@@ -3997,7 +3997,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
     setLoading(true)
     setError('')
     try {
-      const result = await fetchReportSubjects({ academicYearId: yearId, classroomId, mode })
+      const result = await fetchReportSubjects({ academicYearId: yearId, classroomId, mode, term: reportTerm })
       if (activeRef && !activeRef.active) return
       setSubjectOptions(result)
     } catch (err) {

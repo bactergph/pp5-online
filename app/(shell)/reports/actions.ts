@@ -618,24 +618,44 @@ export async function fetchReportInit(mode?: ReportMode) {
   }
 }
 
+const REPORT_SUBJECT_SELECT = 'id, order_number, subject_id, teacher_id, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)'
+
+async function loadReportClassSubjects(
+  db: ReturnType<typeof createServerClient>,
+  params: { classroomId: string; academicYearId: string; term?: 0 | 1 | 2; teacherId?: string; classSubjectId?: string },
+) {
+  const build = (withSemester: boolean) => {
+    let query = db.from('class_subjects')
+      .select(REPORT_SUBJECT_SELECT)
+      .eq('classroom_id', params.classroomId)
+      .eq('academic_year_id', params.academicYearId)
+      .order('order_number')
+    if (withSemester && (params.term === 1 || params.term === 2)) query = query.in('semester', [0, params.term])
+    if (params.teacherId) query = query.eq('teacher_id', params.teacherId)
+    if (params.classSubjectId) query = query.eq('id', params.classSubjectId)
+    return query
+  }
+  const result = await build(true)
+  if (result.error && /semester/.test(result.error.message)) return safeRows<DbRow>(build(false))
+  return (result.data || []) as DbRow[]
+}
+
 export async function fetchReportSubjects(params: {
   academicYearId: string
   classroomId: string
   mode?: ReportMode
+  term?: 0 | 1 | 2
 }) {
   const session = await requireReportSession()
   const db = createServerClient()
   await requireReportClassroom(db, session, params.classroomId, params.mode)
 
-  let query = db.from('class_subjects')
-    .select('id, order_number, subject_id, teacher_id, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)')
-    .eq('classroom_id', params.classroomId)
-    .eq('academic_year_id', params.academicYearId)
-    .order('order_number')
-  if (session.role === 'teacher' && params.mode === 'pp5-subject') {
-    query = query.eq('teacher_id', session.userId)
-  }
-  const rows = await safeRows<DbRow>(query)
+  const rows = await loadReportClassSubjects(db, {
+    classroomId: params.classroomId,
+    academicYearId: params.academicYearId,
+    term: params.term,
+    teacherId: session.role === 'teacher' && params.mode === 'pp5-subject' ? session.userId : undefined,
+  })
 
   return rows.map(normalizeSubject)
 }
@@ -655,15 +675,13 @@ export async function loadReportDataForAccess(
   const schoolId = access.schoolId || ''
   const db = createServerClient()
 
-  let subjectQuery = db.from('class_subjects')
-    .select('id, order_number, subject_id, teacher_id, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)')
-    .eq('classroom_id', params.classroomId)
-    .eq('academic_year_id', params.academicYearId)
-    .order('order_number')
-  if (access.role === 'teacher' && params.mode === 'pp5-subject') {
-    subjectQuery = subjectQuery.eq('teacher_id', access.userId)
-    if (params.classSubjectId) subjectQuery = subjectQuery.eq('id', params.classSubjectId)
-  }
+  const classSubjectRowsPromise = loadReportClassSubjects(db, {
+    classroomId: params.classroomId,
+    academicYearId: params.academicYearId,
+    term: params.term,
+    teacherId: access.role === 'teacher' && params.mode === 'pp5-subject' ? access.userId : undefined,
+    classSubjectId: access.role === 'teacher' && params.mode === 'pp5-subject' ? params.classSubjectId : undefined,
+  })
 
   const [school, classroomBase, yearRow, students, classSubjectRows] = await Promise.all([
     loadReportSchool(db, schoolId),
@@ -678,7 +696,7 @@ export async function loadReportDataForAccess(
       .select('id, student_number, student_code, national_id, prefix, first_name, last_name, status')
       .eq('classroom_id', params.classroomId)
       .order('student_number')),
-    safeRows<DbRow>(subjectQuery),
+    classSubjectRowsPromise,
   ])
   const academicYear = yearRow || null
   const range = termRange(academicYear, params.term)

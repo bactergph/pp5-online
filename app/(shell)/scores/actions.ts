@@ -44,12 +44,20 @@ async function loadScoreSubjects(
   db: ReturnType<typeof createServerClient>,
   session: { userId: string; role: string },
   classroomId: string,
+  term: 1 | 2 = 1,
 ) {
   let q = db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
-    .eq('classroom_id', classroomId).order('order_number')
+    .eq('classroom_id', classroomId).in('semester', [0, term]).order('order_number')
   if (session.role === 'teacher') q = q.eq('teacher_id', session.userId)
-  const { data } = await q
-  return data || []
+  const result = await q
+  if (result.error && /semester/.test(result.error.message)) {
+    let fallback = db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
+      .eq('classroom_id', classroomId).order('order_number')
+    if (session.role === 'teacher') fallback = fallback.eq('teacher_id', session.userId)
+    const plain = await fallback
+    return plain.data || []
+  }
+  return result.data || []
 }
 
 /** ปี + วิชา + ห้องของปีที่ active + วิชาในห้องแรก — ลด waterfall ตอนเปิดหน้า */
@@ -85,10 +93,10 @@ export async function fetchScoreClassrooms(yearId: string) {
 }
 
 // วิชาในห้อง — ครูเห็นเฉพาะวิชาที่ตนสอน
-export async function fetchScoreSubjects(classroomId: string) {
+export async function fetchScoreSubjects(classroomId: string, term: 1 | 2 = 1) {
   const session = await requireSession()
   const db = createServerClient()
-  return loadScoreSubjects(db, session, classroomId)
+  return loadScoreSubjects(db, session, classroomId, term)
 }
 
 // โหลดนักเรียน + config + คะแนนเดิม สำหรับ 1 วิชา × ภาคเรียน

@@ -28,6 +28,11 @@ export default async function AppLayout({ children, title, requireRole }: Props)
     schoolName = data?.name ? String(data.name).trim() || null : null
     isActingDirector = data?.acting_director_user_id === session.userId
     educationType = resolveSchoolEducationType(data?.education_type)
+    if (data && data.education_type !== 'primary' && data.education_type !== 'secondary') {
+      const { createServerClient } = await import('@/lib/supabase')
+      const rooms = await createServerClient().from('classrooms').select('level').eq('school_id', session.schoolId).in('level', ['ม.4', 'ม.5', 'ม.6']).limit(1)
+      educationType = resolveSchoolEducationType(data.education_type, (rooms.data || []).map(row => row.level))
+    }
   }
 
   const navRole = resolveNavRole(session.role, isActingDirector)

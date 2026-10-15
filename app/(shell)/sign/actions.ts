@@ -3,6 +3,7 @@ import 'server-only'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
+import { classSubjectTerms } from '@/lib/class-subject-term'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
 import type { ClassDocType, SchoolLeaders, SubjectGroupHeadMap } from '@/lib/approvals/types'
 import {
@@ -149,13 +150,21 @@ export async function fetchPp5SubjectQueue() {
   const db = createServerClient()
   const { school, groupHeads } = await loadSchoolContext(session.schoolId)
 
-  const { data: classSubjects } = await db.from('class_subjects')
-    .select(`
-      id, teacher_id, academic_year_id,
-      classrooms!inner(id, level, room, school_id),
-      subjects!inner(id, code, name, subject_group)
-    `)
+  const subjectSelect = 'id, teacher_id, academic_year_id, classrooms!inner(id, level, room, school_id), subjects!inner(id, code, name, subject_group)'
+  const withSemester = await db.from('class_subjects')
+    .select('id, teacher_id, academic_year_id, semester, classrooms!inner(id, level, room, school_id), subjects!inner(id, code, name, subject_group)')
     .eq('classrooms.school_id', session.schoolId)
+  const plain = withSemester.error && /semester/.test(withSemester.error.message)
+    ? await db.from('class_subjects').select(subjectSelect).eq('classrooms.school_id', session.schoolId)
+    : null
+  const classSubjects = (plain ? plain.data : withSemester.data) as Array<{
+    id: string
+    teacher_id: string | null
+    academic_year_id: string
+    semester?: number | null
+    classrooms: { id: string; level: string; room: number }
+    subjects: { code: string; name: string; subject_group: string }
+  }> | null
 
   if (!classSubjects?.length) return []
 
@@ -191,7 +200,7 @@ export async function fetchPp5SubjectQueue() {
   for (const cs of classSubjects) {
     const classroom = cs.classrooms as { id: string; level: string; room: number }
     const subject = cs.subjects as { code: string; name: string; subject_group: string }
-    for (const term of [1, 2]) {
+    for (const term of classSubjectTerms((cs as { semester?: number | null }).semester)) {
       const record = (approvalMap.get(`${cs.id}:${term}`) || {
         status: 'draft',
       }) as Pp5SubjectApproval

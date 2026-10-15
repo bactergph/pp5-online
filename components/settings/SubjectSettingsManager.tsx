@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
+import { isSecondaryClassLevel } from '@/lib/class-level'
 import {
   fetchSubjectSettingsInit,
   saveSubject,
@@ -192,14 +193,10 @@ function gridToRows(grid: GridRow[], secondary = false): ParsedRow[] {
   return out
 }
 
-function levelNumberFromLabel(level: string) {
-  const match = level.match(/\d+/)
-  return match ? Number(match[0]) : null
-}
-
 function subjectLevelNumber(subject: Subject) {
-  const fromCode = gradeFromSubjectCode(subject.code)
-  if (fromCode != null) return fromCode
+  const band = bandFromSubjectCode(subject.code)
+  const grade = gradeFromSubjectCode(subject.code)
+  if (band && grade) return (band === 'ประถม' ? 0 : band === 'ม.ต้น' ? 20 : 30) + grade
   const nameMatch = subject.name.match(/(\d+)\s*$/)
   return nameMatch ? Number(nameMatch[1]) : null
 }
@@ -281,6 +278,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   const [loadingClassSubjects, setLoadingClassSubjects] = useState(false)
   const [classSubjectSaving, setClassSubjectSaving] = useState(false)
   const [classSubjectAction, setClassSubjectAction] = useState<'add' | 'auto' | 'remove' | 'remove-all' | null>(null)
+  const [classSubjectTerm, setClassSubjectTerm] = useState<1 | 2>(1)
   const [canManageClassSubjects, setCanManageClassSubjects] = useState(false)
 
   const [showPaste, setShowPaste] = useState(false)
@@ -296,11 +294,18 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   const classSubjectMap = Object.fromEntries(subjects.map(subject => [subject.id, subject]))
   const assignedSubjectIds = new Set(classSubjectItems.map(item => item.subject_id))
   const selectedClassSubjectClassroom = classSubjectClassrooms.find(classroom => classroom.id === classSubjectClassroomId)
-  const selectedClassLevelNumber = selectedClassSubjectClassroom ? levelNumberFromLabel(selectedClassSubjectClassroom.level) : null
+  const classSubjectSemester: 0 | 1 | 2 = selectedClassSubjectClassroom && isSecondaryClassLevel(selectedClassSubjectClassroom.level) ? classSubjectTerm : 0
   const availableClassSubjects = sortSubjectsByCurriculum(subjects.filter(subject => !assignedSubjectIds.has(subject.id)))
-  const autoClassSubjects = selectedClassLevelNumber === null
-    ? []
-    : availableClassSubjects.filter(subject => subjectLevelNumber(subject) === selectedClassLevelNumber)
+  const autoClassSubjects = selectedClassSubjectClassroom
+    ? availableClassSubjects.filter(subject => gradeLabelFromCode(subject.code) === selectedClassSubjectClassroom.level)
+    : []
+  const classSubjectCredits = classSubjectItems.reduce((sum, item) => {
+    const subject = classSubjectMap[item.subject_id]
+    const credits = Number(subject?.credits) || 0
+    if (subject?.type?.includes('เพิ่ม')) sum.extra += credits
+    else sum.basic += credits
+    return sum
+  }, { basic: 0, extra: 0 })
   const clubCounts = clubStudents.reduce((acc: Record<string, number>, student) => {
     const clubId = clubAssignments[student.id]
     if (clubId) acc[clubId] = (acc[clubId] || 0) + 1
@@ -334,9 +339,11 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
 
   useEffect(() => {
     if (activeTab !== 'class-subjects' || !classSubjectClassroomId) return
-    void loadClassSubjectItems(classSubjectClassroomId)
+    const room = classSubjectClassrooms.find(classroom => classroom.id === classSubjectClassroomId)
+    const semester = room && isSecondaryClassLevel(room.level) ? classSubjectTerm : 0
+    void loadClassSubjectItems(classSubjectClassroomId, semester)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, classSubjectClassroomId])
+  }, [activeTab, classSubjectClassroomId, classSubjectTerm, classSubjectClassrooms])
 
   useEffect(() => {
     if (activeTab !== 'clubs' || !clubYearId || !clubClassroomId) return
@@ -455,13 +462,13 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     setLoadingClassSubjects(false)
   }
 
-  async function loadClassSubjectItems(classroomId: string) {
+  async function loadClassSubjectItems(classroomId: string, semester = classSubjectSemester) {
     setLoadingClassSubjects(true)
     setSelectedSubjectId('')
-    let items = await fetchClassSubjects(classroomId) as ClassSubjectItem[]
+    let items = await fetchClassSubjects(classroomId, semester) as ClassSubjectItem[]
     if (items.length > 0) {
-      const { error } = await reorderClassSubjects(classroomId)
-      if (!error) items = await fetchClassSubjects(classroomId) as ClassSubjectItem[]
+      const { error } = await reorderClassSubjects(classroomId, semester)
+      if (!error) items = await fetchClassSubjects(classroomId, semester) as ClassSubjectItem[]
     }
     setClassSubjectItems(items)
     setLoadingClassSubjects(false)
@@ -471,7 +478,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     if (!classSubjectClassroomId || !classSubjectYearId) return
     setClassSubjectSaving(true); clearAlert()
     try {
-      const { error, added } = await addClassSubjects(classSubjectClassroomId, classSubjectYearId, subjectIds)
+      const { error, added } = await addClassSubjects(classSubjectClassroomId, classSubjectYearId, subjectIds, classSubjectSemester)
       if (error) { notify('error', error); return }
       notify('success', successText(added))
       await loadClassSubjectItems(classSubjectClassroomId)
@@ -513,10 +520,10 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
 
   async function handleRemoveAllClassSubjects() {
     if (!classSubjectClassroomId || classSubjectItems.length === 0) return
-    if (!confirm(`ลบรายวิชาทั้งหมด ${classSubjectItems.length} วิชาออกจากห้องนี้?`)) return
+    if (!confirm(`ลบรายวิชาของ${classSubjectSemester ? `ภาคเรียนที่ ${classSubjectSemester}` : 'ทั้งปี'} ${classSubjectItems.length} วิชาออกจากห้องนี้?`)) return
     setClassSubjectSaving(true); setClassSubjectAction('remove-all'); clearAlert()
     try {
-      const { error, deleted } = await removeAllClassSubjects(classSubjectClassroomId)
+      const { error, deleted } = await removeAllClassSubjects(classSubjectClassroomId, classSubjectSemester)
       if (error) { notify('error', error); return }
       notify('success', `ลบรายวิชาออกจากห้อง ${deleted} วิชาเรียบร้อย`)
       await loadClassSubjectItems(classSubjectClassroomId)
@@ -1048,11 +1055,11 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
               <div style={{ minWidth: 0 }}>
                 <div className="section-title" style={{ marginBottom: 6 }}>กำหนดวิชาเรียน</div>
                 <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
-                  เลือกปีการศึกษาและห้องเรียน แล้วเพิ่มรายวิชาจากแม่แบบรายวิชาของสถานศึกษา
+                  เลือกปีการศึกษา ห้องเรียน และภาคเรียน แล้วเพิ่มรายวิชาจากแม่แบบรายวิชาของสถานศึกษา มัธยมศึกษาแยกรายวิชาคนละภาคเรียน
                 </p>
               </div>
               <div className="badge badge-info">
-                {selectedClassSubjectClassroom ? `${selectedClassSubjectClassroom.level}/${selectedClassSubjectClassroom.room}` : 'ยังไม่ได้เลือกห้อง'} · {classSubjectItems.length} วิชา
+                {selectedClassSubjectClassroom ? `${selectedClassSubjectClassroom.level}/${selectedClassSubjectClassroom.room}` : 'ยังไม่ได้เลือกห้อง'} · {classSubjectItems.length} วิชา{classSubjectItems.length ? ` · พื้นฐาน ${classSubjectCredits.basic} หน่วยกิต · เพิ่มเติม ${classSubjectCredits.extra} หน่วยกิต` : ''}
               </div>
             </div>
 
@@ -1085,6 +1092,18 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                   {classSubjectClassrooms.length === 0 ? <option value="">— ไม่มีห้องเรียน —</option> : classSubjectClassrooms.map(classroom => (
                     <option key={classroom.id} value={classroom.id}>{classroom.level}/{classroom.room}</option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">ภาคเรียน</label>
+                <select
+                  className="form-input"
+                  value={classSubjectSemester || 1}
+                  onChange={event => setClassSubjectTerm(Number(event.target.value) as 1 | 2)}
+                  disabled={!selectedClassSubjectClassroom || !isSecondaryClassLevel(selectedClassSubjectClassroom.level)}
+                >
+                  <option value={1}>{selectedClassSubjectClassroom && isSecondaryClassLevel(selectedClassSubjectClassroom.level) ? 'ภาคเรียนที่ 1' : 'ทั้งปี'}</option>
+                  <option value={2}>ภาคเรียนที่ 2</option>
                 </select>
               </div>
             </div>
@@ -1126,7 +1145,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
               </div>
             </div>
             <p style={{ margin: '10px 0 0', color: 'var(--text-3)', fontSize: 13 }}>
-              ปุ่มเพิ่มอัตโนมัติจะดึงรายวิชาที่รหัส/ชื่อบ่งบอกระดับชั้นเดียวกับห้องนี้ เช่น ป.1 ใช้รหัสกลุ่ม `x1xxxx` หรือชื่อที่ลงท้าย `1`
+              ปุ่มเพิ่มอัตโนมัติจะดึงรายวิชาที่รหัสตรงกับชั้นนี้ เช่น ม.1 ใช้รหัสขึ้นต้นระดับ 2 ชั้น 1 และ ม.4 ใช้ระดับ 3 ชั้น 1 มัธยมเก็บคนละชุดระหว่างสองภาคเรียน
             </p>
           </div>
 

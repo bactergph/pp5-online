@@ -3,6 +3,14 @@ import { activityTeachers, type ActivityTeam } from './schedule-activity-teams'
 import { createServerClient } from '@/lib/supabase'
 import { weeklyHoursFromYear } from '@/lib/schedule-helpers'
 
+function weeklyCount(level: string, credits: unknown, hours: unknown) {
+  const text = (level || '').trim()
+  const secondary = /^ม\.?\s*[1-6]\b/i.test(text) || /มัธยม/i.test(text)
+  const value = Number(credits)
+  if (secondary && Number.isFinite(value) && value > 0 && Number.isInteger(value * 2)) return value * 2
+  return Number(hours) > 0 ? weeklyHoursFromYear(Number(hours)) : 0
+}
+
 export async function loadScheduleConstraints(schoolId: string, yearId: string, semester: number) {
   const db = createServerClient()
   const [times, blocks] = await Promise.all([
@@ -59,8 +67,10 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   const classrooms = rooms.data || []
   if (!classrooms.length) return { classrooms, lessons: [] as ScheduleLesson[], slots: [] as ScheduleSlot[], activityGroups: [] as ActivityTeam[], teacherNames: {} as Record<string, string> }
   const ids = classrooms.map(c => c.id)
-  const [subjects, activities, slots, teachers] = await Promise.all([
-    readAll(db.from('class_subjects').select('*,subjects(code,name,short_name,hours_per_year,subject_group,type)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
+  const subjectQuery = () => db.from('class_subjects').select('*,subjects(code,name,short_name,hours_per_year,credits,subject_group,type)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')
+  let subjects = await readAll(subjectQuery().in('semester', [0, semester]))
+  if (subjects.error && /semester/.test(subjects.error.message)) subjects = await readAll(subjectQuery())
+  const [activities, slots, teachers] = await Promise.all([
     readAll(db.from('class_schedule_activities').select('id,classroom_id,evaluation_setting_id,teacher_id,weekly_periods,evaluation_settings(label,short_label,is_active,sort_order)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
     readTermSlots(ids, yearId, semester),
     readAll(db.from('users').select('id,prefix,full_name').eq('school_id', schoolId).order('id')),
@@ -69,11 +79,12 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
     if (r.error.code === 'PGRST205' || r.error.code === '42703') throw new Error('ระบบตารางเรียนยังไม่พร้อม กรุณาให้ผู้ดูแลรันไฟล์ฐานข้อมูล 057_schedule_semesters.sql ก่อน')
     throw new Error(`โหลดตารางเรียนไม่สำเร็จ: ${r.error.message}`)
   }
+  const levels = new Map(classrooms.map(c => [c.id, c.level]))
   const names = new Map((teachers.data || []).map(t => [t.id, `${t.prefix || ''} ${t.full_name}`.trim()]))
   const labels = new Map(classrooms.map(c => [c.id, `${c.level}/${c.room}`]))
-  const lessons: ScheduleLesson[] = (subjects.data || []).map(row => {
+  const lessons: ScheduleLesson[] = (subjects.data || []).filter(row => row.semester == null || Number(row.semester) === 0 || Number(row.semester) === semester).map(row => {
     const s = Array.isArray(row.subjects) ? row.subjects[0] : row.subjects
-    return { id: row.id, classroomId: row.classroom_id, teacherId: row.teacher_id, count: s?.hours_per_year > 0 ? weeklyHoursFromYear(s.hours_per_year) : 0,
+    return { id: row.id, classroomId: row.classroom_id, teacherId: row.teacher_id, count: weeklyCount(levels.get(row.classroom_id) || '', s?.credits, s?.hours_per_year),
       label: `${labels.get(row.classroom_id)} · ${s?.name || ''}`, sourceHours: s?.hours_per_year || 0, subjectId: row.subject_id, code: s?.code || '',
       name: s?.short_name || s?.name || '', fullName:s?.name||'',subjectGroup:s?.subject_group||'',subjectType:s?.type||'พื้นฐาน',teacherName: names.get(row.teacher_id) || '', roomName: row.room_name || "", activity: false }
   })
@@ -93,7 +104,13 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
     const rule=plan?.rules?.[lesson.id]
     if(rule){lesson.count=rule.count;lesson.roomName=plan?.rooms?.find(r=>r.id===rule.roomId)?.name||lesson.roomName}
   }
-  return { classrooms, lessons, slots: (slots.data || []) as ScheduleSlot[], activityGroups: plan?.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
+  const otherTerm = semester === 1 ? 2 : 1
+  const otherPlan = await db.from('schedule_plans').select('config').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',otherTerm).maybeSingle()
+  if (otherPlan.error && !['42P01','PGRST205'].includes(otherPlan.error.code)) throw new Error(otherPlan.error.message)
+  const otherRules = new Set(Object.keys((otherPlan.data?.config as {rules?:Record<string,unknown>} | undefined)?.rules || {}))
+  const thisRules = new Set(Object.keys(plan?.rules || {}))
+  const visible = lessons.filter(lesson => lesson.activity || !(otherRules.has(lesson.id) && !thisRules.has(lesson.id)))
+  return { classrooms, lessons: visible, slots: (slots.data || []) as ScheduleSlot[], activityGroups: plan?.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
 }
 
 export async function persistSchedule(schoolId: string | null, yearId: string, before: ScheduleSlot[], after: ScheduleSlot[], allowUnlock = false, semester = 1) {

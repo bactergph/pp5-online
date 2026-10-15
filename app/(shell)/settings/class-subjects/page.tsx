@@ -6,6 +6,7 @@ import {
   fetchClassSubjectInit, fetchClassroomsLite, fetchClassSubjects,
   setClassSubjectTeacher,
 } from '../actions'
+import { isSecondaryClassLevel } from '@/lib/class-level'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Teacher = { id: string; prefix: string; full_name: string }
@@ -24,6 +25,7 @@ export default function ClassSubjectsPage() {
   const [selectedYear, setSelectedYear] = useState('')
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [selectedClass, setSelectedClass] = useState('')
+  const [term, setTerm] = useState<1 | 2>(1)
   const [items, setItems] = useState<CS[]>([])
   const [loading, setLoading] = useState(true)
   const [roomDrafts,setRoomDrafts] = useState<Record<string,string>>({})
@@ -32,13 +34,18 @@ export default function ClassSubjectsPage() {
   const [alertModal, setAlertModal] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
 
+  function semesterFor(classId: string): 0 | 1 | 2 {
+    const room = classrooms.find(item => item.id === classId)
+    return room && isSecondaryClassLevel(room.level) ? term : 0
+  }
   const subjectMap = Object.fromEntries(subjects.map(s => [s.id, s]))
 
   useEffect(() => { init() }, [])
   useEffect(() => { if (selectedYear) loadClassrooms(selectedYear) }, [selectedYear])
   useEffect(() => {
     if (selectedClass) {
-      loadItems(selectedClass)
+      const semester = semesterFor(selectedClass)
+      loadItems(selectedClass, semester)
       return
     }
     Promise.resolve().then(() => {
@@ -46,7 +53,7 @@ export default function ClassSubjectsPage() {
       setTeacherDrafts({}); setRoomDrafts({})
       setOpenTeacherPicker(null)
     })
-  }, [selectedClass])
+  }, [selectedClass, term, classrooms])
 
   async function init() {
     const d = await fetchClassSubjectInit()
@@ -61,10 +68,10 @@ export default function ClassSubjectsPage() {
     setClassrooms(cs)
     setSelectedClass(cs[0]?.id || '')
   }
-  async function loadItems(classId: string) {
+  async function loadItems(classId: string, semester: 0 | 1 | 2) {
     setTeacherDrafts({}); setRoomDrafts({})
     setOpenTeacherPicker(null)
-    setItems(await fetchClassSubjects(classId) as CS[])
+    setItems(await fetchClassSubjects(classId, semester) as CS[])
   }
 
   function notify(type: 'success' | 'error', text: string) {
@@ -125,14 +132,14 @@ export default function ClassSubjectsPage() {
       if (error) {
         setSavingEdit(false)
         notify('error', error)
-        loadItems(selectedClass)
+        loadItems(selectedClass, semesterFor(selectedClass))
         return
       }
     }
     setSavingEdit(false)
     setTeacherDrafts({}); setRoomDrafts({})
     setOpenTeacherPicker(null)
-    loadItems(selectedClass)
+    loadItems(selectedClass, semesterFor(selectedClass))
     notify('success', `บันทึกครูและสถานที่เรียน ${changes.length} รายการเรียบร้อย`)
   }
   if (loading) return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
@@ -162,6 +169,13 @@ export default function ClassSubjectsPage() {
               <label className="form-label" style={{ margin: 0 }}>ชั้น:</label>
               <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="form-input" style={{ width: 'auto' }} disabled={classrooms.length === 0}>
                 {classrooms.length === 0 ? <option>— ไม่มีชั้นเรียน —</option> : classrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room}</option>)}
+              </select>
+            </div>
+            <div className="field-inline">
+              <label className="form-label" style={{ margin: 0 }}>ภาคเรียน:</label>
+              <select value={term} onChange={e => setTerm(Number(e.target.value) as 1 | 2)} className="form-input" style={{ width: 'auto' }} disabled={!classrooms.some(item => item.id === selectedClass && isSecondaryClassLevel(item.level))}>
+                <option value={1}>ภาคเรียนที่ 1</option>
+                <option value={2}>ภาคเรียนที่ 2</option>
               </select>
             </div>
           </div>
