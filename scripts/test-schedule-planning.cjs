@@ -33,7 +33,13 @@ assert.ok(morning.assignments.filter(s=>s.lessonId==='math').every(s=>s.period<=
 console.log('PASS: morning preference keeps core subjects before lunch',morning.solver)
 
 const helpers={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-helpers.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:helpers,require:()=>({})});
-for(const [date,term] of [['2026-03-31T16:59:00Z',2],['2026-03-31T17:00:00Z',1],['2026-09-30T16:59:00Z',1],['2026-09-30T17:00:00Z',2],['2027-01-15T00:00:00Z',2]])assert.equal(helpers.currentScheduleSemester(new Date(date)),term);
+for(const [date,term] of [['2026-03-31T16:59:00Z',2],['2026-03-31T17:00:00Z',1],['2026-09-30T16:59:00Z',1],['2026-09-30T17:00:00Z',2],['2026-10-14T17:00:00Z',2],['2027-01-15T00:00:00Z',2]])assert.equal(helpers.currentScheduleSemester(new Date(date)),term);
+const termDates={term1_start_date:'2026-05-16',term1_end_date:'2026-10-20',term2_start_date:'2026-11-01',term2_end_date:'2027-04-10'};
+assert.equal(helpers.scheduleSemesterForYear(null,new Date('2026-10-14T17:00:00Z')),2);
+assert.equal(helpers.scheduleSemesterForYear(termDates,new Date('2026-10-14T17:00:00Z')),1);
+assert.equal(helpers.scheduleSemesterForYear({...termDates,term1_end_date:'2026-10-09'},new Date('2026-10-14T17:00:00Z')),2);
+assert.equal(helpers.scheduleSemesterForYear(termDates,new Date('2027-04-04T17:00:00Z')),2);
+assert.equal(helpers.scheduleSemesterForYear({...termDates,term2_end_date:'2027-03-31'},new Date('2027-03-31T17:00:00Z')),1);
 const storedTimes=helpers.DEFAULT_PERIOD_TIMES.map(t=>({...t,start_time:t.start_time+':00',end_time:t.end_time+':00'}));
 const editorTimes=helpers.normalizePeriodTimes(storedTimes);assert.equal(helpers.validatePeriodTimes(editorTimes),null);assert.equal(storedTimes[0].start_time,'08:30:00');assert.equal(editorTimes[0].start_time,'08:30');
 assert.equal(helpers.validatePeriodTimes(helpers.moveLunchBreak(editorTimes,4)),null);

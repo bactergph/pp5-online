@@ -40,7 +40,7 @@ export async function fetchScheduleInit() {
 
   const db = createServerClient()
   const { data: years } = await db.from('academic_years')
-    .select('id, year_be, is_active')
+    .select('id, year_be, is_active, term1_start_date, term1_end_date, term2_start_date, term2_end_date')
     .eq('school_id', session.schoolId)
     .order('year_be', { ascending: false })
 

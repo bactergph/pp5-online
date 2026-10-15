@@ -144,10 +144,30 @@ export function periodTimeLabel(times: PeriodTimeRow[], period: number) {
   return `${row.start_time}–${row.end_time}`
 }
 
-/** School term default follows the Bangkok calendar; users can still change it. */
+/** เมษายน–กันยายนเป็นเทอม 1 · ตุลาคม–มีนาคมเป็นเทอม 2 ตามเวลาไทย ผู้ใช้ยังเปลี่ยนเองได้ */
 export function currentScheduleSemester(date = new Date()): 1 | 2 {
   const month = Number(new Intl.DateTimeFormat('en-US', {timeZone:'Asia/Bangkok', month:'numeric'}).format(date))
   return month >= 4 && month < 10 ? 1 : 2
+}
+
+export type ScheduleTermCalendar = {
+  term1_start_date?: string | null
+  term1_end_date?: string | null
+  term2_start_date?: string | null
+  term2_end_date?: string | null
+}
+
+/** วันเปิด–ปิดเทอมที่กำหนดไว้มาก่อน ถ้านอกช่วงหรือยังไม่กำหนด ใช้ปฏิทินข้างบน */
+export function scheduleSemesterForYear(year: ScheduleTermCalendar | null | undefined, date = new Date()): 1 | 2 {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+  const ranges = [
+    [1, year?.term1_start_date, year?.term1_end_date],
+    [2, year?.term2_start_date, year?.term2_end_date],
+  ] as const
+  const matched = ranges.filter(([, start, end]) => Boolean(start && end && start <= end && today >= start && today <= end))
+  if (matched.length === 1) return matched[0][0]
+  if (matched.length > 1) return [...matched].sort((a, b) => String(b[1]).localeCompare(String(a[1])))[0][0]
+  return currentScheduleSemester(date)
 }
 
 /** PostgreSQL time values include seconds, while the editor uses HH:mm. */

@@ -25,7 +25,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
-import { activityTeacherLabel, currentScheduleSemester, isActivityLessonId, periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import ScheduleLessonPicker from './ScheduleLessonPicker'
 import ScheduleLessonPalette from './ScheduleLessonPalette'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -36,7 +36,7 @@ import SchedulePreparation from './SchedulePreparation'
 import { FiZap, FiGrid, FiUsers, FiCalendar, FiDownload } from 'react-icons/fi'
 import './schedule-workspace.css'
 
-type Year = { id: string; year_be: number; is_active: boolean }
+type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 type Classroom = { id: string; level: string; room: number; label: string }
 type SubjectOption = {
   id: string
@@ -87,7 +87,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [conflicts, setConflicts] = useState<Record<string, string[]>>({})
   const [selectedYear, setSelectedYear] = useState('')
-  const [semester, setSemester] = useState<number>(() => currentScheduleSemester())
+  const [semester, setSemester] = useState<number>(() => scheduleSemesterForYear(null))
   const [selectedClass, setSelectedClass] = useState('')
   const [canEdit, setCanEdit] = useState(false)
   const [pendingCells, setPendingCells] = useState<Set<string>>(new Set())
@@ -181,7 +181,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
       setYears(data.years as Year[])
       setPeriodTimes(periodData.times as PeriodTimeRow[])
       const active = (data.years as Year[]).find(y => y.is_active) || (data.years as Year[])[0]
-      if (active) setSelectedYear(active.id)
+      if (active) { setSelectedYear(active.id); setSemester(scheduleSemesterForYear(active)) }
     } catch (e) {
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     } finally {

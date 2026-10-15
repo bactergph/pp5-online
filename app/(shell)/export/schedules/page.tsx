@@ -12,13 +12,13 @@ import {
   fetchScheduleExportContext,
 } from '@/app/schedules/actions'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
-import { activityTeacherLabel, isActivityLessonId, periodTimeLabel, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 
-type Year = { id: string; year_be: number; is_active: boolean }
+type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 type Classroom = { id: string; level: string; room: number; label: string }
 type Teacher = { id: string; prefix: string; full_name: string }
 type ExportType = 'class' | 'teaching'
@@ -166,7 +166,7 @@ export default function ScheduleExportPage() {
   const [teacherIds, setTeacherIds] = useState<string[]>([])
   const [pickQuery, setPickQuery] = useState('')
   const [gridData, setGridData] = useState<Record<string, { line1: string; line2: string; line3?: string; line4?: string }>>({})
-  const [semester, setSemester] = useState('1')
+  const [semester, setSemester] = useState(() => String(scheduleSemesterForYear(null)))
   const selectedClass = classrooms.find(c => c.id === classroomId)
   const classLabel = (selectedClass?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
   const selectedTeacher = teachers.find(t => t.id === teacherId)
@@ -207,8 +207,11 @@ export default function ScheduleExportPage() {
 
       const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
       const isPrint = params?.get('print') === '1'
-      if (params?.get('semester') === '2') setSemester('2')
+      const requestedTerm = params?.get('semester')
       const active = (initData.years as Year[]).find(y => y.is_active) || (initData.years as Year[])[0]
+      const linkedYear = (initData.years as Year[]).find(y => y.id === params?.get('year')) || active
+      if (requestedTerm === '1' || requestedTerm === '2') setSemester(requestedTerm)
+      else if (linkedYear) setSemester(String(scheduleSemesterForYear(linkedYear)))
 
       if (isPrint && params) {
         const type = params.get('type') as ExportType | null

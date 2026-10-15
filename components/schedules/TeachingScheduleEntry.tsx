@@ -4,12 +4,12 @@ import { fetchScheduleDays } from '@/app/schedules/actions'
 import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { fetchPeriodTimes, fetchScheduleInit, fetchTeachingScheduleGrid } from '@/app/schedules/actions'
-import type { PeriodTimeRow } from '@/lib/schedule-helpers'
+import { scheduleSemesterForYear, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import AppAlertModal from '@/components/AppAlertModal'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 
-type Year = { id: string; year_be: number; is_active: boolean }
+type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 type Teacher = { id: string; prefix: string; full_name: string }
 type Cell = { label: string; subject_line: string; room_line: string }
 
@@ -54,7 +54,7 @@ export default function TeachingScheduleEntry() {
   const [cells, setCells] = useState<Record<string, Cell>>({})
   const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [selectedYear, setSelectedYear] = useState('')
-  const [semester, setSemester] = useState(1)
+  const [semester, setSemester] = useState(() => scheduleSemesterForYear(null))
   const requestId = useRef(0)
   const [selectedTeacher, setSelectedTeacher] = useState('')
   const [canEdit, setCanEdit] = useState(false)
@@ -80,7 +80,7 @@ export default function TeachingScheduleEntry() {
       setTeachers(data.teachers as Teacher[])
       setPeriodTimes(periodData.times as PeriodTimeRow[])
       const active = (data.years as Year[]).find(y => y.is_active) || (data.years as Year[])[0]
-      if (active) setSelectedYear(active.id)
+      if (active) { setSelectedYear(active.id); setSemester(scheduleSemesterForYear(active)) }
       if (data.defaultTeacherId) setSelectedTeacher(data.defaultTeacherId)
     } catch (e) {
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
