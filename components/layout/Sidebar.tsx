@@ -88,6 +88,7 @@ const GLOBAL_HOLIDAYS: NavItem = { href: '/district/holidays', label: 'วัน
 const GLOBAL_TERM_CALENDARS: NavItem = { href: '/district/term-calendars', label: 'เปิด-ปิดภาคเรียนกลาง', icon: ic(I.sliders) }
 const GLOBAL_SUBJECTS: NavItem = { href: '/district/subjects', label: 'โครงสร้างรายวิชากลาง', icon: ic(I.book) }
 const DISTRICT_REPORT_EXPORT: NavItem = { href: '/district/reports/export', label: 'Export รายงานเขต', icon: ic(I.export) }
+const FREE_SCHEDULE_AD: NavItem = { href: '/district/free-ad', label: 'โฆษณาตารางฟรี', icon: ic(I.sliders) }
 const SCHOOL_CLEANUP: NavItem = { href: '/district/school-cleanup', label: 'ล้างข้อมูลโรงเรียนไม่ใช้งาน', icon: ic(I.sliders) }
 const ACTIVITY_LOG: NavItem = { href: '/activity', label: 'ประวัติการใช้งาน', icon: ic(I.clock) }
 
@@ -227,6 +228,11 @@ const SCHEDULE_MANAGE_MAIN: NavItem = {
   label: 'ตารางเรียน / ตารางสอน',
   icon: ic(I.calendar),
   children: SCHEDULE_MANAGE_CHILDREN,
+}
+const FREE_SCHEDULE: NavItem = {
+  href: '/schedules/device',
+  label: 'จัดตารางฟรี',
+  icon: ic(I.calendar),
 }
 const PP5_MAIN: NavItem = {
   href: '/homeroom', label: 'ปพ.5 / ปพ.6', icon: ic(I.book),
@@ -376,18 +382,18 @@ const DISTRICT_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'สมาชิกและโรงเรียน', items: [SCHOOLS_MANAGE, ADMINS_MANAGE] },
   { label: 'ข้อมูลกลางระบบ', items: [GLOBAL_SUBJECTS, GLOBAL_TERM_CALENDARS, GLOBAL_HOLIDAYS] },
-  { label: 'ระบบ', items: [DISTRICT_REPORT_EXPORT, USER_SETTINGS, SCHOOL_CLEANUP, ACTIVITY_LOG] },
+  { label: 'ระบบ', items: [FREE_SCHEDULE_AD, DISTRICT_REPORT_EXPORT, USER_SETTINGS, SCHOOL_CLEANUP, ACTIVITY_LOG] },
 ]
 const ADMIN_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'ตั้งค่าโรงเรียน', items: [ADMIN_SETTINGS] },
-  { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN, SCHEDULE_MANAGE_MAIN, CLASSROOM_ADMIN_SIGN_NAV] },
+  { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN, SCHEDULE_MANAGE_MAIN, FREE_SCHEDULE, CLASSROOM_ADMIN_SIGN_NAV] },
   { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
   { label: 'ติดตามและรายงาน', items: [EVAL_SUMMARY, REPORT_STATUS, EXPORT_FULL, ACTIVITY_LOG] },
 ]
 const PRINCIPAL_NAV: NavSection[] = [
   { items: [DASHBOARD] },
-  { label: 'ภาพรวมโรงเรียน', items: [CLASSROOMS, STUDENTS, EVAL_SUMMARY, SCHEDULE_VIEW_MAIN] },
+  { label: 'ภาพรวมโรงเรียน', items: [CLASSROOMS, STUDENTS, EVAL_SUMMARY, SCHEDULE_VIEW_MAIN, FREE_SCHEDULE] },
   { label: 'ตรวจสอบข้อมูล', items: [REPORT_OVERSIGHT] },
   { label: 'เอกสาร ปพ.', items: [PP5_PRINT_ONLY, DOCUMENTS_SIGN_NAV] },
   { label: 'ตรวจสอบและอนุมัติ', items: [DOCUMENTS_SIGN_NAV, CLASSROOM_ADMIN_SIGN_NAV] },
@@ -398,7 +404,7 @@ const ACADEMIC_HEAD_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'ภาพรวมโรงเรียน', items: [CLASSROOMS, STUDENTS, EVAL_SUMMARY] },
   { label: 'มอบหมายงานวิชาการ', items: [ASSIGN] },
-  { label: 'ตารางเรียน / ตารางสอน', items: [SCHEDULE_MANAGE_MAIN] },
+  { label: 'ตารางเรียน / ตารางสอน', items: [SCHEDULE_MANAGE_MAIN, FREE_SCHEDULE] },
   { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
   { label: 'ตรวจสอบและอนุมัติ', items: [DOCUMENTS_SIGN_NAV] },
   { label: 'รายงานสำหรับวิชาการ', items: [REPORT_OVERSIGHT, ACTIVITY_LOG] },
@@ -406,14 +412,14 @@ const ACADEMIC_HEAD_NAV: NavSection[] = [
 ]
 const TEACHER_NAV: NavSection[] = [
   { items: [DASHBOARD] },
-  { label: 'งานสอนรายวิชา', items: [SCORES, SCORE_CONFIG, ATTENDANCE, SCHEDULE_VIEW_MAIN] },
+  { label: 'งานสอนรายวิชา', items: [SCORES, SCORE_CONFIG, ATTENDANCE, SCHEDULE_VIEW_MAIN, FREE_SCHEDULE] },
   { label: 'นักเรียน', items: [STUDENTS] },
   { label: 'รายงาน / เอกสาร', items: [TEACHER_REPORTS, DOCUMENTS_SIGN_NAV, ACTIVITY_LOG] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
 ]
 const HOMEROOM_NAV: NavSection[] = [
   { items: [DASHBOARD] },
-  { label: 'งานสอนรายวิชา', items: [SCORES, SCORE_CONFIG, ATTENDANCE, SCHEDULE_VIEW_MAIN] },
+  { label: 'งานสอนรายวิชา', items: [SCORES, SCORE_CONFIG, ATTENDANCE, SCHEDULE_VIEW_MAIN, FREE_SCHEDULE] },
   { label: 'นักเรียน', items: [STUDENTS] },
   { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN, CLASSROOM_ADMIN_SIGN_NAV] },
   { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },

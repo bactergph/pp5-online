@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import ClassScheduleEntry from '@/components/schedules/ClassScheduleEntry'
+import DeviceScheduleUpload from '@/components/schedules/DeviceScheduleUpload'
 import { verifySession } from '@/lib/dal'
+import { readMemberPlan } from '@/lib/member-plan'
 import { SCHEDULE_EDIT_ROLES } from '@/lib/schedules'
 
 export default async function ClassScheduleManagePage() {
@@ -8,5 +10,6 @@ export default async function ClassScheduleManagePage() {
   if (!SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])) {
     redirect('/schedules/class')
   }
-  return <ClassScheduleEntry mode="manage" />
+  const memberPlan = session.schoolId ? await readMemberPlan(session.schoolId) : null
+  return <>{memberPlan === 'pro' && <DeviceScheduleUpload />}<ClassScheduleEntry mode="manage" /></>
 }
