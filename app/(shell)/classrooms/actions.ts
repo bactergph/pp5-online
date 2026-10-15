@@ -1,5 +1,7 @@
 'use server'
 import { createServerClient } from '@/lib/supabase'
+import { readMembership } from '@/lib/member-plan'
+import { serverRoomLimit } from '@/lib/membership'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
 import { resolveSchoolEducationType, schoolLevels, type SchoolEducationType } from '@/lib/school-education-type'
@@ -13,6 +15,14 @@ async function requireSession() {
 
 // ผอ. = ดูอย่างเดียว (oversight) · จัดการได้: admin + หัวหน้าวิชาการ (กำหนดครูประจำชั้น)
 const CAN_MANAGE = ['admin', 'district', 'academic_head', 'deputy_principal']
+
+async function roomCapMessage(schoolId: string, nextCount: number) {
+  const limit = serverRoomLimit(await readMembership(schoolId))
+  if (limit == null || nextCount <= limit) return null
+  return limit === 0
+    ? 'สมาชิกเดี่ยวฟรีจัดตารางบนเครื่อง ไม่เปิดห้องบนเซิร์ฟเวอร์'
+    : `สมาชิกเดี่ยวโปรเปิดได้ไม่เกิน ${limit} ห้อง`
+}
 type ClassroomSetupResult = {
   error: string | null
   academicYearId?: string
@@ -119,6 +129,9 @@ export async function saveClassroom(id: string | null, payload: {
   let savedId = id
   if (id) ({ error } = await db.from('classrooms').update(row).eq('id', id).eq('school_id', session.schoolId))
   else {
+    const existing = await db.from('classrooms').select('id', { count: 'exact', head: true }).eq('school_id', session.schoolId).eq('academic_year_id', payload.academic_year_id)
+    const capped = await roomCapMessage(session.schoolId, (existing.count ?? 0) + 1)
+    if (capped) return { error: capped }
     const res = await db.from('classrooms').insert(row).select('id').single()
     error = res.error
     savedId = res.data?.id ?? null
@@ -220,6 +233,8 @@ export async function applyClassroomLevels(
   }
 
   if (toInsert.length > 0) {
+    const capped = await roomCapMessage(sid, existingList.length - toDelete.length + toInsert.length)
+    if (capped) return { error: capped }
     const { error } = await db.from('classrooms').insert(toInsert)
     if (error) return { error: error.message }
   }

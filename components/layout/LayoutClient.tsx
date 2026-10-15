@@ -6,6 +6,7 @@ import Sidebar from './Sidebar'
 import Navbar from './Navbar'
 import NavigationProgress from './NavigationProgress'
 import type { SchoolEducationType } from '@/lib/school-education-type'
+import type { Membership } from '@/lib/membership'
 
 /** Navbar titles — same labels as the old per-section layouts */
 const TITLE_BY_PREFIX: { prefix: string; title: string }[] = [
@@ -49,6 +50,7 @@ type Props = {
   schoolName?: string | null
   hasSchool?: boolean
   isActingDirector?: boolean
+  membership?: Membership | null
 }
 
 function LayoutClientInner({
@@ -65,6 +67,7 @@ function LayoutClientInner({
   hasSchool = false,
   isActingDirector = false,
   educationType = 'primary',
+  membership = null,
 }: Props) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -113,6 +116,7 @@ function LayoutClientInner({
         schoolLogoUrl={schoolLogoUrl}
         schoolProgramName={schoolProgramName}
         schoolName={schoolName}
+        membership={membership}
       />
 
       {sidebarOpen && (

@@ -19,6 +19,15 @@ type SchoolRow = SchoolPayload & {
   director_name?: string | null
   created_by?: string | null
   layout_tuner_enabled?: boolean | null
+  member_plan?: string | null
+}
+
+const SCHOOL_LIST_COLUMNS = 'id,name,department,area_office,district,province,address,phone,document_prefix,director_name,layout_tuner_enabled'
+
+function missingMemberPlanColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false
+  const message = error.message || ''
+  return error.code === 'PGRST204' || error.code === '42703' || message.includes('member_plan') || message.includes('schema cache')
 }
 type AdminRow = {
   id: string
@@ -44,6 +53,7 @@ export async function fetchSchoolCatalogStats() {
 export async function fetchSchoolCatalog(opts?: {
   q?: string
   filterAdmin?: 'all' | 'has' | 'none'
+  filterPlan?: 'all' | 'free' | 'pro'
   page?: number
   pageSize?: number
 }) {
@@ -51,6 +61,7 @@ export async function fetchSchoolCatalog(opts?: {
   const client = createServerClient()
   const q = (opts?.q || '').trim()
   const filterAdmin = opts?.filterAdmin || 'all'
+  const filterPlan = opts?.filterPlan || 'all'
   const page = Math.max(1, opts?.page || 1)
   const pageSize = Math.min(100, Math.max(10, opts?.pageSize || 50))
 
@@ -68,37 +79,51 @@ export async function fetchSchoolCatalog(opts?: {
   const adminIds = Object.keys(adminMap)
 
   if (filterAdmin === 'has' && adminIds.length === 0) {
-    return { rows: [], total: 0, page, pageSize }
-  }
-
-  let query = client
-    .from('schools')
-    .select('id,name,department,area_office,district,province,address,phone,document_prefix,director_name,layout_tuner_enabled', { count: 'exact' })
-
-  if (q.length >= 2) {
-    const safe = q.replace(/,/g, ' ')
-    query = query.or(
-      `name.ilike.%${safe}%,district.ilike.%${safe}%,province.ilike.%${safe}%,area_office.ilike.%${safe}%`,
-    )
-  }
-
-  if (filterAdmin === 'has') {
-    query = query.in('id', adminIds)
-  } else if (filterAdmin === 'none' && adminIds.length > 0) {
-    query = query.not('id', 'in', `(${adminIds.join(',')})`)
+    return { rows: [], total: 0, page, pageSize, planReady: true }
   }
 
   const from = (page - 1) * pageSize
-  const { data, count, error } = await query.order('name').range(from, from + pageSize - 1)
-  if (error) throw new Error(error.message)
+  const listSchools = (includePlan: boolean) => {
+    let query = client
+      .from('schools')
+      .select(includePlan ? `${SCHOOL_LIST_COLUMNS},member_plan` : SCHOOL_LIST_COLUMNS, { count: 'exact' })
 
-  const rows = ((data || []) as SchoolRow[]).map(s => ({
+    const safe = q.replace(/,/g, ' ')
+    const searchOr = `name.ilike.%${safe}%,district.ilike.%${safe}%,province.ilike.%${safe}%,area_office.ilike.%${safe}%`
+    const freeOr = 'member_plan.eq.free,member_plan.is.null'
+    const wantSearch = q.length >= 2
+    const wantFree = includePlan && filterPlan === 'free'
+    if (wantSearch && wantFree) query = query.or(`and(or(${freeOr}),or(${searchOr}))`)
+    else if (wantSearch) query = query.or(searchOr)
+    else if (wantFree) query = query.or(freeOr)
+
+    if (filterAdmin === 'has') {
+      query = query.in('id', adminIds)
+    } else if (filterAdmin === 'none' && adminIds.length > 0) {
+      query = query.not('id', 'in', `(${adminIds.join(',')})`)
+    }
+
+    if (includePlan && filterPlan === 'pro') query = query.eq('member_plan', 'pro')
+
+    return query.order('name').range(from, from + pageSize - 1)
+  }
+
+  let planReady = true
+  let listed = await listSchools(true)
+  if (missingMemberPlanColumn(listed.error)) {
+    planReady = false
+    listed = await listSchools(false)
+  }
+  if (listed.error) throw new Error(listed.error.message)
+
+  const rows = ((listed.data || []) as SchoolRow[]).map(s => ({
     ...s,
     admin_name: adminMap[s.id] ?? null,
     layout_tuner_enabled: s.layout_tuner_enabled !== false,
+    member_plan: s.member_plan === 'pro' || s.member_plan === 'free' ? s.member_plan : null,
   }))
 
-  return { rows, total: count ?? 0, page, pageSize }
+  return { rows, total: listed.count ?? 0, page, pageSize, planReady }
 }
 
 /** @deprecated ใช้ fetchSchoolCatalog แทนเมื่อมีโรงเรียนจำนวนมาก */

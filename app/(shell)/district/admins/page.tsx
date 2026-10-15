@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import LoadingButton from '@/components/LoadingButton'
-import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, searchSchoolsForAdminAssign, resetSchoolMemberSettings, approveAdmins } from './actions'
+import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, setSchoolPackage, searchSchoolsForAdminAssign, resetSchoolMemberSettings, approveAdmins } from './actions'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { schoolMemberIdHint } from '@/lib/school-identity'
 
@@ -13,6 +13,8 @@ type School = {
   district?: string | null
   province?: string | null
   member_code?: string | null
+  membership_kind?: string | null
+  member_plan?: string | null
 }
 type Stat = { students: number; principal: number; academic_head: number; homeroom: number; teacher_only: number; totalUsers: number }
 type Admin = {
@@ -49,6 +51,8 @@ export default function DistrictAdminsPage() {
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   // quota modal
+  const [packageTarget, setPackageTarget] = useState<{ schoolId: string; name: string; packageName: 'school' | 'free' | 'pro' } | null>(null)
+  const [packageSaving, setPackageSaving] = useState(false)
   const [quotaTarget, setQuotaTarget] = useState<{ id: string; name: string } | null>(null)
   const [quotaVal, setQuotaVal] = useState('')
   const [quotaSaving, setQuotaSaving] = useState(false)
@@ -209,6 +213,24 @@ export default function DistrictAdminsPage() {
     if (error) notify('error', error)
     else { notify('success', 'ตั้งโควต้าเรียบร้อย'); loadData() }
     setQuotaTarget(null)
+  }
+
+  async function handleSetPackage() {
+    if (!packageTarget) return
+    setPackageSaving(true)
+    const { error } = await setSchoolPackage(packageTarget.schoolId, packageTarget.packageName)
+    setPackageSaving(false)
+    if (error) notify('error', error)
+    else {
+      notify('success', 'ตั้งแพ็กเกจเรียบร้อย')
+      setPackageTarget(null)
+      loadData()
+    }
+  }
+
+  function packageOf(school?: School | null): 'school' | 'free' | 'pro' {
+    if (school?.membership_kind === 'individual') return school.member_plan === 'pro' ? 'pro' : 'free'
+    return 'school'
   }
 
   const schoolMap = Object.fromEntries(schools.map(s => [s.id, s]))
@@ -467,6 +489,15 @@ export default function DistrictAdminsPage() {
               { label: 'รีเซ็ตรหัสผ่าน', color: '#C49212', action: () => { setResetTarget({ id: admin.id, name: `${admin.prefix} ${admin.full_name}` }); setNewPassword(''); setResetMsg(null); setOpenMenuId(null) } },
               { label: 'ตั้งโควต้าผู้ใช้', color: '#0891B2', action: () => { setQuotaTarget({ id: admin.id, name: `${admin.prefix} ${admin.full_name}` }); setQuotaVal(String(admin.quota ?? 15)); setOpenMenuId(null) } },
               ...(admin.school_id ? [{
+                label: 'ตั้งแพ็กเกจ',
+                color: '#182b49',
+                action: () => {
+                  const school = admin.school || schoolMap[admin.school_id!]
+                  setPackageTarget({ schoolId: admin.school_id!, name: school?.name || schoolName, packageName: packageOf(school) })
+                  setOpenMenuId(null)
+                },
+              }] : []),
+              ...(admin.school_id ? [{
                 label: 'ล้างการตั้งค่าโรงเรียน',
                 color: '#C2410C',
                 action: () => {
@@ -485,6 +516,29 @@ export default function DistrictAdminsPage() {
               </button>
             ))
           })()}
+        </div>
+      )}
+
+      {packageTarget && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: '420px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '4px' }}>ตั้งแพ็กเกจ</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '16px' }}>{packageTarget.name}</p>
+            {([
+              ['school', 'สมาชิกรายโรงเรียน', 'ใช้ระบบเดิมได้ทั้งก้อน'],
+              ['free', 'สมาชิกเดี่ยวฟรี', 'จัดตารางบนเครื่อง และมีโฆษณา'],
+              ['pro', 'สมาชิกเดี่ยวโปร', 'ตารางบนเครื่อง สำรองได้ และธุรการกับ ปพ.5/6 ไม่เกิน 3 ห้อง'],
+            ] as const).map(([value, label, detail]) => (
+              <label key={value} style={{ display: 'grid', gridTemplateColumns: '20px 1fr', gap: 8, marginBottom: 10, cursor: 'pointer' }}>
+                <input type="radio" name="package" checked={packageTarget.packageName === value} onChange={() => setPackageTarget({ ...packageTarget, packageName: value })} />
+                <span><strong style={{ display: 'block', fontSize: 13 }}>{label}</strong><span style={{ fontSize: 12, color: 'var(--text-3)' }}>{detail}</span></span>
+              </label>
+            ))}
+            <div className="form-actions">
+              <button onClick={() => setPackageTarget(null)} className="btn btn-ghost">ยกเลิก</button>
+              <LoadingButton loading={packageSaving} onClick={handleSetPackage}>บันทึก</LoadingButton>
+            </div>
+          </div>
         </div>
       )}
 
@@ -553,7 +607,7 @@ export default function DistrictAdminsPage() {
                         <div>
                           <div style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 600 }}>{school.name}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: 2 }}>
-                            {schoolMemberIdHint(school)}
+                            {schoolMemberIdHint(school)} · {packageOf(school) === 'school' ? 'รายโรงเรียน' : packageOf(school) === 'pro' ? 'เดี่ยวโปร' : 'เดี่ยวฟรี'}
                           </div>
                         </div>
                       ) : (

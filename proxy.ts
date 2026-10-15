@@ -80,7 +80,7 @@ function handleSchoolScopedPath(req: NextRequest, codeRaw: string, schoolPath: s
 
   const url = req.nextUrl.clone()
   url.pathname = `/${schoolPath}`
-  return NextResponse.rewrite(url)
+  return rewriteWithPath(req, url, `/${schoolPath}`)
 }
 
 export default function proxy(req: NextRequest) {
@@ -113,7 +113,7 @@ export default function proxy(req: NextRequest) {
 
   // หน้าตรวจเอกสารสาธารณะ — ผ่านได้เสมอ
   if (isOpenRoute) {
-    return NextResponse.next()
+    return continueWithPath(req, path)
   }
 
   // ถ้าเป็น protected route และไม่มี session cookie → ไป login
@@ -126,7 +126,21 @@ export default function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', req.nextUrl))
   }
 
-  return NextResponse.next()
+  return continueWithPath(req, path)
+}
+
+function requestWithPath(req: NextRequest, pathname: string) {
+  const headers = new Headers(req.headers)
+  headers.set('x-app-path', pathname)
+  return headers
+}
+
+function continueWithPath(req: NextRequest, pathname: string) {
+  return NextResponse.next({ request: { headers: requestWithPath(req, pathname) } })
+}
+
+function rewriteWithPath(req: NextRequest, url: URL, pathname: string) {
+  return NextResponse.rewrite(url, { request: { headers: requestWithPath(req, pathname) } })
 }
 
 // กำหนด route ที่ proxy จะทำงาน

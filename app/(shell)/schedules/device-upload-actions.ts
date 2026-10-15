@@ -1,6 +1,6 @@
 'use server'
 import { verifySession } from '@/lib/dal'
-import { readMemberPlan } from '@/lib/member-plan'
+import { readMembership } from '@/lib/member-plan'
 import { logActivity } from '@/lib/audit'
 import { storeDeviceSchedule } from '@/lib/device-schedule-import'
 import { cleanDeviceSchedule, deviceScheduleHasContent, deviceScheduleHash, type DeviceScheduleUpload } from '@/lib/device-schedule-payload'
@@ -8,8 +8,8 @@ import { cleanDeviceSchedule, deviceScheduleHasContent, deviceScheduleHash, type
 export async function uploadDeviceSchedule(raw: DeviceScheduleUpload) {
   const session = await verifySession()
   if (!session.schoolId) return { error: 'ใช้ได้เฉพาะสมาชิกของโรงเรียน' }
-  const planName = await readMemberPlan(session.schoolId)
-  if (planName !== 'pro') return { error: null, stored: false, message: '' }
+  const membership = await readMembership(session.schoolId)
+  if (membership.kind !== 'individual' || membership.plan !== 'pro') return { error: null, stored: false, message: '' }
   const plan = cleanDeviceSchedule(raw)
   if (!deviceScheduleHasContent(plan)) return { error: null, stored: false, message: '' }
   const hash = deviceScheduleHash(plan)

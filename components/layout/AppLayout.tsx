@@ -1,6 +1,10 @@
+import { headers } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { verifySession } from '@/lib/dal'
 import { getSchoolShell } from '@/lib/school-shell'
 import { hasRoleInList, resolveNavRole } from '@/lib/roles'
+import { readMembership } from '@/lib/member-plan'
+import { membershipAllows, membershipHome, type Membership } from '@/lib/membership'
 import LayoutClient from './LayoutClient'
 import { resolveSchoolEducationType, type SchoolEducationType } from '@/lib/school-education-type'
 
@@ -37,9 +41,14 @@ export default async function AppLayout({ children, title, requireRole }: Props)
 
   const navRole = resolveNavRole(session.role, isActingDirector)
   const accessRole = isActingDirector ? 'principal' : session.role
+  let membership: Membership | null = null
+  if (session.role !== 'district' && session.schoolId) {
+    membership = await readMembership(session.schoolId)
+    const appPath = (await headers()).get('x-app-path') || ''
+    if (appPath && !membershipAllows(appPath, membership)) redirect(membershipHome(membership))
+  }
 
   if (requireRole && !hasRoleInList(accessRole, requireRole)) {
-    const { redirect } = await import('next/navigation')
     redirect('/dashboard')
   }
 
@@ -57,6 +66,7 @@ export default async function AppLayout({ children, title, requireRole }: Props)
       educationType={educationType}
       hasSchool={Boolean(session.schoolId)}
       isActingDirector={isActingDirector}
+      membership={membership}
     >
       {children}
     </LayoutClient>

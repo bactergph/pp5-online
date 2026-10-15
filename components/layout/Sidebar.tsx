@@ -7,6 +7,7 @@ import { logout } from '@/lib/actions/auth'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { filterSchoolMenu, type SchoolEducationType } from '@/lib/school-education-type'
+import { filterMembershipItems, type Membership } from '@/lib/membership'
 
 type Child = { href?: string; label: string; icon?: React.ReactNode; children?: Child[]; tone?: SidebarTone }
 type NavItem = { href: string; label: string; icon: React.ReactNode; children?: Child[] }
@@ -534,6 +535,7 @@ type Props = {
   schoolLogoUrl?: string | null
   schoolProgramName?: string | null
   schoolName?: string | null
+  membership?: Membership | null
 }
 
 export default function Sidebar({
@@ -549,6 +551,7 @@ export default function Sidebar({
   schoolProgramName = null,
   schoolName = null,
   educationType = 'primary',
+  membership = null,
 }: Props) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement | null>(null)
@@ -566,7 +569,11 @@ export default function Sidebar({
     setExpanded([])
   }, [pathname])
 
-  const sections = buildNav(navRole, isHomeroom).map(section => ({ ...section, items: filterSchoolMenu(section.items, educationType) })).filter(section => section.items.length > 0)
+  const sections = buildNav(navRole, isHomeroom).map(section => {
+    const byEducation = filterSchoolMenu(section.items, educationType)
+    const items = membership ? filterMembershipItems(byEducation, membership) : byEducation
+    return { ...section, items }
+  }).filter(section => section.items.length > 0)
   const schoolPrefix = schoolCode && userRole !== 'district' ? `/${schoolCode}` : ''
   const scopedHref = (href: string) => {
     if (!schoolPrefix || !href.startsWith('/') || href.startsWith('/district')) return href

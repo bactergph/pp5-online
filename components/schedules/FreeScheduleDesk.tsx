@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import { DEFAULT_PERIOD_TIMES } from '@/lib/schedule-helpers'
 import { emptyPlan } from '@/lib/schedule-planning'
@@ -10,7 +9,6 @@ import { readFreePlan, writeFreePlan } from '@/lib/schedule-device-cache'
 import { solveScheduleOnDevice } from '@/lib/schedule-device-run'
 import FreeSubstituteDesk, { type FreeSubstituteEntry, type LocalCell } from '@/components/schedules/FreeSubstituteDesk'
 import DeviceScheduleUpload from '@/components/schedules/DeviceScheduleUpload'
-type MemberPlan = 'free' | 'pro'
 export type LiveFreeAd = { title: string; href: string; imageUrl: string }
 
 type Teacher = { id: string; name: string }
@@ -86,7 +84,27 @@ function toSnapshot(plan: FreePlan): DeviceSnapshot {
   }
 }
 
-export default function FreeScheduleDesk({ plan, ad = null }: { plan: MemberPlan | null; ad?: LiveFreeAd | null }) {
+function localReport(plan: FreePlan) {
+  const teacherName = Object.fromEntries(plan.teachers.map(teacher => [teacher.id, teacher.name]))
+  const roomName = Object.fromEntries(plan.rooms.map(room => [room.id, room.label]))
+  const clashes: string[] = []
+  const seen = new Map<string, string>()
+  const load = new Map<string, number>()
+  for (const cell of plan.timetable) {
+    const subject = plan.subjects.find(item => item.id === cell.subjectId)
+    if (!subject) continue
+    const who = teacherName[subject.teacherId] || 'ครู'
+    load.set(who, (load.get(who) || 0) + 1)
+    const where = `${roomName[cell.classroomId] || ''} ${subject.name}`.trim()
+    const key = `${subject.teacherId}|${cell.day}|${cell.period}`
+    const previous = seen.get(key)
+    if (previous) clashes.push(`${who} วัน${SCHEDULE_DAYS.find(day => day.value === cell.day)?.label || cell.day} คาบ ${cell.period}: ${previous} กับ ${where}`)
+    else seen.set(key, where)
+  }
+  return { clashes, load: [...load.entries()] }
+}
+
+export default function FreeScheduleDesk({ tier, ad = null }: { tier: 'free' | 'pro'; ad?: LiveFreeAd | null }) {
   const [data, setData] = useState<FreePlan>(empty)
   const [ready, setReady] = useState(false)
   const [savedAt, setSavedAt] = useState('')
@@ -100,7 +118,8 @@ export default function FreeScheduleDesk({ plan, ad = null }: { plan: MemberPlan
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState<DeviceDraft | null>(null)
-  const [mode, setMode] = useState<'plan' | 'substitute'>('plan')
+  const [mode, setMode] = useState<'plan' | 'substitute' | 'review'>('plan')
+  const [paperTitle, setPaperTitle] = useState('')
 
   useEffect(() => {
     let active = true
@@ -160,30 +179,41 @@ export default function FreeScheduleDesk({ plan, ad = null }: { plan: MemberPlan
     }
   }
 
-  if (plan === 'pro') {
-    return (
-      <section className="free-schedule">
-        <style>{STYLES}</style>
-        <header>
-          <span>สมาชิกโปร</span>
-          <h1>โรงเรียนนี้ใช้จัดตารางออนไลน์</h1>
-          <p>แพ็กเกจโปรจัดตารางบนระบบออนไลน์ ถ้าเครื่องนี้มีตารางที่จัดตอนเป็นสมาชิกฟรี ระบบส่งชุดนั้นขึ้นเซิร์ฟเวอร์ให้</p>
-        </header>
-        <DeviceScheduleUpload />
-        <Link href="/schedules/class/manage">ไปหน้าจัดตารางออนไลน์</Link>
-      </section>
-    )
+  const report = useMemo(() => localReport(data), [data])
+
+  function printPersonal() {
+    const title = paperTitle.trim() || 'ตารางเรียน'
+    const rooms = data.rooms.filter(room => data.timetable.some(cell => cell.classroomId === room.id))
+    const body = rooms.map(room => {
+      const rows = SCHEDULE_DAYS.map(day => {
+        const cells = [1, 2, 3, 4, 5, 6].map(period => {
+          const cell = data.timetable.find(item => item.classroomId === room.id && item.day === day.value && item.period === period)
+          const subject = cell ? data.subjects.find(item => item.id === cell.subjectId) : undefined
+          const teacher = subject ? data.teachers.find(item => item.id === subject.teacherId)?.name : ''
+          return `<td>${subject ? `${subject.name}<br><small>${teacher || ''}</small>` : ''}</td>`
+        }).join('')
+        return `<tr><th>${day.label}</th>${cells}</tr>`
+      }).join('')
+      return `<h2>${room.label}</h2><table><thead><tr><th>วัน</th><th>คาบ 1</th><th>คาบ 2</th><th>คาบ 3</th><th>คาบ 4</th><th>คาบ 5</th><th>คาบ 6</th></tr></thead><tbody>${rows}</tbody></table>`
+    }).join('')
+    const popup = window.open('', '_blank', 'noopener,noreferrer')
+    if (!popup) return
+    popup.document.write(`<!doctype html><html><head><title>${title}</title><style>body{font-family:sans-serif;padding:24px}table{border-collapse:collapse;width:100%;margin-bottom:24px}td,th{border:1px solid #182b49;padding:8px;text-align:center}h1{color:#182b49}</style></head><body><h1>${title}</h1>${body || '<p>ยังไม่มีตาราง</p>'}</body></html>`)
+    popup.document.close()
+    popup.focus()
+    popup.print()
   }
 
   return (
     <section className="free-schedule">
       <style>{STYLES}</style>
       <header>
-        <span>สมาชิกฟรี</span>
+        <span>{tier === 'pro' ? 'สมาชิกเดี่ยวโปร' : 'สมาชิกเดี่ยวฟรี'}</span>
         <h1>จัดตารางบนเครื่องนี้</h1>
-        <p>เก็บครู วิชา ห้อง และตารางสอนแทนไว้ในเครื่อง แล้วให้เครื่องนี้จัดตารางเอง ไม่ส่งข้อมูลชุดนี้ไปเก็บที่เซิร์ฟเวอร์</p>
+        <p>{tier === 'pro' ? 'ตารางสอนอยู่บนเครื่องนี้ สำรองขึ้นเซิร์ฟเวอร์ได้ และใช้ธุรการกับ ปพ.5/ปพ.6 ได้ไม่เกิน 3 ห้อง' : 'เก็บครู วิชา ห้อง และตารางสอนแทนไว้ในเครื่อง แล้วให้เครื่องนี้จัดตารางเอง'}</p>
         {savedAt && <small>บันทึกในเครื่องล่าสุด {new Date(savedAt).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}</small>}
       </header>
+      {tier === 'pro' && <DeviceScheduleUpload />}
 
       {!ready ? <p className="note">กำลังเปิดข้อมูลในเครื่อง...</p> : (
         <>
@@ -191,8 +221,20 @@ export default function FreeScheduleDesk({ plan, ad = null }: { plan: MemberPlan
           <div className="modes" role="tablist" aria-label="งานบนเครื่องนี้">
             <button type="button" role="tab" aria-selected={mode === 'plan'} className={mode === 'plan' ? 'is-on' : ''} onClick={() => setMode('plan')}>จัดตาราง</button>
             <button type="button" role="tab" aria-selected={mode === 'substitute'} className={mode === 'substitute' ? 'is-on' : ''} onClick={() => setMode('substitute')}>ตารางสอนแทน</button>
+            {tier === 'pro' && <button type="button" role="tab" aria-selected={mode === 'review'} className={mode === 'review' ? 'is-on' : ''} onClick={() => setMode('review')}>ตรวจและพิมพ์</button>}
           </div>
-          {mode === 'substitute' ? (
+          {mode === 'review' && tier === 'pro' ? (
+            <article>
+              <h2>คาบชน</h2>
+              {report.clashes.length ? <ul className="issues">{report.clashes.map(item => <li key={item}>{item}</li>)}</ul> : <p className="note">ยังไม่พบครูคนเดียวสอนสองห้องในคาบเดียวกัน</p>}
+              <h2>ภาระงานจากตารางนี้</h2>
+              <ul>{report.load.map(([name, count]) => <li key={name}>{name} · {count} คาบ</li>)}</ul>
+              <form onSubmit={event => { event.preventDefault(); printPersonal() }}>
+                <input value={paperTitle} onChange={event => setPaperTitle(event.target.value)} placeholder="หัวกระดาษ เช่น ชื่อครูหรือชื่อห้อง" aria-label="หัวกระดาษ" />
+                <button type="submit">พิมพ์ตารางหัวกระดาษส่วนตัว</button>
+              </form>
+            </article>
+          ) : mode === 'substitute' ? (
             <FreeSubstituteDesk
               teachers={data.teachers}
               rooms={data.rooms}

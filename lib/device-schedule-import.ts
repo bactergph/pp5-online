@@ -5,7 +5,7 @@ import { parseDeviceRoom, type DeviceScheduleUpload } from '@/lib/device-schedul
 
 const REPLACE_ROLES = new Set(['admin', 'academic_head', 'deputy_principal', 'district'])
 
-export async function storeDeviceSchedule(schoolId: string, userId: string, role: string, plan: DeviceScheduleUpload, hash: string) {
+export async function storeDeviceSchedule(schoolId: string, userId: string, role: string, plan: DeviceScheduleUpload, hash: string, copyToOnline = false) {
   const db = createServerClient()
   const existing = await db.from('device_schedule_uploads').select('content_hash').eq('school_id', schoolId).maybeSingle()
   if (existing.error) {
@@ -22,7 +22,7 @@ export async function storeDeviceSchedule(schoolId: string, userId: string, role
     uploaded_at: new Date().toISOString(),
   })
   if (saved.error) return { error: saved.error.message }
-  const copied = await copyOntoEmptyTimetable(schoolId, plan)
+  const copied = copyToOnline ? await copyOntoEmptyTimetable(schoolId, plan) : { copied: false, slots: 0, kept: false }
   return {
     error: null,
     stored: true,
