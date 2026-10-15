@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation'
 import { verifySession } from '@/lib/dal'
 import { readMembership } from '@/lib/member-plan'
 import { readLiveFreeScheduleAd } from '@/lib/free-schedule-ad'
@@ -10,7 +9,7 @@ export default async function FreeSchedulePage() {
     return <p style={{ color: '#52647c', fontWeight: 700 }}>ใช้ได้เฉพาะสมาชิกที่เข้าสู่ระบบแล้ว</p>
   }
   const membership = await readMembership(session.schoolId)
-  if (membership.kind === 'school') redirect('/schedules/class')
-  const ad = membership.plan === 'free' ? await readLiveFreeScheduleAd() : null
-  return <FreeScheduleDesk tier={membership.plan} ad={ad} />
+  const tier = membership.kind === 'school' ? 'school' : membership.plan
+  const ad = tier === 'free' ? await readLiveFreeScheduleAd() : null
+  return <FreeScheduleDesk tier={tier} ad={ad} />
 }

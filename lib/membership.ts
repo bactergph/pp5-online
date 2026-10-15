@@ -61,7 +61,7 @@ export function membershipHome(membership: Membership) {
 
 export function membershipAllows(path: string, membership: Membership) {
   const clean = cleanPath(path)
-  if (membership.kind === 'school') return !matches(clean, '/schedules/device')
+  if (membership.kind === 'school') return true
   if (membership.plan === 'free') return FREE_PREFIXES.some(prefix => matches(clean, prefix))
   if (matches(clean, '/schedules') && !matches(clean, '/schedules/device')) return false
   if (PRO_DENY.some(prefix => matches(clean, prefix))) return false
