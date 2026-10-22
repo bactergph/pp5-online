@@ -210,11 +210,110 @@ function solveDenseWithRetainedRooms(lessons:PlannedLesson[],fixed:PlannedSlot[]
   const solved=searchSlot(0)
   return {status:solved?'complete' as const:limited?'timeout' as const:'conflict' as const,limitReason:limited,assignments:solved?assignments.filter(slot=>!String(slot.lessonId).startsWith('__free__:')):[],issues:[],nodes,message:solved?undefined:'ครูผู้สอนที่ยังว่างไม่พอสำหรับห้องที่เลือก หรือใช้เวลาค้นหาเกินกำหนด',solver:'dense_slot_matching' as const,elapsedMs:Date.now()-started,timeLimitMs:searchLimitMs}
 }
+/** Place flexible activities as simultaneous multi-room events, then solve subjects.
+ * A subject conflict backtracks the activity choices within the same search budget. */
+function solveFlexibleActivities(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],maxNodes:number,timeLimitMs:number):PlannedScheduleResult {
+  const started=Date.now(),deadline=started+timeLimitMs
+  const byId=new Map(lessons.map(l=>[l.id,l])),cell=(id:string,day:number,period:number)=>`${id}:${day}:${period}`
+  const occupied=new Map<string,string>(),teacherBusy=new Map<string,string>(),roomBusy=new Map<string,string>()
+  for(const slot of fixed){
+    occupied.set(cell(slot.classroomId,slot.day,slot.period),slot.lessonId||'locked')
+    const lesson=slot.lessonId?byId.get(slot.lessonId):undefined
+    if(lesson){for(const id of lessonTeachers(lesson))teacherBusy.set(cell(id,slot.day,slot.period),lesson.activityGroupId||lesson.id);if(lesson.roomId)roomBusy.set(cell(lesson.roomId,slot.day,slot.period),lesson.id)}
+  }
+  for(const block of unavailable)teacherBusy.set(cell(block.teacherId,block.day,block.period),'unavailable')
+  const groups=new Map<string,PlannedLesson[]>()
+  for(const lesson of lessons.filter(l=>l.activity&&!l.fixedOnly&&l.count>0)){
+    const id=lesson.activityGroupId||lesson.id
+    groups.set(id,[...(groups.get(id)||[]),lesson])
+  }
+  const units=[...groups].map(([id,members])=>{
+    const allIds=new Set(lessons.filter(l=>(l.activityGroupId||l.id)===id).map(l=>l.id))
+    const mandatory=[...new Map(fixed.filter(s=>s.lessonId&&allIds.has(s.lessonId)).map(s=>[`${s.day}:${s.period}`,{day:s.day,period:s.period}])).values()]
+    return {id,members,count:members[0].count,mandatory,chosen:new Set<string>(),teachers:[...new Set(members.flatMap(lessonTeachers))]}
+  })
+  for(const unit of units)if(unit.mandatory.length>unit.count||unit.members.some(l=>l.count!==unit.count))return {status:'conflict',assignments:[],issues:[],nodes:0,message:'กิจกรรมรวมกลุ่มมีจำนวนคาบหรือคาบล็อกไม่ตรงกัน'}
+  const allCells=plan.days.flatMap(day=>times.filter(t=>!t.is_break).map(t=>({day,period:t.period})))
+  const tasks=units.flatMap(unit=>[
+    ...unit.mandatory.map(position=>({unit,position:position as {day:number;period:number}|null})),
+    ...Array.from({length:unit.count-unit.mandatory.length},()=>({unit,position:null as {day:number;period:number}|null})),
+  ])
+  const added:PlannedSlot[]=[],used=new Set<number>(),lastFree=new Map<string,number>()
+  let nodes=0,limitReason:'node_limit'|'time_limit'|null=null,answer:PlannedScheduleResult|null=null,sawChildTimeout=false
+  function candidates(task:typeof tasks[number]){
+    const {unit}=task
+    return (task.position?[task.position]:allCells).filter(position=>{
+      const {day,period}=position,key=`${day}:${period}`
+      if(unit.chosen.has(key)||(!task.position&&unit.mandatory.some(p=>p.day===day&&p.period===period)))return false
+      if(!task.position&&lastFree.has(unit.id)&&day*10+period<=lastFree.get(unit.id)!)return false
+      if(unit.teachers.some(id=>{const owner=teacherBusy.get(cell(id,day,period));return owner!==undefined&&owner!==unit.id}))return false
+      return unit.members.every(lesson=>{
+        const owner=occupied.get(cell(lesson.classroomId,day,period))
+        const placeOwner=lesson.roomId?roomBusy.get(cell(lesson.roomId,day,period)):undefined
+        return (!owner||owner===lesson.id)&&(!placeOwner||placeOwner===lesson.id)
+      })
+    })
+  }
+  function search():boolean{
+    if(++nodes>maxNodes){limitReason='node_limit';return false}
+    if(Date.now()>=deadline){limitReason='time_limit';return false}
+    if(used.size===tasks.length){
+      const normalized=lessons.map(lesson=>lesson.activity&&!lesson.fixedOnly?{...lesson,fixedOnly:true}:lesson)
+      const remainder=solvePlannedSchedule(normalized,[...fixed,...added],plan,times,unavailable,Math.max(0,maxNodes-nodes),Math.max(0,deadline-Date.now()))
+      nodes+=remainder.nodes
+      if(remainder.status==='complete'){answer={...remainder,assignments:[...added,...remainder.assignments],nodes,elapsedMs:Date.now()-started,timeLimitMs};return true}
+      if(remainder.status==='timeout'){
+        sawChildTimeout=true
+        if(nodes>=maxNodes)limitReason='node_limit'
+        else if(Date.now()>=deadline)limitReason='time_limit'
+      }
+      return false
+    }
+    let best=-1,options:{day:number;period:number}[]=[]
+    for(let index=0;index<tasks.length;index++){
+      if(used.has(index))continue
+      // Equivalent free occurrences are indistinguishable; try them in order.
+      if(!tasks[index].position&&tasks.some((task,earlier)=>earlier<index&&task.unit===tasks[index].unit&&!task.position&&!used.has(earlier)))continue
+      const choices=candidates(tasks[index]);if(!choices.length)return false
+      if(best<0||choices.length<options.length){best=index;options=choices}
+    }
+    const task=tasks[best],{unit}=task
+    options.sort((a,b)=>{
+      const sameDay=(day:number)=>[...unit.chosen].filter(key=>key.startsWith(day+':')).length
+      return sameDay(a.day)-sameDay(b.day)||a.day-b.day||a.period-b.period
+    })
+    used.add(best)
+    for(const position of options){
+      const {day,period}=position,key=`${day}:${period}`,changes:{map:Map<string,string>;key:string}[]=[]
+      const from=added.length
+      const previousFree=lastFree.get(unit.id)
+      if(!task.position)lastFree.set(unit.id,day*10+period)
+      const remember=(map:Map<string,string>,k:string,owner:string)=>{if(!map.has(k)){map.set(k,owner);changes.push({map,key:k})}}
+      unit.chosen.add(key)
+      for(const lesson of unit.members){
+        const k=cell(lesson.classroomId,day,period)
+        if(!occupied.has(k)){remember(occupied,k,lesson.id);added.push({classroomId:lesson.classroomId,lessonId:lesson.id,day,period})}
+        if(lesson.roomId)remember(roomBusy,cell(lesson.roomId,day,period),lesson.id)
+      }
+      for(const id of unit.teachers)remember(teacherBusy,cell(id,day,period),unit.id)
+      if(search())return true
+      added.length=from;unit.chosen.delete(key);for(const change of changes)change.map.delete(change.key)
+      if(!task.position){if(previousFree===undefined)lastFree.delete(unit.id);else lastFree.set(unit.id,previousFree)}
+      if(limitReason)break
+    }
+    used.delete(best)
+    return false
+  }
+  search()
+  return answer||{status:limitReason||sawChildTimeout?'timeout':'conflict',assignments:[],issues:[],nodes,limitReason:limitReason||(sawChildTimeout?'time_limit':null),elapsedMs:Date.now()-started,timeLimitMs,message:'ไม่พบช่วงว่างร่วมสำหรับกิจกรรมและรายวิชา กรุณาตรวจชั่วโมงกิจกรรม ครูไม่ว่าง และคาบล็อก'}
+}
+
 /** Bounded block search. Fixed lessons may be completed into a double block. */
 export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],maxNodes=SCHEDULE_SEARCH_MAX_NODES,timeLimitMs=SCHEDULE_SEARCH_TIME_LIMIT_MS):PlannedScheduleResult{
   const started=Date.now()
   const issues=checkPlanning(lessons,fixed,plan.days,times,unavailable)
   if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,assignments:[] as PlannedSlot[],issues,nodes:0}
+  if(lessons.some(l=>l.activity&&!l.fixedOnly&&l.count>0))return solveFlexibleActivities(lessons,fixed,plan,times,unavailable,maxNodes,timeLimitMs)
   // Most school timetables use one-period lessons. Route this common case,
   // including lessons that need a shared venue, through the slot-based solver: the general
   // block CSP rescans every subject domain at every node and can spend its

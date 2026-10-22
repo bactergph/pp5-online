@@ -30,4 +30,22 @@ assert.ok(captured.after_rows.some(r=>r.classroom_id==='A'&&r.day_of_week===2&&r
 assert.ok(captured.after_rows.some(r=>r.classroom_id==='B'&&r.day_of_week===2&&r.period===2&&r.activity_id&&!r.class_subject_id));
 assert.ok(captured.after_rows.some(r=>r.classroom_id==='A'&&r.day_of_week===1&&r.period===1&&r.class_subject_id==='math'));
 console.log('PASS: activity teams are pinned into the draft, including rooms outside the selected scope');
+// Empty cells turn the same activity into an automatically placed weekly workload.
+data.slots=data.slots.filter(s=>!(s.classroom_id==='A'&&s.day_of_week===2&&s.period===2));
+planConfig.activityGroups[0]={...planConfig.activityGroups[0],cells:[],weeklyPeriods:2};
+const beforeFlexible=JSON.stringify(data.slots);
+const automaticActivity=await api.generate('year',1,['A'],true);
+assert.equal(automaticActivity.status,'complete');assert.equal(JSON.stringify(data.slots),beforeFlexible);
+const automaticRows=captured.after_rows.filter(row=>row.activity_id);
+assert.equal(automaticRows.length,4);
+const activityCells=room=>automaticRows.filter(row=>row.classroom_id===room).map(row=>`${row.day_of_week}:${row.period}`).sort().join(',');
+assert.equal(activityCells('A'),activityCells('B'));assert.ok(automaticRows.every(row=>row.period!==0));
+assert.equal(automaticActivity.activityLessons.length,2);
+data.lessons.push({id:'activity:existing',classroomId:'A',teacherId:null,count:2,label:'A · แนะแนว',subjectId:'activity',name:'แนะแนว',teacherName:'',activity:true,teacherOptional:true});
+data.slots.push({classroom_id:'A',academic_year_id:'year',day_of_week:4,period:2,class_subject_id:null,activity_id:'existing',note:null,locked:true});
+const lockedActivity=await api.generate('year',1,['A'],true);
+assert.equal(lockedActivity.status,'complete');
+assert.ok(captured.after_rows.some(row=>row.classroom_id==='A'&&row.activity_id==='existing'&&row.locked&&row.day_of_week===4&&row.period===2));
+assert.ok(captured.after_rows.some(row=>row.classroom_id==='B'&&row.activity_id&&row.day_of_week===4&&row.period===2));
+console.log('PASS: flexible activity weekly quota included in draft; joint rooms outside selected scope synchronize; locked activity retained; live timetable unchanged');
 session={...session,role:'teacher'};await assert.rejects(api.generate('year',1,['A'],true),/สิทธิ์/);session=null;await assert.rejects(api.confirmDraft('draft'),/สิทธิ์/);assert.equal(liveWrites,0);console.log('PASS: preparation authorization, auto writes draft only, multi-room/multi-cell activity preview and locked impact, scope/duplicate/break rejection')})().catch(e=>{console.error(e);process.exitCode=1});

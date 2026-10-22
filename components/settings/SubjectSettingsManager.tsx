@@ -5,6 +5,8 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 import { isSecondaryClassLevel } from '@/lib/class-level'
 import {
   fetchSubjectSettingsInit,
+  manageSchoolSubjectGroup,
+  setMissingSubjectSemesterToSecond,
   saveSubject,
   deleteSubject,
   deleteAllSubjects,
@@ -23,6 +25,8 @@ import {
   fetchClassroomsLite,
   fetchClassSubjects,
   addClassSubjects,
+  previewClassSubjectCopy,
+  copyClassSubjects,
   removeClassSubject,
   removeAllClassSubjects,
   reorderClassSubjects,
@@ -31,6 +35,7 @@ import LoadingButton from '@/components/LoadingButton'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { type EvaluationKind, type EvaluationSetting } from '@/lib/evaluation-settings'
 import type { SchoolEducationType } from '@/lib/school-education-type'
+import { defaultSubjectSemester, subjectSemesterTerms, type SubjectSemester } from '@/lib/subject-semester'
 
 type Subject = {
   id: string
@@ -45,6 +50,7 @@ type Subject = {
   level?: string | null
   levels?: string[]
   semesters?: number[]
+  semester?: SubjectSemester | null
 }
 
 type SubjectSettingsTab = 'subjects' | 'class-subjects' | 'clubs' | 'activities'
@@ -64,7 +70,7 @@ type ClubClassroom = { id: string; level: string; room: number; academic_year_id
 type ClubStudent = { id: string; student_number: number; prefix: string | null; first_name: string; last_name: string; status: string }
 type ClassSubjectItem = { id: string; subject_id: string; teacher_id: string | null; order_number: number }
 
-// ⚠️ ต้องตรงกับ CHECK constraint subjects_group_check ใน 001_initial_schema.sql (8 กลุ่ม)
+// กลุ่มมาตรฐานใช้จัดลำดับก่อน ส่วนชื่อกลุ่มจริงโหลดจากการตั้งค่าของโรงเรียน
 const SUBJECT_GROUPS = [
   'ภาษาไทย',
   'คณิตศาสตร์',
@@ -157,22 +163,15 @@ function subjectGradeLabels(subject: { code: string; name?: string; level?: stri
   return []
 }
 
-function subjectTermList(subject: { semesters?: number[] }) {
-  const terms = new Set<1 | 2>()
-  for (const semester of subject.semesters || []) {
-    if (semester === 1 || semester === 0) terms.add(1)
-    if (semester === 2 || semester === 0) terms.add(2)
-  }
-  return [...terms]
-}
+const subjectTermList = subjectSemesterTerms
 
-function soleSchoolTerm(subjects: { semesters?: number[] }[]) {
+function soleSchoolTerm(subjects: { semester?: number | null; semesters?: number[] }[]) {
   let has1 = false
   let has2 = false
   for (const subject of subjects) {
-    for (const semester of subject.semesters || []) {
-      if (semester === 0 || semester === 1) has1 = true
-      if (semester === 0 || semester === 2) has2 = true
+    for (const semester of subjectTermList(subject)) {
+      if (semester === 1) has1 = true
+      if (semester === 2) has2 = true
     }
   }
   if (has2 && !has1) return 2 as const
@@ -180,9 +179,9 @@ function soleSchoolTerm(subjects: { semesters?: number[] }[]) {
   return 0 as const
 }
 
-function subjectTermText(subject: { semesters?: number[] }) {
+function subjectTermText(subject: { semester?: number | null; semesters?: number[] }) {
   const semesters = subject.semesters || []
-  if (semesters.includes(0)) return 'ทั้งปี'
+  if (subject.semester == null && semesters.includes(0)) return 'ทั้งปี'
   const terms = subjectTermList(subject)
   return terms.length ? terms.map(term => `เทอม ${term}`).join(' · ') : '—'
 }
@@ -195,15 +194,15 @@ function subjectGradeRank(subject: Subject, secondary: boolean) {
   return rank < 0 ? GRADE_ORDER.length : rank
 }
 
-function groupSubjectRows(rows: Subject[], secondary = false) {
+function groupSubjectRows(rows: Subject[], secondary = false, groupNames: string[] = SUBJECT_GROUPS) {
   const buckets = new Map<string, Subject[]>()
   for (const row of rows) {
     const key = row.subject_group || ''
     buckets.set(key, [...(buckets.get(key) || []), row])
   }
   const keys = [
-    ...SUBJECT_GROUPS.filter(group => buckets.has(group)),
-    ...[...buckets.keys()].filter(key => key && !SUBJECT_GROUPS.includes(key)),
+    ...groupNames.filter(group => buckets.has(group)),
+    ...[...buckets.keys()].filter(key => key && !groupNames.includes(key)),
     ...(buckets.has('') ? [''] : []),
   ]
   return keys.map(key => ({
@@ -308,12 +307,24 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     ? SETTINGS_TABS.filter(tab => tab.id === 'activities' || tab.id === 'clubs').reverse()
     : SETTINGS_TABS.filter(tab => tab.id !== 'activities' && tab.id !== 'clubs')
   const [subjects, setSubjects] = useState<Subject[]>([])
+  const [schoolSubjectGroups, setSchoolSubjectGroups] = useState<{ name: string }[]>([])
+  const [subjectGroupsError, setSubjectGroupsError] = useState<string | null>(null)
+  const [showGroupManager, setShowGroupManager] = useState(false)
+  const [groupDraft, setGroupDraft] = useState('')
+  const [editingGroupName, setEditingGroupName] = useState<string | null>(null)
+  const [groupSaving, setGroupSaving] = useState(false)
   const [educationType, setEducationType] = useState<SchoolEducationType>('primary')
   const secondary = educationType === 'secondary'
+  const schoolGroupNames = schoolSubjectGroups.map(group => group.name)
+  const subjectGroupNames = [
+    ...SUBJECT_GROUPS.filter(name => schoolGroupNames.includes(name)),
+    ...schoolGroupNames.filter(name => !SUBJECT_GROUPS.includes(name as typeof SUBJECT_GROUPS[number])),
+  ]
   const [creditInput, setCreditInput] = useState('0.5')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingAll, setDeletingAll] = useState(false)
+  const [fillingSemesters, setFillingSemesters] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<typeof empty>(empty)
   const [search, setSearch] = useState('')
@@ -324,6 +335,8 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   const termChosen = useRef(false)
   const [formCode, setFormCode] = useState('')
   const [formLevel, setFormLevel] = useState('')
+  const [formSemester, setFormSemester] = useState<SubjectSemester>(2)
+  const [pasteSemester, setPasteSemester] = useState<SubjectSemester>(2)
   const [offeredGrades, setOfferedGrades] = useState<string[]>([])
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const [evaluationSettings, setEvaluationSettings] = useState<Record<EvaluationKind, EvaluationSetting[]>>({
@@ -356,7 +369,9 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
   const [loadingClassSubjects, setLoadingClassSubjects] = useState(false)
   const [classSubjectSaving, setClassSubjectSaving] = useState(false)
-  const [classSubjectAction, setClassSubjectAction] = useState<'add' | 'auto' | 'remove' | 'remove-all' | null>(null)
+  const [classSubjectAction, setClassSubjectAction] = useState<'add' | 'auto' | 'copy' | 'remove' | 'remove-all' | null>(null)
+  const [copySourceClassroomId, setCopySourceClassroomId] = useState('')
+  const copyInProgress = useRef(false)
   const [classSubjectTerm, setClassSubjectTerm] = useState<1 | 2>(1)
   const [canManageClassSubjects, setCanManageClassSubjects] = useState(false)
 
@@ -438,6 +453,8 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     const data = await fetchSubjectSettingsInit()
     const next = data.subjects as Subject[]
     setSubjects(next)
+    setSchoolSubjectGroups(data.subjectGroups || [])
+    setSubjectGroupsError(data.subjectGroupsError || null)
     setEducationType(data.educationType)
     if (!termChosen.current) setFilterTerm(data.educationType === 'secondary' ? soleSchoolTerm(next) : 0)
     setLoading(false)
@@ -453,17 +470,51 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
 
   function openAdd() {
     setCreditInput(secondary ? '0.5' : '0')
-    setEditing(empty)
+    setEditing({ ...empty, subject_group: subjectGroupNames[0] || '' })
     setFormCode('')
     setFormLevel('')
+    setFormSemester(defaultSubjectSemester(filterTerm))
     setOfferedGrades([])
     setShowForm(true)
     setShowPaste(false)
+  }
+
+  async function handleGroupSave(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const name = groupDraft.trim()
+    if (!name || groupSaving) return
+    setGroupSaving(true)
+    const result = await manageSchoolSubjectGroup(editingGroupName ? 'rename' : 'add', editingGroupName || name, editingGroupName ? name : undefined)
+    setGroupSaving(false)
+    if (result.error) { notify('error', result.error); return }
+    setGroupDraft('')
+    setEditingGroupName(null)
+    await load()
+    notify('success', editingGroupName ? 'แก้ไขกลุ่มสาระเรียบร้อย' : 'เพิ่มกลุ่มสาระเรียบร้อย')
+  }
+
+  async function handleGroupDelete(name: string) {
+    const result = await Swal.fire({
+      title: `ลบกลุ่มสาระ “${name}”?`,
+      text: 'ระบบจะลบได้เมื่อไม่มีรายวิชาใช้กลุ่มนี้อยู่',
+      icon: 'warning', showCancelButton: true,
+      confirmButtonText: 'ลบกลุ่มสาระ', cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#dc2626',
+    })
+    if (!result.isConfirmed) return
+    setGroupSaving(true)
+    const response = await manageSchoolSubjectGroup('delete', name)
+    setGroupSaving(false)
+    if (response.error) { notify('error', response.error); return }
+    await load()
+    notify('success', 'ลบกลุ่มสาระเรียบร้อย')
   }
   function openEdit(s: Subject) {
     setCreditInput(String(s.credits || (secondary ? 0.5 : 0)))
     setEditing({ ...s, short_name: s.short_name || '' })
     setFormCode(s.code)
+    const terms = subjectTermList(s)
+    setFormSemester(terms.length === 2 ? 0 : terms[0] || defaultSubjectSemester(filterTerm))
     setFormLevel(s.level && GRADE_ORDER.includes(s.level) ? s.level : '')
     setOfferedGrades(GRADE_ORDER.filter(level => (s.levels || []).includes(level)))
     setShowForm(true)
@@ -591,6 +642,37 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     await handleAddClassSubject(autoClassSubjects.map(subject => subject.id), added => `เพิ่มอัตโนมัติ ${added} วิชาเรียบร้อย`)
   }
 
+  async function handleCopyClassSubjects() {
+    if (!canManageClassSubjects || classSubjectSaving || copyInProgress.current || !copySourceClassroomId || !classSubjectClassroomId) return
+    const input = { sourceClassroomId: copySourceClassroomId, targetClassroomId: classSubjectClassroomId,
+      academicYearId: classSubjectYearId, term: classSubjectTerm }
+    copyInProgress.current = true
+    setClassSubjectSaving(true); setClassSubjectAction('copy'); clearAlert()
+    try {
+      const { error, preview } = await previewClassSubjectCopy(input)
+      if (error || !preview) { notify('error', error || 'ตรวจสอบรายวิชาไม่สำเร็จ'); return }
+      if (!preview.added) { notify('success', `ห้องปลายทางมีครบทั้ง ${preview.total} วิชาแล้ว ไม่ต้องคัดลอกเพิ่ม`, 'มีรายวิชาครบแล้ว'); return }
+      const confirmation = await Swal.fire({
+        title: 'คัดลอกทุกวิชาเข้าห้องนี้?',
+        text: `จาก ${preview.sourceLabel} ไป ${preview.targetLabel} — ทั้งหมด ${preview.total} วิชา เพิ่มใหม่ ${preview.added} วิชา ข้ามวิชาที่มีแล้ว ${preview.skipped} วิชา คัดลอกเฉพาะรายวิชาและรหัสเดิม โดยไม่คัดลอกครู คะแนน หรือข้อมูลตารางเรียน`,
+        icon: 'question', showCancelButton: true, confirmButtonText: `ยืนยันคัดลอก ${preview.added} วิชา`,
+        cancelButtonText: 'ยกเลิก', confirmButtonColor: '#245BDB', focusCancel: true,
+      })
+      if (!confirmation.isConfirmed) return
+      const result = await copyClassSubjects(input, preview.subjectIds)
+      if (result.error) { notify('error', result.error); return }
+      // Copying does not reorder or update any pre-existing offering.
+      const items = await fetchClassSubjects(input.targetClassroomId, classSubjectSemester) as ClassSubjectItem[]
+      setClassSubjectItems(items)
+      notify('success', `คัดลอกเพิ่ม ${result.added} วิชา · ข้ามวิชาที่มีแล้ว ${result.skipped} วิชา`)
+    } catch (error) {
+      notify('error', error instanceof Error ? error.message : 'คัดลอกรายวิชาไม่สำเร็จ')
+    } finally {
+      copyInProgress.current = false
+      setClassSubjectSaving(false); setClassSubjectAction(null)
+    }
+  }
+
   async function handleRemoveClassSubject(item: ClassSubjectItem) {
     const subject = classSubjectMap[item.subject_id]
     if (!confirm(`ลบ "${subject ? `${subject.code} ${subject.name}` : 'รายวิชา'}" ออกจากห้องนี้?`)) return
@@ -635,6 +717,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
       short_name: (fd.get('short_name') as string).trim() || null,
       subject_group: fd.get('subject_group') as string,
       level: formLevel,
+      ...(secondary ? { semester: formSemester } : {}),
       type: fd.get('type') as string,
       hours_per_year: Number(fd.get('hours_per_year') || 0),
       credits: Number(fd.get('credits') || 0),
@@ -703,11 +786,25 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
 
   async function handleBulkSave() {
     setPasteSaving(true); clearAlert()
-    const { error, count } = await bulkUpsertSubjects(validRows)
+    const { error, count } = await bulkUpsertSubjects(validRows.map(row => ({ ...row, ...(secondary ? { semester: pasteSemester } : {}) })))
     setPasteSaving(false)
     if (error) { notify('error', error); return }
     notify('success', `เพิ่ม/อัปเดต ${count} วิชาเรียบร้อย`)
     setShowPaste(false); clearGrid(); load()
+  }
+
+  async function handleFillMissingSemesters() {
+    if (fillingSemesters) return
+    setFillingSemesters(true)
+    try {
+      const result = await setMissingSubjectSemesterToSecond()
+      if (result.error) { notify('error', result.error); return }
+      termChosen.current = true
+      setFilterTerm(2)
+      await load()
+      notify('success', `กำหนดภาคเรียนที่ 2 ให้ ${result.count} วิชาเรียบร้อย`)
+    } catch { notify('error', 'กำหนดภาคเรียนไม่สำเร็จ กรุณาลองใหม่') }
+    finally { setFillingSemesters(false) }
   }
 
   async function handleSyncGlobal() {
@@ -849,10 +946,10 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     const matchQ = !q || subject.code.toLowerCase().includes(q) || subject.name.toLowerCase().includes(q) || subject.subject_group.includes(search) || grades.some(grade => grade.includes(q))
     return matchGrade && matchQ
   })
-  const groupChoices = groupSubjectRows(searched, secondary)
+  const groupChoices = groupSubjectRows(searched, secondary, subjectGroupNames)
   const activeGroup = groupChoices.some(section => section.key === filterGroup) ? filterGroup : ''
   const filtered = activeGroup ? searched.filter(subject => (subject.subject_group || '') === activeGroup) : searched
-  const grouped = groupSubjectRows(filtered, secondary)
+  const grouped = groupSubjectRows(filtered, secondary, subjectGroupNames)
   const columnCount = secondary ? 11 : 10
   const renderSubjectRow = (s: Subject, index: number) => {
     const grades = subjectGradeLabels(s, secondary)
@@ -934,6 +1031,15 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 ปิด
               </button>
             </div>
+
+            {secondary && <div style={{ marginBottom: 14, maxWidth: 300 }}>
+              <label htmlFor="paste-subject-semester" className="form-label">ภาคเรียนของรายวิชาที่นำเข้า</label>
+              <select id="paste-subject-semester" className="form-input" value={pasteSemester} onChange={event => setPasteSemester(Number(event.target.value) as SubjectSemester)}>
+                <option value={1}>ภาคเรียนที่ 1</option>
+                <option value={2}>ภาคเรียนที่ 2</option>
+                <option value={0}>ทั้งสองภาคเรียน</option>
+              </select>
+            </div>}
 
             <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
               <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
@@ -1047,9 +1153,18 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                   <label className="form-label">กลุ่มสาระ</label>
                   <select name="subject_group" defaultValue={editing.subject_group || ''} className="form-input">
                     <option value="">ไม่มีกลุ่มสาระ</option>
-                    {SUBJECT_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+                    {subjectGroupNames.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
+                {secondary && <div>
+                  <label htmlFor="subject-semester" className="form-label">ภาคเรียน *</label>
+                  <select id="subject-semester" name="semester" className="form-input" value={formSemester} onChange={event => setFormSemester(Number(event.target.value) as SubjectSemester)} required>
+                    <option value={1}>ภาคเรียนที่ 1</option>
+                    <option value={2}>ภาคเรียนที่ 2</option>
+                    <option value={0}>ทั้งสองภาคเรียน</option>
+                  </select>
+                  {editing.id && <p style={{ margin: '6px 0 0', color: 'var(--text-3)', fontSize: 12 }}>ใช้จัดหมวดข้อมูลรายวิชา การเปลี่ยนเทอมไม่ย้ายวิชาที่เปิดสอนหรือคะแนนเดิม</p>}
+                </div>}
                 <div>
                   <label className="form-label">ประเภท *</label>
                   <select name="type" defaultValue={editing.type} className="form-input" required>
@@ -1076,6 +1191,57 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 <LoadingButton type="submit" loading={saving}>บันทึก</LoadingButton>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'subjects' && showGroupManager && (
+        <div className="modal-backdrop" onClick={() => !groupSaving && setShowGroupManager(false)}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="subject-group-dialog-title" style={{ maxWidth: 620, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={event => event.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <div id="subject-group-dialog-title" className="section-title" style={{ marginBottom: 4 }}>จัดการกลุ่มสาระ</div>
+                <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>กลุ่มสาระของโรงเรียนนี้ ใช้ในข้อมูลรายวิชาและตัวกรอง</p>
+              </div>
+              <button type="button" onClick={() => setShowGroupManager(false)} disabled={groupSaving} className="btn btn-ghost">ปิด</button>
+            </div>
+            {subjectGroupsError && (
+              <div role="status" style={{ padding: 12, marginBottom: 12, borderRadius: 10, background: '#fff7ed', color: '#9a3412', fontSize: 13 }}>
+                {subjectGroupsError}. การเพิ่ม/แก้ไข/ลบกลุ่มสาระจะใช้ได้หลังติดตั้ง migration นี้
+              </div>
+            )}
+            <form onSubmit={handleGroupSave} style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+              <input value={groupDraft} onChange={event => setGroupDraft(event.target.value)} className="form-input"
+                placeholder="ชื่อกลุ่มสาระ" maxLength={80} required aria-label="ชื่อกลุ่มสาระ" style={{ flex: '1 1 260px' }} />
+              <LoadingButton type="submit" loading={groupSaving} disabled={!groupDraft.trim() || !!subjectGroupsError} className="btn btn-primary">
+                {editingGroupName ? 'บันทึกชื่อใหม่' : '+ เพิ่มกลุ่มสาระ'}
+              </LoadingButton>
+              {editingGroupName && <button type="button" disabled={groupSaving} className="btn btn-secondary" onClick={() => { setEditingGroupName(null); setGroupDraft('') }}>ยกเลิกแก้ไข</button>}
+            </form>
+            {schoolSubjectGroups.length === 0 ? (
+              <p style={{ color: 'var(--text-3)', padding: 16, textAlign: 'center' }}>ยังไม่มีกลุ่มสาระในโรงเรียน</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {schoolSubjectGroups.map(group => {
+                  const usedCount = subjects.filter(subject => subject.subject_group === group.name).length
+                  return (
+                    <div key={group.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{group.name}</div>
+                        <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{usedCount} รายวิชา</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button type="button" className="btn btn-secondary" disabled={groupSaving || !!subjectGroupsError} onClick={() => { setEditingGroupName(group.name); setGroupDraft(group.name) }}>แก้ไข</button>
+                        <button type="button" className="btn btn-secondary" disabled={groupSaving || !!subjectGroupsError} onClick={() => void handleGroupDelete(group.name)} style={{ color: '#b91c1c', borderColor: '#fecaca' }}>ลบ</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <p style={{ margin: '14px 0 0', color: 'var(--text-3)', fontSize: 12, lineHeight: 1.6 }}>
+              การเปลี่ยนชื่อจะอัปเดตกลุ่มสาระของรายวิชาและข้อมูลหัวหน้ากลุ่มสาระให้ด้วย ส่วนการลบต้องย้ายรายวิชาออกก่อน
+            </p>
           </div>
         </div>
       )}
@@ -1138,7 +1304,9 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 <LoadingButton className="btn btn-secondary" loading={syncBusy} loadingText="กำลังนำเข้า..." onClick={handleSyncGlobal}>
                   ใช้จากข้อมูลกลาง
                 </LoadingButton>
-                <button type="button" onClick={() => { setGrid(Array.from({ length: 12 }, blankRow)); setShowPaste(true); setShowForm(false) }} className="btn btn-secondary">วางจากตาราง</button>
+                <button type="button" onClick={() => { setShowGroupManager(true); setEditingGroupName(null); setGroupDraft('') }} className="btn btn-secondary">จัดการกลุ่มสาระ</button>
+                <button type="button" onClick={() => { setGrid(Array.from({ length: 12 }, blankRow)); setPasteSemester(defaultSubjectSemester(filterTerm)); setShowPaste(true); setShowForm(false) }} className="btn btn-secondary">วางจากตาราง</button>
+                {secondary && subjects.some(subject => subjectTermList(subject).length === 0) && <LoadingButton type="button" loading={fillingSemesters} className="btn btn-secondary" onClick={handleFillMissingSemesters}>ใส่เทอม 2 ให้วิชาที่ยังไม่ระบุ</LoadingButton>}
                 <button type="button" onClick={openAdd} className="btn btn-primary">+ เพิ่มรายวิชา</button>
                 <LoadingButton type="button" onClick={handleDeleteAll} loading={deletingAll} disabled={!subjects.length || saving || syncBusy} loadingText="กำลังลบ..." className="btn btn-secondary" style={{ color: '#b91c1c', borderColor: '#fecaca' }}>ลบทั้งหมด</LoadingButton>
               </div>
@@ -1213,8 +1381,9 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                     setClassSubjectYearId(event.target.value)
                     setClassSubjectItems([])
                     setClassSubjectClassroomId('')
+                    setCopySourceClassroomId('')
                   }}
-                  disabled={loadingClassSubjects || classSubjectYears.length === 0}
+                  disabled={classSubjectSaving || loadingClassSubjects || classSubjectYears.length === 0}
                 >
                   {classSubjectYears.length === 0 ? <option value="">— ไม่มีปีการศึกษา —</option> : classSubjectYears.map(year => (
                     <option key={year.id} value={year.id}>{year.year_be}{year.is_active ? ' (ปัจจุบัน)' : ''}</option>
@@ -1226,8 +1395,11 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 <select
                   className="form-input"
                   value={classSubjectClassroomId}
-                  onChange={event => setClassSubjectClassroomId(event.target.value)}
-                  disabled={loadingClassSubjects || classSubjectClassrooms.length === 0}
+                  onChange={event => {
+                    setClassSubjectClassroomId(event.target.value)
+                    if (copySourceClassroomId === event.target.value) setCopySourceClassroomId('')
+                  }}
+                  disabled={classSubjectSaving || loadingClassSubjects || classSubjectClassrooms.length === 0}
                 >
                   {classSubjectClassrooms.length === 0 ? <option value="">— ไม่มีห้องเรียน —</option> : classSubjectClassrooms.map(classroom => (
                     <option key={classroom.id} value={classroom.id}>{classroom.level}/{classroom.room}</option>
@@ -1240,7 +1412,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                   className="form-input"
                   value={classSubjectSemester || 1}
                   onChange={event => setClassSubjectTerm(Number(event.target.value) as 1 | 2)}
-                  disabled={!selectedClassSubjectClassroom || !isSecondaryClassLevel(selectedClassSubjectClassroom.level)}
+                  disabled={classSubjectSaving || !selectedClassSubjectClassroom || !isSecondaryClassLevel(selectedClassSubjectClassroom.level)}
                 >
                   <option value={1}>{selectedClassSubjectClassroom && isSecondaryClassLevel(selectedClassSubjectClassroom.level) ? 'ภาคเรียนที่ 1' : 'ทั้งปี'}</option>
                   <option value={2}>ภาคเรียนที่ 2</option>
@@ -1286,6 +1458,39 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
             </div>
             <p style={{ margin: '10px 0 0', color: 'var(--text-3)', fontSize: 13 }}>
               ปุ่มเพิ่มอัตโนมัติจะดึงรายวิชาของชั้นและภาคเรียนที่เลือก จากห้องที่เปิดวิชานี้อยู่แล้ว หรือจากรหัสที่ระบุชั้นไว้ เช่น ท21101 = ม.1 และ ท31101 = ม.4
+            </p>
+          </div>
+
+          <div className="data-card" style={{ padding: 20, marginBottom: 14 }}>
+            <h3 className="section-title" style={{ margin: '0 0 6px' }}>คัดลอกทุกวิชาจากห้องอื่น</h3>
+            <p style={{ margin: '0 0 14px', color: 'var(--text-2)', fontSize: 14 }}>
+              เลือกห้องต้นทางในปีการศึกษาเดียวกัน เพื่อเพิ่มรายวิชาให้ห้องที่เปิดอยู่ วิชาที่มีแล้วจะถูกข้าม และข้อมูลเดิมของห้องปลายทางจะยังอยู่
+            </p>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                <label className="form-label" htmlFor="copy-class-subject-source">ห้องต้นทาง</label>
+                <select id="copy-class-subject-source" className="form-input" value={copySourceClassroomId}
+                  onChange={event => setCopySourceClassroomId(event.target.value)}
+                  disabled={!canManageClassSubjects || classSubjectSaving || loadingClassSubjects || !selectedClassSubjectClassroom}>
+                  <option value="">— เลือกห้องที่ต้องการคัดลอกวิชา —</option>
+                  {classSubjectClassrooms.filter(room => room.academic_year_id === classSubjectYearId && room.id !== classSubjectClassroomId).map(room => (
+                    <option key={room.id} value={room.id}>{room.level}/{room.room} · {isSecondaryClassLevel(room.level) ? `ภาคเรียนที่ ${classSubjectTerm}` : 'ทั้งปี'}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: '1 1 180px' }}>
+                <div className="form-label">ห้องปลายทาง</div>
+                <div style={{ minHeight: 44, display: 'flex', alignItems: 'center', fontWeight: 700 }}>
+                  {selectedClassSubjectClassroom ? `${selectedClassSubjectClassroom.level}/${selectedClassSubjectClassroom.room} · ${classSubjectSemester ? `ภาคเรียนที่ ${classSubjectSemester}` : 'ทั้งปี'}` : 'เลือกห้องเรียนด้านบนก่อน'}
+                </div>
+              </div>
+              <LoadingButton className="btn btn-primary" loading={classSubjectAction === 'copy'} onClick={handleCopyClassSubjects}
+                disabled={!canManageClassSubjects || !copySourceClassroomId || copySourceClassroomId === classSubjectClassroomId || !selectedClassSubjectClassroom || classSubjectSaving || loadingClassSubjects}>
+                คัดลอกทุกวิชา
+              </LoadingButton>
+            </div>
+            <p style={{ margin: '12px 0 0', color: 'var(--text-3)', fontSize: 13 }}>
+              ใช้รหัสวิชาเดิมจากต้นทาง ไม่เปลี่ยนรหัสตามระดับชั้น และไม่คัดลอกครูผู้สอน คะแนน หรือตารางเรียน
             </p>
           </div>
 

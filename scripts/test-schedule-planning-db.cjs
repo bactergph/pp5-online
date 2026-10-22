@@ -237,6 +237,29 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   await saveTeam(team,true);
   assert.equal((await db.query('select count(*)::int n from class_schedule_slots where semester=1 and day_of_week=2 and period=1')).rows[0].n,0);
   console.log('PASS: production room-column ambiguity reproduced, 066 repeatable fix; 065 repeatable, joint team counted once, separate-room collision rollback, foreign teacher/room rejection, lunch rejection, stale guard, teacher block rejection, group removal');
+  await db.exec(fs.readFileSync('supabase/migrations/067_schedule_activity_team_overwrite.sql','utf8'));
+  const flexibleMigration=fs.readFileSync('supabase/migrations/080_schedule_flexible_activities.sql','utf8');
+  await db.exec(flexibleMigration);await db.exec(flexibleMigration);
+  await db.exec('delete from class_schedule_slots where semester=1');
+  const flexibleTeam={...team,cells:[],weeklyPeriods:2,teacherIds:[id(30)]};
+  const saveFlexible=async(group)=>db.query('select save_schedule_activity_team($1,$2,1,$3,$4::jsonb,false,false,false)',[id(1),id(10),await teamHash(),JSON.stringify(group)]);
+  await saveFlexible(flexibleTeam);
+  assert.equal((await db.query('select count(*)::int n from class_schedule_slots where semester=1')).rows[0].n,0);
+  const activityOfferings=(await db.query('select id,classroom_id from class_schedule_activities where evaluation_setting_id=$1 and classroom_id in ($2,$3)',[id(60),id(20),id(23)])).rows;
+  const autoRows=activityOfferings.flatMap(offer=>[3,4].map(day=>({...slot(Number(offer.classroom_id.slice(-12)),null,1,{activity_id:offer.id}),day_of_week:day})));
+  await db.query('select save_school_schedule_term($1,$2,$3::jsonb,$4::jsonb,false,1)',[id(1),id(10),'[]',JSON.stringify(autoRows)]);
+  assert.equal((await db.query('select count(*)::int n from class_schedule_slots where semester=1')).rows[0].n,4);
+  const unsynced=autoRows.map(row=>row.classroom_id===id(23)&&row.day_of_week===3?{...row,day_of_week:5}:row);
+  await assert.rejects(db.query('select validate_activity_teams($1,$2,1,$3::jsonb)',[id(1),id(10),JSON.stringify(unsynced)]),/พร้อมกัน/);
+  const overQuota=[...autoRows,...activityOfferings.map(offer=>({...slot(Number(offer.classroom_id.slice(-12)),null,2,{activity_id:offer.id}),day_of_week:5}))];
+  await assert.rejects(db.query('select validate_activity_teams($1,$2,1,$3::jsonb)',[id(1),id(10),JSON.stringify(overQuota)]),/จำนวนคาบ/);
+  await db.query('insert into class_subjects(id,classroom_id,academic_year_id,subject_id,teacher_id) values($1,$2,$3,$4,$5)',[id(951),id(21),id(10),id(40),id(30)]);
+  const collided=[...autoRows,{...slot(21,951,1),day_of_week:3}];
+  await assert.rejects(db.query('select validate_activity_teams($1,$2,1,$3::jsonb)',[id(1),id(10),JSON.stringify(collided)]),/ชนกัน/);
+  await saveFlexible({...flexibleTeam,teacherIds:[]});
+  await assert.rejects(db.exec('update evaluation_settings set schedule_weekly_periods=9'),/schedule_weekly_periods_check/);
+  assert.equal((await db.query('select schedule_weekly_periods from evaluation_settings where id=$1',[id(60)])).rows[0].schedule_weekly_periods,1);
+  console.log('PASS: 080 repeatable, empty-cell activity saved, generated quota accepted, joint sync/over-quota/teacher collision enforced, no-teacher activity allowed');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

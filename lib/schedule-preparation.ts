@@ -1,5 +1,5 @@
 import 'server-only'
-import { activityTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
+import { activityTeachers, activityWeeklyPeriods, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { randomUUID } from 'node:crypto'
 import { getSession } from './session'
 import { createServerClient } from './supabase'
@@ -17,9 +17,9 @@ export async function preparation(year:string,term:number){
  loadSchedule(session.schoolId,year,term),loadScheduleConstraints(session.schoolId,year,term),
  db.from('schedule_plans').select('config').eq('school_id',session.schoolId).eq('academic_year_id',year).eq('semester',term).maybeSingle(),
  db.from('school_period_times').select('period,label,start_time,end_time,is_break,sort_order').eq('school_id',session.schoolId).order('sort_order'),
- db.from('evaluation_settings').select('id,label,short_label').eq('school_id',session.schoolId).eq('kind','activities').eq('is_active',true).order('sort_order'),
+ readActivityCatalog(db,session.schoolId),
  db.from('users').select('id,prefix,full_name,position').eq('school_id',session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name').limit(1000)])
- for(const r of [config,times,activities,teachers])fail(r.error)
+ for(const r of [config,times,teachers])fail(r.error)
  if(hash!==await snapshot(session.schoolId,year,term))throw Error('ข้อมูลเปลี่ยนระหว่างโหลด กรุณาลองใหม่')
  const plan=(config.data?.config||emptyPlan()) as SchedulePlan
  const periods=normalizePeriodTimes((times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[])
@@ -32,19 +32,27 @@ export async function preparation(year:string,term:number){
  })
  // Keep all existing slots/lessons for outside-scope teacher and venue conflicts,
  // but only offer non-kindergarten classrooms for import, activities and generation.
- return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,activities:activities.data||[],teachers:teachers.data||[]}
+ return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,activities,teachers:teachers.data||[]}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
-export type ActivityName={id:string;label:string;short_label:string}
-export async function activityCatalog(){
- const session=await actor(),result=await createServerClient().from('evaluation_settings').select('id,label,short_label').eq('school_id',session.schoolId).eq('kind','activities').eq('is_active',true).order('sort_order')
+export type ActivityName={id:string;label:string;short_label:string;weeklyPeriods:number}
+async function readActivityCatalog(db:ReturnType<typeof createServerClient>,schoolId:string):Promise<ActivityName[]>{
+ const query=(columns:string)=>db.from('evaluation_settings').select(columns).eq('school_id',schoolId).eq('kind','activities').eq('is_active',true).order('sort_order')
+ let result=await query('id,label,short_label,schedule_weekly_periods')
+ if(result.error&&/schedule_weekly_periods/.test(result.error.message))result=await query('id,label,short_label')
  if(result.error)throw Error('โหลดรายการกิจกรรมไม่สำเร็จ กรุณาลองใหม่')
- return (result.data||[]) as ActivityName[]
+ const rows=(result.data||[]) as unknown as {id:string;label:string;short_label:string|null;schedule_weekly_periods?:number}[]
+ return rows.map(row=>({id:row.id,label:row.label,short_label:row.short_label||'',weeklyPeriods:activityWeeklyPeriods(row.schedule_weekly_periods??1)}))
 }
-export async function saveActivityName(id:string|null,label:string,shortLabel:string){
+export async function activityCatalog(){
+ const session=await actor()
+ return readActivityCatalog(createServerClient(),session.schoolId)
+}
+export async function saveActivityName(id:string|null,label:string,shortLabel:string,weeklyPeriods=1){
  const session=await actor(),name=label.trim(),shortName=(shortLabel.trim()||name).slice(0,40)
  if(!name)throw Error('กรอกชื่อกิจกรรม')
  if(!shortName)throw Error('กรอกชื่อย่อกิจกรรม')
+ const weekly=activityWeeklyPeriods(weeklyPeriods)
  const db=createServerClient()
  const dup=await db.from('evaluation_settings').select('id').eq('school_id',session.schoolId).eq('kind','activities').eq('is_active',true).eq('label',name)
  fail(dup.error)
@@ -53,12 +61,14 @@ export async function saveActivityName(id:string|null,label:string,shortLabel:st
   const existing=await db.from('evaluation_settings').select('id').eq('id',id).eq('school_id',session.schoolId).eq('kind','activities').maybeSingle()
   fail(existing.error)
   if(!existing.data)throw Error('ไม่พบกิจกรรมนี้')
-  const updated=await db.from('evaluation_settings').update({label:name,short_label:shortName,updated_at:new Date().toISOString()}).eq('id',id).eq('school_id',session.schoolId)
+  const updated=await db.from('evaluation_settings').update({label:name,short_label:shortName,schedule_weekly_periods:weekly,updated_at:new Date().toISOString()}).eq('id',id).eq('school_id',session.schoolId)
+  if(updated.error&&/schedule_weekly_periods/.test(updated.error.message))throw Error('กรุณาติดตั้ง migration 080_schedule_flexible_activities.sql ก่อนบันทึกชั่วโมงกิจกรรม')
   fail(updated.error)
  }else{
   const latest=await db.from('evaluation_settings').select('sort_order').eq('school_id',session.schoolId).eq('kind','activities').order('sort_order',{ascending:false}).limit(1)
   fail(latest.error)
-  const inserted=await db.from('evaluation_settings').insert({school_id:session.schoolId,kind:'activities',field_key:`custom_activities_${randomUUID().replace(/-/g,'').slice(0,12)}`,label:name,short_label:shortName,group_label:'กิจกรรมพัฒนาผู้เรียน',sort_order:((latest.data?.[0]?.sort_order as number)||0)+1,is_active:true,score_type:'pass_fail',max_score:1,is_required:false,hours_per_year:0})
+  const inserted=await db.from('evaluation_settings').insert({school_id:session.schoolId,kind:'activities',field_key:`custom_activities_${randomUUID().replace(/-/g,'').slice(0,12)}`,label:name,short_label:shortName,group_label:'กิจกรรมพัฒนาผู้เรียน',sort_order:((latest.data?.[0]?.sort_order as number)||0)+1,is_active:true,score_type:'pass_fail',max_score:1,is_required:false,hours_per_year:0,schedule_weekly_periods:weekly})
+  if(inserted.error&&/schedule_weekly_periods/.test(inserted.error.message))throw Error('กรุณาติดตั้ง migration 080_schedule_flexible_activities.sql ก่อนบันทึกชั่วโมงกิจกรรม')
   fail(inserted.error)
  }
  return activityCatalog()
@@ -99,6 +109,7 @@ const toPlanned=(s:ScheduleSlot)=>({classroomId:s.classroom_id,lessonId:lessonKe
 function activityPlacement(data:Preparation,year:string){
  const offerings:{id:string;classroom_id:string;evaluation_setting_id:string}[]=[],slots:ScheduleSlot[]=[],extra:Preparation['lessons']=[],unlock:ScheduleSlot[]=[],seen=new Set<string>()
  const patch=new Map<string,{teacherIds:string[];teacherId:null;activityGroupId?:string;name:string;teacherName:string}>()
+ const flexible=new Map<string,{count:number;group:ActivityTeam}>()
  for(const group of data.plan.activityGroups||[]){
   const label=data.activities.find(a=>a.id===group.settingId)?.label||'กิจกรรม'
   for(const roomId of group.roomIds){
@@ -109,9 +120,10 @@ function activityPlacement(data:Preparation,year:string){
    if(!lesson){
     const id=randomUUID(),room=data.classrooms.find(c=>c.id===roomId)
     offerings.push({id,classroom_id:roomId,evaluation_setting_id:group.settingId})
-    lesson={id:'activity:'+id,classroomId:roomId,teacherId:null,teacherIds:teachers,count:group.cells.length,label:`${room?.level}/${room?.room} · ${label}`,subjectId:group.settingId,code:'',name:label,fullName:label,teacherName,activity:true,teacherOptional:true,selectable:false,activityGroupId:group.mode==='joint'?group.id:undefined,sourceHours:0,roomName:'',spread:true,source:'กิจกรรมที่กำหนดไว้'} as Preparation['lessons'][number]
+    lesson={id:'activity:'+id,classroomId:roomId,teacherId:null,teacherIds:teachers,count:group.weeklyPeriods,label:`${room?.level}/${room?.room} · ${label}`,subjectId:group.settingId,code:'',name:label,fullName:label,teacherName,activity:true,teacherOptional:true,selectable:false,activityGroupId:group.mode==='joint'?group.id:undefined,sourceHours:0,roomName:'',spread:true,source:'กิจกรรมที่กำหนดไว้'} as Preparation['lessons'][number]
     extra.push(lesson)
    }else patch.set(lesson.id,{teacherIds:teachers,teacherId:null,activityGroupId:group.mode==='joint'?group.id:undefined,name:lesson.name||label,teacherName:teacherName||lesson.teacherName})
+   if(!group.cells.length)flexible.set(lesson.id,{count:activityWeeklyPeriods(group.weeklyPeriods),group})
    for(const cell of group.cells){
     const key=`${roomId}:${cell.day}:${cell.period}`
     if(seen.has(key))throw Error('มีกิจกรรมมากกว่าหนึ่งรายการในคาบเดียวกัน กรุณาแก้ที่ขั้นกิจกรรม')
@@ -122,13 +134,19 @@ function activityPlacement(data:Preparation,year:string){
    }
   }
  }
- return {slots,offerings,extra,patch,unlock}
+ return {slots,offerings,extra,patch,unlock,flexible}
 }
 function input(data:Preparation,scope:string[],clear:boolean,year:string){
  if(!scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id)))throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล')
  const placed=activityPlacement(data,year),cellKey=(s:{classroom_id:string;day_of_week:number;period:number})=>`${s.classroom_id}:${s.day_of_week}:${s.period}`,pinned=new Set(placed.slots.map(cellKey))
- const retained=[...data.slots.filter(s=>!pinned.has(cellKey(s))&&(!scope.includes(s.classroom_id)||s.locked||!!s.activity_id||!clear)),...placed.slots]
- const lessons=[...data.lessons,...placed.extra].map(l=>{const active=scope.includes(l.classroomId)&&!l.activity;const count=active?l.count:retained.filter(s=>lessonKey(s)===l.id).length;return {...l,...placed.patch.get(l.id),count,fixedOnly:!active,pattern:active?l.pattern:undefined,teacherOptional:!active||l.teacherOptional,preferMorning:active&&lessonPrefersMorning(l)}})
+ const allLessons=[...data.lessons,...placed.extra],byId=new Map(allLessons.map(l=>[l.id,l]))
+ const autoIds=new Set<string>()
+ for(const [id,item] of placed.flexible){
+  const lesson=byId.get(id)
+  if(lesson&&(scope.includes(lesson.classroomId)||item.group.mode==='joint'&&item.group.roomIds.some(roomId=>scope.includes(roomId))))autoIds.add(id)
+ }
+ const retained=[...data.slots.filter(s=>!pinned.has(cellKey(s))&&(s.locked||!clear||s.activity_id&&!autoIds.has(lessonKey(s)||'')||!scope.includes(s.classroom_id)&&!autoIds.has(lessonKey(s)||''))),...placed.slots]
+ const lessons=allLessons.map(l=>{const active=scope.includes(l.classroomId)&&!l.activity||autoIds.has(l.id);const count=active?(placed.flexible.get(l.id)?.count??l.count):retained.filter(s=>lessonKey(s)===l.id).length;return {...l,...placed.patch.get(l.id),count,fixedOnly:!active,pattern:active?(l.activity?Array(count).fill(1):l.pattern):undefined,teacherOptional:!active||l.teacherOptional,preferMorning:active&&!l.activity&&lessonPrefersMorning(l)}})
  return {retained,lessons,offerings:placed.offerings,unlock:placed.unlock}
 }
 function shiftManageStep<T extends {step:number}>(issue:T){return issue.step>=2?{...issue,step:issue.step+1}:issue}
@@ -147,7 +165,7 @@ export async function generate(year:string,term:number,scope:string[],clear:bool
  if(result.status!=='complete')return {...result,id:null,rows:[] as ScheduleSlot[],assigned:0,locked:0}
  const covered=new Set(retained.map(s=>`${s.classroom_id}:${s.day_of_week}:${s.period}`))
  const rows=[...retained,...result.assignments.filter(a=>!covered.has(`${a.classroomId}:${a.day}:${a.period}`)).map(a=>({classroom_id:a.classroomId,academic_year_id:year,day_of_week:a.day,period:a.period,...lessonColumns(a.lessonId),note:null,locked:false}))]
- const id=await storeDraft(year,term,data,rows,offerings,unlock);return {status:'complete' as const,issues:result.issues.map(shiftManageStep),id,rows,assigned:result.assignments.length,locked:unlock.length}
+ const id=await storeDraft(year,term,data,rows,offerings,unlock);return {status:'complete' as const,issues:result.issues.map(shiftManageStep),id,rows,assigned:result.assignments.length,locked:unlock.length,activityLessons:lessons.filter(l=>l.activity).map(l=>({id:l.id,name:l.name,teacherName:l.teacherName,classroomId:l.classroomId,subjectId:l.subjectId}))}
 }
 export async function activityDraft(year:string,term:number,setting:string,rooms:string[],cells:{day:number;period:number}[],remove:boolean){
  const data=await preparation(year,term)
@@ -186,7 +204,13 @@ export async function saveActivityTeam(year:string,term:number,hash:string,group
  const impact=await previewActivityTeam(year,term,hash,group,remove)
  if(impact.locked&&!unlock)throw Error('ต้องยืนยันแทนที่คาบล็อกโดยเฉพาะ')
  if(impact.overwrites.length&&!overwrite)throw Error('มีกิจกรรมนี้จัดไว้ในห้องแล้ว กรุณายืนยันบันทึกทับก่อน')
- const session=await actor(),r=await createServerClient().rpc('save_schedule_activity_team',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:hash,p_group:group,p_remove:remove,p_unlock:unlock,p_overwrite:overwrite})
+ const session=await actor(),db=createServerClient()
+ if(!remove&&!group.cells.length){
+  const support=await db.from('evaluation_settings').select('schedule_weekly_periods').eq('id',group.settingId).eq('school_id',session.schoolId).maybeSingle()
+  if(support.error&&/schedule_weekly_periods/.test(support.error.message))throw Error('กรุณาติดตั้ง migration 080_schedule_flexible_activities.sql ก่อนใช้กิจกรรมแบบจัดอัตโนมัติ')
+  fail(support.error)
+ }
+ const r=await db.rpc('save_schedule_activity_team',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:hash,p_group:group,p_remove:remove,p_unlock:unlock,p_overwrite:overwrite})
  if(r.error){console.error('[activity-team]',r.error);const message=r.error.message;throw Error(r.error.code==='PGRST202'?'ต้องติดตั้ง migration 067_schedule_activity_team_overwrite.sql ก่อนบันทึกทับทีมครูกิจกรรม':/^[\u0E00-\u0E7F]/.test(message)?message:`ระบบบันทึกกิจกรรมพบข้อผิดพลาด (${r.error.code||'ไม่ทราบรหัส'}) กรุณาแจ้งผู้ดูแลระบบ`)}
  return preparation(year,term)
 }

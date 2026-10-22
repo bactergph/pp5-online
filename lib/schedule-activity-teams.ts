@@ -8,7 +8,13 @@ export function validateActivityTeam(g:ActivityTeam,rooms:string[],teachers:stri
  if(!g||!uuid(g.id)||!settings.includes(g.settingId)||!['joint','separate'].includes(g.mode)||!unique(g.roomIds)||!g.roomIds.length||g.roomIds.some(id=>!rooms.includes(id)))throw Error('เลือกกิจกรรมและห้องในโรงเรียนให้ถูกต้อง')
  if(!g.roomTeachers||typeof g.roomTeachers!=='object'||!Array.isArray(g.teacherIds))throw Error('กำหนดทีมครูให้ถูกต้อง')
  for(const room of g.roomIds){const ids=activityTeachers(g,room);if(!unique(ids)||ids.some(id=>!teachers.includes(id)))throw Error('ครูผู้รับผิดชอบไม่อยู่ในรายชื่อครูของโรงเรียน')}
- if(!Number.isInteger(g.weeklyPeriods)||g.weeklyPeriods<1||g.weeklyPeriods>8||!Array.isArray(g.cells)||g.cells.length!==g.weeklyPeriods||new Set(g.cells.map(c=>`${c.day}:${c.period}`)).size!==g.cells.length||g.cells.some(c=>!days.includes(c.day)||!periods.some(p=>!p.is_break&&p.period===c.period)))throw Error('เลือกวันและคาบให้ครบตามคาบต่อสัปดาห์ และห้ามใช้ช่วงพัก')
+ if(!Number.isInteger(g.weeklyPeriods)||g.weeklyPeriods<1||g.weeklyPeriods>8||!Array.isArray(g.cells)||(g.cells.length!==0&&g.cells.length!==g.weeklyPeriods)||new Set(g.cells.map(c=>`${c.day}:${c.period}`)).size!==g.cells.length||g.cells.some(c=>!days.includes(c.day)||!periods.some(p=>!p.is_break&&p.period===c.period)))throw Error('ไม่เลือกคาบเพื่อให้ระบบจัดอัตโนมัติ หรือเลือกคาบให้ครบตามชั่วโมงต่อสัปดาห์ และห้ามใช้ช่วงพัก')
+}
+
+export function activityWeeklyPeriods(value: unknown) {
+ const count=Number(value)
+ if(!Number.isInteger(count)||count<1||count>8)throw Error('ชั่วโมงกิจกรรมต่อสัปดาห์ต้องเป็นจำนวนเต็ม 1–8 คาบ')
+ return count
 }
 export function activityTeamWorkload(groups:ActivityTeam[]){
  const result:Record<string,number>={}

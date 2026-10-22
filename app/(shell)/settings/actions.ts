@@ -35,6 +35,8 @@ import { staffAccessError, staffProfileError } from '@/lib/staff-permissions'
 import { getSchoolShell } from '@/lib/school-shell'
 import { resolveSchoolEducationType } from '@/lib/school-education-type'
 import { secondaryCreditHours } from '@/lib/subject-credit-hours'
+import { parseSubjectSemester, type SubjectSemester } from '@/lib/subject-semester'
+import { prepareClassSubjectCopy, executeClassSubjectCopy, type ClassSubjectCopyInput } from '@/lib/class-subject-copy'
 
 async function requireSchoolSession(allowUnassigned = false) {
   const session = await getSession()
@@ -1576,6 +1578,65 @@ export async function fetchSubjects() {
   return data || []
 }
 
+export async function fetchSchoolSubjectGroups() {
+  const session = await requireSchoolSession()
+  if (!session.schoolId) return { groups: [], error: 'กรุณาเลือกโรงเรียน' }
+  const db = createServerClient()
+  const { data, error } = await db.from('school_subject_groups')
+    .select('name').eq('school_id', session.schoolId).order('name')
+  if (error) {
+    if (/school_subject_groups|schema cache/i.test(error.message)) {
+      return { groups: SUBJECT_GROUPS.map(name => ({ name })), error: 'ยังไม่ได้ติดตั้ง migration 078_school_subject_groups.sql' }
+    }
+    return { groups: SUBJECT_GROUPS.map(name => ({ name })), error: error.message }
+  }
+  return { groups: data || [], error: null }
+}
+
+export async function manageSchoolSubjectGroup(action: 'add' | 'rename' | 'delete', name: string, newName?: string) {
+  const session = await requireSchoolSession()
+  if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
+  if (!session.schoolId) return { error: 'กรุณาเลือกโรงเรียน' }
+  const db = createServerClient()
+  const { data, error } = await db.rpc('manage_school_subject_group', {
+    p_school_id: session.schoolId,
+    p_action: action,
+    p_name: name,
+    p_new_name: newName || null,
+  })
+  if (error) {
+    return { error: /manage_school_subject_group|schema cache/i.test(error.message)
+      ? 'ยังไม่ได้ติดตั้ง migration 078_school_subject_groups.sql ในฐานข้อมูล'
+      : 'บันทึกกลุ่มสาระไม่สำเร็จ กรุณาลองใหม่' }
+  }
+  const result = data as { ok?: boolean; error?: string; name?: string }
+  if (result?.error || !result?.ok) return { error: result?.error || 'บันทึกกลุ่มสาระไม่สำเร็จ' }
+  try {
+    await logActivity({
+      actor: session, schoolId: session.schoolId,
+      action: action === 'add' ? 'create' : action === 'delete' ? 'delete' : 'update',
+      module: 'subjects', targetType: 'subject_group', targetLabel: result.name || name,
+      description: action === 'add' ? `เพิ่มกลุ่มสาระ ${result.name}` : action === 'rename' ? `แก้ไขกลุ่มสาระ ${name} เป็น ${result.name}` : `ลบกลุ่มสาระ ${name}`,
+    })
+  } catch (auditError) { console.error('Subject group audit failed', auditError) }
+  return { error: null }
+}
+
+export async function setMissingSubjectSemesterToSecond() {
+  const session = await requireSchoolSession()
+  if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', count: 0 }
+  if (!session.schoolId) return { error: 'กรุณาเลือกโรงเรียน', count: 0 }
+  const db = createServerClient()
+  const { data, error } = await db.rpc('set_missing_subject_semester_to_second', { p_school_id: session.schoolId })
+  if (error) return { error: 'ยังบันทึกภาคเรียนไม่ได้ กรุณาติดตั้ง migration 079_subject_catalog_semester.sql', count: 0 }
+  const count = Number(data || 0)
+  try {
+    await logActivity({ actor: session, schoolId: session.schoolId, action: 'update', module: 'subjects',
+      targetType: 'subject', description: `กำหนดวิชาที่ยังไม่มีภาคเรียนเป็นภาคเรียนที่ 2 จำนวน ${count} วิชา`, metadata: { semester: 2, count } })
+  } catch (auditError) { console.error('Subject semester audit failed', auditError) }
+  return { error: null, count }
+}
+
 async function subjectRoomTerms(schoolId: string) {
   const db = createServerClient()
   const levelOf = new Map<string, string>()
@@ -1608,10 +1669,11 @@ async function subjectRoomTerms(schoolId: string) {
 export async function fetchSubjectSettingsInit() {
   const session = await requireSchoolSession()
   const db = createServerClient()
-  const [subjects, school, placements] = await Promise.all([
+  const [subjects, school, placements, subjectGroupResult] = await Promise.all([
     fetchSubjects(),
     session.schoolId ? getSchoolShell(session.schoolId) : Promise.resolve(null),
     session.schoolId ? subjectRoomTerms(session.schoolId) : Promise.resolve(new Map<string, { levels: string[]; semesters: number[] }>()),
+    fetchSchoolSubjectGroups(),
   ])
   let levels: string[] = []
   if (session.schoolId && school?.education_type !== 'primary' && school?.education_type !== 'secondary') {
@@ -1623,6 +1685,8 @@ export async function fetchSubjectSettingsInit() {
       const place = placements.get(subject.id)
       return { ...subject, levels: place?.levels || [], semesters: place?.semesters || [] }
     }),
+    subjectGroups: subjectGroupResult.groups,
+    subjectGroupsError: subjectGroupResult.error,
     educationType: resolveSchoolEducationType(school?.education_type, levels),
   }
 }
@@ -1642,14 +1706,29 @@ export async function saveSubject(id: string | null, payload: Record<string, unk
     } catch (error) { return { error: error instanceof Error ? error.message : 'หน่วยกิตไม่ถูกต้อง' } }
   }
   const level = typeof payload.level === 'string' ? payload.level.trim() : ''
+  let semester: SubjectSemester | undefined
+  if (payload.semester !== undefined) {
+    try { semester = parseSubjectSemester(payload.semester) }
+    catch (error) { return { error: error instanceof Error ? error.message : 'ภาคเรียนไม่ถูกต้อง' } }
+  }
   if (level && !['ป.1', 'ป.2', 'ป.3', 'ป.4', 'ป.5', 'ป.6', 'ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6'].includes(level)) return { error: 'ชั้นไม่ถูกต้อง' }
   payload = {
     code, name, short_name: payload.short_name, subject_group: payload.subject_group,
     level: level || null,
     type: payload.type, hours_per_year: payload.hours_per_year,
     credits: payload.credits, max_score: payload.max_score,
+    ...(semester !== undefined ? { semester } : {}),
   }
   const db = createServerClient()
+  const subjectGroup = typeof payload.subject_group === 'string' ? payload.subject_group.trim() : ''
+  if (subjectGroup) {
+    const { data: group, error: groupError } = await db.from('school_subject_groups').select('name')
+      .eq('school_id', session.schoolId).eq('name', subjectGroup).maybeSingle()
+    if (groupError) {
+      if (!/school_subject_groups|schema cache/i.test(groupError.message)) return { error: 'ตรวจสอบกลุ่มสาระไม่สำเร็จ' }
+      if (!SUBJECT_GROUPS.includes(subjectGroup as typeof SUBJECT_GROUPS[number])) return { error: 'กรุณารัน migration 078_school_subject_groups.sql ก่อนใช้กลุ่มสาระแบบกำหนดเอง' }
+    } else if (!group) return { error: 'ไม่พบกลุ่มสาระนี้ในโรงเรียน กรุณาโหลดหน้าใหม่แล้วเลือกอีกครั้ง' }
+  }
   if (id) {
     const { data: existing, error } = await db.from('subjects').select('id')
       .eq('id', id).eq('school_id', session.schoolId).maybeSingle()
@@ -1671,7 +1750,9 @@ export async function saveSubject(id: string | null, payload: Record<string, unk
   }
   const missingLevelColumn = (message?: string) => /level/i.test(message || '') && /does not exist|schema cache/i.test(message || '')
   const saveError = (error: { code?: string; message: string } | null) =>
-    error?.code === '23505'
+    /semester/i.test(error?.message || '') && /does not exist|schema cache/i.test(error?.message || '')
+      ? 'ยังบันทึกภาคเรียนไม่ได้ กรุณาติดตั้ง migration 079_subject_catalog_semester.sql แล้วลองใหม่'
+      : error?.code === '23505'
       ? `รหัสวิชา ${code}${level ? ` ชั้น ${level}` : ''} ซ้ำไม่ได้ ถ้ารหัสนี้คนละชั้นแล้วยังบันทึกไม่ได้ ให้รันไฟล์ supabase/migrations/077_subject_code_per_level.sql`
       : missingLevelColumn(error?.message) || /subjects_level_check/i.test(error?.message || '')
         ? 'ยังบันทึกชั้นไม่ได้ กรุณารันไฟล์ supabase/migrations/076_subject_level.sql ใน SQL Editor แล้วลองใหม่'
@@ -2683,6 +2764,37 @@ export async function addClassSubjects(classroomId: string, academicYearId: stri
   return { error: error?.message, added: rows.length }
 }
 
+export async function previewClassSubjectCopy(input: ClassSubjectCopyInput) {
+  try {
+    const session = await requireSchoolSession()
+    if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', preview: null }
+    const plan = await prepareClassSubjectCopy(createServerClient(), session.schoolId!, input)
+    const preview = { subjectIds: plan.subjectIds, sourceLabel: plan.sourceLabel, targetLabel: plan.targetLabel,
+      total: plan.total, added: plan.added, skipped: plan.skipped }
+    return { error: null, preview }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'ตรวจสอบรายวิชาต้นทางไม่สำเร็จ', preview: null }
+  }
+}
+
+export async function copyClassSubjects(input: ClassSubjectCopyInput, confirmedSubjectIds: string[]) {
+  try {
+    const session = await requireSchoolSession()
+    if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', added: 0, skipped: 0 }
+    const result = await executeClassSubjectCopy(createServerClient(), session.schoolId!, input, confirmedSubjectIds)
+    if (result.added) {
+      try {
+        await logActivity({ actor: session, schoolId: session.schoolId, action: 'create', module: 'class_subjects',
+          targetType: 'classroom', targetId: input.targetClassroomId,
+          description: `คัดลอกรายวิชาจากห้องอื่น ${result.added} วิชา`, metadata: { ...input, ...result } })
+      } catch (auditError) { console.error('Class subject copy audit failed', auditError) }
+    }
+    return { error: null, ...result }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'คัดลอกรายวิชาไม่สำเร็จ', added: 0, skipped: 0 }
+  }
+}
+
 export async function reorderClassSubjects(classroomId: string, semester?: ClassSubjectSemester) {
   try {
     const session = await requireSchoolSession()
@@ -2847,18 +2959,37 @@ export async function saveScoreConfigs(rows: {
 export async function bulkUpsertSubjects(rows: {
   code: string; name: string; short_name?: string | null
   subject_group: string; type: string; hours_per_year: number; credits: number; max_score: number
+  semester?: SubjectSemester
 }[]) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', count: 0 }
   if (!session.schoolId) return { error: 'ไม่พบโรงเรียน', count: 0 }
   if (rows.length === 0) return { error: 'ไม่มีข้อมูลให้เพิ่ม', count: 0 }
+  try { rows.forEach(row => { if (row.semester !== undefined) parseSubjectSemester(row.semester) }) }
+  catch (error) { return { error: error instanceof Error ? error.message : 'ภาคเรียนไม่ถูกต้อง', count: 0 } }
   const db = createServerClient()
+  const requestedGroups = [...new Set(rows.map(row => row.subject_group.trim()).filter(Boolean))]
+  if (requestedGroups.length) {
+    const { data: groups, error: groupError } = await db.from('school_subject_groups').select('name')
+      .eq('school_id', session.schoolId).in('name', requestedGroups)
+    const migrationMissing = !!groupError && /school_subject_groups|schema cache/i.test(groupError.message)
+    const fallbackGroupsValid = migrationMissing && requestedGroups.every(group => SUBJECT_GROUPS.includes(group as typeof SUBJECT_GROUPS[number]))
+    if ((groupError && !fallbackGroupsValid) || (!groupError && (groups || []).length !== requestedGroups.length)) return {
+      error: migrationMissing
+        ? 'กรุณารัน migration 078_school_subject_groups.sql ก่อนนำเข้ากลุ่มสาระแบบกำหนดเอง'
+        : 'มีกลุ่มสาระที่ไม่อยู่ในรายการของโรงเรียน กรุณาตรวจข้อมูลก่อนนำเข้า',
+      count: 0,
+    }
+  }
   const school = await getSchoolShell(session.schoolId)
   let payload
   try {
     payload = rows.map(r => ({ ...r, level: null, ...(school?.education_type === 'secondary' ? { hours_per_year: secondaryCreditHours(r.credits).annual } : {}), school_id: session.schoolId }))
   } catch { return { error: 'รายวิชามัธยมต้องมีหน่วยกิตตั้งแต่ 0.5 และเพิ่มครั้งละ 0.5 กรุณาตรวจรายการนำเข้า', count: 0 } }
   let saved = await db.from('subjects').upsert(payload, { onConflict: 'school_id,code,level' }).select('id')
+  if (saved.error && /semester/i.test(saved.error.message) && /does not exist|schema cache/i.test(saved.error.message)) {
+    return { error: 'ยังบันทึกภาคเรียนไม่ได้ กรุณาติดตั้ง migration 079_subject_catalog_semester.sql แล้วลองใหม่', count: 0 }
+  }
   if (saved.error && /unique|constraint|level|schema cache/i.test(saved.error.message)) {
     saved = await db.from('subjects').upsert(payload.map(({ level: _level, ...row }) => row), { onConflict: 'school_id,code' }).select('id')
   }

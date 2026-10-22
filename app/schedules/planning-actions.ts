@@ -12,7 +12,7 @@ export async function saveScheduleTeachingAssignments(year:string,term:number,ha
 export async function saveTimetableClassrooms(year:string,term:number,levels:{level:string;names:string[]}[]){return scheduleResult(()=>saveTimetableRooms(year,term,levels))}
 export async function fetchPreparation(year:string,term:number){return scheduleResult(()=>planning.preparation(year,term))}
 export async function fetchScheduleActivityCatalog(){return scheduleResult(()=>planning.activityCatalog())}
-export async function saveScheduleActivityName(id:string|null,label:string,shortLabel:string){return scheduleResult(()=>planning.saveActivityName(id,label,shortLabel))}
+export async function saveScheduleActivityName(id:string|null,label:string,shortLabel:string,weeklyPeriods=1){return scheduleResult(()=>planning.saveActivityName(id,label,shortLabel,weeklyPeriods))}
 export async function removeScheduleActivityName(id:string){return scheduleResult(()=>planning.removeActivityName(id))}
 export async function savePreparation(year:string,term:number,hash:string,plan:SchedulePlan){return scheduleResult(()=>planning.savePlan(year,term,hash,plan))}
 export async function checkPreparation(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.preflight(year,term,rooms,clear).then(r=>r.issues))}
