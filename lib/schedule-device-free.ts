@@ -1,0 +1,252 @@
+import type { ActivityTeam } from './schedule-activity-teams'
+import { emptyPlan } from './schedule-planning'
+import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
+import type { DeviceSnapshot } from './schedule-device-build'
+
+export type LocalCell = { classroomId: string; day: number; period: number; subjectId: string; locked?: boolean }
+
+export type FreeActivity = {
+  id: string
+  name: string
+  mode: 'joint' | 'separate'
+  roomIds: string[]
+  teacherId: string
+  roomTeachers: Record<string, string>
+  cells: { day: number; period: number }[]
+}
+
+export type FreeSubject = {
+  id: string
+  roomId: string
+  code: string
+  name: string
+  teacherId: string
+  periods: number
+  pattern: number[]
+  placeId: string | null
+}
+
+export type FreePlace = { id: string; name: string }
+
+export type FreeWizardPlan = {
+  teachers: { id: string; name: string }[]
+  rooms: { id: string; label: string }[]
+  places: FreePlace[]
+  subjects: FreeSubject[]
+  timetable: LocalCell[]
+  days: number[]
+  periods: PeriodTimeRow[]
+  blocks: { teacherId: string; day: number; period: number }[]
+  activities: FreeActivity[]
+}
+
+export function newId() {
+  return globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+export function teachingRows(periods: PeriodTimeRow[]) {
+  return (periods.length ? periods : DEFAULT_PERIOD_TIMES).filter(row => !row.is_break)
+}
+
+export function periodColumns(periods: PeriodTimeRow[]) {
+  const rows = periods.length ? periods : DEFAULT_PERIOD_TIMES
+  const breakAt = rows.findIndex(row => row.is_break)
+  return {
+    before: rows.slice(0, Math.max(breakAt, 0)).filter(row => !row.is_break),
+    after: rows.slice(breakAt + 1).filter(row => !row.is_break),
+  }
+}
+
+export function slotCapacity(plan: Pick<FreeWizardPlan, 'days' | 'periods'>) {
+  return teachingRows(plan.periods).length * plan.days.length
+}
+
+export function patternFor(periods: number, doubles: number) {
+  const count = Math.max(1, Math.min(40, Math.round(periods) || 1))
+  const pair = Math.max(0, Math.min(Math.floor(count / 2), Math.round(doubles) || 0))
+  return [...Array(pair).fill(2), ...Array(count - pair * 2).fill(1)]
+}
+
+export function doublesIn(pattern: number[] | undefined, periods: number) {
+  if (!pattern?.length || pattern.reduce((sum, item) => sum + item, 0) !== periods || pattern.some(item => item !== 1 && item !== 2)) return 0
+  return pattern.filter(item => item === 2).length
+}
+
+export function activityTeacherId(activity: FreeActivity, roomId: string) {
+  if ((activity.mode || 'joint') === 'separate') return activity.roomTeachers?.[roomId] || ''
+  return activity.teacherId
+}
+
+export function roomNeed(plan: FreeWizardPlan, roomId: string) {
+  const subjects = plan.subjects.filter(subject => subject.roomId === roomId).reduce((sum, subject) => sum + subject.periods, 0)
+  const activities = plan.activities.filter(activity => activity.roomIds.includes(roomId)).reduce((sum, activity) => sum + activity.cells.length, 0)
+  return subjects + activities
+}
+
+export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
+  const periods = raw?.periods?.length ? raw.periods : DEFAULT_PERIOD_TIMES
+  return {
+    teachers: raw?.teachers || [],
+    rooms: raw?.rooms || [],
+    places: raw?.places || [],
+    subjects: (raw?.subjects || []).map(subject => ({
+      id: subject.id,
+      roomId: subject.roomId,
+      code: subject.code || '',
+      name: subject.name,
+      teacherId: subject.teacherId,
+      periods: subject.periods,
+      pattern: subject.pattern && subject.pattern.reduce((sum, item) => sum + item, 0) === subject.periods && subject.pattern.every(item => item === 1 || item === 2) ? subject.pattern : patternFor(subject.periods, 0),
+      placeId: subject.placeId || null,
+    })),
+    timetable: raw?.timetable || [],
+    days: raw?.days?.length ? raw.days : [1, 2, 3, 4, 5],
+    periods,
+    blocks: raw?.blocks || [],
+    activities: (raw?.activities || []).map(activity => ({
+      id: activity.id,
+      name: activity.name,
+      mode: activity.mode === 'separate' ? 'separate' as const : 'joint' as const,
+      roomIds: activity.roomIds || [],
+      teacherId: activity.teacherId || '',
+      roomTeachers: activity.roomTeachers || {},
+      cells: activity.cells || [],
+    })),
+  }
+}
+
+function named<T extends { id: string }>(items: T[], name: string, label: (item: T) => string, make: () => T) {
+  const found = items.find(item => label(item) === name)
+  if (found) return { items, item: found }
+  const item = make()
+  return { items: [...items, item], item }
+}
+
+export function addLevelRooms(plan: FreeWizardPlan, levels: string[], count: number) {
+  const rooms = [...plan.rooms]
+  const total = Math.max(1, Math.min(20, Math.round(count) || 1))
+  for (const level of levels.map(level => level.trim()).filter(Boolean)) {
+    for (let room = 1; room <= total; room += 1) {
+      const label = `${level}/${room}`
+      if (!rooms.some(item => item.label === label)) rooms.push({ id: newId(), label })
+    }
+  }
+  return { ...plan, rooms }
+}
+
+export function importSubjectTable(text: string, plan: FreeWizardPlan): { plan: FreeWizardPlan } | { error: string } {
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (!lines.length) return { error: 'ยังไม่มีแถวให้นำเข้า' }
+  let teachers = [...plan.teachers]
+  let rooms = [...plan.rooms]
+  let places = [...plan.places]
+  const subjects = [...plan.subjects]
+  let imported = 0
+  for (const [index, line] of lines.entries()) {
+    const cells = line.split(line.includes('\t') ? '\t' : ',').map(cell => cell.trim())
+    if (index === 0 && /ห้อง/.test(cells[0] || '') && cells.some(cell => /วิชา|ครู/.test(cell))) continue
+    const [roomLabel, code, name, teacherName, periodText, doubleText, placeName] = cells
+    if (!roomLabel || !name || !teacherName) return { error: `แถวที่ ${index + 1} ต้องมีห้อง รายวิชา และครู` }
+    const periods = Math.max(1, Math.min(40, Number(periodText) || 1))
+    const room = named(rooms, roomLabel, item => item.label, () => ({ id: newId(), label: roomLabel }))
+    rooms = room.items
+    const teacher = named(teachers, teacherName, item => item.name, () => ({ id: newId(), name: teacherName }))
+    teachers = teacher.items
+    let placeId: string | null = null
+    if (placeName) {
+      const place = named(places, placeName, item => item.name, () => ({ id: newId(), name: placeName }))
+      places = place.items
+      placeId = place.item.id
+    }
+    const next = { id: newId(), roomId: room.item.id, code: code || '', name, teacherId: teacher.item.id, periods, pattern: patternFor(periods, Number(doubleText) || 0), placeId }
+    const existing = subjects.findIndex(subject => subject.roomId === next.roomId && subject.name === name && subject.code === next.code)
+    if (existing >= 0) subjects[existing] = { ...subjects[existing], ...next, id: subjects[existing].id }
+    else subjects.push(next)
+    imported += 1
+  }
+  if (!imported) return { error: 'ไม่พบแถวรายวิชา ใช้หัวตาราง ห้อง รหัส รายวิชา ครู คาบ คาบคู่ สถานที่' }
+  return { plan: { ...plan, teachers, rooms, places, subjects } }
+}
+
+export function copyTermSubjects(source: FreeWizardPlan, target: FreeWizardPlan): FreeWizardPlan {
+  return {
+    ...target,
+    subjects: source.subjects.map(subject => ({ ...subject, pattern: [...(subject.pattern || [])], placeId: subject.placeId || null })),
+    activities: source.activities.map(activity => ({
+      ...activity,
+      roomIds: [...activity.roomIds],
+      roomTeachers: { ...activity.roomTeachers },
+      cells: activity.cells.map(cell => ({ ...cell })),
+    })),
+    blocks: source.blocks.map(block => ({ ...block })),
+    timetable: [],
+  }
+}
+
+export function withTeachingPeriods(periods: PeriodTimeRow[], count: number) {
+  const rows = [...(periods.length ? periods : DEFAULT_PERIOD_TIMES)]
+  const wanted = Math.max(1, Math.min(8, Math.round(count) || 1))
+  let lessons = rows.filter(row => !row.is_break)
+  while (lessons.length < wanted) {
+    const last = rows.at(-1) || DEFAULT_PERIOD_TIMES.at(-1)!
+    const start = last.end_time
+    const [hour, minute] = start.split(':').map(Number)
+    const endMinute = hour * 60 + minute + 60
+    const end = `${String(Math.floor(endMinute / 60) % 24).padStart(2, '0')}:${String(endMinute % 60).padStart(2, '0')}`
+    rows.push({ period: lessons.length + 1, label: `คาบที่ ${lessons.length + 1}`, start_time: start, end_time: end, is_break: false, sort_order: rows.length + 1 })
+    lessons = rows.filter(row => !row.is_break)
+  }
+  return rows
+}
+
+export function toDeviceSnapshot(plan: FreeWizardPlan, scope: string[]): DeviceSnapshot {
+  const lessons = plan.subjects.map(subject => {
+    const room = plan.rooms.find(item => item.id === subject.roomId)
+    const teacher = plan.teachers.find(item => item.id === subject.teacherId)
+    const place = plan.places.find(item => item.id === subject.placeId)
+    return {
+      id: subject.id,
+      classroomId: subject.roomId,
+      teacherId: subject.teacherId,
+      count: subject.periods,
+      label: `${room?.label || 'ห้อง'} · ${subject.name}`,
+      name: subject.name,
+      fullName: subject.name,
+      teacherName: teacher?.name || '',
+      pattern: subject.pattern,
+      roomId: place?.id || null,
+      roomName: place?.name || '',
+      spread: true,
+    }
+  })
+  const groups: ActivityTeam[] = []
+  for (const activity of plan.activities) {
+    if (!activity.roomIds.length || !activity.cells.length) continue
+    if (activity.mode === 'separate') {
+      if (activity.roomIds.some(roomId => !activity.roomTeachers[roomId])) continue
+      const roomTeachers: Record<string, string[]> = {}
+      for (const roomId of activity.roomIds) roomTeachers[roomId] = [activity.roomTeachers[roomId]]
+      groups.push({ id: activity.id, settingId: activity.id, mode: 'separate', roomIds: activity.roomIds, teacherIds: [], roomTeachers, weeklyPeriods: activity.cells.length, cells: activity.cells })
+    } else if (activity.teacherId) {
+      groups.push({ id: activity.id, settingId: activity.id, mode: 'joint', roomIds: activity.roomIds, teacherIds: [activity.teacherId], roomTeachers: {}, weeklyPeriods: activity.cells.length, cells: activity.cells })
+    }
+  }
+  return {
+    hash: 'local',
+    plan: {
+      ...emptyPlan(),
+      days: plan.days,
+      rooms: plan.places.map(place => ({ id: place.id, name: place.name })),
+      rules: Object.fromEntries(lessons.map(lesson => [lesson.id, { count: lesson.count, pattern: lesson.pattern || [1], roomId: lesson.roomId || null, morning: false, spread: true }])),
+      activityGroups: groups,
+    },
+    periods: plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES,
+    timesConfigured: !validatePeriodTimes(plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES),
+    classrooms: plan.rooms.map(room => ({ id: room.id, level: room.label, room: 0 })),
+    lessons,
+    slots: plan.timetable.filter(cell => cell.subjectId && (cell.locked || !scope.includes(cell.classroomId))).map(cell => ({ classroom_id: cell.classroomId, academic_year_id: 'local', day_of_week: cell.day, period: cell.period, class_subject_id: cell.subjectId, activity_id: null, note: null, locked: true })),
+    blocks: plan.blocks,
+    activities: plan.activities.map(activity => ({ id: activity.id, label: activity.name })),
+    teachers: plan.teachers.map(teacher => ({ id: teacher.id, full_name: teacher.name })),
+  }
+}

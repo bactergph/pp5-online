@@ -1,11 +1,12 @@
 'use client'
 
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { DEFAULT_PERIOD_TIMES, periodTimeLabel } from '@/lib/schedule-helpers'
+import { DEFAULT_PERIOD_TIMES, periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { availableSubstitutes } from '@/lib/substitute-availability'
 import { bangkokToday } from '@/lib/free-schedule-ad-window'
+import type { LocalCell } from '@/lib/schedule-device-free'
 
-export type LocalCell = { classroomId: string; day: number; period: number; subjectId: string }
+export type { LocalCell }
 export type FreeSubstituteEntry = {
   id: string
   absentTeacherId: string
@@ -41,6 +42,7 @@ export default function FreeSubstituteDesk({
   subjects,
   timetable,
   days,
+  periods = DEFAULT_PERIOD_TIMES,
   onSave,
 }: {
   teachers: Teacher[]
@@ -48,6 +50,7 @@ export default function FreeSubstituteDesk({
   subjects: Subject[]
   timetable: LocalCell[]
   days: Record<string, FreeSubstituteEntry[]>
+  periods?: PeriodTimeRow[]
   onSave: (days: Record<string, FreeSubstituteEntry[]>) => void
 }) {
   const [date, setDate] = useState(bangkokToday)
@@ -192,7 +195,7 @@ export default function FreeSubstituteDesk({
                   </tr>
                   {entries.filter(entry => entry.absentTeacherId === teacherId).sort((a, b) => a.period - b.period).map(entry => (
                     <tr key={entry.id}>
-                      <td>คาบ {entry.period}<span className="sub-period-time">{periodTimeLabel(DEFAULT_PERIOD_TIMES, entry.period)}</span></td>
+                      <td>คาบ {entry.period}<span className="sub-period-time">{periodTimeLabel(periods, entry.period)}</span></td>
                       <td><span className={`sub-status${ready(entry) ? '' : ' pending'}`}>{ready(entry) ? 'พร้อม' : 'รอเลือกครู'}</span></td>
                       <td>{entry.roomLabel || '—'}</td>
                       <td>{entry.subjectLabel || '—'}</td>

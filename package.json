@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs && node scripts/test-substitute-availability.cjs",
-    "test:schedule-planning": "node scripts/test-schedule-input.cjs && node scripts/test-schedule-planning.cjs && node scripts/test-schedule-preparation.cjs && node scripts/test-schedule-planning-db.cjs && node scripts/test-schedule-planning-scale.cjs"
+    "test:schedule-planning": "node scripts/test-schedule-input.cjs && node scripts/test-schedule-planning.cjs && node scripts/test-schedule-preparation.cjs && node scripts/test-schedule-planning-db.cjs && node scripts/test-schedule-planning-scale.cjs && node scripts/test-free-schedule-gaps.cjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "^149.0.0",
