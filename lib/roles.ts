@@ -42,6 +42,16 @@ export function ensureThaiNamePrefixJoined(name?: string | null) {
 /** @deprecated ใช้ ensureThaiNamePrefixJoined — คงชื่อเดิมเพื่อไม่พัง import เก่า */
 export const ensureThaiNamePrefixSpace = ensureThaiNamePrefixJoined
 
+export function splitThaiStaffName(display?: string | null) {
+  const trimmed = (display || '').trim().replace(/\s+/g, ' ')
+  for (const prefix of THAI_NAME_PREFIXES) {
+    if (!trimmed.startsWith(prefix)) continue
+    const rest = trimmed.slice(prefix.length).trim()
+    if (rest) return { prefix, full_name: rest }
+  }
+  return { prefix: '', full_name: trimmed }
+}
+
 export function formatStaffName(prefix?: string | null, fullName?: string | null) {
   const p = (prefix || '').trim()
   const n = (fullName || '').trim()

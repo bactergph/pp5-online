@@ -124,7 +124,7 @@ export default function SchoolLeadersPanel({
             <span className="leaders-status-bar__count">{stats.filled}/{stats.total}</span>
           </div>
           <p className="leaders-status-bar__desc">
-            เลือกจากระบบเพื่อลงนามดิจิทัลได้ · พิมพ์ชื่อเองใช้บนเอกสารอย่างเดียว
+            เลือกจากระบบ หรือพิมพ์ชื่อเองแล้วบันทึก ระบบจะเพิ่มชื่อนั้นในบุคลากรของโรงเรียน
           </p>
           <div className="leaders-status-bar__meter" aria-hidden>
             <div className="leaders-status-bar__meter-fill" style={{ width: `${progressPct}%` }} />

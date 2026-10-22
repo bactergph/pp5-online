@@ -11,6 +11,7 @@ import {
   SCHEDULE_EDIT_ROLES,
   SCHEDULE_PERIOD_COUNT,
   SCHEDULE_VIEW_ROLES,
+  classroomShortName,
 } from '@/lib/schedules'
 import { activityTeacherLabel, isActivityLessonId, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 

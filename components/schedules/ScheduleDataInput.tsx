@@ -1,25 +1,30 @@
 'use client'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Swal from 'sweetalert2'
-import { saveScheduleInputTeachers, saveScheduleInputSubjects } from '@/app/schedules/planning-actions'
-import { SUBJECT_GROUPS, validateSubjectInputs, type SubjectInputRow } from '@/lib/schedule-input'
+import { removeScheduleInputSubjects, saveScheduleInputTeachers, saveScheduleInputSubjects } from '@/app/schedules/planning-actions'
+import { SUBJECT_GROUPS, SUBJECT_IMPORT_COLUMNS, SUBJECT_ROW_LIMIT, matchClassroomLabel, parseSubjectTable, validateSubjectInputs, type SubjectInputRow } from '@/lib/schedule-input'
 import type { Preparation } from '@/lib/schedule-preparation'
 import ScheduleInputGrid from './ScheduleInputGrid'
-import LessonPatternPicker from './LessonPatternPicker'
 
 export default function ScheduleDataInput({ kind, data, year, term, onSaved, onDirty, locked, onBusy, onRoster }: {
   kind: 'teachers' | 'subjects'; data: Preparation; year: string; term: number
   onSaved: () => Promise<void>; onDirty: (value: boolean) => void; locked: boolean; onBusy: (value: boolean) => void
   onRoster: (ids: string[]) => void
 }) {
-  const [rows, setRows] = useState<string[][]>(Array.from({ length: 8 }, () => Array(kind === 'teachers' ? 3 : 9).fill('')))
+  const [rows, setRows] = useState<string[][]>(Array.from({ length: 8 }, () => Array(kind === 'teachers' ? 3 : 6).fill('')))
+  const [addOpen, setAddOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [subjectLevel, setSubjectLevel] = useState('')
+  const [subjectRoom, setSubjectRoom] = useState('')
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const saving = useRef(false)
   const [statuses, setStatuses] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState(''), [progress, setProgress] = useState(0)
   const teachers = data.teachers.map(t => ({ id: t.id, name: `${t.prefix || ''} ${t.full_name}`.trim(), position: t.position || '' }))
   const timetableLessons = data.lessons.filter(l => data.classrooms.some(c => c.id === l.classroomId))
-  const rooms = data.classrooms.map(c => ({ id: c.id, name: `${c.level}/${c.room}` }))
+  const rooms = data.classrooms.map(c => ({ id: c.id, name: `${c.level}/${c.name}`, numeric: `${c.level}/${c.room}` }))
   const selectedTeachers = data.plan.teacherIds || teachers.map(t=>t.id)
   const teacherLabel = (id: string | null) => {
     const t = teachers.find(t => t.id === id)
@@ -29,27 +34,34 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
   const filled = rows.map((r, i) => ({ r, i })).filter(x => x.r.some(Boolean))
   function resolveSubjects(): SubjectInputRow[] {
     return filled.map(({ r, i }) => {
-      const room = rooms.find(c => c.name === r[0].trim())
-      const teacher = teachers.find(t => selectedTeachers.includes(t.id) && teacherLabel(t.id) === r[3].trim())
-      if (!room || !teacher) throw Error(`แถว ${i + 1}: เลือกห้องและครูจากข้อมูลของโรงเรียนก่อน ครูใหม่เพิ่มที่ขั้น 2`)
-      return { classroomId: room.id, code: r[1].trim(), name: r[2].trim(), teacherId: teacher.id, count: Number(r[4]), pattern: (r[5] || Array(Math.max(0, Math.min(40, Number(r[4]) || 0))).fill(1).join('+')).split('+').map(Number), venue: r[6].trim(), group: r[7].trim(), type: r[8].trim() || 'พื้นฐาน' }
+      const room = matchClassroomLabel(r[0], rooms)
+      if (!room) throw Error(`แถว ${i + 1}: ไม่พบห้อง ${r[0].trim() || 'นักเรียน'}`)
+      const code = r[1].trim()
+      const count = Number(r[3])
+      const existing = timetableLessons.find(lesson => !lesson.activity && lesson.classroomId === room.id && lesson.code.trim().toLowerCase() === code.toLowerCase())
+      const rule = existing ? data.plan.rules[existing.id] : undefined
+      const pattern = rule?.pattern && rule.pattern.reduce((sum, part) => sum + part, 0) === count ? rule.pattern : Array.from({ length: Math.max(0, Math.min(40, Number.isInteger(count) ? count : 0)) }, () => 1)
+      return { classroomId: room.id, code, name: r[2].trim(), teacherId: existing?.teacherId || '', count, pattern, venue: existing?.roomName || '', group: r[4].trim(), type: r[5].trim() || 'พื้นฐาน' }
     })
   }
-  async function save() {
+  async function save(alreadyConfirmed = false) {
     if (saving.current || locked) return
     saving.current = true; setBusy(true); onBusy(true)
     setError(''); setMessage('')
     try {
       if (kind === 'subjects') validateSubjectInputs(resolveSubjects())
       else if (filled.some(({ r }) => !r[1].trim())) throw Error('กรอกชื่อ-นามสกุลให้ครบทุกแถวที่มีข้อมูล')
-      const answer = await Swal.fire({ icon: 'question', title: kind === 'teachers' ? `เพิ่ม / ใช้ครู ${filled.length} รายการ?` : `บันทึกรายวิชา ${filled.length} รายการ?`, text: kind === 'teachers' ? 'ใช้รายชื่อเดิมเมื่อชื่อและคำนำหน้าตรงกัน ครูใหม่เพิ่มในข้อมูลบุคลากรโดยยังไม่เปิดบัญชี' : 'รายวิชาและผู้สอนใช้ข้อมูลร่วมกับโรงเรียน ส่วนภาระสอนและสถานที่เป็นของภาคเรียนนี้ วิชาเดิมจะคงรายละเอียดหลักไว้', showCancelButton: true, confirmButtonText: 'บันทึกข้อมูล', cancelButtonText: 'กลับไปตรวจ', confirmButtonColor: '#245bdb' })
-      if (!answer.isConfirmed) return
+      if (!alreadyConfirmed) {
+        const answer = await Swal.fire({ icon: 'question', title: `บันทึกรายวิชา ${filled.length} รายการ?`, text: 'ครู การแบ่งคาบ และห้องสถานที่กำหนดในขั้นภาระสอน วิชาเดิมจะคงรายละเอียดเหล่านั้นไว้', showCancelButton: true, confirmButtonText: 'บันทึกข้อมูล', cancelButtonText: 'กลับไปตรวจ', confirmButtonColor: '#1373d9' })
+        if (!answer.isConfirmed) return
+      }
       setBusy(true); onBusy(true); setProgress(0)
       if (kind === 'subjects') {
         const result = await saveScheduleInputSubjects(year, term, data.hash, resolveSubjects())
         if (result.error) throw Error(result.error)
-        setProgress(filled.length); setRows(Array.from({ length: 8 }, () => Array(9).fill(''))); onDirty(false)
+        setProgress(filled.length); setRows(Array.from({ length: 8 }, () => Array(6).fill(''))); onDirty(false)
         setMessage(`บันทึก ${filled.length} รายวิชาแล้ว`)
+        setAddOpen(false); dialogRef.current?.close()
       } else {
         const failures: string[][] = []; const reasons: string[] = []; let saved = 0
         for (let offset = 0; offset < filled.length; offset += 50) {
@@ -66,28 +78,234 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
         setRows(failures.length ? failures : Array.from({ length: 8 }, () => Array(3).fill(''))); setStatuses({}); onDirty(!!failures.length)
         setMessage(`สำเร็จ ${saved} รายการ${failures.length ? ` · ${failures.length} รายการยังไม่สำเร็จ เก็บไว้ในตารางเพื่อแก้ไขและลองอีกครั้ง` : ''}`)
         if (reasons.length) setError(reasons.join('\n'))
+        if (!failures.length) { setAddOpen(false); dialogRef.current?.close() }
       }
       await onSaved()
     } catch (e) { setError(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ') }
     finally { saving.current = false; setBusy(false); onBusy(false) }
   }
-  async function loadExisting() {
-    if (filled.length && !(await Swal.fire({icon:'warning',title:'แทนรายการนำเข้าด้วยข้อมูลเดิม?',text:'ข้อมูลที่ยังไม่บันทึกในตารางนี้จะถูกแทนที่',showCancelButton:true,confirmButtonText:'ดึงข้อมูลเดิม',cancelButtonText:'กลับไปแก้',confirmButtonColor:'#245bdb'})).isConfirmed) return
-    change(kind === 'teachers' ? data.teachers.map(t => [t.prefix || '', t.full_name, t.position || '']) : timetableLessons.filter(l => !l.activity).map(l => {
-      const rule = data.plan.rules[l.id]
-      return [rooms.find(c => c.id === l.classroomId)?.name || '', l.code, l.fullName || l.name, teacherLabel(l.teacherId), String(rule?.count ?? l.count), rule?.pattern.join('+') || Array(l.count).fill(1).join('+'), l.roomName || '', l.subjectGroup || '', l.subjectType || 'พื้นฐาน']
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!addOpen || !dialog || dialog.open) return
+    dialog.showModal()
+  }, [addOpen])
+  function openAdd() {
+    setAddOpen(true)
+    const dialog = dialogRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+  }
+  function closeAdd() {
+    if (busy) return
+    dialogRef.current?.close()
+    setAddOpen(false)
+  }
+  const lessonCount = new Map<string, number>()
+  for (const lesson of timetableLessons) {
+    if (!lesson.teacherId || lesson.activity) continue
+    lessonCount.set(lesson.teacherId, (lessonCount.get(lesson.teacherId) || 0) + 1)
+  }
+  const needle = query.trim().toLowerCase()
+  const visibleTeachers = teachers.filter(teacher => !needle || `${teacherLabel(teacher.id)} ${teacher.position}`.toLowerCase().includes(needle))
+  function toggleTeacher(id: string) {
+    onRoster(selectedTeachers.includes(id) ? selectedTeachers.filter(item => item !== id) : [...selectedTeachers, id])
+  }
+  async function loadExisting(skipConfirm = false) {
+    if (!skipConfirm && filled.length && !(await Swal.fire({icon:'warning',title:'แทนรายการนำเข้าด้วยข้อมูลเดิม?',text:'ข้อมูลที่ยังไม่บันทึกในตารางนี้จะถูกแทนที่',showCancelButton:true,confirmButtonText:'ดึงข้อมูลเดิม',cancelButtonText:'กลับไปแก้',confirmButtonColor:'#1373d9'})).isConfirmed) return
+    if (kind === 'teachers') { change(data.teachers.map(t => [t.prefix || '', t.full_name, t.position || ''])); return }
+    const roomById = new Map(data.classrooms.map(room => [room.id, room]))
+    const levelOrder = new Map<string, number>()
+    for (const room of data.classrooms) if (!levelOrder.has(room.level)) levelOrder.set(room.level, levelOrder.size)
+    const groupRank = (name: string) => { const index = SUBJECT_GROUPS.indexOf(name); return index === -1 ? SUBJECT_GROUPS.length : index }
+    change(timetableLessons.filter(lesson => !lesson.activity).slice().sort((a, b) => {
+      const left = roomById.get(a.classroomId), right = roomById.get(b.classroomId)
+      return (levelOrder.get(left?.level || '') ?? 99) - (levelOrder.get(right?.level || '') ?? 99) || (left?.room ?? 0) - (right?.room ?? 0) || groupRank(a.subjectGroup?.trim() || '') - groupRank(b.subjectGroup?.trim() || '') || a.code.localeCompare(b.code, 'th')
+    }).map(lesson => {
+      const room = roomById.get(lesson.classroomId)
+      const rule = data.plan.rules[lesson.id]
+      return [room ? `${room.level}/${room.name}` : '', lesson.code, lesson.fullName || lesson.name, String(rule?.count ?? lesson.count), lesson.subjectGroup || '', lesson.subjectType || 'พื้นฐาน']
     }))
   }
-  return <section className="prep-input-panel">
-    <div className="prep-section-heading"><div><span className="prep-eyebrow">ข้อมูลสำหรับจัดตาราง</span><h2>{kind === 'teachers' ? 'กำหนดครูผู้สอน' : 'กำหนดรายวิชาแต่ละห้อง'}</h2><p>{kind === 'teachers' ? 'รายชื่อเดิมพร้อมใช้ด้านล่าง เพิ่มครูใหม่จากตารางนี้ได้โดยไม่ต้องสลับไปหน้าบุคลากร' : 'เลือกห้อง ครู และคาบต่อสัปดาห์ วางหลายรายวิชาพร้อมกันแล้วตรวจและบันทึกเป็นชุด'}</p></div><span className="prep-count">{kind === 'teachers' ? `${teachers.length} ครูในโรงเรียน` : `${timetableLessons.filter(l => !l.activity).length} รายวิชาเดิม`}</span></div>
-    {kind === 'teachers' && <details className="prep-roster" open><summary>เลือกครูที่จะนำมาจัดตาราง ({selectedTeachers.length} / {teachers.length})</summary><div className="prep-checks"><button type="button" disabled={busy} onClick={()=>onRoster(teachers.map(t=>t.id))}>เลือกครูทั้งหมด</button></div><div className="prep-teacher-list">{teachers.map(t => <div key={t.id}><label><input type="checkbox" disabled={busy} checked={selectedTeachers.includes(t.id)} onChange={()=>onRoster(selectedTeachers.includes(t.id)?selectedTeachers.filter(id=>id!==t.id):[...selectedTeachers,t.id])}/><strong>{teacherLabel(t.id)}</strong></label><small>{t.position || 'ไม่ระบุตำแหน่ง'} · {timetableLessons.filter(l => l.teacherId === t.id && !l.activity).length} รายวิชา</small></div>)}</div></details>}
-    {kind === 'subjects' && <aside className="prep-pattern-guide"><strong>อยากให้วิชานี้เรียนครั้งละกี่คาบ?</strong><p>กรอกคาบต่อสัปดาห์ แล้วเลือกการแบ่งคาบ เช่น 3 คาบ/สัปดาห์ เลือกเรียนคาบเดี่ยว 3 ครั้ง หรือคาบคู่ 1 ครั้งและคาบเดี่ยว 1 ครั้ง คาบคู่ต้องติดกันและไม่ข้ามพักกลางวัน</p><small>วางจาก Excel ได้ตามเดิม: ช่องการแบ่งคาบเว้นว่างเพื่อใช้คาบเดี่ยว หรือใส่ 2+1 สำหรับคาบคู่หนึ่งครั้งและคาบเดี่ยวหนึ่งครั้ง</small></aside>}
-    <div className="prep-input-toolbar"><button type="button" disabled={busy || locked} onClick={loadExisting}>ดึงข้อมูลเดิมลงตาราง</button><Link href={kind === 'teachers' ? '/settings/users' : '/settings/class-subjects'}>เปิดข้อมูลเดิมของโรงเรียน ↗</Link><span>ลำดับคอลัมน์ตรงกับหัวตาราง · วางเฉพาะข้อมูล ไม่ต้องรวมหัวตาราง</span></div>
-    <fieldset disabled={busy}><ScheduleInputGrid label={kind === 'teachers' ? 'ตารางนำเข้าครู' : 'ตารางนำเข้ารายวิชา'} rows={rows} onChange={change} statuses={statuses}
-      renderCell={kind === 'subjects' ? (row, col, index, update) => col === 5 ? <LessonPatternPicker count={Number(row[4])} value={row[5] || ''} onChange={update} label={`แถว ${index + 1}`}/> : undefined : undefined}
-      columns={kind === 'teachers' ? [{ label: 'คำนำหน้า', hint: 'เช่น นาย' }, { label: 'ชื่อ-นามสกุล', hint: 'ชื่อครู' }, { label: 'ตำแหน่ง', hint: 'เช่น ครู' }] : [{ label: 'ห้องนักเรียน', hint: 'เช่น ม.1/1', options: rooms.map(c => c.name) }, { label: 'รหัสวิชา', hint: 'เช่น ค21101' }, { label: 'ชื่อวิชา', hint: 'ชื่อเต็มตามหลักสูตร' }, { label: 'ครูผู้สอน', options: teachers.filter(t=>selectedTeachers.includes(t.id)).map(t => teacherLabel(t.id)) }, { label: 'คาบ/สัปดาห์', hint: 'เช่น 3' }, { label: 'การแบ่งคาบเรียน', hint: 'เลือกคาบเดี่ยวหรือคาบคู่' }, { label: 'ห้องสถานที่', hint: 'ไม่บังคับ', options: data.plan.rooms.map(r => r.name) }, { label: 'กลุ่มสาระ', options: SUBJECT_GROUPS }, { label: 'ประเภท', options: ['พื้นฐาน', 'เพิ่มเติม'], hint: 'พื้นฐาน' }]} /></fieldset>
-    {error && <div className="prep-error" role="alert">{error}<div><button type="button" disabled={busy} onClick={()=>void onSaved().catch(e=>setError(e instanceof Error?e.message:'โหลดข้อมูลไม่สำเร็จ'))}>โหลดข้อมูลล่าสุดเพื่อบันทึกอีกครั้ง</button></div></div>}{message && <p className="prep-success" role="status">{message}</p>}
-    {busy && <div role="status" className="prep-import-progress"><progress aria-label="สถานะบันทึกข้อมูล" max={filled.length || 1} value={kind === 'teachers' ? progress : undefined} /><span>{kind === 'teachers' ? `ตรวจและบันทึกแล้ว ${progress} / ${filled.length} รายการ` : 'กำลังตรวจและบันทึกรายวิชาเป็นชุด…'}</span></div>}
-    <div className="prep-input-footer"><span>{locked ? 'บันทึกการตั้งค่าด้านบนก่อนนำเข้าข้อมูล' : `${filled.length} รายการรอตรวจ · ข้อมูลจะบันทึกเมื่อกดยืนยัน`}</span><button type="button" className="prep-primary" disabled={busy || locked || !filled.length} onClick={() => void save()}>{busy ? 'กำลังบันทึก…' : `ตรวจและบันทึก ${filled.length} รายการ`}</button></div>
+  if (kind === 'teachers') return <section className="prep-input-panel prep-teacher-panel">
+    <div className="prep-teacher-bar">
+      <div className="prep-teacher-title">
+        <h2>เลือกครูที่จะนำมาจัดตาราง</h2>
+        <p>เลือกแล้ว {selectedTeachers.length} จาก {teachers.length} คน</p>
+      </div>
+      <div className="prep-teacher-tools">
+        <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหาชื่อหรือตำแหน่ง" aria-label="ค้นหาครู" />
+        <button type="button" disabled={busy || !teachers.length} onClick={() => onRoster(teachers.map(t => t.id))}>เลือกทั้งหมด</button>
+        <button type="button" disabled={busy || !selectedTeachers.length} onClick={() => onRoster([])}>เอาออกทั้งหมด</button>
+        <button type="button" className="prep-primary" disabled={busy || locked} onClick={() => { setError(''); setMessage(''); setAddOpen(true) }}>เพิ่มครู</button>
+      </div>
+    </div>
+    {!addOpen && message && <p className="prep-success" role="status">{message}</p>}
+    {visibleTeachers.length === 0 ? <p className="prep-teacher-empty">{teachers.length ? 'ไม่พบครูที่ค้นหา' : 'ยังไม่มีครูในโรงเรียน กดเพิ่มครูเพื่อกรอกหรือวางรายชื่อ'}</p> : <div className="prep-teacher-grid">
+      {visibleTeachers.map(teacher => <label key={teacher.id} className={selectedTeachers.includes(teacher.id) ? 'prep-teacher-card is-on' : 'prep-teacher-card'}>
+        <input type="checkbox" disabled={busy} checked={selectedTeachers.includes(teacher.id)} onChange={() => toggleTeacher(teacher.id)} />
+        <span><strong>{teacherLabel(teacher.id)}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'} · {lessonCount.get(teacher.id) || 0} รายวิชา</small></span>
+      </label>)}
+    </div>}
+    <dialog ref={dialogRef} className="prep-team-dialog prep-teacher-dialog" aria-labelledby="add-teacher-title" onCancel={event => { event.preventDefault(); closeAdd() }}>
+      <header>
+        <h2 id="add-teacher-title">เพิ่มครู</h2>
+        <button type="button" disabled={busy} aria-label="ปิด" onClick={closeAdd}>ปิด</button>
+      </header>
+      <div className="prep-team-dialog-body">
+        <fieldset disabled={busy}>
+          <ScheduleInputGrid label="ตารางนำเข้าครู" rows={rows} onChange={change} statuses={statuses} columns={[{ label: 'คำนำหน้า', hint: 'เช่น นาย' }, { label: 'ชื่อ-นามสกุล', hint: 'ชื่อครู' }, { label: 'ตำแหน่ง', hint: 'เช่น ครู' }]} />
+        </fieldset>
+        {error && <div className="prep-error" role="alert">{error}</div>}
+        {message && <p className="prep-success" role="status">{message}</p>}
+        {busy && <div role="status" className="prep-import-progress"><progress aria-label="สถานะบันทึกข้อมูล" max={filled.length || 1} value={progress} /><span>ตรวจและบันทึกแล้ว {progress} / {filled.length} รายการ</span></div>}
+      </div>
+      <footer>
+        <span>{locked ? 'บันทึกการตั้งค่าด้านบนก่อนนำเข้าข้อมูล' : `${filled.length} แถวพร้อมบันทึก`}</span>
+        <Link href="/settings/users">หน้าบุคลากร</Link>
+        <button type="button" disabled={busy} onClick={closeAdd}>ยกเลิก</button>
+        <button type="button" className="prep-primary" disabled={busy || locked || !filled.length} onClick={() => void save(true)}>{busy ? 'กำลังบันทึก…' : `บันทึก ${filled.length} รายการ`}</button>
+      </footer>
+    </dialog>
+  </section>
+
+  const subjectLessons = timetableLessons.filter(lesson => !lesson.activity)
+  const levels = [...new Set(data.classrooms.map(room => room.level))]
+  const activeLevel = levels.includes(subjectLevel) ? subjectLevel : levels[0] || ''
+  const levelRooms = data.classrooms.filter(room => room.level === activeLevel).slice().sort((a, b) => a.room - b.room)
+  const activeRoom = levelRooms.some(room => room.id === subjectRoom) ? subjectRoom : levelRooms[0]?.id || ''
+  const activeRoomLabel = levelRooms.find(room => room.id === activeRoom)
+  const roomLessons = subjectLessons.filter(lesson => lesson.classroomId === activeRoom)
+  const visibleRoomLessons = roomLessons.filter(lesson => !needle || `${lesson.code} ${lesson.fullName || lesson.name} ${lesson.subjectGroup || ''} ${teacherLabel(lesson.teacherId)}`.toLowerCase().includes(needle))
+  const groupRank = (name: string) => {
+    const index = SUBJECT_GROUPS.indexOf(name)
+    return index === -1 ? SUBJECT_GROUPS.length : index
+  }
+  const orderedLessons = visibleRoomLessons.slice().sort((a, b) => groupRank(a.subjectGroup?.trim() || '') - groupRank(b.subjectGroup?.trim() || '') || a.code.localeCompare(b.code, 'th'))
+  const periodCount = (lesson: typeof roomLessons[number]) => data.plan.rules[lesson.id]?.count ?? lesson.count
+  const roomPeriodTotal = (roomId: string) => subjectLessons.filter(lesson => lesson.classroomId === roomId).reduce((sum, lesson) => sum + periodCount(lesson), 0)
+  const activePeriodTotal = roomLessons.reduce((sum, lesson) => sum + periodCount(lesson), 0)
+  function subjectLine(lesson: typeof roomLessons[number]) {
+    const rule = data.plan.rules[lesson.id]
+    return [rooms.find(room => room.id === lesson.classroomId)?.name || '', lesson.code, lesson.fullName || lesson.name, String(rule?.count ?? lesson.count), lesson.subjectGroup || '', lesson.subjectType || 'พื้นฐาน']
+  }
+  async function downloadWorkbook(filename: string, body: string[][], withGuide: boolean) {
+    const XLSX = await import('xlsx')
+    const sheet = XLSX.utils.aoa_to_sheet([[...SUBJECT_IMPORT_COLUMNS], ...body])
+    sheet['!cols'] = [16, 14, 28, 16, 36, 14].map(wch => ({ wch }))
+    const book = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(book, sheet, 'รายวิชา')
+    if (withGuide) {
+      const note = XLSX.utils.aoa_to_sheet([
+        ['กรอกในชีต รายวิชา แล้วอัปโหลดไฟล์นี้กลับมา'],
+        ['ห้องนักเรียนใช้รูปแบบ ม.1/1 หรือ ม.1/IP และวางแบบสั้นได้ เช่น 1/IP'],
+        ['กลุ่มสาระต้องเป็นหนึ่งในรายการนี้', ...SUBJECT_GROUPS],
+        ['ประเภทคือ พื้นฐาน หรือ เพิ่มเติม'],
+        ['ครูผู้สอน การแบ่งคาบเรียน และห้องสถานที่กำหนดในขั้นภาระสอน'],
+      ])
+      XLSX.utils.book_append_sheet(book, note, 'คำอธิบาย')
+    }
+    XLSX.writeFile(book, filename)
+  }
+  function downloadTemplate() {
+    setError('')
+    void downloadWorkbook('เทมเพลตรายวิชา.xlsx', [['ม.1/1', 'ท21101', 'ภาษาไทย', '3', 'ภาษาไทย', 'พื้นฐาน']], true).catch(error => setError(error instanceof Error ? error.message : 'สร้างเทมเพลตไม่สำเร็จ'))
+  }
+  function exportSubjects() {
+    setError('')
+    const body = filled.length ? filled.map(({ r }) => SUBJECT_IMPORT_COLUMNS.map((_, index) => r[index] || '')) : roomLessons.map(subjectLine)
+    if (!body.length) { setError('ยังไม่มีรายวิชาให้นำออก'); return }
+    const label = activeRoomLabel ? `${activeRoomLabel.level}-${activeRoomLabel.name}` : 'รายวิชา'
+    void downloadWorkbook(`รายวิชา-${label}.xlsx`, body, false).catch(error => setError(error instanceof Error ? error.message : 'นำออกไม่สำเร็จ'))
+  }
+  async function uploadSubjects(file: File) {
+    setError(''); setMessage('')
+    try {
+      const XLSX = await import('xlsx')
+      const book = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      const sheet = book.Sheets[book.SheetNames.find(name => name === 'รายวิชา') || book.SheetNames[0]]
+      if (!sheet) throw Error('ไม่พบชีตในไฟล์')
+      const matrix = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' })
+      const parsed = parseSubjectTable(matrix)
+      if (!parsed.length) throw Error('ไม่พบรายวิชาในไฟล์')
+      if (parsed.length > SUBJECT_ROW_LIMIT) throw Error(`อัปโหลดได้สูงสุด ${SUBJECT_ROW_LIMIT} แถว`)
+      change(parsed)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'อ่านไฟล์ไม่สำเร็จ')
+    }
+  }
+  function addForRoom(room: { id: string; level: string; room: number }) {
+    setSubjectLevel(room.level); setSubjectRoom(room.id); setError(''); setMessage(''); setStatuses({})
+    setRows([[`${room.level}/${room.name}`, '', '', '', '', 'พื้นฐาน'], ...Array.from({ length: 7 }, () => Array(6).fill(''))])
+    onDirty(true); openAdd()
+  }
+  async function removeLessons(ids: string[], title: string) {
+    if (!ids.length || busy) return
+    const answer = await Swal.fire({ icon: 'warning', title, text: 'วิชาที่มีคาบในตารางหรือมีคะแนนแล้วจะลบไม่ได้', showCancelButton: true, confirmButtonText: 'ลบรายวิชา', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#be3340' })
+    if (!answer.isConfirmed) return
+    setBusy(true); onBusy(true); setError(''); setMessage('')
+    try {
+      const result = await removeScheduleInputSubjects(year, term, data.hash, ids)
+      if (result.error) throw Error(result.error)
+      setMessage(ids.length === 1 ? 'ลบรายวิชาออกจากห้องแล้ว' : `ลบรายวิชาออกจากห้อง ${ids.length} รายการแล้ว`)
+      await onSaved()
+    } catch (error) { setError(error instanceof Error ? error.message : 'ลบรายวิชาไม่สำเร็จ') }
+    finally { setBusy(false); onBusy(false) }
+  }
+  const levelCount = (level: string) => {
+    const ids = new Set(data.classrooms.filter(room => room.level === level).map(room => room.id))
+    return subjectLessons.filter(lesson => ids.has(lesson.classroomId)).length
+  }
+  return <section className="prep-input-panel prep-teacher-panel">
+    <div className="prep-teacher-bar">
+      <div className="prep-teacher-title">
+        <h2>รายวิชาแต่ละห้อง</h2>
+        <p>{activeRoomLabel ? `${activeRoomLabel.level}/${activeRoomLabel.name} · ${roomLessons.length} รายวิชา` : `${subjectLessons.length} รายวิชา`}</p>
+      </div>
+      <div className="prep-teacher-tools prep-subject-tools">
+        <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหารหัส ชื่อวิชา หรือครูในห้องนี้" aria-label="ค้นหารายวิชา" />
+        <button type="button" className="prep-primary" disabled={busy || locked} onClick={() => { setError(''); setMessage(''); setRows(Array.from({ length: 8 }, () => Array(6).fill(''))); onDirty(false); openAdd() }}>เพิ่มรายวิชา</button>
+      </div>
+    </div>
+    {!addOpen && error && <div className="prep-error" role="alert">{error}</div>}
+    {!addOpen && message && <p className="prep-success" role="status">{message}</p>}
+    {levels.length > 0 && <div className="prep-subject-levels" role="tablist" aria-label="ชั้น"><span>ชั้น</span>{levels.map(level => <button key={level} type="button" aria-pressed={level === activeLevel} onClick={() => { setSubjectLevel(level); setSubjectRoom('') }}>{level}<small>{levelCount(level)}</small></button>)}</div>}
+    {levelRooms.length > 0 && <div className="prep-subject-rooms" role="tablist" aria-label="ห้อง"><span>ห้อง</span>{levelRooms.map(room => {
+      const count = subjectLessons.filter(lesson => lesson.classroomId === room.id).length
+      return <div key={room.id} className={room.id === activeRoom ? 'prep-room-chip is-on' : 'prep-room-chip'}>
+        <button type="button" aria-pressed={room.id === activeRoom} onClick={() => setSubjectRoom(room.id)}>ห้อง {room.name}<small>{count}</small></button>
+        <button type="button" className="prep-room-add" disabled={busy || locked} onClick={() => addForRoom(room)}>เพิ่ม</button>
+        <button type="button" className="prep-room-delete" disabled={busy || !count} onClick={() => void removeLessons(subjectLessons.filter(lesson => lesson.classroomId === room.id).map(lesson => lesson.id), `ลบรายวิชาของห้อง ${room.level}/${room.name} ทั้ง ${count} รายการ?`)}>ลบ</button>
+      </div>
+    })}</div>}
+    {orderedLessons.length === 0 ? <p className="prep-teacher-empty">{subjectLessons.length ? 'ไม่พบรายวิชาในห้องนี้' : 'ยังไม่มีรายวิชา กดเพิ่มรายวิชาเพื่อกรอกหรือวางจาก Excel'}</p> : <ul className="prep-subject-list">{orderedLessons.map(lesson => <li key={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}</span><small>{teacherLabel(lesson.teacherId) || 'ยังไม่กำหนดครู'}</small><em>{periodCount(lesson)} คาบ</em><i>{lesson.subjectGroup?.trim() || 'ไม่ระบุหมวด'}</i><button type="button" disabled={busy} onClick={() => void removeLessons([lesson.id], `ลบ ${lesson.code} ${lesson.fullName || lesson.name} ออกจากห้อง ${activeRoomLabel ? `${activeRoomLabel.level}/${activeRoomLabel.name}` : 'นี้'}?`)}>ลบ</button></li>)}<li className="is-total"><b>รวม</b><span>คาบต่อสัปดาห์ของห้องนี้</span><small>{roomLessons.length} รายวิชา</small><em>{activePeriodTotal} คาบ</em><i /><span /></li></ul>}
+    {levelRooms.length > 0 && <div className="prep-period-summary" aria-label="รวมคาบต่อสัปดาห์แต่ละห้อง"><span>รวมคาบต่อสัปดาห์</span>{levelRooms.map(room => <button key={room.id} type="button" aria-pressed={room.id === activeRoom} onClick={() => setSubjectRoom(room.id)}>ห้อง {room.name}<em>{roomPeriodTotal(room.id)}</em></button>)}</div>}
+    <dialog ref={dialogRef} className="prep-team-dialog prep-teacher-dialog prep-subject-dialog" aria-labelledby="add-subject-title" onCancel={event => { event.preventDefault(); closeAdd() }}>
+      <header>
+        <h2 id="add-subject-title">เพิ่มรายวิชา</h2>
+        <button type="button" disabled={busy} aria-label="ปิด" onClick={closeAdd}>ปิด</button>
+      </header>
+      <div className="prep-team-dialog-body">
+        <div className="prep-subject-files">
+          <button type="button" disabled={busy} onClick={downloadTemplate}>โหลดเทมเพลต</button>
+          <button type="button" disabled={busy} onClick={() => fileRef.current?.click()}>อัปโหลด Excel</button>
+          <button type="button" disabled={busy} onClick={exportSubjects}>นำออก</button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadSubjects(file) }} />
+        </div>
+        <p className="prep-subject-hint">กรอกห้อง รหัส ชื่อ จำนวนคาบ กลุ่มสาระ และประเภท หรือวางจาก Excel ได้หลายแถว ครูผู้สอน การแบ่งคาบ และห้องสถานที่กำหนดในขั้นภาระสอน</p>
+        <fieldset disabled={busy}>
+          <ScheduleInputGrid label="ตารางนำเข้ารายวิชา" rows={rows} onChange={change} statuses={statuses} maxRows={SUBJECT_ROW_LIMIT}
+            columns={[{ label: 'ห้องนักเรียน', hint: 'เช่น ม.1/1  ม.1/IP', options: rooms.map(c => c.name) }, { label: 'รหัสวิชา', hint: 'เช่น ค21101' }, { label: 'ชื่อวิชา', hint: 'ชื่อเต็มตามหลักสูตร' }, { label: 'คาบต่อสัปดาห์', hint: 'เช่น 3' }, { label: 'กลุ่มสาระ', options: SUBJECT_GROUPS }, { label: 'ประเภท', options: ['พื้นฐาน', 'เพิ่มเติม'], hint: 'พื้นฐาน' }]} />
+        </fieldset>
+        {error && <div className="prep-error" role="alert">{error}<div><button type="button" disabled={busy} onClick={() => void onSaved().catch(e => setError(e instanceof Error ? e.message : 'โหลดข้อมูลไม่สำเร็จ'))}>โหลดข้อมูลล่าสุดเพื่อบันทึกอีกครั้ง</button></div></div>}
+        {message && <p className="prep-success" role="status">{message}</p>}
+        {busy && <div role="status" className="prep-import-progress"><progress aria-label="สถานะบันทึกข้อมูล" max={filled.length || 1} /><span>กำลังตรวจและบันทึกรายวิชาเป็นชุด…</span></div>}
+      </div>
+      <footer>
+        <span>{locked ? 'บันทึกการตั้งค่าด้านบนก่อนนำเข้าข้อมูล' : `${filled.length} แถวพร้อมบันทึก`}</span>
+        <button type="button" disabled={busy || locked} onClick={() => void loadExisting(true)}>ดึงรายวิชาเดิมมาแก้</button>
+        <Link href="/settings/class-subjects">หน้ารายวิชา</Link>
+        <button type="button" disabled={busy} onClick={closeAdd}>ยกเลิก</button>
+        <button type="button" className="prep-primary" disabled={busy || locked || !filled.length} onClick={() => void save(true)}>{busy ? 'กำลังบันทึก…' : `บันทึก ${filled.length} รายการ`}</button>
+      </footer>
+    </dialog>
   </section>
 }

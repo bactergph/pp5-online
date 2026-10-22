@@ -16,7 +16,10 @@ async function run(){
   assert.notEqual(first.id,src.id);assert.notEqual(first.id,second.id);assert.equal(created[0].is_catalog,false);assert.match(first.member_code,/^MS-/);assert.equal(created[0].province,'ทดสอบ')
   src={id:'member',name:'สมาชิกเดิม',is_catalog:false,member_code:'MS-EXIST'};await assert.rejects(mod.createMemberSchoolFromCatalog('member'),/บัญชีอื่น/);assert.equal(created.length,2);assert.equal((await mod.resolveMemberSchoolId('member')).id,'member')
   src={id:'catalog',name:'โรงเรียน',is_catalog:true};collision=true;await mod.createMemberSchoolFromCatalog('catalog');assert.equal(created.length,3)
-  insertError={code:'PGRST204',message:"Could not find 'member_code' column"};await assert.rejects(mod.createMemberSchoolFromCatalog('catalog'),/044_member_schools/);assert.equal(created.length,3);insertError=null
+  await assert.rejects(mod.createMemberSchool({name:' '}),/ชื่อโรงเรียน/)
+  const typed=await mod.createMemberSchool({name:' โรงเรียนกรอกเอง ',province:' อุดรธานี ',department:' '})
+  assert.equal(typed.name,'โรงเรียนกรอกเอง');assert.equal(created.at(-1).is_catalog,false);assert.equal(created.at(-1).province,'อุดรธานี');assert.equal(created.at(-1).department,null)
+  insertError={code:'PGRST204',message:"Could not find 'member_code' column"};await assert.rejects(mod.createMemberSchoolFromCatalog('catalog'),/044_member_schools/);assert.equal(created.length,4);insertError=null
   readError={message:'is_catalog missing'};await assert.rejects(mod.createMemberSchoolFromCatalog('catalog'),/044_member_schools/)
   console.log('PASS: catalog cloning without ministry/optional columns, isolated member IDs, no copied private settings, existing-member onboarding rejection, district resolution and safe schema/collision handling')
 }

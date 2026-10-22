@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import { isSecondaryClassLevel } from '@/lib/class-level'
@@ -42,6 +42,9 @@ type Subject = {
   hours_per_year: number
   credits: number
   max_score: number
+  level?: string | null
+  levels?: string[]
+  semesters?: number[]
 }
 
 type SubjectSettingsTab = 'subjects' | 'class-subjects' | 'clubs' | 'activities'
@@ -138,11 +141,81 @@ function gradeLabelFromCode(code: string): string {
   return `ม.${grade + 3}`
 }
 
-function gradeLabelFromSubject(s: { code: string; name?: string }): string {
-  const fromCode = gradeLabelFromCode(s.code)
-  if (fromCode && fromCode !== '—') return fromCode
-  const m = String(s.name || '').match(/(\d+)\s*$/)
-  return m ? `ป.${m[1]}` : '—'
+const GRADE_ORDER = ['ป.1', 'ป.2', 'ป.3', 'ป.4', 'ป.5', 'ป.6', 'ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6']
+
+function subjectGradeLabels(subject: { code: string; name?: string; level?: string | null; levels?: string[] }, secondary = false) {
+  if (subject.level && GRADE_ORDER.includes(subject.level)) return [subject.level]
+  const fromRooms = GRADE_ORDER.filter(level => (subject.levels || []).includes(level))
+  if (fromRooms.length) return fromRooms
+  const fromCode = gradeLabelFromCode(subject.code)
+  if (fromCode && fromCode !== '—') return [fromCode]
+  if (!secondary) {
+    const match = String(subject.name || '').match(/(\d+)\s*$/)
+    const grade = Number(match?.[1])
+    if (grade >= 1 && grade <= 6) return [`ป.${grade}`]
+  }
+  return []
+}
+
+function subjectTermList(subject: { semesters?: number[] }) {
+  const terms = new Set<1 | 2>()
+  for (const semester of subject.semesters || []) {
+    if (semester === 1 || semester === 0) terms.add(1)
+    if (semester === 2 || semester === 0) terms.add(2)
+  }
+  return [...terms]
+}
+
+function soleSchoolTerm(subjects: { semesters?: number[] }[]) {
+  let has1 = false
+  let has2 = false
+  for (const subject of subjects) {
+    for (const semester of subject.semesters || []) {
+      if (semester === 0 || semester === 1) has1 = true
+      if (semester === 0 || semester === 2) has2 = true
+    }
+  }
+  if (has2 && !has1) return 2 as const
+  if (has1 && !has2) return 1 as const
+  return 0 as const
+}
+
+function subjectTermText(subject: { semesters?: number[] }) {
+  const semesters = subject.semesters || []
+  if (semesters.includes(0)) return 'ทั้งปี'
+  const terms = subjectTermList(subject)
+  return terms.length ? terms.map(term => `เทอม ${term}`).join(' · ') : '—'
+}
+
+function subjectGradeRank(subject: Subject, secondary: boolean) {
+  const rank = subjectGradeLabels(subject, secondary).reduce((best, label) => {
+    const index = GRADE_ORDER.indexOf(label)
+    return index >= 0 && (best < 0 || index < best) ? index : best
+  }, -1)
+  return rank < 0 ? GRADE_ORDER.length : rank
+}
+
+function groupSubjectRows(rows: Subject[], secondary = false) {
+  const buckets = new Map<string, Subject[]>()
+  for (const row of rows) {
+    const key = row.subject_group || ''
+    buckets.set(key, [...(buckets.get(key) || []), row])
+  }
+  const keys = [
+    ...SUBJECT_GROUPS.filter(group => buckets.has(group)),
+    ...[...buckets.keys()].filter(key => key && !SUBJECT_GROUPS.includes(key)),
+    ...(buckets.has('') ? [''] : []),
+  ]
+  return keys.map(key => ({
+    key,
+    label: key || 'ไม่มีกลุ่มสาระ',
+    rows: (buckets.get(key) || []).slice().sort((a, b) => {
+      const gradeDiff = subjectGradeRank(a, secondary) - subjectGradeRank(b, secondary)
+      if (gradeDiff) return gradeDiff
+      const typeDiff = Number(a.type.includes('เพิ่ม')) - Number(b.type.includes('เพิ่ม'))
+      return typeDiff || a.code.localeCompare(b.code, 'th')
+    }),
+  }))
 }
 
 // ───────── โหมดวางแบบตาราง (Excel-like) ─────────
@@ -245,7 +318,13 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   const [editing, setEditing] = useState<typeof empty>(empty)
   const [search, setSearch] = useState('')
   const [filterGrade, setFilterGrade] = useState('')
+  const [filterTerm, setFilterTerm] = useState<0 | 1 | 2>(0)
+  const [filterGroup, setFilterGroup] = useState('')
+  const [groupView, setGroupView] = useState(true)
+  const termChosen = useRef(false)
   const [formCode, setFormCode] = useState('')
+  const [formLevel, setFormLevel] = useState('')
+  const [offeredGrades, setOfferedGrades] = useState<string[]>([])
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const [evaluationSettings, setEvaluationSettings] = useState<Record<EvaluationKind, EvaluationSetting[]>>({
     activities: [],
@@ -297,7 +376,12 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   const classSubjectSemester: 0 | 1 | 2 = selectedClassSubjectClassroom && isSecondaryClassLevel(selectedClassSubjectClassroom.level) ? classSubjectTerm : 0
   const availableClassSubjects = sortSubjectsByCurriculum(subjects.filter(subject => !assignedSubjectIds.has(subject.id)))
   const autoClassSubjects = selectedClassSubjectClassroom
-    ? availableClassSubjects.filter(subject => gradeLabelFromCode(subject.code) === selectedClassSubjectClassroom.level)
+    ? availableClassSubjects.filter(subject => {
+      if (!subjectGradeLabels(subject, secondary).includes(selectedClassSubjectClassroom.level)) return false
+      if (!isSecondaryClassLevel(selectedClassSubjectClassroom.level)) return true
+      const terms = subjectTermList(subject)
+      return !terms.length || terms.includes(classSubjectTerm)
+    })
     : []
   const classSubjectCredits = classSubjectItems.reduce((sum, item) => {
     const subject = classSubjectMap[item.subject_id]
@@ -352,8 +436,10 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
 
   async function load() {
     const data = await fetchSubjectSettingsInit()
-    setSubjects(data.subjects as Subject[])
+    const next = data.subjects as Subject[]
+    setSubjects(next)
     setEducationType(data.educationType)
+    if (!termChosen.current) setFilterTerm(data.educationType === 'secondary' ? soleSchoolTerm(next) : 0)
     setLoading(false)
   }
 
@@ -369,6 +455,8 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     setCreditInput(secondary ? '0.5' : '0')
     setEditing(empty)
     setFormCode('')
+    setFormLevel('')
+    setOfferedGrades([])
     setShowForm(true)
     setShowPaste(false)
   }
@@ -376,6 +464,8 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     setCreditInput(String(s.credits || (secondary ? 0.5 : 0)))
     setEditing({ ...s, short_name: s.short_name || '' })
     setFormCode(s.code)
+    setFormLevel(s.level && GRADE_ORDER.includes(s.level) ? s.level : '')
+    setOfferedGrades(GRADE_ORDER.filter(level => (s.levels || []).includes(level)))
     setShowForm(true)
     setShowPaste(false)
   }
@@ -544,6 +634,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
       name: (fd.get('name') as string).trim(),
       short_name: (fd.get('short_name') as string).trim() || null,
       subject_group: fd.get('subject_group') as string,
+      level: formLevel,
       type: fd.get('type') as string,
       hours_per_year: Number(fd.get('hours_per_year') || 0),
       credits: Number(fd.get('credits') || 0),
@@ -744,24 +835,52 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     await loadEvaluationSettings(evaluationKind)
   }
 
-  const gradeOptions = (() => {
-    const set = new Set<string>()
-    for (const s of subjects) {
-      const label = gradeLabelFromSubject(s)
-      if (label !== '—') set.add(label)
-    }
-    return [...set].sort((a, b) => a.localeCompare(b, 'th'))
-  })()
-
-  const filtered = sortSubjectsByCurriculum(subjects.filter(s => {
+  const termPool = subjects.filter(subject => {
+    if (!secondary || filterTerm === 0) return true
+    const terms = subjectTermList(subject)
+    if (!terms.length) return soleSchoolTerm(subjects) === filterTerm
+    return terms.includes(filterTerm)
+  })
+  const gradeOptions = GRADE_ORDER.filter(level => termPool.some(subject => subjectGradeLabels(subject, secondary).includes(level)))
+  const searched = termPool.filter(subject => {
     const q = search.trim().toLowerCase()
-    const matchQ = !q ||
-      s.code.toLowerCase().includes(q) ||
-      s.name.toLowerCase().includes(q) ||
-      s.subject_group.includes(search)
-    const matchGrade = !filterGrade || gradeLabelFromSubject(s) === filterGrade
-    return matchQ && matchGrade
-  }))
+    const grades = subjectGradeLabels(subject, secondary)
+    const matchGrade = !filterGrade || grades.includes(filterGrade)
+    const matchQ = !q || subject.code.toLowerCase().includes(q) || subject.name.toLowerCase().includes(q) || subject.subject_group.includes(search) || grades.some(grade => grade.includes(q))
+    return matchGrade && matchQ
+  })
+  const groupChoices = groupSubjectRows(searched, secondary)
+  const activeGroup = groupChoices.some(section => section.key === filterGroup) ? filterGroup : ''
+  const filtered = activeGroup ? searched.filter(subject => (subject.subject_group || '') === activeGroup) : searched
+  const grouped = groupSubjectRows(filtered, secondary)
+  const columnCount = secondary ? 11 : 10
+  const renderSubjectRow = (s: Subject, index: number) => {
+    const grades = subjectGradeLabels(s, secondary)
+    const groupColor = GROUP_COLOR[s.subject_group] || '#64748b'
+    return (
+      <tr key={s.id}>
+        <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{index + 1}</td>
+        <td style={{ fontWeight: 600 }}>{s.code}</td>
+        <td>{s.name}</td>
+        <td style={{ fontWeight: 700, color: '#8B6B45' }}>{grades.join(' · ') || '—'}</td>
+        <td>
+          <span style={{
+            fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+            color: groupColor, background: `${groupColor}18`,
+          }}>{s.subject_group || 'ไม่มีกลุ่มสาระ'}</span>
+        </td>
+        <td>{s.type}</td>
+        {secondary && <td>{subjectTermText(s)}</td>}
+        <td style={{ textAlign: 'right' }}>{secondary ? Number(s.credits) * 40 : s.hours_per_year}</td>
+        <td style={{ textAlign: 'right' }}>{s.credits}</td>
+        <td style={{ textAlign: 'right' }}>{s.max_score}</td>
+        <td>
+          <button onClick={() => openEdit(s)} style={{ color: 'var(--primary)', fontSize: 13, marginRight: 12, background: 'none', border: 'none', cursor: 'pointer' }}>แก้ไข</button>
+          <button onClick={() => handleDelete(s)} style={{ color: '#DC2626', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}>ลบ</button>
+        </td>
+      </tr>
+    )
+  }
 
   if (loading) return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
 
@@ -906,10 +1025,6 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                     placeholder="ท11101"
                     required
                   />
-                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-                    ชั้นจากรหัส: <b style={{ color: '#8B6B45' }}>{gradeLabelFromCode(formCode) || '—'}</b>
-                    {' '}· เช่น ท11101 = ป.1, ท12101 = ป.2
-                  </div>
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>
                   <label className="form-label">ชื่อวิชา *</label>
@@ -920,8 +1035,18 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                   <input name="short_name" defaultValue={editing.short_name} className="form-input" placeholder="ท2" />
                 </div>
                 <div>
-                  <label className="form-label">กลุ่มสาระ *</label>
-                  <select name="subject_group" defaultValue={editing.subject_group} className="form-input" required>
+                  <label className="form-label">ชั้น</label>
+                  <select name="level" className="form-input" value={formLevel} onChange={event => setFormLevel(event.target.value)}>
+                    <option value="">{offeredGrades.length ? `ตามห้องที่เปิดสอน (${offeredGrades.join(' · ')})` : 'ยังไม่กำหนด'}</option>
+                    {(secondary ? GRADE_ORDER.filter(grade => grade.startsWith('ม.')) : GRADE_ORDER.filter(grade => grade.startsWith('ป.'))).map(grade => (
+                      <option key={grade} value={grade}>{grade}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">กลุ่มสาระ</label>
+                  <select name="subject_group" defaultValue={editing.subject_group || ''} className="form-input">
+                    <option value="">ไม่มีกลุ่มสาระ</option>
                     {SUBJECT_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
@@ -939,7 +1064,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 <div>
                   <label className="form-label">หน่วยกิต</label>
                   <input name="credits" type="number" step="0.5" value={creditInput} onChange={e => setCreditInput(e.target.value)} className="form-input" min={secondary ? 0.5 : 0} required={secondary} />
-                  {secondary && <p className="mt-2 text-sm text-slate-600">{Number(creditInput) * 2 || 0} ชม./สัปดาห์ · {Number(creditInput) * 40 || 0} ชม./ภาคเรียน</p>}
+                  {secondary && <p className="mt-2 text-sm text-slate-600">{Number(creditInput) * 2 || 0} คาบ/สัปดาห์ · {Number(creditInput) * 40 || 0} ชม./ภาคเรียน</p>}
                 </div>
                 <div>
                   <label className="form-label">คะแนนเต็ม</label>
@@ -958,26 +1083,55 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
       {activeTab === 'subjects' && (
         <>
           <div className="filter-bar control-card" style={{ marginBottom: 12 }}>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="form-input"
-              placeholder="ค้นหา รหัส / ชื่อวิชา / กลุ่มสาระ..."
-              style={{ flex: 1, minWidth: 200, maxWidth: 360 }}
-            />
-            <select className="form-input" value={filterGrade} onChange={e => setFilterGrade(e.target.value)} style={{ width: 120 }}>
-              <option value="">ทุกชั้น</option>
-              {gradeOptions.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
+            <div className="subject-view-tools">
+              {secondary && (
+                <div className="subject-chip-row" role="tablist" aria-label="ภาคเรียน">
+                  <span>ภาคเรียน</span>
+                  {([0, 1, 2] as const).map(term => (
+                    <button key={term} type="button" className={`subject-chip ${filterTerm === term ? 'is-active' : ''}`} aria-pressed={filterTerm === term} onClick={() => { termChosen.current = true; setFilterTerm(term) }}>
+                      {term === 0 ? 'ทุกเทอม' : `เทอม ${term}`}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="subject-chip-row" role="tablist" aria-label="ชั้น">
+                <span>ชั้น</span>
+                <button type="button" className={`subject-chip ${filterGrade === '' ? 'is-active' : ''}`} aria-pressed={filterGrade === ''} onClick={() => setFilterGrade('')}>ทุกชั้น</button>
+                {gradeOptions.map(level => {
+                  const count = termPool.filter(subject => subjectGradeLabels(subject, secondary).includes(level)).length
+                  return (
+                    <button key={level} type="button" className={`subject-chip ${filterGrade === level ? 'is-active' : ''}`} aria-pressed={filterGrade === level} onClick={() => setFilterGrade(level)}>
+                      {level} {count}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="form-input"
+                  placeholder="ค้นหา รหัส / ชื่อวิชา / กลุ่มสาระ..."
+                  style={{ flex: 1, minWidth: 200, maxWidth: 360 }}
+                />
+                <select className="form-input" value={activeGroup} onChange={e => setFilterGroup(e.target.value)} style={{ width: 220 }}>
+                  <option value="">ทุกกลุ่มสาระ</option>
+                  {groupChoices.map(section => <option key={section.key || 'none'} value={section.key}>{section.label} ({section.rows.length})</option>)}
+                </select>
+                <button type="button" className={`subject-chip ${groupView ? 'is-active' : ''}`} aria-pressed={groupView} onClick={() => setGroupView(value => !value)}>
+                  {groupView ? 'ดูตามกลุ่มสาระ' : 'ดูเป็นรายการ'}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="data-card" style={{ padding: 20, overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
               <div style={{ minWidth: 0 }}>
                 <div className="section-title" style={{ marginBottom: 6 }}>ข้อมูลรายวิชา</div>
-                {secondary && <p className="mb-2 text-sm text-slate-600">กรอกหน่วยกิต · 0.5 นก. = 1 ชม./สัปดาห์ = 20 ชม./ภาคเรียน (20 สัปดาห์)</p>}
+                {secondary && <p className="mb-2 text-sm text-slate-600">1 คาบ/สัปดาห์ = 0.5 หน่วยกิต · 2 คาบ = 1 · 3 คาบ = 1.5 · 4 คาบ = 2</p>}
                 <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
-                  รายวิชาพื้นฐาน/เพิ่มเติมทั้งหมด {subjects.length} รายการ
+                  แสดง {filtered.length} จาก {subjects.length} วิชา{filterGrade ? ` · ${filterGrade}` : ''}{secondary && filterTerm ? ` · ภาคเรียนที่ ${filterTerm}` : ''} · ชั้นอิงจากห้องที่เปิดวิชานี้
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -999,15 +1153,16 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                     <th style={{ width: 70 }}>ชั้น</th>
                     <th>กลุ่มสาระ</th>
                     <th style={{ width: 80 }}>ประเภท</th>
+                    {secondary && <th style={{ width: 90 }}>ภาคเรียน</th>}
                     <th style={{ width: 100, textAlign: 'right' }}>{secondary ? 'ชม./ภาคเรียน' : 'ชม./ปี'}</th>
                     <th style={{ width: 70, textAlign: 'right' }}>นก.</th>
                     <th style={{ width: 70, textAlign: 'right' }}>เต็ม</th>
                     <th style={{ width: 100 }}>จัดการ</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>
+                {filtered.length === 0 ? (
+                  <tbody>
+                    <tr><td colSpan={columnCount} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 32 }}>
                       {subjects.length === 0 ? (
                         <div>
                           <div style={{ marginBottom: 12 }}>ยังไม่มีรายวิชา</div>
@@ -1016,32 +1171,17 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                           </LoadingButton>
                           <div style={{ marginTop: 10, fontSize: 13 }}>หรือกด「วางจากตาราง」/「เพิ่มรายวิชา」</div>
                         </div>
-                      ) : 'ไม่พบวิชาที่ค้นหา'}
+                      ) : 'ไม่พบวิชาตามชั้น ภาคเรียน หรือกลุ่มสาระที่เลือก'}
                     </td></tr>
-                  ) : filtered.map((s, i) => (
-                    <tr key={s.id}>
-                      <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{i + 1}</td>
-                      <td style={{ fontWeight: 600 }}>{s.code}</td>
-                      <td>{s.name}</td>
-                      <td style={{ fontWeight: 700, color: '#8B6B45' }}>{gradeLabelFromSubject(s)}</td>
-                      <td>
-                        <span style={{
-                          fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
-                          color: GROUP_COLOR[s.subject_group] || '#374151',
-                          background: (GROUP_COLOR[s.subject_group] || '#374151') + '18',
-                        }}>{s.subject_group}</span>
-                      </td>
-                      <td>{s.type}</td>
-                      <td style={{ textAlign: 'right' }}>{secondary ? Number(s.credits) * 40 : s.hours_per_year}</td>
-                      <td style={{ textAlign: 'right' }}>{s.credits}</td>
-                      <td style={{ textAlign: 'right' }}>{s.max_score}</td>
-                      <td>
-                        <button onClick={() => openEdit(s)} style={{ color: 'var(--primary)', fontSize: 13, marginRight: 12, background: 'none', border: 'none', cursor: 'pointer' }}>แก้ไข</button>
-                        <button onClick={() => handleDelete(s)} style={{ color: '#DC2626', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}>ลบ</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                  </tbody>
+                ) : groupView ? grouped.map(section => (
+                  <tbody key={section.key || 'none'}>
+                    <tr className="subject-group-row"><td colSpan={columnCount}>{section.label} · {section.rows.length} วิชา</td></tr>
+                    {section.rows.map((subject, index) => renderSubjectRow(subject, index))}
+                  </tbody>
+                )) : (
+                  <tbody>{filtered.map((subject, index) => renderSubjectRow(subject, index))}</tbody>
+                )}
               </table>
             </div>
           </div>
@@ -1145,7 +1285,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
               </div>
             </div>
             <p style={{ margin: '10px 0 0', color: 'var(--text-3)', fontSize: 13 }}>
-              ปุ่มเพิ่มอัตโนมัติจะดึงรายวิชาที่รหัสตรงกับชั้นนี้ เช่น ม.1 ใช้รหัสขึ้นต้นระดับ 2 ชั้น 1 และ ม.4 ใช้ระดับ 3 ชั้น 1 มัธยมเก็บคนละชุดระหว่างสองภาคเรียน
+              ปุ่มเพิ่มอัตโนมัติจะดึงรายวิชาของชั้นและภาคเรียนที่เลือก จากห้องที่เปิดวิชานี้อยู่แล้ว หรือจากรหัสที่ระบุชั้นไว้ เช่น ท21101 = ม.1 และ ท31101 = ม.4
             </p>
           </div>
 

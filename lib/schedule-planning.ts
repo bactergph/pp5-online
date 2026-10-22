@@ -3,7 +3,7 @@ import { solveSchoolSchedule } from './schedule-solver'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
 export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean }
-export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[] }
+export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[]; roomLabels?: Record<string, string> }
 export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; subjectGroup?: string; fullName?: string; name?: string }
 export function lessonPrefersMorning(lesson: { subjectGroup?: string; fullName?: string; name?: string; label?: string }) {
   return /ภาษาไทย|คณิต|วิทยาศาสตร์|สังคมศึกษา|ภาษาอังกฤษ|ภาษาต่างประเทศ/.test(`${lesson.subjectGroup || ''} ${lesson.fullName || ''} ${lesson.name || ''}`)
@@ -26,6 +26,7 @@ export function validatePlan(plan: SchedulePlan, lessonIds: string[]) {
   if (typeof plan.reduceGaps!=='boolean' || !Number.isInteger(plan.maxContinuous)||plan.maxContinuous<0||plan.maxContinuous>8) throw Error('เงื่อนไขคาบต่อเนื่องไม่ถูกต้อง')
   if (!plan.rules || typeof plan.rules!=='object') throw Error('ข้อมูลภาระสอนไม่ถูกต้อง')
   if (plan.teacherIds && (!Array.isArray(plan.teacherIds) || plan.teacherIds.length>1000 || new Set(plan.teacherIds).size!==plan.teacherIds.length || plan.teacherIds.some(id=>!/^[-0-9a-f]{36}$/i.test(id)))) throw Error('รายการครูที่เลือกไม่ถูกต้อง')
+  if (plan.roomLabels && (typeof plan.roomLabels !== 'object' || Array.isArray(plan.roomLabels) || Object.keys(plan.roomLabels).length > 500 || Object.entries(plan.roomLabels).some(([id, name]) => !/^[-0-9a-f]{36}$/i.test(id) || typeof name !== 'string' || !name.trim() || name.trim().length > 20))) throw Error('ชื่อห้องไม่ถูกต้อง')
   for(const [id,r] of Object.entries(plan.rules)) {
     if (!lessonIds.includes(id) || !Number.isInteger(r.count)||r.count<1||r.count>40 || !Array.isArray(r.pattern)||!r.pattern.length||r.pattern.some(n=>!Number.isInteger(n)||n<1||n>8)||r.pattern.reduce((a,b)=>a+b,0)!==r.count) throw Error('ภาระสอนและผลรวมรูปแบบคาบต้องตรงกัน')
     if (r.roomId && !plan.rooms.some(room=>room.id===r.roomId)) throw Error('ไม่พบห้องสถานที่ที่เลือก')

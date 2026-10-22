@@ -3,9 +3,9 @@ import { useId, useState, type ReactNode } from 'react'
 import { parseSchedulePaste } from '@/lib/schedule-input'
 
 export type InputColumn = { label: string; hint?: string; options?: string[]; readOnly?: boolean }
-export default function ScheduleInputGrid({ columns, rows, onChange, statuses = {}, label, renderCell }: {
+export default function ScheduleInputGrid({ columns, rows, onChange, statuses = {}, label, renderCell, maxRows = 500 }: {
   columns: InputColumn[]; rows: string[][]; onChange: (rows: string[][]) => void
-  statuses?: Record<number, string>; label: string
+  statuses?: Record<number, string>; label: string; maxRows?: number
   renderCell?: (row: string[], column: number, rowIndex: number, update: (value: string) => void) => ReactNode
 }) {
   const id = useId()
@@ -43,6 +43,6 @@ onPaste={e => {
       </td>)}<td><small role="status">{statuses[i] || (row.some(Boolean) ? 'พร้อมตรวจ' : 'แถวว่าง')}</small><button type="button" aria-label={`นำแถว ${i + 1} ออกจากรายการนำเข้า`} onClick={() => onChange(rows.filter((_, n) => n !== i))}>เอาแถวออก</button></td></tr>)}</tbody>
     </table></div>
     {columns.map((c, j) => c.options && <datalist key={j} id={`${id}-${j}`}>{c.options.map(o => <option key={o} value={o} />)}</datalist>)}
-    <button type="button" disabled={rows.length >= 500} onClick={() => onChange([...rows, ...Array.from({ length: Math.min(5, 500 - rows.length) }, empty)])}>+ เพิ่ม 5 แถว</button>
+    <button type="button" disabled={rows.length >= maxRows} onClick={() => onChange([...rows, ...Array.from({ length: Math.min(5, maxRows - rows.length) }, empty)])}>+ เพิ่ม 5 แถว</button>
   </div>
 }

@@ -1,4 +1,4 @@
-/** กลุ่มสาระ 8 กลุ่ม — ต้องตรงกับ subjects_group_check ใน 001_initial_schema.sql */
+/** กลุ่มสาระ 8 กลุ่ม วิชาแนะแนวและสาธารณประโยชน์เว้นว่างได้ ต้องตรงกับ subjects_group_check */
 export const SUBJECT_GROUPS = [
   'ภาษาไทย',
   'คณิตศาสตร์',

@@ -10305,3 +10305,13 @@ body:not([data-nav-pending='1']) .content-shell {
   background: linear-gradient(180deg, #4ADE80, #16A34A) !important;
   box-shadow: 0 6px 14px rgba(22, 163, 74, 0.28) !important;
 }
+
+.subject-view-tools { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.subject-chip-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.subject-chip-row span { font-size: 12px; font-weight: 700; color: #64748b; margin-right: 2px; }
+.subject-chip {
+  min-height: 32px; padding: 4px 10px; border-radius: 999px; border: 1px solid #d7dee8;
+  background: #fff; color: #334155; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.subject-chip.is-active { background: #1373d9; border-color: #1373d9; color: #fff; }
+.subject-group-row td { background: #f4f7fb; font-weight: 800; color: #1e293b; }

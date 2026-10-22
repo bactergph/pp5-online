@@ -36,6 +36,12 @@ export function isTimetableClassroom(level: string) {
   return !/^(?:อ\.?\s*[1-3]$|อนุบาล)/.test(level.trim())
 }
 
+/** Shown room name. A blank custom name falls back to the room number. */
+export function classroomShortName(room: { id?: string; room: number }, labels?: Record<string, string> | null) {
+  const custom = room.id ? labels?.[room.id]?.trim() : ''
+  return custom || String(room.room)
+}
+
 export function scheduleCellKey(day: number, period: number) {
   return `${day}-${period}`
 }

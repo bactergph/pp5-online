@@ -113,13 +113,26 @@ export async function saveSubjectGroupHeads(
   if (!schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
 
   const db = createServerClient()
+  const { attachTypedNamesToStaff } = await import('@/lib/leader-staff')
+  let linked: Record<string, { userId: string | null; name: string | null }>
+  try {
+    linked = await attachTypedNamesToStaff(schoolId, SUBJECT_GROUPS.map(group => ({
+      key: group,
+      name: heads[group]?.name,
+      userId: heads[group]?.userId,
+      position: `หัวหน้า${group}`,
+      role: 'teacher',
+    })))
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'เพิ่มบุคลากรไม่สำเร็จ' }
+  }
   const rows = SUBJECT_GROUPS.map(group => {
-    const entry = heads[group]
+    const row = linked[group]
     return {
       school_id: schoolId,
       subject_group: group,
-      head_name: (entry?.name || '').trim() || null,
-      head_user_id: entry?.userId || null,
+      head_name: row?.name || null,
+      head_user_id: row?.userId || null,
       updated_at: new Date().toISOString(),
     }
   })
@@ -144,7 +157,8 @@ export async function saveSubjectGroupHeads(
       metadata: { groups: SUBJECT_GROUPS.length },
     })
   }
-  return { error: error?.message || null }
+  const savedHeads = Object.fromEntries(rows.map(row => [row.subject_group, { name: row.head_name || '', userId: row.head_user_id }]))
+  return { error: error?.message || null, heads: error ? undefined : savedHeads }
 }
 
 // ค้นหาโรงเรียนจากฐานข้อมูล (สำหรับ admin เลือกโรงเรียนของตน)
@@ -213,6 +227,46 @@ export async function setMySchool(catalogId: string) {
     targetLabel: member.name,
     description: `สร้างโรงเรียนสมาชิกใหม่: ${member.name}${member.member_code ? ` (${member.member_code})` : ''}`,
     metadata: { catalogId, memberCode: member.member_code },
+  })
+  return { error: null }
+}
+
+export async function createMySchool(payload: { name: string; department?: string | null; area_office?: string | null; district?: string | null; province?: string | null }) {
+  const session = await requireSchoolSession(true)
+  if (session.role !== 'admin') return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้น' }
+  const db = createServerClient()
+  if (session.schoolId) {
+    const { data: current } = await db.from('schools')
+      .select('id, is_catalog')
+      .eq('id', session.schoolId)
+      .maybeSingle()
+    if (current && current.is_catalog === false) {
+      return { error: 'บัญชีนี้มีโรงเรียนสมาชิกอยู่แล้ว — ติดต่อ Super Admin หากต้องการล้างการตั้งค่า' }
+    }
+  }
+  const { createMemberSchool } = await import('@/lib/school-member')
+  let member: { id: string; name: string; member_code: string | null }
+  try {
+    member = await createMemberSchool(payload)
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'สร้างโรงเรียนไม่สำเร็จ' }
+  }
+  const { error } = await db.from('users')
+    .update({ school_id: member.id })
+    .eq('id', session.userId)
+  if (error) return { error: error.message }
+  await createSession({ ...session, schoolId: member.id })
+  await seedEvaluationSettingsForSchool(member.id)
+  await logActivity({
+    actor: { ...session, schoolId: member.id },
+    schoolId: member.id,
+    action: 'create',
+    module: 'school',
+    targetType: 'school',
+    targetId: member.id,
+    targetLabel: member.name,
+    description: `สร้างโรงเรียนสมาชิกจากการกรอกเอง: ${member.name}${member.member_code ? ` (${member.member_code})` : ''}`,
+    metadata: { memberCode: member.member_code, source: 'typed' },
   })
   return { error: null }
 }
@@ -418,7 +472,7 @@ export async function fetchSchoolStaff() {
   const { data } = await db.from('users')
     .select('id, prefix, full_name, position, role')
     .eq('school_id', session.schoolId)
-    .eq('is_active', true)
+    .or('is_active.eq.true,email.like.pending-%')
     .order('full_name')
   return data || []
 }
@@ -442,10 +496,34 @@ export async function saveSchoolLeaders(payload: {
   if (!schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
 
   const db = createServerClient()
+  const { actingLeaderRole, attachTypedNamesToStaff } = await import('@/lib/leader-staff')
+  let linked: Record<string, { userId: string | null; name: string | null }>
+  try {
+    linked = await attachTypedNamesToStaff(schoolId, [
+      { key: 'director', name: payload.director_name, userId: payload.director_user_id, position: 'ผู้อำนวยการ', role: 'principal' },
+      { key: 'vice', name: payload.vice_director_name, userId: payload.vice_director_user_id, position: 'รองผู้อำนวยการ', role: 'deputy_principal' },
+      { key: 'acting', name: payload.acting_director, userId: payload.acting_director_user_id, position: (payload.acting_director_position || '').trim() || 'ผู้รักษาการ', role: actingLeaderRole(payload.acting_director_position) },
+      { key: 'academic', name: payload.academic_head_name, userId: payload.academic_head_user_id, position: 'หัวหน้าฝ่ายวิชาการ', role: 'academic_head' },
+      { key: 'measurement', name: payload.measurement_head_name, userId: payload.measurement_head_user_id, position: 'หัวหน้างานวัดผล', role: 'teacher' },
+    ])
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'เพิ่มบุคลากรไม่สำเร็จ' }
+  }
   const updates: Record<string, string | null> = {}
   for (const [key, val] of Object.entries(payload)) {
     if (val !== undefined) updates[key] = val === '' ? null : val
   }
+  const applyLinked = (nameKey: string, userKey: string, slot: string) => {
+    const row = linked[slot]
+    if (!row) return
+    updates[nameKey] = row.name
+    updates[userKey] = row.userId
+  }
+  applyLinked('director_name', 'director_user_id', 'director')
+  applyLinked('vice_director_name', 'vice_director_user_id', 'vice')
+  applyLinked('acting_director', 'acting_director_user_id', 'acting')
+  applyLinked('academic_head_name', 'academic_head_user_id', 'academic')
+  applyLinked('measurement_head_name', 'measurement_head_user_id', 'measurement')
 
   const withoutPendingColumns = () => {
     const next = { ...updates }
@@ -466,7 +544,7 @@ export async function saveSchoolLeaders(payload: {
   if (error?.message?.includes('user_id') || error?.message?.includes('acting_director_position')) {
     ;({ error } = await db.from('schools').update(withoutPendingColumns()).eq('id', schoolId))
   }
-  return { error: error?.message || null }
+  return { error: error?.message || null, leaders: error ? undefined : updates }
 }
 
 export async function updateUser(id: string, payload: Record<string, string | boolean | null>) {
@@ -1498,16 +1576,55 @@ export async function fetchSubjects() {
   return data || []
 }
 
+async function subjectRoomTerms(schoolId: string) {
+  const db = createServerClient()
+  const levelOf = new Map<string, string>()
+  for (let from = 0; ; from += 1000) {
+    const page = await db.from('classrooms').select('id,level').eq('school_id', schoolId).range(from, from + 999)
+    if (page.error) return new Map<string, { levels: string[]; semesters: number[] }>()
+    for (const row of page.data || []) levelOf.set(row.id, row.level)
+    if (!page.data || page.data.length < 1000) break
+  }
+  const seen = new Map<string, { levels: Set<string>; semesters: Set<number> }>()
+  const ids = [...levelOf.keys()]
+  for (let index = 0; index < ids.length; index += 80) {
+    const chunk = ids.slice(index, index + 80)
+    for (let from = 0; ; from += 1000) {
+      const page = await db.from('class_subjects').select('subject_id,semester,classroom_id').in('classroom_id', chunk).range(from, from + 999)
+      if (page.error) return new Map<string, { levels: string[]; semesters: number[] }>()
+      for (const row of page.data || []) {
+        const item = seen.get(row.subject_id) || { levels: new Set<string>(), semesters: new Set<number>() }
+        const level = levelOf.get(row.classroom_id)
+        if (level) item.levels.add(level)
+        if (typeof row.semester === 'number') item.semesters.add(row.semester)
+        seen.set(row.subject_id, item)
+      }
+      if (!page.data || page.data.length < 1000) break
+    }
+  }
+  return new Map([...seen].map(([id, item]) => [id, { levels: [...item.levels], semesters: [...item.semesters] }]))
+}
+
 export async function fetchSubjectSettingsInit() {
   const session = await requireSchoolSession()
   const db = createServerClient()
-  const [subjects, school] = await Promise.all([fetchSubjects(), session.schoolId ? getSchoolShell(session.schoolId) : Promise.resolve(null)])
+  const [subjects, school, placements] = await Promise.all([
+    fetchSubjects(),
+    session.schoolId ? getSchoolShell(session.schoolId) : Promise.resolve(null),
+    session.schoolId ? subjectRoomTerms(session.schoolId) : Promise.resolve(new Map<string, { levels: string[]; semesters: number[] }>()),
+  ])
   let levels: string[] = []
   if (session.schoolId && school?.education_type !== 'primary' && school?.education_type !== 'secondary') {
     const rooms = await db.from('classrooms').select('level').eq('school_id', session.schoolId).in('level', ['ม.4', 'ม.5', 'ม.6']).limit(1)
     levels = (rooms.data || []).map(row => row.level)
   }
-  return { subjects, educationType: resolveSchoolEducationType(school?.education_type, levels) }
+  return {
+    subjects: (subjects || []).map(subject => {
+      const place = placements.get(subject.id)
+      return { ...subject, levels: place?.levels || [], semesters: place?.semesters || [] }
+    }),
+    educationType: resolveSchoolEducationType(school?.education_type, levels),
+  }
 }
 
 export async function saveSubject(id: string | null, payload: Record<string, unknown>) {
@@ -1524,8 +1641,11 @@ export async function saveSubject(id: string | null, payload: Record<string, unk
       payload = { ...payload, credits: hours.credits, hours_per_year: hours.annual }
     } catch (error) { return { error: error instanceof Error ? error.message : 'หน่วยกิตไม่ถูกต้อง' } }
   }
+  const level = typeof payload.level === 'string' ? payload.level.trim() : ''
+  if (level && !['ป.1', 'ป.2', 'ป.3', 'ป.4', 'ป.5', 'ป.6', 'ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6'].includes(level)) return { error: 'ชั้นไม่ถูกต้อง' }
   payload = {
     code, name, short_name: payload.short_name, subject_group: payload.subject_group,
+    level: level || null,
     type: payload.type, hours_per_year: payload.hours_per_year,
     credits: payload.credits, max_score: payload.max_score,
   }
@@ -1536,50 +1656,47 @@ export async function saveSubject(id: string | null, payload: Record<string, unk
     if (error) return { error: 'ตรวจสอบรายวิชาไม่สำเร็จ กรุณาลองใหม่' }
     if (!existing) return { error: 'ไม่พบรายวิชาที่ต้องการแก้ไขในโรงเรียนนี้ กรุณาโหลดหน้าใหม่' }
   }
-  const { data: duplicate, error: lookupError } = await db.from('subjects').select('id, code, name')
-    .eq('school_id', session.schoolId).eq('code', code).maybeSingle()
-  if (lookupError) return { error: 'ตรวจสอบรหัสวิชาไม่สำเร็จ กรุณาลองใหม่' }
-  if (duplicate && duplicate.id !== id) {
-    return { error: `รหัสวิชา ${code} ถูกใช้โดยรายวิชา “${duplicate.name}” แล้ว กรุณาแก้ไขรายวิชาเดิมหรือใช้รหัสวิชาอื่น` }
+  const sameCode = await db.from('subjects').select('id, code, name, level').eq('school_id', session.schoolId).eq('code', code)
+  const levelColumnMissing = !!sameCode.error && /level/i.test(sameCode.error.message) && /does not exist|schema cache/i.test(sameCode.error.message)
+  if (levelColumnMissing && level) {
+    return { error: 'รหัสวิชาใช้ซ้ำได้เมื่อคนละชั้น กรุณารันไฟล์ supabase/migrations/077_subject_code_per_level.sql ใน SQL Editor แล้วลองใหม่' }
   }
+  if (sameCode.error && !levelColumnMissing) return { error: 'ตรวจสอบรหัสวิชาไม่สำเร็จ กรุณาลองใหม่' }
+  const duplicateRows = levelColumnMissing
+    ? (await db.from('subjects').select('id, code, name').eq('school_id', session.schoolId).eq('code', code)).data || []
+    : sameCode.data || []
+  const duplicate = duplicateRows.find(row => row.id !== id && (levelColumnMissing || ((row as { level?: string | null }).level || '') === (level || '')))
+  if (duplicate) {
+    return { error: level ? `รหัสวิชา ${code} มีในชั้น ${level} แล้ว` : `รหัสวิชา ${code} ที่ยังไม่กำหนดชั้นมีอยู่แล้ว${levelColumnMissing ? ' ถ้ารหัสนี้คนละชั้น ให้รันไฟล์ supabase/migrations/077_subject_code_per_level.sql' : ' ระบุชั้นให้ต่างจากรายการเดิม'}` }
+  }
+  const missingLevelColumn = (message?: string) => /level/i.test(message || '') && /does not exist|schema cache/i.test(message || '')
   const saveError = (error: { code?: string; message: string } | null) =>
     error?.code === '23505'
-      ? `รหัสวิชา ${code} มีอยู่ในโรงเรียนแล้ว กรุณาโหลดรายการใหม่และแก้ไขรายวิชาเดิม หรือใช้รหัสวิชาอื่น`
-      : error?.message
-  if (id) {
-    const { data: updated, error } = await db.from('subjects').update(payload).eq('id', id)
-      .eq('school_id', session.schoolId).select('id').maybeSingle()
-    if (!error && !updated) return { error: 'ไม่พบรายวิชาที่ต้องการแก้ไข กรุณาโหลดหน้าใหม่' }
-    if (!error) {
-      await logActivity({
-        actor: session,
-        schoolId: session.schoolId,
-        action: 'update',
-        module: 'subjects',
-        targetType: 'subject',
-        targetId: id,
-        targetLabel: String(payload.name || payload.code || 'รายวิชา'),
-        description: `แก้ไขรายวิชา ${payload.name || payload.code || ''}`.trim(),
-        metadata: { fields: Object.keys(payload) },
-      })
-    }
-    return { error: saveError(error) }
-  }
-  const { data, error } = await db.from('subjects').insert({ ...payload, school_id: session.schoolId }).select('id').single()
-  if (!error) {
+      ? `รหัสวิชา ${code}${level ? ` ชั้น ${level}` : ''} ซ้ำไม่ได้ ถ้ารหัสนี้คนละชั้นแล้วยังบันทึกไม่ได้ ให้รันไฟล์ supabase/migrations/077_subject_code_per_level.sql`
+      : missingLevelColumn(error?.message) || /subjects_level_check/i.test(error?.message || '')
+        ? 'ยังบันทึกชั้นไม่ได้ กรุณารันไฟล์ supabase/migrations/076_subject_level.sql ใน SQL Editor แล้วลองใหม่'
+        : error?.message
+  const { level: _level, ...withoutLevel } = payload
+  const persist = (body: Record<string, unknown>) => id
+    ? db.from('subjects').update(body).eq('id', id).eq('school_id', session.schoolId).select('id').maybeSingle()
+    : db.from('subjects').insert({ ...body, school_id: session.schoolId }).select('id').single()
+  let saved = await persist(payload)
+  if (saved.error && missingLevelColumn(saved.error.message) && !level) saved = await persist(withoutLevel)
+  if (!saved.error && id && !saved.data) return { error: 'ไม่พบรายวิชาที่ต้องการแก้ไข กรุณาโหลดหน้าใหม่' }
+  if (!saved.error) {
     await logActivity({
       actor: session,
       schoolId: session.schoolId,
-      action: 'create',
+      action: id ? 'update' : 'create',
       module: 'subjects',
       targetType: 'subject',
-      targetId: data?.id ?? null,
+      targetId: id || saved.data?.id || null,
       targetLabel: String(payload.name || payload.code || 'รายวิชา'),
-      description: `เพิ่มรายวิชา ${payload.name || payload.code || ''}`.trim(),
-      metadata: { code: typeof payload.code === 'string' ? payload.code : null },
+      description: `${id ? 'แก้ไข' : 'เพิ่ม'}รายวิชา ${payload.name || payload.code || ''}`.trim(),
+      metadata: id ? { fields: Object.keys(payload) } : { code },
     })
   }
-  return { error: saveError(error) }
+  return { error: saveError(saved.error) }
 }
 
 export async function deleteAllSubjects() {
@@ -2739,23 +2856,24 @@ export async function bulkUpsertSubjects(rows: {
   const school = await getSchoolShell(session.schoolId)
   let payload
   try {
-    payload = rows.map(r => ({ ...r, ...(school?.education_type === 'secondary' ? { hours_per_year: secondaryCreditHours(r.credits).annual } : {}), school_id: session.schoolId }))
+    payload = rows.map(r => ({ ...r, level: null, ...(school?.education_type === 'secondary' ? { hours_per_year: secondaryCreditHours(r.credits).annual } : {}), school_id: session.schoolId }))
   } catch { return { error: 'รายวิชามัธยมต้องมีหน่วยกิตตั้งแต่ 0.5 และเพิ่มครั้งละ 0.5 กรุณาตรวจรายการนำเข้า', count: 0 } }
-  const { data, error } = await db.from('subjects')
-    .upsert(payload, { onConflict: 'school_id,code' })
-    .select('id')
-  if (!error) {
+  let saved = await db.from('subjects').upsert(payload, { onConflict: 'school_id,code,level' }).select('id')
+  if (saved.error && /unique|constraint|level|schema cache/i.test(saved.error.message)) {
+    saved = await db.from('subjects').upsert(payload.map(({ level: _level, ...row }) => row), { onConflict: 'school_id,code' }).select('id')
+  }
+  if (!saved.error) {
     await logActivity({
       actor: session,
       schoolId: session.schoolId,
       action: 'upsert',
       module: 'subjects',
       targetType: 'subject',
-      description: `นำเข้า/อัปเดตรายวิชา ${data?.length ?? 0} รายการ`,
-      metadata: { count: data?.length ?? 0 },
+      description: `นำเข้า/อัปเดตรายวิชา ${saved.data?.length ?? 0} รายการ`,
+      metadata: { count: saved.data?.length ?? 0 },
     })
   }
-  return { error: error?.message, count: data?.length ?? 0 }
+  return { error: saved.error?.message, count: saved.data?.length ?? 0 }
 }
 
 /** ดึงรายวิชากลางที่ active ให้โรงเรียนดู/นำเข้า */

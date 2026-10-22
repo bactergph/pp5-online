@@ -31,6 +31,18 @@ export async function createMemberSchoolFromCatalog(catalogId:string) {
   return insertMemberSchool(db,src)
 }
 
+/** Self-service onboarding: the school types its own name instead of picking a catalog row. */
+export async function createMemberSchool(input:CatalogTemplate) {
+  const name=input.name?.trim()||''
+  if(name.length<2) throw new Error('กรอกชื่อโรงเรียนอย่างน้อย 2 ตัวอักษร')
+  const clean=(value?:string|null)=>{const text=value?.trim()||'';return text||null}
+  return insertMemberSchool(createServerClient(),{
+    name,department:clean(input.department),area_office:clean(input.area_office),
+    district:clean(input.district),province:clean(input.province),address:clean(input.address),
+    phone:clean(input.phone),document_prefix:clean(input.document_prefix),
+  })
+}
+
 async function insertMemberSchool(db:ReturnType<typeof createServerClient>,src:CatalogTemplate) {
   for(let attempt=0;attempt<5;attempt++) {
     const memberCode=generateMemberCode()

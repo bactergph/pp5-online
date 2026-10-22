@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation'
 import LoadingButton from '@/components/LoadingButton'
 import { type StaffOption } from '@/components/StaffPicker'
 import SchoolLeadersPanel from '@/components/settings/SchoolLeadersPanel'
-import { fetchMySchool, saveSchool, searchSchools, setMySchool, updateSchoolActingDirector, fetchSubjectGroupHeads, saveSubjectGroupHeads, fetchSchoolStaff, saveSchoolLeaders } from '../actions'
+import { fetchMySchool, saveSchool, searchSchools, setMySchool, createMySchool, updateSchoolActingDirector, fetchSubjectGroupHeads, saveSubjectGroupHeads, fetchSchoolStaff, saveSchoolLeaders } from '../actions'
 import { loadSchoolSettings } from '@/lib/school-settings-boot'
 import GoogleDriveIntegrationPanel from '@/components/settings/GoogleDriveIntegrationPanel'
 import DmcImportTool, { type DmcImportAction } from '@/components/settings/DmcImportTool'
@@ -46,7 +46,7 @@ const schoolSettingTabs = Array.isArray(SCHOOL_SETTING_TABS) ? SCHOOL_SETTING_TA
 
 // ── ขั้นตอน onboarding (wizard เต็มจอสำหรับผู้ใช้ใหม่) ──
 const ONBOARDING_STEPS: { key: string; label: string; title: string; desc: string; icon: string }[] = [
-  { key: 'school', label: 'เลือกโรงเรียน', title: 'เลือกโรงเรียนของคุณ', desc: 'ค้นหาและเลือกโรงเรียนจากฐานข้อมูลที่สำนักงานเขตเตรียมไว้', icon: 'M3 21h18 M5 21V7l7-4 7 4v14 M9 21v-6h6v6' },
+  { key: 'school', label: 'กรอกโรงเรียน', title: 'กรอกข้อมูลโรงเรียน', desc: 'พิมพ์ชื่อโรงเรียนและพื้นที่ด้วยตัวเอง', icon: 'M3 21h18 M5 21V7l7-4 7 4v14 M9 21v-6h6v6' },
   { key: 'general', label: 'ข้อมูลทั่วไป', title: 'ข้อมูลทั่วไป', desc: 'ข้อมูลที่ใช้บนเอกสารราชการและรายงานของโรงเรียน', icon: 'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5' },
   { key: 'leaders', label: 'ผู้บริหาร/ผู้รับผิดชอบ', title: 'ผู้บริหารและผู้รับผิดชอบ', desc: 'ชื่อที่ใช้ลงนามในเอกสารและรายงานสรุป', icon: 'M12 12a4 4 0 100-8 4 4 0 000 8z M4 22a8 8 0 0116 0' },
   { key: 'login', label: 'ลิงก์เข้าโรงเรียน', title: 'ตั้งลิงก์เข้าสู่ระบบโรงเรียน', desc: 'ตั้ง URL โรงเรียนสำหรับลิงก์เข้าระบบของครูและบุคลากร', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
@@ -146,6 +146,7 @@ export default function SchoolSettingsPage() {
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const formRef = useRef<HTMLFormElement>(null)
   // school picker (กรณี admin ยังไม่ได้เลือกโรงเรียน)
+  const [schoolDraft, setSchoolDraft] = useState({ name: '', department: '', area_office: '', district: '', province: '' })
   const [q, setQ] = useState('')
   const [results, setResults] = useState<{ id: string; name: string; area_office: string; district: string; province: string }[]>([])
   const [busy, setBusy] = useState(false)
@@ -188,6 +189,13 @@ export default function SchoolSettingsPage() {
       if (!active) return
       if (data) {
         setSchool(data)
+        setSchoolDraft({
+          name: data.name || '',
+          department: data.department || '',
+          area_office: data.area_office || '',
+          district: data.district || '',
+          province: data.province || '',
+        })
         setViceDirectorName(data.vice_director_name || '')
         setDirectorName(data.director_name || '')
         setActingDirector(data.acting_director || '')
@@ -228,6 +236,33 @@ export default function SchoolSettingsPage() {
     // ผู้ใช้เดิม (กดเปลี่ยนโรงเรียน) → reload ตามปกติ
     if (!school.id || inOnboarding) window.location.assign('/settings/school?onboarding=1&step=1')
     else window.location.reload()
+  }
+  async function saveSchoolIdentityStep() {
+    const updates = {
+      name: schoolDraft.name.trim(),
+      department: schoolDraft.department.trim(),
+      area_office: schoolDraft.area_office.trim(),
+      district: schoolDraft.district.trim(),
+      province: schoolDraft.province.trim(),
+    }
+    if (updates.name.length < 2) { setPickerErr('กรอกชื่อโรงเรียนอย่างน้อย 2 ตัวอักษร'); return }
+    setStepSaving(true); setPickerErr(null); clearAlert()
+    try {
+      if (school.id) {
+        const { error } = await saveSchool(school.id, updates)
+        setStepSaving(false)
+        if (error) { setPickerErr(error); return }
+        setSchool(current => ({ ...current, ...updates }))
+        goStep(1)
+        return
+      }
+      const { error } = await createMySchool(updates)
+      if (error) { setStepSaving(false); setPickerErr(error); return }
+      afterSchoolChosen()
+    } catch (e) {
+      setStepSaving(false)
+      setPickerErr(e instanceof Error ? e.message : 'บันทึกโรงเรียนไม่สำเร็จ')
+    }
   }
   async function pickSchool(id: string) {
     setBusy(true); setPickerErr(null)
@@ -297,9 +332,8 @@ export default function SchoolSettingsPage() {
     goStep(step + 1)
   }
   // บันทึกผู้บริหาร + หัวหน้ากลุ่มสาระ แล้วไปต่อ
-  async function saveLeadersStep() {
-    setStepSaving(true); clearAlert()
-    const leadersError = (await saveSchoolLeaders({
+  function leaderFormPayload() {
+    return {
       director_name: directorName,
       director_user_id: directorUserId,
       vice_director_name: viceDirectorName,
@@ -311,13 +345,35 @@ export default function SchoolSettingsPage() {
       academic_head_user_id: academicHeadUserId,
       measurement_head_name: measurementHeadName,
       measurement_head_user_id: measurementHeadUserId,
-    })).error
-    const headsError = leadersError ? null : (await saveSubjectGroupHeads(
+    }
+  }
+  function applySavedLeaders(leaders?: Record<string, string | null>, heads?: Record<string, { name: string; userId: string | null }>) {
+    if (leaders) {
+      if ('director_user_id' in leaders) setDirectorUserId(leaders.director_user_id)
+      if ('director_name' in leaders) setDirectorName(leaders.director_name || '')
+      if ('vice_director_user_id' in leaders) setViceDirectorUserId(leaders.vice_director_user_id)
+      if ('vice_director_name' in leaders) setViceDirectorName(leaders.vice_director_name || '')
+      if ('acting_director_user_id' in leaders) setActingDirectorUserId(leaders.acting_director_user_id)
+      if ('acting_director' in leaders) setActingDirector(leaders.acting_director || '')
+      if ('academic_head_user_id' in leaders) setAcademicHeadUserId(leaders.academic_head_user_id)
+      if ('academic_head_name' in leaders) setAcademicHeadName(leaders.academic_head_name || '')
+      if ('measurement_head_user_id' in leaders) setMeasurementHeadUserId(leaders.measurement_head_user_id)
+      if ('measurement_head_name' in leaders) setMeasurementHeadName(leaders.measurement_head_name || '')
+    }
+    if (heads) setSubjectGroupHeads(heads)
+  }
+  async function saveLeadersStep() {
+    setStepSaving(true); clearAlert()
+    const leadersResult = await saveSchoolLeaders(leaderFormPayload())
+    if (leadersResult.error) { setStepSaving(false); notify('error', leadersResult.error); return }
+    applySavedLeaders(leadersResult.leaders)
+    const headsResult = await saveSubjectGroupHeads(
       Object.fromEntries(SUBJECT_GROUPS.map(group => [group, subjectGroupHeads[group] || { name: '', userId: null }])),
-    )).error
+    )
+    if (!headsResult.error && headsResult.heads) setSubjectGroupHeads(headsResult.heads)
+    setStaff(await fetchSchoolStaff() as StaffOption[])
     setStepSaving(false)
-    if (leadersError) { notify('error', leadersError); return }
-    if (headsError) { notify('error', headsError); return }
+    if (headsResult.error) { notify('error', headsResult.error); return }
     goStep(step + 1)
   }
 
@@ -332,26 +388,15 @@ export default function SchoolSettingsPage() {
         .map(k => [k, fd.get(k) as string | null])
     )
     const { error } = await saveSchool(school.id || null, updates)
-    const leadersError = school.id
-      ? (await saveSchoolLeaders({
-        director_name: directorName,
-        director_user_id: directorUserId,
-        vice_director_name: viceDirectorName,
-        vice_director_user_id: viceDirectorUserId,
-        acting_director: actingDirector,
-        acting_director_position: actingDirectorPosition,
-        acting_director_user_id: actingDirectorUserId,
-        academic_head_name: academicHeadName,
-        academic_head_user_id: academicHeadUserId,
-        measurement_head_name: measurementHeadName,
-        measurement_head_user_id: measurementHeadUserId,
-      })).error
+    const leadersResult = school.id ? await saveSchoolLeaders(leaderFormPayload()) : null
+    const leadersError = leadersResult?.error || null
+    if (leadersResult?.leaders) applySavedLeaders(leadersResult.leaders)
+    const headsResult = school.id && !leadersError
+      ? await saveSubjectGroupHeads(Object.fromEntries(SUBJECT_GROUPS.map(group => [group, subjectGroupHeads[group] || { name: '', userId: null }])))
       : null
-    const headsError = school.id
-      ? (await saveSubjectGroupHeads(
-        Object.fromEntries(SUBJECT_GROUPS.map(group => [group, subjectGroupHeads[group] || { name: '', userId: null }])),
-      )).error
-      : null
+    const headsError = headsResult?.error || null
+    if (headsResult?.heads) setSubjectGroupHeads(headsResult.heads)
+    if (school.id && !leadersError) setStaff(await fetchSchoolStaff() as StaffOption[])
     setSaving(false)
     if (error) notify('error', error)
     else if (leadersError) notify('error', leadersError)
@@ -551,7 +596,8 @@ export default function SchoolSettingsPage() {
     const progressPct = (step / lastIndex) * 100
 
     let primaryBtn: React.ReactNode = null
-    if (step === 1) primaryBtn = <LoadingButton type="button" loading={stepSaving} onClick={saveGeneralStep} className="btn btn-primary btn-lg">บันทึกและไปต่อ</LoadingButton>
+    if (step === 0) primaryBtn = <LoadingButton type="button" loading={stepSaving} onClick={saveSchoolIdentityStep} className="btn btn-primary btn-lg">บันทึกและไปต่อ</LoadingButton>
+    else if (step === 1) primaryBtn = <LoadingButton type="button" loading={stepSaving} onClick={saveGeneralStep} className="btn btn-primary btn-lg">บันทึกและไปต่อ</LoadingButton>
     else if (step === 2) primaryBtn = <LoadingButton type="button" loading={stepSaving} onClick={saveLeadersStep} className="btn btn-primary btn-lg">บันทึกและไปต่อ</LoadingButton>
     else if (step === 3) primaryBtn = <LoadingButton type="button" loading={stepSaving} onClick={saveLoginStep} className="btn btn-primary btn-lg">บันทึกและไปต่อ</LoadingButton>
     else if (step === 4 || step === 5 || step === 7) primaryBtn = <button type="button" onClick={() => goStep(step + 1)} className="btn btn-primary btn-lg">ไปต่อ</button>
@@ -641,7 +687,28 @@ export default function SchoolSettingsPage() {
             </div>
 
             <div className="wizard-content">
-              {step === 0 && schoolPickerCard}
+              {step === 0 && (
+                <form onSubmit={e => { e.preventDefault(); void saveSchoolIdentityStep() }} className="card-padded school-settings-card">
+                  {pickerErr && <div className="alert alert-error" style={{ marginBottom: 16 }}>{pickerErr}</div>}
+                  <div className="school-form-grid">
+                    <div className="school-field-wide">
+                      <label className="form-label" htmlFor="onboarding-school-name">ชื่อโรงเรียน *</label>
+                      <input id="onboarding-school-name" className="form-input" value={schoolDraft.name} onChange={e => setSchoolDraft(current => ({ ...current, name: e.target.value }))} placeholder="เช่น โรงเรียนหนองวัวซอพิทยาคม" autoFocus required />
+                    </div>
+                    {([
+                      ['department', 'สังกัด', 'เช่น สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน'],
+                      ['area_office', 'สำนักงานเขตพื้นที่การศึกษา', 'เช่น สพม.อุดรธานี'],
+                      ['district', 'อำเภอ', 'เช่น หนองวัวซอ'],
+                      ['province', 'จังหวัด', 'เช่น อุดรธานี'],
+                    ] as const).map(([key, label, placeholder]) => (
+                      <div key={key}>
+                        <label className="form-label" htmlFor={`onboarding-school-${key}`}>{label}</label>
+                        <input id={`onboarding-school-${key}`} className="form-input" value={schoolDraft[key]} onChange={e => setSchoolDraft(current => ({ ...current, [key]: e.target.value }))} placeholder={placeholder} />
+                      </div>
+                    ))}
+                  </div>
+                </form>
+              )}
 
               {step === 1 && (
                 <form ref={generalFormRef} onSubmit={e => { e.preventDefault(); saveGeneralStep() }} className="card-padded school-settings-card">
@@ -1015,7 +1082,7 @@ export default function SchoolSettingsPage() {
             <div className="school-card-head">
               <div>
                 <div className="section-title">ผู้บริหารและผู้รับผิดชอบ</div>
-                <p>เลือกจากรายชื่อในระบบเพื่อลงนามดิจิทัลได้ — หรือพิมพ์ชื่อเองสำหรับเอกสาร</p>
+                <p>เลือกจากรายชื่อในระบบ หรือพิมพ์ชื่อเอง แล้วบันทึกเพื่อเพิ่มเป็นบุคลากรของโรงเรียน</p>
               </div>
             </div>
             {renderLeadersPanel({ showSaveCta: true })}

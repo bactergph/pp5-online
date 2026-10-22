@@ -261,7 +261,7 @@ export default function StaffPicker({
           </div>
           {!value && (
             <p className="staff-picker__hint staff-picker__hint--warn">
-              มีชื่อบนเอกสาร แต่ลงนามดิจิทัลไม่ได้ — ควรเลือกจากรายชื่อในระบบ
+              บันทึกแล้วชื่อนี้จะถูกเพิ่มในบุคลากรของโรงเรียน
             </p>
           )}
         </>
