@@ -37,9 +37,9 @@ function placedCount(slots: ScheduleSlot[], lessonId: string) {
   for (const slot of slots) if (slot.class_subject_id === lessonId) cells.add(`${slot.day_of_week}:${slot.period}`)
   return cells.size
 }
-const workloadNumbers = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 })
+const workloadNumbers = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 })
 function numberRange(values: number[]) {
-  const min = Math.min(...values), max = Math.max(...values)
+  const min = Math.round(Math.min(...values)), max = Math.round(Math.max(...values))
   const number = (value: number) => workloadNumbers.format(value)
   return min === max ? number(min) : `${number(min)}–${number(max)}`
 }
@@ -397,7 +397,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
         const weekly = validCounts ? `${numberRange(uniformMinutes ? counts.map(count => count * uniformMinutes / 60) : counts)} ${uniformMinutes ? 'ชม.' : 'คาบ'}/สัปดาห์/ห้อง` : 'ยังต้องกำหนดคาบต่อสัปดาห์'
         return <li key={card.id}><button type="button" className={allComplete ? 'is-complete' : undefined} data-state={allComplete ? 'complete' : complete ? 'partial' : 'empty'} onClick={() => openCode(card.id)}>
           <strong>{card.name}</strong><b>{card.code}</b>
-          <span className="prep-code-weekly">{weekly}</span>
+          <span className="prep-code-weekly" title={uniformMinutes ? 'ชั่วโมงต่อสัปดาห์ ปัดเป็นจำนวนเต็มตามเวลาคาบที่ตั้งไว้' : undefined}>{weekly}</span>
           {validCounts && <small className="prep-code-period-count">{uniformMinutes ? `${numberRange(counts)} คาบ · คาบละ ${uniformMinutes} นาที` : 'ชั่วโมงขึ้นอยู่กับระยะเวลาคาบที่จัด'}</small>}
           <small>{card.lessons.length} ห้อง · มีครู {assigned} ห้อง</small>
           <span className={`prep-code-status${allComplete ? ' is-complete' : ''}`}>{allComplete ? '✓ กำหนดครบแล้ว' : complete ? `กำหนดครบ ${complete}/${card.lessons.length} ห้อง` : assigned ? 'ยังต้องตรวจภาระสอน' : 'ยังไม่กำหนดครู'}</span>
