@@ -353,6 +353,13 @@
 .schedule-prep .prep-load-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .schedule-prep .prep-load-toolbar span,.schedule-prep .prep-load-save span{color:#52647c;font-size:14px}
 .schedule-prep .prep-load-save{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.schedule-prep .prep-workload-status{font-size:14px;line-height:1.6;color:#166534;overflow-wrap:anywhere}
+.schedule-prep .prep-workload-status.is-error{color:#9f1239}
+.schedule-prep .prep-load-save{flex-wrap:wrap}
+.schedule-prep .prep-code-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
+.schedule-prep .prep-code-settings label{display:grid;gap:6px;min-width:0;align-content:start}
+.schedule-prep .prep-code-settings select{width:100%;min-width:0;max-width:100%}
+.schedule-prep .prep-activity-dialog>footer>.prep-workload-status{flex:1 0 100%;margin:0}
 .schedule-prep .prep-load-count{display:grid;gap:6px;max-width:180px;margin:0 0 12px;font-size:13px;font-weight:700}
 .schedule-prep .prep-load-place{display:flex;gap:8px;margin-top:10px}
 .schedule-prep .prep-load-place input{flex:1}

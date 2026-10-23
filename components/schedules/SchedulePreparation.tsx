@@ -9,7 +9,7 @@ import ScheduleReviewStep, { type ScheduleDraftView } from './ScheduleReviewStep
 import ScheduleDataInput from './ScheduleDataInput'
 import WizardPeriodEditor from './WizardPeriodEditor'
 import ActivityTeamEditor from './ActivityTeamEditor'
-import WorkloadEditor from './WorkloadEditor'
+import WorkloadEditor, { type WorkloadChange } from './WorkloadEditor'
 import ClassroomLevelEditor from './ClassroomLevelEditor'
 import { savePeriodTimes } from '@/app/schedules/actions'
 import './schedule-preparation.css'
@@ -43,9 +43,34 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  setDirty(false);setIssues(null);setDraft(null);setMessage('บันทึกการตั้งค่าแล้ว');onChanged()}
  async function reload(){const r=await fetchPreparation(yearId,semester);if(r.error||!r.data)throw Error(r.error||'โหลดไม่สำเร็จ');setData(r.data);setDirty(false);setTimeDirty(false);setTeacherAssignments({});setIssues(null);setDraft(null);onChanged()}
  async function refreshLocks(){const latest=await fetchPreparation(yearId,semester);if(latest.error||!latest.data)throw Error(latest.error||'โหลดคาบที่ล็อกไม่สำเร็จ');setData(current=>current?{...current,hash:latest.data!.hash,slots:latest.data!.slots,blocks:latest.data!.blocks}:latest.data);setDraft(null);setIssues(null)}
+ async function saveWorkload(change:WorkloadChange){
+ if(!data||runLock.current)throw Error('กำลังบันทึก กรุณารอให้เสร็จก่อน')
+ if(dirty||timeDirty||hasUnsavedInput)throw Error('บันทึกการตั้งค่าหรือข้อมูลในขั้นก่อนหน้าให้เรียบร้อยก่อนกำหนดภาระสอน')
+ runLock.current=true;setBusy(true);setWorkingLabel('กำลังบันทึกภาระสอน…');setError('');setMessage('');setIssues(null);setDraft(null)
+ let planSaved=false
+ try{
+ let saved=data
+ const plan={...data.plan,rules:{...data.plan.rules,...Object.fromEntries((change.rules||[]).map(rule=>[rule.lessonId,rule.value]))},rooms:[...data.plan.rooms,...(change.places||[]).filter(place=>!data.plan.rooms.some(existing=>existing.id===place.id))]}
+ if(JSON.stringify(plan)!==JSON.stringify(data.plan)){
+ const result=await savePreparation(yearId,semester,saved.hash,plan)
+ if(result.error||!result.data)throw Error(result.error||'บันทึกภาระสอนไม่สำเร็จ')
+ saved=result.data;setData(saved);planSaved=true
+ }
+ const changed=change.assignments.filter(row=>(saved.lessons.find(lesson=>lesson.id===row.lessonId)?.teacherId||'')!==row.teacherId)
+ if(changed.length){
+ const result=await saveScheduleTeachingAssignments(yearId,semester,saved.hash,changed)
+ if(result.error||!result.data)throw Error(result.error||'บันทึกครูผู้สอนไม่สำเร็จ')
+ saved=result.data;setData(saved)
+ }
+ onChanged()
+ }catch(error){
+ const detail=error instanceof Error?error.message:'บันทึกภาระสอนไม่สำเร็จ'
+ const message=planSaved?`${detail}\nบันทึกคาบและเงื่อนไขแล้ว แต่ครูผู้สอนยังบันทึกไม่สำเร็จ กดบันทึกเพื่อลองใหม่`:detail
+ setError(message);throw Error(message)
+ }finally{runLock.current=false;setBusy(false)}
+ }
  if(!data)return <section className="schedule-prep" role="status">{error||'กำลังตรวจข้อมูลเตรียมตาราง…'}{error&&<button onClick={()=>void run(reload)}>ลองใหม่</button>}</section>
  const rule=(id:string,count:number):LessonRule=>data.plan.rules[id]||{count,pattern:Array(Math.max(0,Math.min(40,count))).fill(1),roomId:null,morning:false,spread:true}
- const updateRule=(id:string,count:number,patch:Partial<LessonRule>)=>edit(d=>{const current=d.plan.rules[id]||{count,pattern:Array(Math.max(0,Math.min(40,count))).fill(1),roomId:null,morning:false,spread:true};return {...d,plan:{...d.plan,rules:{...d.plan.rules,[id]:{...current,...patch}}}}})
  const scopedLessons=data.lessons.filter(l=>data.classrooms.some(c=>c.id===l.classroomId))
  const teaching=scopedLessons.filter(l=>!l.activity)
  const eligibleTeachers=data.plan.teacherIds??data.teachers.map(t=>t.id)
@@ -65,7 +90,7 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  {step===1&&<><h2>วันและเวลาคาบเรียน</h2><p>เลือกวันเรียน แล้วปรับเวลาและช่วงพักได้ที่นี่</p><div className="prep-checks">{SCHEDULE_DAYS.map(day=><label key={day.value}><input type="checkbox" checked={data.plan.days.includes(day.value)} onChange={()=>edit(d=>({...d,plan:{...d.plan,days:d.plan.days.includes(day.value)?d.plan.days.filter(v=>v!==day.value):[...d.plan.days,day.value].sort()}}))}/>{day.label}</label>)}</div><WizardPeriodEditor rows={data.periods} configured={data.timesConfigured} dirty={dirty||timeDirty} onSave={()=>void run(save)} onChange={periods=>{setData({...data,periods});setTimeDirty(true);setIssues(null);setDraft(null)}}/></>}
 
  {step===2&&<ClassroomLevelEditor classrooms={data.classrooms} year={yearId} term={semester} locked={dirty||timeDirty} busy={busy} onSaved={reload} onBusy={setBusy}/>}
- {step===6&&<WorkloadEditor classrooms={data.classrooms} lessons={teaching} teachers={data.teachers.filter(t=>eligibleTeachers.includes(t.id))} rules={data.plan.rules} teacherAssignments={teacherAssignments} slots={data.slots} places={data.plan.rooms} blocks={data.blocks} days={data.plan.days} periods={data.periods} year={yearId} term={semester} busy={busy} dirty={dirty} ready={workloadReady} onRule={updateRule} onAssign={(ids,teacherId)=>{setTeacherAssignments(v=>({...v,...Object.fromEntries(ids.map(id=>[id,teacherId]))}));edit(d=>d)}} onAddPlace={place=>edit(d=>({...d,plan:{...d.plan,rooms:[...d.plan.rooms,place]}}))} onRefresh={refreshLocks} onSave={()=>void run(save)}/>}
+ {step===6&&<WorkloadEditor classrooms={data.classrooms} lessons={teaching} teachers={data.teachers.filter(t=>eligibleTeachers.includes(t.id))} rules={data.plan.rules} teacherAssignments={teacherAssignments} slots={data.slots} places={data.plan.rooms} blocks={data.blocks} days={data.plan.days} periods={data.periods} year={yearId} term={semester} busy={busy} ready={workloadReady} onCommit={saveWorkload} onRefresh={refreshLocks}/>}
  {step===5&&<ActivityTeamEditor data={data} year={yearId} term={semester} onSaved={reload} onBusy={setBusy} onDirty={setActivityDirty} blocked={dirty||timeDirty||hasInputDirty}/>}
  {step===7&&<ScheduleReviewStep data={data} rooms={rooms} clear={clear} issues={issues} draft={draft} blocked={hasUnsavedInput} workingLabel={busy?workingLabel:undefined}
  onRooms={next=>{setRooms(next);setIssues(null);setDraft(null)}} onClear={next=>{setClear(next);setIssues(null);setDraft(null)}} onFix={setStep}

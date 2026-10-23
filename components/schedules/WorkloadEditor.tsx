@@ -13,6 +13,11 @@ import LessonPatternPicker from './LessonPatternPicker'
 type Classroom = Preparation['classrooms'][number]
 type Teacher = Preparation['teachers'][number]
 type Place = { id: string; name: string }
+export type WorkloadChange = {
+  assignments: { lessonId: string; teacherId: string }[]
+  rules?: { lessonId: string; value: LessonRule }[]
+  places?: Place[]
+}
 type Draft = { id: string; teacherId: string; count: number; pattern: number[]; roomId: string | null; spread: boolean; morning: boolean }
 
 function groupRank(lesson: ScheduleLesson) {
@@ -30,7 +35,7 @@ function placedCount(slots: ScheduleSlot[], lessonId: string) {
   return cells.size
 }
 
-export default function WorkloadEditor({ classrooms, lessons, teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, dirty, ready, onRule, onAssign, onAddPlace, onRefresh, onSave }: {
+export default function WorkloadEditor({ classrooms, lessons, teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh }: {
   classrooms: Classroom[]
   lessons: ScheduleLesson[]
   teachers: Teacher[]
@@ -44,13 +49,9 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   year: string
   term: number
   busy: boolean
-  dirty: boolean
   ready: boolean
-  onRule: (id: string, count: number, patch: Partial<LessonRule>) => void
-  onAssign: (ids: string[], teacherId: string) => void
-  onAddPlace: (place: Place) => void
+  onCommit: (change: WorkloadChange) => Promise<void>
   onRefresh: () => Promise<void>
-  onSave: () => void
 }) {
   const dialog = useRef<HTMLDialogElement>(null), addDialog = useRef<HTMLDialogElement>(null), codeDialog = useRef<HTMLDialogElement>(null), lockDialog = useRef<HTMLDialogElement>(null)
   const [view, setView] = useState<'room' | 'teacher' | 'code' | 'lock'>('room')
@@ -64,7 +65,26 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   const [level, setLevel] = useState(''), [roomId, setRoomId] = useState(''), [query, setQuery] = useState('')
   const [teacherId, setTeacherId] = useState(''), [teacherQuery, setTeacherQuery] = useState(''), [codeQuery, setCodeQuery] = useState(''), [codeTeacher, setCodeTeacher] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null), [placeName, setPlaceName] = useState('')
+  const [draftPlaces, setDraftPlaces] = useState<Place[]>([])
+  const saveLock = useRef(false)
+  const [saveStatus, setSaveStatus] = useState<{ kind: 'saving' | 'saved' | 'error'; text: string } | null>(null)
+  const saving = busy || saveStatus?.kind === 'saving'
+  const saveNotice = <span className={`prep-workload-status${saveStatus?.kind === 'error' ? ' is-error' : ''}`} role={saveStatus?.kind === 'error' ? 'alert' : 'status'}>{saveStatus?.text || 'บันทึกอัตโนมัติเมื่อกดกำหนดครูหรือบันทึกวิชา'}</span>
+  async function commit(change: WorkloadChange) {
+    if (saveLock.current || busy || queuedLocks.current.size) return false
+    saveLock.current = true
+    setSaveStatus({ kind: 'saving', text: 'กำลังบันทึกภาระสอน…' })
+    try {
+      await onCommit(change)
+      setSaveStatus({ kind: 'saved', text: 'บันทึกภาระสอนแล้ว' })
+      return true
+    } catch (error) {
+      setSaveStatus({ kind: 'error', text: error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ กรุณาลองใหม่' })
+      return false
+    } finally { saveLock.current = false }
+  }
   const [picked, setPicked] = useState<string[]>([]), [codeLessonIds, setCodeLessonIds] = useState<string[]>([]), [activeCode, setActiveCode] = useState(''), [codeLevel, setCodeLevel] = useState('')
+  const [codePlace, setCodePlace] = useState('keep'), [codeMorning, setCodeMorning] = useState('keep'), [codePattern, setCodePattern] = useState('keep')
   const levels = [...new Set(classrooms.map(room => room.level))]
   const activeLevel = levels.includes(level) ? level : levels[0] || ''
   const levelRooms = classrooms.filter(room => room.level === activeLevel).slice().sort((a, b) => Number(a.room) - Number(b.room))
@@ -96,7 +116,9 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   const codeLevels = [...new Set(codeLessons.map(lesson => roomOf(lesson.classroomId)?.level).filter((item): item is string => !!item))]
   const shownCodeLevel = codeLevels.includes(codeLevel) ? codeLevel : codeLevels[0] || ''
   const codeLevelLessons = codeLessons.filter(lesson => roomOf(lesson.classroomId)?.level === shownCodeLevel)
-  const chosenLessons = lessons.filter(lesson => codeLessonIds.includes(lesson.id) && (!codeTeacher || teacherOf(lesson) !== codeTeacher))
+  const chosenLessons = codeLessons.filter(lesson => codeLessonIds.includes(lesson.id))
+  const codeHasRules = codePlace !== 'keep' || codeMorning !== 'keep' || codePattern !== 'keep'
+  const codeHasChanges = codeHasRules || chosenLessons.some(lesson => codeTeacher && teacherOf(lesson) !== codeTeacher)
   const codeTeacherRow = teachers.find(teacher => teacher.id === codeTeacher)
   const codeTeachers = codeTeacherRow && !teacherMatches.some(teacher => teacher.id === codeTeacher) ? [codeTeacherRow, ...teacherMatches] : teacherMatches
   function roomOf(id: string) { return classrooms.find(item => item.id === id) }
@@ -104,33 +126,35 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   function toggleCodeLesson(id: string) { setCodeLessonIds(values => values.includes(id) ? values.filter(item => item !== id) : [...values, id]) }
   function openCode(id: string) {
     setActiveCode(id); setCodeLessonIds([]); setCodeLevel(''); setCodeTeacher(''); setTeacherQuery('')
+    setCodePlace('keep'); setCodeMorning('keep'); setCodePattern('keep')
     const element = codeDialog.current
     if (element && !element.open) element.showModal()
   }
-  function closeCode() { codeDialog.current?.close() }
-  function open(lesson: ScheduleLesson) {
+  function closeCode() { if (!saveLock.current) codeDialog.current?.close() }
+  function openLesson(id: string) {
+    const lesson = lessons.find(item => item.id === id)
+    if (!lesson) return
     const current = ruleOf(lesson)
     setDraft({ id: lesson.id, teacherId: teacherOf(lesson), count: current.count, pattern: [...current.pattern], roomId: current.roomId, spread: current.spread, morning: current.morning })
-    setTeacherQuery(''); setPlaceName('')
+    setTeacherQuery(''); setPlaceName(''); setDraftPlaces([])
     const element = dialog.current
     if (element && !element.open) element.showModal()
   }
-  function close() { dialog.current?.close(); setDraft(null) }
-  function apply() {
+  function close() { if (!saveLock.current) { dialog.current?.close(); setDraft(null) } }
+  async function apply() {
     if (!draft?.teacherId) return
     const lesson = lessons.find(item => item.id === draft.id)
     if (!lesson) return
     const total = draft.pattern.reduce((sum, size) => sum + size, 0)
     if (!draft.pattern.length || draft.pattern.some(size => !Number.isInteger(size) || size < 1 || size > 8) || total !== draft.count) return
-    onRule(draft.id, lesson.count, { count: draft.count, pattern: draft.pattern, roomId: draft.roomId, spread: draft.spread, morning: draft.morning })
-    onAssign([draft.id], draft.teacherId)
-    close()
+    const saved = await commit({ assignments: [{ lessonId: draft.id, teacherId: draft.teacherId }], rules: [{ lessonId: draft.id, value: { count: draft.count, pattern: draft.pattern, roomId: draft.roomId, spread: draft.spread, morning: draft.morning } }], places: draftPlaces })
+    if (saved) close()
   }
   function addPlace() {
     const name = placeName.trim()
     if (!name || !draft) return
     const place = { id: crypto.randomUUID(), name }
-    onAddPlace(place)
+    setDraftPlaces(values => [...values, place])
     setDraft({ ...draft, roomId: place.id })
     setPlaceName('')
   }
@@ -210,19 +234,25 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
       if (saved.error) throw Error(saved.error)
     })
   }
-  function assignCodes() {
-    if (!codeTeacher || !chosenLessons.length || chosenLessons.length > 500) return
-    onAssign(chosenLessons.map(lesson => lesson.id), codeTeacher)
-    setCodeLessonIds([])
+  async function assignCodes() {
+    if (!codeHasChanges || !chosenLessons.length || chosenLessons.length > 500) return
+    const rules = codeHasRules ? chosenLessons.map(lesson => {
+      const current = ruleOf(lesson), count = current.count
+      const pattern = codePattern === 'single' ? Array(count).fill(1) : codePattern === 'double' ? [...Array(Math.floor(count / 2)).fill(2), ...(count % 2 ? [1] : [])] : current.pattern
+      return { lessonId: lesson.id, value: { ...current, pattern, roomId: codePlace === 'keep' ? current.roomId : codePlace || null, morning: codeMorning === 'keep' ? current.morning : codeMorning === 'morning' } }
+    }) : undefined
+    if (await commit({ assignments: codeTeacher ? chosenLessons.map(lesson => ({ lessonId: lesson.id, teacherId: codeTeacher })) : [], rules })) setCodeLessonIds([])
   }
   async function assignPicked() {
     if (!teacherId || !picked.length) return
     const targets = lessons.filter(lesson => picked.includes(lesson.id))
     const changed = targets.filter(lesson => teacherOf(lesson))
-    const answer = await Swal.fire({ icon: changed.length ? 'warning' : 'question', title: `เพิ่ม ${targets.length} วิชาให้ ${teacherName(teacherId)}?`, text: changed.length ? `เปลี่ยนผู้สอนเดิม ${changed.length} วิชา` : 'วิชาเหล่านี้จะใช้ครูคนนี้', showCancelButton: true, confirmButtonText: 'กำหนด', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#1373d9' })
-    if (!answer.isConfirmed) return
-    onAssign(targets.map(lesson => lesson.id), teacherId)
-    setPicked([]); addDialog.current?.close()
+    // Native dialogs sit above body-level SweetAlerts; keep the confirmation in this dialog.
+    if (changed.length) {
+      const answer = await Swal.fire({ target: addDialog.current!, icon: 'warning', title: `เปลี่ยนผู้สอนเดิม ${changed.length} วิชา?`, showCancelButton: true, confirmButtonText: 'กำหนด', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#1373d9' })
+      if (!answer.isConfirmed) return
+    }
+    if (await commit({ assignments: targets.map(lesson => ({ lessonId: lesson.id, teacherId })) })) { setPicked([]); addDialog.current?.close() }
   }
   const draftLesson = draft ? lessons.find(lesson => lesson.id === draft.id) : undefined
   const draftTeachers = teachers.filter(teacher => !teacherQuery.trim() || `${teacher.prefix || ''} ${teacher.full_name} ${teacher.position || ''}`.toLowerCase().includes(teacherQuery.trim().toLowerCase()))
@@ -234,21 +264,9 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     }
     const answer = await Swal.fire({ icon: 'warning', title: `นำ ${lesson.code} ออกจากภาระของ ${teacherName(teacherId)}?`, text: `${lesson.fullName || lesson.name} ${roomLabel(lesson.classroomId)} จะยังอยู่ที่ห้อง แต่ยังไม่กำหนดครู`, showCancelButton: true, confirmButtonText: 'นำออก', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#be3340' })
     if (!answer.isConfirmed) return
-    onAssign([lesson.id], '')
+    await commit({ assignments: [{ lessonId: lesson.id, teacherId: '' }] })
   }
-  function patternOk(lesson: ScheduleLesson) {
-    const current = ruleOf(lesson)
-    return current.count > 0 && current.pattern.length > 0 && current.pattern.every(size => Number.isInteger(size) && size >= 1 && size <= 8) && current.pattern.reduce((sum, size) => sum + size, 0) === current.count
-  }
-  const patternsReady = lessons.length > 0 && lessons.every(patternOk)
-  function rows(items: ScheduleLesson[], showRoom: boolean, onRemove?: (lesson: ScheduleLesson) => void) {
-    if (!items.length) return <p className="prep-teacher-empty">{lessons.length ? 'ไม่พบรายวิชาที่ค้นหา' : 'ยังไม่มีรายวิชา เพิ่มในขั้นรายวิชาก่อน'}</p>
-    return <ul className="prep-load-list">{items.map(lesson => {
-      const current = ruleOf(lesson)
-      const name = teacherName(teacherOf(lesson))
-      return <li key={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}{showRoom && <small>{roomLabel(lesson.classroomId)}</small>}</span><span className={name ? undefined : 'prep-load-missing'}>{name || 'ยังไม่กำหนดครู'}</span><span>{current.count} คาบ<small>{patternText(current.pattern)}</small></span><small>{venueOf(lesson)}</small><span className="prep-row-actions"><button type="button" className="prep-row-edit" disabled={busy} onClick={() => open(lesson)}>แก้ไข</button>{onRemove && <button type="button" className="prep-row-delete" disabled={busy} onClick={() => void onRemove(lesson)}>ลบ</button>}</span></li>
-    })}</ul>
-  }
+  const rowProps = { busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit: openLesson, hasLessons: lessons.length > 0 }
   return <section className="prep-input-panel prep-teacher-panel prep-workload">
     <div className="prep-teacher-bar">
       <div className="prep-teacher-title"><h2>กำหนดภาระสอน</h2><p>{view === 'room' ? `${activeLevel}/${levelRooms.find(room => room.id === activeRoom)?.room || ''} · ${visible.length} วิชา` : view === 'teacher' ? (teacherId ? `${teacherName(teacherId)} · จากครู ${teachers.length} คน` : `ครูในชุดนี้ ${teachers.length} คน`) : view === 'lock' ? (lockMode === 'room' ? 'เลือกห้อง แล้วแตะคาบเพื่อกำหนดวิชาและล็อกคาบเรียน' : `เลือกจากครู ${teachers.length} คน แล้วแตะคาบเพื่อกำหนดวิชาหรือล็อกคาบว่าง`) : 'แตะการ์ดวิชา แล้วเลือกหลายห้องเพื่อกำหนดครู'}</p></div>
@@ -259,20 +277,20 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
       </div>
     </div>
     <div className="prep-view-switch" role="group" aria-label="มุมมองภาระสอน">
-      <button type="button" aria-pressed={view === 'room'} onClick={() => setView('room')}>ตามห้อง</button>
-      <button type="button" aria-pressed={view === 'teacher'} onClick={() => { setView('teacher'); setPicked([]) }}>ตามครู</button>
-      <button type="button" aria-pressed={view === 'code'} onClick={() => { setView('code'); setCodeLessonIds([]); setActiveCode(''); setCodeTeacher(''); closeCode() }}>ตามรหัส</button>
-      <button type="button" aria-pressed={view === 'lock'} onClick={() => setView('lock')}>ล็อกคาบ</button>
+      <button type="button" disabled={busy || pendingLocks.length > 0} aria-pressed={view === 'room'} onClick={() => setView('room')}>ตามห้อง</button>
+      <button type="button" disabled={busy || pendingLocks.length > 0} aria-pressed={view === 'teacher'} onClick={() => { setView('teacher'); setPicked([]) }}>ตามครู</button>
+      <button type="button" disabled={busy || pendingLocks.length > 0} aria-pressed={view === 'code'} onClick={() => { setView('code'); setCodeLessonIds([]); setActiveCode(''); setCodeTeacher(''); closeCode() }}>ตามรหัส</button>
+      <button type="button" disabled={busy || pendingLocks.length > 0} aria-pressed={view === 'lock'} onClick={() => setView('lock')}>ล็อกคาบ</button>
     </div>
     {view === 'room' && <>
       {levels.length > 0 && <div className="prep-subject-levels" role="tablist" aria-label="ชั้น"><span>ชั้น</span>{levels.map(item => <button key={item} type="button" aria-pressed={item === activeLevel} onClick={() => { setLevel(item); setRoomId('') }}>{item}<small>{levelCount(item)}</small></button>)}</div>}
       {levelRooms.length > 0 && <div className="prep-subject-rooms" role="tablist" aria-label="ห้อง"><span>ห้อง</span>{levelRooms.map(room => <button key={room.id} type="button" aria-pressed={room.id === activeRoom} onClick={() => setRoomId(room.id)}>ห้อง {room.name}<small>{roomCount(room.id)}</small></button>)}</div>}
-      {rows(visible, false)}
+      {<WorkloadRows items={visible} showRoom={false} {...rowProps}/>}
     </>}
     {view === 'teacher' && <>
       <div className="prep-activity-teachers"><div>{shownTeachers.map(teacher => <button type="button" key={teacher.id} aria-pressed={teacher.id === teacherId} onClick={() => setTeacherId(teacher.id)}><strong>{`${teacher.prefix || ''} ${teacher.full_name}`.trim()}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'}</small></button>)}</div></div>
       {teacherId && <div className="prep-load-toolbar"><span>{teacherLessons.length} วิชา · {teacherLessons.reduce((sum, lesson) => sum + ruleOf(lesson).count, 0)} คาบ/สัปดาห์</span><button type="button" disabled={busy} onClick={() => { setPicked([]); setQuery(''); addDialog.current?.showModal() }}>เพิ่มวิชา</button></div>}
-      {teacherId ? (teacherLessons.length ? rows(teacherLessons, true, removeFromTeacher) : <p className="prep-teacher-empty">ครูคนนี้ยังไม่มีวิชา</p>) : <p className="prep-teacher-empty">ค้นหาแล้วแตะการ์ดครู</p>}
+      {teacherId ? (teacherLessons.length ? <WorkloadRows items={teacherLessons} showRoom onRemove={removeFromTeacher} {...rowProps}/> : <p className="prep-teacher-empty">ครูคนนี้ยังไม่มีวิชา</p>) : <p className="prep-teacher-empty">ค้นหาแล้วแตะการ์ดครู</p>}
     </>}
     {view === 'lock' && <>
       <div className="prep-view-switch" role="group" aria-label="ชนิดการล็อกคาบ">
@@ -300,10 +318,10 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
         return <li key={card.id}><button type="button" onClick={() => openCode(card.id)}><strong>{card.name}</strong><b>{card.code}</b><small>{card.lessons.length} ห้อง · มีครู {assigned}</small></button></li>
       })}</ul></section>)}</div>}
     </>}
-    <div className="prep-load-save"><span>{ready ? 'กำหนดครูและภาระสอนครบแล้ว' : 'ยังมีวิชาที่ยังไม่กำหนดครูหรือคาบให้ครบ'}</span><button type="button" className="prep-primary" disabled={busy || !dirty || !patternsReady} onClick={onSave}>บันทึกภาระสอน</button></div>
+    <div className="prep-load-save"><span>{ready ? 'กำหนดครูและภาระสอนครบแล้ว' : 'ยังมีวิชาที่ยังไม่กำหนดครูหรือคาบให้ครบ'}</span>{saveNotice}</div>
     <dialog ref={lockDialog} className="prep-team-dialog prep-activity-dialog" aria-labelledby="lock-title" onCancel={event => { event.preventDefault(); closeLock() }}>{lockCell && <>
       <header><div><h2 id="lock-title">{lockMode === 'room' ? 'ล็อกคาบเรียน' : 'ล็อกคาบสอน'}</h2><p>{SCHEDULE_DAYS.find(day => day.value === lockCell.day)?.label} · คาบ {lockCell.period} · {lockMode === 'room' ? roomLabel(activeRoom) : teacherName(teacherId)}</p></div><button type="button" aria-label="ปิด" onClick={closeLock}>ปิด</button></header>
-      <div className="prep-team-dialog-body"><fieldset className="prep-activity-sections">
+      <div className="prep-team-dialog-body"><fieldset className="prep-activity-sections" disabled={saving}>
         {lockMode === 'teacher' && <section className="prep-activity-block"><div className="prep-activity-head"><span>1</span><div><h3>คาบว่าง</h3><p>ล็อกไว้เมื่อครูไม่สะดวกสอนคาบนี้</p></div></div>
           <div className="prep-activity-scope">{teacherBlocked(lockCell.day, lockCell.period) ? <button type="button" onClick={() => applyTeacherFree(false)}>ปลดล็อกคาบว่าง</button> : <button type="button" disabled={!!teacherSlot(lockCell.day, lockCell.period)} onClick={() => applyTeacherFree(true)}>ล็อกคาบว่าง</button>}</div>
         </section>}
@@ -322,8 +340,8 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
       </footer>
     </>}</dialog>
     <dialog ref={dialog} className="prep-team-dialog prep-activity-dialog" aria-labelledby="load-title" onCancel={event => { event.preventDefault(); close() }}>{draft && draftLesson && <>
-      <header><div><h2 id="load-title">แก้ไขภาระสอน</h2><p>{draftLesson.code} · {draftLesson.fullName || draftLesson.name} · {roomLabel(draftLesson.classroomId)}</p></div><button type="button" aria-label="ปิด" onClick={close}>ปิด</button></header>
-      <div className="prep-team-dialog-body"><fieldset className="prep-activity-sections">
+      <header><div><h2 id="load-title">แก้ไขภาระสอน</h2><p>{draftLesson.code} · {draftLesson.fullName || draftLesson.name} · {roomLabel(draftLesson.classroomId)}</p></div><button type="button" disabled={saving} aria-label="ปิด" onClick={close}>ปิด</button></header>
+      <div className="prep-team-dialog-body"><fieldset className="prep-activity-sections" disabled={saving}>
         <section className="prep-activity-block"><div className="prep-activity-head"><span>1</span><div><h3>ครูผู้สอน</h3><p>ค้นหาแล้วแตะการ์ดครู</p></div></div>
           <div className="prep-activity-teachers"><input type="search" value={teacherQuery} onChange={event => setTeacherQuery(event.target.value)} placeholder="ค้นหาชื่อหรือตำแหน่ง" aria-label="ค้นหาครูผู้สอน" /><div>{draftTeachers.map(teacher => <button type="button" key={teacher.id} aria-pressed={draft.teacherId === teacher.id} onClick={() => setDraft({ ...draft, teacherId: teacher.id })}><strong>{`${teacher.prefix || ''} ${teacher.full_name}`.trim()}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'}</small></button>)}</div><p>เลือกแล้ว {draft.teacherId ? 1 : 0} คน</p></div>
         </section>
@@ -332,38 +350,61 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
           <LessonPatternPicker count={draft.count} value={draft.pattern.join('+')} label={draftLesson.label} onChange={value => setDraft({ ...draft, pattern: value.split('+').map(Number) })} />
         </section>
         <section className="prep-activity-block"><div className="prep-activity-head"><span>3</span><div><h3>ห้องสถานที่</h3><p>ใช้สถานที่เดียวกันเมื่อไม่ต้องการให้จองชนกัน</p></div></div>
-          <select aria-label="ห้องสถานที่" value={draft.roomId || ''} onChange={event => setDraft({ ...draft, roomId: event.target.value || null })}><option value="">ไม่กำหนด{draftLesson.roomName ? ` (เดิม ${draftLesson.roomName})` : ''}</option>{places.map(place => <option key={place.id} value={place.id}>{place.name}</option>)}</select>
+          <select aria-label="ห้องสถานที่" value={draft.roomId || ''} onChange={event => setDraft({ ...draft, roomId: event.target.value || null })}><option value="">ไม่กำหนด{draftLesson.roomName ? ` (เดิม ${draftLesson.roomName})` : ''}</option>{[...places, ...draftPlaces].map(place => <option key={place.id} value={place.id}>{place.name}</option>)}</select>
           <div className="prep-load-place"><input value={placeName} onChange={event => setPlaceName(event.target.value)} placeholder="เช่น ห้องคอมพิวเตอร์" aria-label="ชื่อสถานที่ใหม่" /><button type="button" disabled={!placeName.trim()} onClick={addPlace}>เพิ่มสถานที่</button></div>
         </section>
         <section className="prep-activity-block"><div className="prep-activity-head"><span>4</span><div><h3>ความต้องการ</h3><p>ใช้ช่วยจัดตาราง ระบบยังคงไม่ให้ครูหรือห้องชนกัน</p></div></div>
           <div className="prep-activity-pills"><button type="button" aria-pressed={draft.spread} onClick={() => setDraft({ ...draft, spread: !draft.spread })}>กระจายวัน</button><button type="button" aria-pressed={draft.morning} onClick={() => setDraft({ ...draft, morning: !draft.morning })}>ช่วงเช้า</button></div>
         </section>
       </fieldset></div>
-      <footer><span>{draft.teacherId && patternReady ? 'พร้อมใช้กับวิชานี้' : 'เลือกครูและแบ่งคาบให้ครบ'}</span><button type="button" onClick={close}>ยกเลิก</button><button type="button" className="prep-primary" disabled={!draft.teacherId || !patternReady} onClick={apply}>ใช้กับวิชานี้</button></footer>
+      <footer>{saveNotice}<button type="button" disabled={saving} onClick={close}>ยกเลิก</button><button type="button" className="prep-primary" disabled={saving || !draft.teacherId || !patternReady} onClick={() => void apply()}>{saving ? 'กำลังบันทึก…' : 'บันทึกวิชานี้'}</button></footer>
     </>}</dialog>
     <dialog ref={codeDialog} className="prep-team-dialog prep-activity-dialog" aria-labelledby="code-load-title" onCancel={event => { event.preventDefault(); closeCode() }}>{activeSubject && <>
-      <header><div><h2 id="code-load-title">{activeSubject.name}</h2><p>{activeSubject.code} · {activeSubject.lessons.length} ห้อง</p></div><button type="button" aria-label="ปิด" onClick={closeCode}>ปิด</button></header>
-      <div className="prep-team-dialog-body"><fieldset className="prep-activity-sections">
+      <header><div><h2 id="code-load-title">{activeSubject.name}</h2><p>{activeSubject.code} · {activeSubject.lessons.length} ห้อง</p></div><button type="button" disabled={saving} aria-label="ปิด" onClick={closeCode}>ปิด</button></header>
+      <div className="prep-team-dialog-body"><fieldset className="prep-activity-sections" disabled={saving}>
         <section className="prep-activity-block"><div className="prep-activity-head"><span>1</span><div><h3>ห้องที่เรียนวิชานี้</h3><p>เลือกได้หลายห้องในครั้งเดียว</p></div></div>
           <div className="prep-code-rooms">
             <div className="prep-subject-levels" role="tablist" aria-label="ชั้นของรหัสนี้">{codeLevels.map(item => <button key={item} type="button" aria-pressed={item === shownCodeLevel} onClick={() => setCodeLevel(item)}>{item}</button>)}</div>
-            <div className="prep-activity-scope"><button type="button" onClick={() => setCodeLessonIds(values => [...new Set([...values, ...codeLevelLessons.filter(lesson => !codeTeacher || teacherOf(lesson) !== codeTeacher).map(lesson => lesson.id)])])}>ทั้ง {shownCodeLevel}</button><button type="button" onClick={() => setCodeLessonIds(values => values.filter(id => !codeLevelLessons.some(lesson => lesson.id === id)))}>เอาห้องชั้นนี้ออก</button></div>
-            <div className="prep-activity-room-picks">{codeLevelLessons.map(lesson => { const owned = !!codeTeacher && teacherOf(lesson) === codeTeacher; const current = teacherName(teacherOf(lesson)); return <button type="button" key={lesson.id} aria-pressed={owned || codeLessonIds.includes(lesson.id)} disabled={owned} title={owned ? 'กำหนดให้ครูนี้แล้ว' : current || 'ยังไม่มีครู'} onClick={() => toggleCodeLesson(lesson.id)}><span>ห้อง {roomOf(lesson.classroomId)?.name}</span><small>{owned ? 'กำหนดแล้ว' : current || 'ยังไม่มีครู'}</small></button> })}</div>
+            <div className="prep-activity-scope"><button type="button" onClick={() => setCodeLessonIds(values => [...new Set([...values, ...codeLevelLessons.map(lesson => lesson.id)])])}>ทั้ง {shownCodeLevel}</button><button type="button" onClick={() => setCodeLessonIds(values => values.filter(id => !codeLevelLessons.some(lesson => lesson.id === id)))}>เอาห้องชั้นนี้ออก</button></div>
+            <div className="prep-activity-room-picks">{codeLevelLessons.map(lesson => { const owned = !!codeTeacher && teacherOf(lesson) === codeTeacher; const current = teacherName(teacherOf(lesson)); return <button type="button" key={lesson.id} aria-pressed={codeLessonIds.includes(lesson.id)} title={current || 'ยังไม่มีครู'} onClick={() => toggleCodeLesson(lesson.id)}><span>ห้อง {roomOf(lesson.classroomId)?.name}</span><small>{owned ? 'กำหนดแล้ว' : current || 'ยังไม่มีครู'}</small></button> })}</div>
           </div>
         </section>
-        <section className="prep-activity-block"><div className="prep-activity-head"><span>2</span><div><h3>ครูผู้สอน</h3><p>ครูคนนี้จะได้สอนห้องที่เลือกในรหัส {activeSubject.code}</p></div></div>
-          <div className="prep-activity-teachers"><input type="search" value={teacherQuery} onChange={event => setTeacherQuery(event.target.value)} placeholder="ค้นหาชื่อหรือตำแหน่ง" aria-label="ค้นหาครูที่จะกำหนด" /><div>{codeTeachers.map(teacher => <button type="button" key={teacher.id} aria-pressed={codeTeacher === teacher.id} onClick={() => setCodeTeacher(teacher.id)}><strong>{`${teacher.prefix || ''} ${teacher.full_name}`.trim()}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'}</small></button>)}</div></div>
+        <section className="prep-activity-block"><div className="prep-activity-head"><span>2</span><div><h3>ครูผู้สอน</h3><p>เลือกครูเพื่อกำหนดให้ห้องที่เลือก หรือเว้นไว้เพื่อคงครูเดิม</p></div></div>
+          <div className="prep-activity-teachers"><input type="search" value={teacherQuery} onChange={event => setTeacherQuery(event.target.value)} placeholder="ค้นหาชื่อหรือตำแหน่ง" aria-label="ค้นหาครูที่จะกำหนด" /><div>{codeTeachers.map(teacher => <button type="button" key={teacher.id} aria-pressed={codeTeacher === teacher.id} onClick={() => setCodeTeacher(codeTeacher === teacher.id ? '' : teacher.id)}><strong>{`${teacher.prefix || ''} ${teacher.full_name}`.trim()}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'}</small></button>)}</div></div>
+        </section>
+        <section className="prep-activity-block">
+          <div className="prep-activity-head"><span>3</span><div><h3>สถานที่และรูปแบบคาบ</h3><p>ใช้กับห้องที่เลือก โดยคงจำนวนคาบต่อสัปดาห์ของแต่ละห้อง</p></div></div>
+          <div className="prep-code-settings">
+            <label>ห้องสถานที่<select aria-label="สถานที่ของห้องที่เลือก" value={codePlace} onChange={event => setCodePlace(event.target.value)}><option value="keep">คงสถานที่เดิม</option><option value="">ไม่กำหนดสถานที่</option>{places.map(place => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label>
+            <label>ช่วงเวลาที่ต้องการ<select aria-label="ช่วงเวลาของห้องที่เลือก" value={codeMorning} onChange={event => setCodeMorning(event.target.value)}><option value="keep">คงความต้องการเดิม</option><option value="morning">ต้องการช่วงเช้า</option><option value="any">ได้ทั้งเช้าและบ่าย</option></select></label>
+            <label>รูปแบบคาบ<select aria-label="รูปแบบคาบของห้องที่เลือก" value={codePattern} onChange={event => setCodePattern(event.target.value)}><option value="keep">คงรูปแบบเดิม</option><option value="single">คาบเดี่ยวทั้งหมด</option><option value="double">คาบคู่ + คาบเดี่ยวที่เหลือ</option></select></label>
+          </div>
+          <p>ตัวอย่าง 3 คาบต่อสัปดาห์: คาบเดี่ยว = เรียน 3 ครั้ง ครั้งละ 1 คาบ · คาบคู่ = เรียน 2 ครั้ง แบบ 2 คาบติดกันและอีก 1 คาบ โดยไม่ข้ามพักกลางวัน</p>
+          <p>ช่วงเช้าเป็นความต้องการ ตัวจัดอาจเลือกช่วงบ่ายเมื่อเงื่อนไขอื่นจำเป็น ส่วนสถานที่และคาบคู่จะตรวจตามเงื่อนไขจริง</p>
         </section>
       </fieldset></div>
-      <footer><span>{chosenLessons.length ? `เลือก ${chosenLessons.length} ห้อง${chosenLessons.some(lesson => teacherOf(lesson)) ? ` · เปลี่ยนครูเดิม ${chosenLessons.filter(lesson => teacherOf(lesson)).length} ห้อง` : ''}` : 'เลือกห้องและครู'}</span><button type="button" onClick={closeCode}>ปิด</button><button type="button" className="prep-primary" disabled={!codeTeacher || !chosenLessons.length || chosenLessons.length > 500} onClick={assignCodes}>กำหนดครู</button></footer>
+      <footer>{saveNotice}<span>{chosenLessons.length ? `เลือก ${chosenLessons.length} ห้อง${codeTeacher && chosenLessons.some(lesson => teacherOf(lesson) && teacherOf(lesson) !== codeTeacher) ? ` · เปลี่ยนครูเดิม ${chosenLessons.filter(lesson => teacherOf(lesson) && teacherOf(lesson) !== codeTeacher).length} ห้อง` : ''}` : 'เลือกห้อง แล้วกำหนดครูหรือเงื่อนไข'}</span><button type="button" disabled={saving} onClick={closeCode}>ปิด</button><button type="button" className="prep-primary" disabled={saving || !codeHasChanges || !chosenLessons.length || chosenLessons.length > 500} onClick={() => void assignCodes()}>{saving ? 'กำลังบันทึก…' : 'บันทึกห้องที่เลือก'}</button></footer>
     </>}</dialog>
-    <dialog ref={addDialog} className="prep-team-dialog prep-catalog-dialog" aria-labelledby="add-load-title" onCancel={event => { event.preventDefault(); addDialog.current?.close() }}>
-      <header><div><h2 id="add-load-title">เพิ่มวิชาให้ครู</h2><p>{teacherName(teacherId)}</p></div><button type="button" aria-label="ปิด" onClick={() => addDialog.current?.close()}>ปิด</button></header>
-      <div className="prep-team-dialog-body">
+    <dialog ref={addDialog} className="prep-team-dialog prep-catalog-dialog" aria-labelledby="add-load-title" onCancel={event => { event.preventDefault(); if (!saveLock.current) addDialog.current?.close() }}>
+      <header><div><h2 id="add-load-title">เพิ่มวิชาให้ครู</h2><p>{teacherName(teacherId)}</p></div><button type="button" aria-label="ปิด" disabled={saving} onClick={() => { if (!saveLock.current) addDialog.current?.close() }}>ปิด</button></header>
+      <div className="prep-team-dialog-body"><fieldset disabled={saving}>
         <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="ค้นหารหัส ชื่อวิชา หรือห้อง" aria-label="ค้นหาวิชาที่จะเพิ่ม" />
         <ul className="prep-load-pick">{lessons.filter(lesson => teacherOf(lesson) !== teacherId && (!query.trim() || `${lesson.code} ${lesson.fullName || lesson.name} ${roomLabel(lesson.classroomId)}`.toLowerCase().includes(query.trim().toLowerCase()))).slice(0, 80).map(lesson => <li key={lesson.id}><label><input type="checkbox" checked={picked.includes(lesson.id)} onChange={() => setPicked(values => values.includes(lesson.id) ? values.filter(id => id !== lesson.id) : [...values, lesson.id])} /><span><strong>{lesson.code} · {lesson.fullName || lesson.name}</strong><small>{roomLabel(lesson.classroomId)} · {teacherName(teacherOf(lesson)) || 'ยังไม่มีครู'}</small></span></label></li>)}</ul>
-      </div>
-      <footer><span>เลือก {picked.length} วิชา</span><button type="button" onClick={() => addDialog.current?.close()}>ยกเลิก</button><button type="button" className="prep-primary" disabled={!picked.length} onClick={() => void assignPicked()}>กำหนดให้ครูนี้</button></footer>
+      </fieldset></div>
+      <footer>{saveNotice}<span>เลือก {picked.length} วิชา</span><button type="button" disabled={saving} onClick={() => { if (!saveLock.current) addDialog.current?.close() }}>ยกเลิก</button><button type="button" className="prep-primary" disabled={saving || !picked.length} onClick={() => void assignPicked()}>{saving ? 'กำลังบันทึก…' : 'กำหนดให้ครูนี้'}</button></footer>
     </dialog>
   </section>
+}
+
+function WorkloadRows({ items, showRoom, busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit, onRemove, hasLessons }: {
+  items: ScheduleLesson[]; showRoom: boolean; busy: boolean; hasLessons: boolean
+  ruleOf: (lesson: ScheduleLesson) => LessonRule; teacherOf: (lesson: ScheduleLesson) => string
+  teacherName: (id: string) => string; roomLabel: (id: string) => string; venueOf: (lesson: ScheduleLesson) => string
+  onEdit: (id: string) => void; onRemove?: (lesson: ScheduleLesson) => Promise<void>
+}) {
+  if (!items.length) return <p className="prep-teacher-empty">{hasLessons ? 'ไม่พบรายวิชาที่ค้นหา' : 'ยังไม่มีรายวิชา เพิ่มในขั้นรายวิชาก่อน'}</p>
+  return <ul className="prep-load-list">{items.map(lesson => {
+    const current = ruleOf(lesson), name = teacherName(teacherOf(lesson))
+    return <li key={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}{showRoom && <small>{roomLabel(lesson.classroomId)}</small>}</span><span className={name ? undefined : 'prep-load-missing'}>{name || 'ยังไม่กำหนดครู'}</span><span>{current.count} คาบ<small>{patternText(current.pattern)}</small></span><small>{venueOf(lesson)}</small><span className="prep-row-actions"><button type="button" className="prep-row-edit" disabled={busy} onClick={() => onEdit(lesson.id)}>แก้ไข</button>{onRemove && <button type="button" className="prep-row-delete" disabled={busy} onClick={() => void onRemove(lesson)}>ลบ</button>}</span></li>
+  })}</ul>
 }

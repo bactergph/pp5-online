@@ -1,6 +1,16 @@
 import type { PeriodTimeRow } from './schedule-helpers'
 export type ActivityTeam = { id:string; settingId:string; mode:'joint'|'separate'; roomIds:string[]; teacherIds:string[]; roomTeachers:Record<string,string[]>; weeklyPeriods:number; cells:{day:number;period:number}[] }
 export function activityTeachers(group:ActivityTeam,room:string){return group.mode==='joint'?group.teacherIds:group.roomTeachers[room]||[]}
+/** Restore saved teams only for newly selected rooms; keep deliberate draft edits, including an empty team. */
+export function restoreActivityRoomTeachers(draft:ActivityTeam,groups:ActivityTeam[],roomIds:string[]):ActivityTeam {
+ const added=roomIds.filter(id=>!draft.roomIds.includes(id))
+ const saved=new Map(added.map(id=>[id,Object.hasOwn(draft.roomTeachers,id)?undefined:groups.find(group=>group.settingId===draft.settingId&&group.roomIds.includes(id))]))
+ if(![...saved.values()].some(Boolean))return {...draft,roomIds}
+ const roomTeachers={...draft.roomTeachers,...Object.fromEntries(roomIds.map(id=>[id,[...activityTeachers(saved.get(id)||draft,id)]]))}
+ const profiles=new Set(roomIds.map(id=>[...roomTeachers[id]].sort().join('|')))
+ const separate=draft.mode==='separate'||profiles.size>1||[...saved.values()].some(group=>group?.mode==='separate')
+ return {...draft,roomIds,roomTeachers,mode:separate?'separate':'joint',teacherIds:separate?draft.teacherIds:[...(roomTeachers[roomIds[0]]||[])]}
+}
 export function lessonTeachers(l:{teacherId:string|null;teacherIds?:string[]}){return l.teacherIds??(l.teacherId?[l.teacherId]:[])}
 export function validateActivityTeam(g:ActivityTeam,rooms:string[],teachers:string[],settings:string[],days:number[],periods:PeriodTimeRow[]){
  const uuid=(s:string)=>typeof s==='string'&&/^[-0-9a-f]{36}$/i.test(s)

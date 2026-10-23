@@ -11,6 +11,15 @@ const {webpack}=webpackPackage, root=process.cwd(), out=path.resolve('tmp/activi
 fs.mkdirSync(out,{recursive:true})
 const exports={}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-activity-teams.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports})
+const savedTeams=[{id:'saved',settingId:'guidance',mode:'separate',roomIds:['a','b'],teacherIds:[],roomTeachers:{a:['one'],b:['two']},weeklyPeriods:1,cells:[]}]
+const blank={id:'new',settingId:'guidance',mode:'joint',roomIds:[],teacherIds:[],roomTeachers:{},weeklyPeriods:1,cells:[]}
+let restored=exports.restoreActivityRoomTeachers(blank,savedTeams,['a','b'])
+assert.equal(restored.mode,'separate');assert.equal(JSON.stringify(restored.roomTeachers),JSON.stringify({a:['one'],b:['two']}))
+restored={...restored,roomTeachers:{...restored.roomTeachers,a:[]}}
+restored=exports.restoreActivityRoomTeachers(restored,savedTeams,['a','b','c'])
+assert.equal(restored.roomTeachers.a.length,0,'Deliberately cleared teams are not restored over draft edits')
+const other=exports.restoreActivityRoomTeachers({...blank,settingId:'scouts'},savedTeams,['a'])
+assert.equal(other.teacherIds.length,0,'Never copy a different activity’s teachers')
 const classrooms=Array.from({length:9},(_,i)=>({id:`room-${i+1}`,level:`ป.${Math.floor(i/3)+1}`,name:String(i%3+1),room:i%3+1}))
 const teachers=['หนึ่ง','สอง','สาม','นอกชุด'].map((name,i)=>({id:`teacher-${i+1}`,prefix:'ครู',full_name:`ตัวอย่าง ${name}`,position:'ครู'}))
 const periods=[1,2,0,3,4].map((period,i)=>({period,is_break:!period,start_time:`${i+8}:00`,end_time:`${i+9}:00`,sort_order:i+1}))
@@ -167,6 +176,24 @@ try{
   assert.equal(separate.mode,'separate');assert.deepEqual([...separate.roomIds].sort(),['room-1','room-2','room-4'])
   assert.deepEqual(separate.roomTeachers,{'room-1':['teacher-1'],'room-2':['teacher-1'],'room-4':['teacher-2']},'Bulk assignment preserves other rooms and prunes removed rooms')
   console.log('PASS: separate room teams saved with untouched teams preserved')
+
+  // Starting a new assignment must show and restore saved teams for this activity,
+  // not claim that already assigned rooms have no teachers.
+  await open();await page.select(`${modal} select[aria-label="กิจกรรมที่จะกำหนด"]`,'guidance')
+  assert.ok(await page.$eval(`${main}`,el=>el.textContent.includes('ครู ตัวอย่าง หนึ่ง')))
+  assert.ok(await page.$eval(`${main}`,el=>el.textContent.includes('ครู ตัวอย่าง สอง')),'Unselected rooms show their saved teachers too')
+  await page.click(`${main} input[aria-label="เลือกห้อง ป.1/2"]`)
+  assert.ok(await page.$eval(`${targets}`,el=>el.textContent.includes('ครู ตัวอย่าง หนึ่ง')))
+  await clickText(`${targets} button`,'เลือกทุกห้อง')
+  assert.equal(await page.$$eval(`${modal} .activity-pick-panel input:checked`,els=>els.length),1,'Selecting rooms with the same team loads that team into the picker')
+  await page.click(`${main} input[aria-label="เลือกห้อง ป.2/1"]`)
+  assert.ok(await page.$eval(`${targets}`,el=>el.textContent.includes('ครู ตัวอย่าง สอง')))
+  await page.setViewport({width:1440,height:1000});await page.$eval(`${targets}`,el=>el.scrollIntoView({block:'start'}));await page.screenshot({path:path.join(out,'saved-room-teams-desktop.png')})
+  await page.setViewport({width:390,height:844});await page.$eval(`${targets}`,el=>el.scrollIntoView({block:'start'}));await page.screenshot({path:path.join(out,'saved-room-teams-mobile.png')})
+  await page.select(`${modal} select[aria-label="กิจกรรมที่จะกำหนด"]`,'scouts')
+  assert.equal(await page.$$eval(`${modal} .activity-teacher-checks input:checked`,els=>els.length),2,'Changing activity restores that activity’s own shared team')
+  await page.keyboard.press('Escape');await page.setViewport({width:1440,height:1000})
+  console.log('PASS: saved per-room activity teams displayed and restored across multiple rooms; same-team selection populates teacher picker; switching activities never mixes teachers')
 
   const edit=await page.evaluateHandle(()=>[...document.querySelectorAll('.prep-activity-assigned li')].find(el=>el.textContent.includes('แนะแนว')).querySelector('.prep-row-edit'))
   await edit.asElement().click();await page.waitForSelector(modal)

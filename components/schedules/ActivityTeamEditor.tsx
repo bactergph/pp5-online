@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react'
 import Swal from 'sweetalert2'
 import type { Preparation } from '@/lib/schedule-preparation'
-import { activityTeachers, activityTeamWorkload, validateActivityTeam, type ActivityTeam } from '@/lib/schedule-activity-teams'
+import { activityTeachers, activityTeamWorkload, restoreActivityRoomTeachers, validateActivityTeam, type ActivityTeam } from '@/lib/schedule-activity-teams'
 import { previewScheduleActivityTeam, removeScheduleActivityName, saveScheduleActivityName, saveScheduleActivityTeam } from '@/app/schedules/planning-actions'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import ActivityAssignmentFields from './ActivityAssignmentFields'
@@ -70,13 +70,21 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
     const opened = group ? { ...structuredClone(group), ...(copy ? { id: crypto.randomUUID(), roomIds: roomId ? [roomId] : [], roomTeachers: {} } : {}) } : { id: crypto.randomUUID(), settingId: activities[0]?.id || '', mode: 'joint' as const, roomIds: roomId ? [roomId] : [], teacherIds: [], roomTeachers: {}, weeklyPeriods: activities[0]?.weeklyPeriods || 1, cells: [] }
     setPendingTeam(false)
     setShowTimes(opened.cells.length > 0)
-    setDraft(opened)
+    setDraft(group && !copy ? opened : restoreActivityRoomTeachers({ ...opened, roomIds: [] }, groups, opened.roomIds))
     onDirty(true)
     const element = dialog.current
     if (element && !element.open) element.showModal()
   }
   function close() { if (busy) return; dialog.current?.close(); setDraft(null); setPendingTeam(false); onDirty(false); opener.current?.focus() }
-  function change(patch: Partial<ActivityTeam>) { if (draft) setDraft({ ...draft, ...patch }) }
+  function change(patch: Partial<ActivityTeam>) {
+    if (!draft) return
+    if (patch.settingId && patch.settingId !== draft.settingId) {
+      // A different activity has its own saved teams, never the previously selected activity's teachers.
+      setDraft(restoreActivityRoomTeachers({ ...draft, ...patch, roomIds: [], mode: 'joint', teacherIds: [], roomTeachers: {} }, groups, draft.roomIds))
+      setPendingTeam(false)
+    } else if (patch.roomIds) setDraft(restoreActivityRoomTeachers({ ...draft, ...patch, roomIds: draft.roomIds }, groups, patch.roomIds))
+    else setDraft({ ...draft, ...patch })
+  }
   async function save(group: ActivityTeam, remove = false) {
     if (lock.current) return
     lock.current = true; setBusy(true); onBusy(true); setError('')
@@ -219,7 +227,7 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
               <div className="prep-activity-head"><span>1</span><div><h3>กิจกรรม</h3><p>เลือกครั้งเดียว ใช้กับทุกห้องที่เลือกด้านล่าง</p></div></div>
               <div className="activity-catalog-fields"><label>ชื่อกิจกรรม<select aria-label="กิจกรรมที่จะกำหนด" value={draft.settingId} onChange={event => { const item = activities.find(activity => activity.id === event.target.value); if (item) change({ settingId: item.id, weeklyPeriods: item.weeklyPeriods || 1, cells: [] }) }}>{activities.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><label>คาบต่อสัปดาห์<input aria-label="คาบกิจกรรมต่อสัปดาห์" type="number" min={1} max={8} step={1} value={draft.weeklyPeriods} onChange={event => change({ weeklyPeriods: Number(event.target.value), cells: [] })}/></label></div>
             </section>
-            <ActivityAssignmentFields key={draft.id} classrooms={data.classrooms} teachers={data.teachers} eligibleTeacherIds={eligibleTeacherIds} draft={draft} onChange={change} onPendingChange={setPendingTeam}/>
+            <ActivityAssignmentFields key={`${draft.id}:${draft.settingId}`} classrooms={data.classrooms} teachers={data.teachers} eligibleTeacherIds={eligibleTeacherIds} draft={draft} savedRoomTeams={Object.fromEntries(groups.filter(group=>group.settingId===draft.settingId).flatMap(group=>group.roomIds.map(id=>[id,activityTeachers(group,id)])))} onChange={change} onPendingChange={setPendingTeam}/>
             <section className="prep-activity-block">
               <div className="prep-activity-head"><span>4</span><div><h3>วันและคาบ</h3><p>{when(draft)} · {draft.weeklyPeriods} คาบ/สัปดาห์</p></div></div>
               <details className="activity-time-details" open={showTimes} onToggle={event => setShowTimes(event.currentTarget.open)}><summary>กำหนดวันและคาบเอง (ไม่บังคับ)</summary>

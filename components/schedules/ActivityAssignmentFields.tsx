@@ -65,8 +65,8 @@ function TeacherPicker({ teachers, eligible, selected, onChange }: {
   </div>
 }
 
-export default function ActivityAssignmentFields({ classrooms, teachers, eligibleTeacherIds, draft, onChange, onPendingChange }: {
-  classrooms: Classroom[]; teachers: Teacher[]; eligibleTeacherIds: string[]; draft: ActivityTeam; onChange: (patch: Partial<ActivityTeam>) => void; onPendingChange: (value: boolean) => void
+export default function ActivityAssignmentFields({ classrooms, teachers, eligibleTeacherIds, draft, savedRoomTeams = {}, onChange, onPendingChange }: {
+  classrooms: Classroom[]; teachers: Teacher[]; eligibleTeacherIds: string[]; draft: ActivityTeam; savedRoomTeams?: Record<string, string[]>; onChange: (patch: Partial<ActivityTeam>) => void; onPendingChange: (value: boolean) => void
 }) {
   const [targets, setTargets] = useState<string[]>([])
   const [team, setTeam] = useState<string[]>([])
@@ -99,7 +99,10 @@ export default function ActivityAssignmentFields({ classrooms, teachers, eligibl
   }
   function pickTargets(ids: string[]) {
     setTargets(ids); setApplied('')
-    if (ids.length === 1 && !teamDirty) setTeam([...activityTeachers(draft, ids[0])])
+    if (!teamDirty) {
+      const profiles = new Set(ids.map(id => [...activityTeachers(draft, id)].sort().join('|')))
+      setTeam(ids.length && profiles.size === 1 ? [...activityTeachers(draft, ids[0])] : [])
+    }
   }
   function applyTeam() {
     if (!validTargets.length) return
@@ -111,7 +114,7 @@ export default function ActivityAssignmentFields({ classrooms, teachers, eligibl
   return <>
     <section className="prep-activity-block activity-assignment">
       <div className="prep-activity-head"><span>2</span><div><h3>เลือกชั้นและห้อง</h3><p>ติ๊กหลายชั้นได้พร้อมกัน หรือกางเลือกเฉพาะห้องที่ต้องการ</p></div></div>
-      <RoomScope classrooms={classrooms} selected={draft.roomIds} label="ห้องที่จะกำหนดกิจกรรม" onChange={roomIds => { onChange({ roomIds }); setApplied(''); setConfirmJoint(false) }}/>
+      <RoomScope classrooms={classrooms} selected={draft.roomIds} label="ห้องที่จะกำหนดกิจกรรม" teams={id => names(draft.roomIds.includes(id) ? activityTeachers(draft, id) : savedRoomTeams[id] || [])} onChange={roomIds => { onChange({ roomIds }); setApplied(''); setConfirmJoint(false) }}/>
     </section>
     <section className="prep-activity-block activity-assignment">
       <div className="prep-activity-head"><span>3</span><div><h3>ครูผู้รับผิดชอบ</h3><p>เลือกได้หลายคน หรือเว้นไว้แล้วกำหนดภายหลัง</p></div></div>
