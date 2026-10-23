@@ -50,70 +50,46 @@ try{
  page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())})
  await page.setViewport({width:1440,height:1000});await page.goto(`http://127.0.0.1:${server.address().port}`,{waitUntil:'domcontentloaded',timeout:60000})
  const click=async(selector,text)=>{const el=await page.evaluateHandle((s,t)=>[...document.querySelectorAll(s)].find(el=>el.textContent.trim()===t),selector,text);assert.ok(el.asElement(),`Missing ${text}`);await el.asElement().click()}
- const modal='dialog[open]:not(.prep-code-options-dialog)', options='.prep-code-options-dialog[open]', idle=()=>page.waitForFunction(()=>!window.isBusy&&!document.querySelector('.swal2-container'))
+ const modal='dialog[open]:not(.prep-code-options-dialog):not(.prep-code-place-dialog)', options='.prep-code-options-dialog[open]', idle=()=>page.waitForFunction(()=>!window.isBusy&&!document.querySelector('.swal2-container'))
  // Thai card comes first, so identify the math card by its actual code.
  const math=async()=>{await idle();await click('.prep-workload>.prep-view-switch button','ตามรหัส');const el=await page.evaluateHandle(()=>[...document.querySelectorAll('.prep-code-cards button')].find(el=>el.textContent.includes('ค21102')));await el.asElement().click();await page.waitForSelector(modal)}
  const rooms=()=>click(`${modal} .prep-activity-scope button`,'ทั้ง ม.1')
  const openOptions=async()=>{await click(`${modal}>footer button`,'บันทึก');await page.waitForSelector(options)}
  const saveOptions=async()=>{await click(`${options}>footer button`,'บันทึกภาระสอน');await idle()}
+ const placeDialog='.prep-code-place-dialog[open]', row=id=>options+' [data-lesson-id='+id+']'
+ const addVenue=async name=>{await click(options+' .prep-code-settings-toolbar button','+ เพิ่มสถานที่');await page.waitForSelector(placeDialog);await page.type(placeDialog+' #code-place-name',name);await click(placeDialog+' button[type=submit]','เพิ่มสถานที่');await page.waitForSelector(placeDialog,{hidden:true})}
+ const chooseVenue=async(id,name,keyboard=false)=>{const input=await page.$(row(id)+' [role=combobox]');await input.click();await input.type(name);if(keyboard)await page.keyboard.press('Enter');else await click(row(id)+' [role=option]',name);await page.$eval(row(id)+' [role=combobox]',el=>el.blur())}
  await page.waitForSelector('.prep-workload');await math();await rooms()
- assert.deepEqual(await page.$$eval(`${modal} .prep-activity-head h3`,els=>els.map(el=>el.textContent)),['ห้องที่เรียนวิชานี้','ครูผู้สอน'],'Restore the room-first, teacher-second editor')
- assert.equal(await page.$(`${modal} .prep-code-settings`),null,'Settings are kept out of the room/teacher editor')
- await click(`${modal} .prep-activity-teachers strong`,'ครู ตัวอย่าง 1');await openOptions()
- assert.equal(calls.length,0,'First Save opens settings without writing any data')
- await page.type(`${options} #code-place-name`,'สถานที่ที่ยกเลิก');await click(`${options} .prep-code-place-add button`,'เพิ่ม')
- assert.equal(state.plan.rooms.length,1,'Adding a place is staged until workload confirmation')
- await page.keyboard.press('Escape');assert.equal(await page.$(options),null)
- assert.equal(calls.length,0);assert.equal(await page.$$eval(`${modal} .prep-activity-room-picks button[aria-pressed=true]`,els=>els.length),2)
- assert.equal(await page.$eval(`${modal}>footer .prep-primary`,el=>document.activeElement===el),true,'Cancel restores focus to Save')
- await openOptions();await click(`${options}>footer button`,'ย้อนกลับ');assert.equal(await page.$(options),null);assert.equal(calls.length,0);await openOptions()
- assert.equal(await page.$$eval(`${options} select[aria-label="สถานที่ของห้องที่เลือก"] option`,els=>els.some(el=>el.textContent==='สถานที่ที่ยกเลิก')),false,'Cancel discards unsaved places')
- await page.type(`${options} #code-place-name`,'  ห้องวิทยาศาสตร์  ');await click(`${options} .prep-code-place-add button`,'เพิ่ม')
- assert.equal(await page.$eval(`${options} select[aria-label="สถานที่ของห้องที่เลือก"]`,el=>el.value),'venue','Reuse an existing place with the same trimmed name')
- await page.type(`${options} #code-place-name`,'ห้องปฏิบัติการจำลอง')
- await click(`${options}>footer button`,'บันทึกภาระสอน')
- assert.equal(calls.length,0,'Do not silently drop a typed but unadded location')
- await page.keyboard.press('Enter')
- const newVenue=await page.$eval(`${options} select[aria-label="สถานที่ของห้องที่เลือก"]`,el=>el.value)
- assert.match(newVenue,/^[0-9a-f-]{36}$/i)
- await page.type(`${options} #code-place-name`,' ห้องปฏิบัติการจำลอง ');await click(`${options} .prep-code-place-add button`,'เพิ่ม')
- assert.equal(await page.$eval(`${options} select[aria-label="สถานที่ของห้องที่เลือก"]`,el=>el.value),newVenue)
- assert.equal(await page.$$eval(`${options} select[aria-label="สถานที่ของห้องที่เลือก"] option`,els=>els.filter(el=>el.textContent==='ห้องปฏิบัติการจำลอง').length),1,'No duplicate staged place')
- await page.select(`${options} select[aria-label="ช่วงเวลาของห้องที่เลือก"]`,'morning')
- await page.select(`${options} select[aria-label="รูปแบบคาบของห้องที่เลือก"]`,'double')
- for(const width of [360,390,768,1024,1440]){
-  await page.setViewport({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
-  assert.equal(await page.$eval(options,el=>el.scrollWidth<=el.clientWidth),true)
-  assert.equal(await page.$eval(`${options}>footer .prep-primary`,el=>el.getBoundingClientRect().height>=44),true)
-  assert.equal(await page.$eval(options,el=>{const body=el.querySelector('.prep-team-dialog-body').getBoundingClientRect(),footer=el.querySelector('footer').getBoundingClientRect();return body.bottom<=footer.top+1}),true)
- }
- await page.setViewport({width:390,height:844});await page.screenshot({path:path.join(out,'mobile-code-settings.png')})
- await page.setViewport({width:1440,height:1000});await page.screenshot({path:path.join(out,'desktop-code-settings.png')})
- // Repeated final confirmation events must not make duplicate writes.
- await page.$eval(`${options}>footer .prep-primary`,el=>{el.click();el.click()});await idle();assert.equal(await page.$(options),null)
+ assert.deepEqual(await page.$$eval(modal+' .prep-activity-head h3',els=>els.map(el=>el.textContent)),['ห้องที่เรียนวิชานี้','ครูผู้สอน'])
+ await click(modal+' .prep-activity-teachers strong','ครู ตัวอย่าง 1');await openOptions()
+ assert.equal(calls.length,0,'First Save does not write data')
+ assert.deepEqual(await page.$$eval(options+' select',els=>els.map(el=>el.value)),['any','single','any','single'],'New assignments default to both sessions and singles')
+ await addVenue('สถานที่ที่ยกเลิก');assert.equal(state.plan.rooms.length,1)
+ await page.keyboard.press('Escape');assert.equal(await page.$(options),null);assert.equal(calls.length,0)
+ assert.equal(await page.$eval(modal+'>footer .prep-primary',el=>document.activeElement===el),true)
+ await openOptions();await click(options+'>footer button','ย้อนกลับ');assert.equal(await page.$(options),null);await openOptions()
+ await page.click(row('math1')+' [role=combobox]');assert.equal(await page.$$eval(row('math1')+' [role=option]',els=>els.some(el=>el.textContent.includes('สถานที่ที่ยกเลิก'))),false);await page.keyboard.press('Escape');assert.ok(await page.$(options),'Escape closes search before modal')
+ await addVenue('  ห้องวิทยาศาสตร์  ');await addVenue('ห้องปฏิบัติการจำลอง');await addVenue(' ห้องปฏิบัติการจำลอง ')
+ await chooseVenue('math1','ห้องปฏิบัติการจำลอง',true);await chooseVenue('math2','ห้องวิทยาศาสตร์')
+ await page.select(row('math1')+' select[aria-label^=ช่วงเวลา]','morning');await page.select(row('math2')+' select[aria-label^=ช่วงเวลา]','afternoon')
+ for(const id of ['math1','math2'])await page.select(row(id)+' select[aria-label^=รูปแบบคาบ]','double')
+ for(const width of [360,390,768,1024,1440]){await page.setViewport({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.equal(await page.$eval(options,el=>el.scrollWidth<=el.clientWidth),true);assert.equal(await page.$eval(options+'>footer .prep-primary',el=>el.getBoundingClientRect().height>=44),true)}
+ await page.$eval(options+'>footer .prep-primary',el=>{el.click();el.click()});await idle();assert.equal(await page.$(options),null)
  assert.equal(calls.filter(c=>c.method==='plan').length,1);assert.equal(calls.filter(c=>c.method==='assign').length,1);assert.equal(maxWrites,1)
- assert.deepEqual(state.plan.rules.math1.pattern,[2,1]);assert.deepEqual(state.plan.rules.math2.pattern,[2,2])
- assert.equal(state.plan.rules.math1.count,3);assert.equal(state.plan.rules.math2.count,4)
- assert.equal(state.plan.rules.math1.roomId,newVenue);assert.equal(state.plan.rules.math2.roomId,newVenue);assert.equal(state.plan.rules.math2.morning,true)
- assert.equal(state.plan.rooms.filter(place=>place.id===newVenue).length,1)
+ const newVenue=state.plan.rooms.find(place=>place.name==='ห้องปฏิบัติการจำลอง').id;assert.equal(state.plan.rooms.length,2,'Duplicate names reuse saved or staged venue IDs')
+ assert.deepEqual(state.plan.rules.math1.pattern,[2,1]);assert.deepEqual(state.plan.rules.math2.pattern,[2,2]);assert.equal(state.plan.rules.math1.count,3);assert.equal(state.plan.rules.math2.count,4)
+ assert.equal(state.plan.rules.math1.roomId,newVenue);assert.equal(state.plan.rules.math2.roomId,'venue');assert.equal(state.plan.rules.math1.timePreference,'morning');assert.equal(state.plan.rules.math2.timePreference,'afternoon')
  assert.equal(state.lessons[0].teacherId,'t1');assert.equal(state.lessons[1].teacherId,'t1')
- assert.ok(await page.$eval(`${modal}>footer`,el=>el.textContent.includes('บันทึกภาระสอนแล้ว')))
- console.log('PASS: room-first selection; first Save opens settings without writes; cancel/Escape preserves selection and focus; final Save commits once; responsive popup at five widths')
- // Keep existing teachers while changing only the lesson rules of already assigned rooms.
- await page.keyboard.press('Escape');await math();await rooms();await click(`${modal} .prep-activity-teachers strong`,'ครู ตัวอย่าง 1');await openOptions();await page.select(`${options} select[aria-label="รูปแบบคาบของห้องที่เลือก"]`,'single')
- const assignments=calls.filter(c=>c.method==='assign').length
- await saveOptions()
- assert.equal(calls.filter(c=>c.method==='assign').length,assignments);assert.deepEqual(state.plan.rules.math1.pattern,[1,1,1]);assert.equal(state.lessons[0].teacherId,'t1')
- await page.keyboard.press('Escape');await math();await rooms();await click(`${modal} .prep-activity-teachers strong`,'ครู ตัวอย่าง 2');await openOptions();failAssignment=true
- await page.type(`${options} #code-place-name`,'ห้องทดสอบการลองใหม่');await click(`${options} .prep-code-place-add button`,'เพิ่ม')
- const retryVenue=await page.$eval(`${options} select[aria-label="สถานที่ของห้องที่เลือก"]`,el=>el.value)
- await saveOptions();await page.waitForSelector(`${options} .prep-workload-status.is-error`)
- assert.equal(state.plan.rooms.filter(place=>place.id===retryVenue).length,1,'Place saved before a later teacher error is retained')
- assert.equal(await page.$$eval(`${options} select[aria-label="สถานที่ของห้องที่เลือก"] option`,(els,id)=>els.filter(el=>el.value===id).length,retryVenue),1,'Retry does not duplicate a saved option')
- assert.equal(await page.$$eval(`${modal} .prep-activity-room-picks button[aria-pressed=true]`,els=>els.length),2)
- assert.equal(state.lessons[0].teacherId,'t1');await saveOptions();assert.equal(state.lessons[0].teacherId,'t2')
- assert.equal(state.plan.rooms.filter(place=>place.id===retryVenue).length,1)
- console.log('PASS: changing only rules preserves teachers; failed save retains selected rooms and supports retry')
+ console.log('PASS: per-room venues, morning/afternoon and blocks persist independently; new venues staged/deduplicated; cancel and keyboard focus; one final commit')
+ await page.keyboard.press('Escape');await math();await rooms();await click(modal+' .prep-activity-teachers strong','ครู ตัวอย่าง 1');await openOptions()
+ assert.equal(await page.$eval(row('math2')+' select[aria-label^=ช่วงเวลา]',el=>el.value),'afternoon','Saved per-room preferences are loaded back')
+ await page.select(row('math1')+' select[aria-label^=รูปแบบคาบ]','single');const assignments=calls.filter(c=>c.method==='assign').length;await saveOptions();assert.equal(calls.filter(c=>c.method==='assign').length,assignments)
+ await page.keyboard.press('Escape');await math();await rooms();await click(modal+' .prep-activity-teachers strong','ครู ตัวอย่าง 2');await openOptions();failAssignment=true
+ await addVenue('ห้องทดสอบการลองใหม่');await chooseVenue('math1','ห้องทดสอบการลองใหม่');await saveOptions();await page.waitForSelector(options+' .prep-workload-status.is-error')
+ const retryVenue=state.plan.rooms.find(place=>place.name==='ห้องทดสอบการลองใหม่').id;assert.equal(state.plan.rooms.filter(place=>place.id===retryVenue).length,1)
+ await page.click(row('math1')+' [role=combobox]');assert.equal(await page.$$eval(row('math1')+' [role=option]',els=>els.filter(el=>el.textContent.includes('ห้องทดสอบการลองใหม่')).length),1);await page.keyboard.press('Escape')
+ assert.equal(state.lessons[0].teacherId,'t1');await saveOptions();assert.equal(state.lessons[0].teacherId,'t2');assert.equal(state.plan.rooms.filter(place=>place.id===retryVenue).length,1)
+ console.log('PASS: existing settings reload; rules-only edits preserve teachers; retry after partial save does not duplicate venues')
  await page.keyboard.press('Escape');await click('.prep-workload>.prep-view-switch button','ตามห้อง')
  const editMath=await page.evaluateHandle(()=>[...document.querySelectorAll('.prep-load-list li')].find(el=>el.textContent.includes('ค21102')).querySelector('.prep-row-edit'));await editMath.asElement().click()
  await click(`${modal} .prep-activity-teachers strong`,'ครู ตัวอย่าง 1')
@@ -136,11 +112,20 @@ try{
  assert.ok(await page.$eval('.prep-load-list',el=>el.textContent.includes('ครู ตัวอย่าง 1')))
  assert.equal(await page.$$eval('.prep-load-save button',els=>els.length),0,'No redundant manual workload Save button')
  // Concurrent changes remain guarded by the existing server hash check.
- await math();await rooms();await click(`${modal} .prep-activity-teachers strong`,'ครู ตัวอย่าง 1');await openOptions();await page.select(`${options} select[aria-label="ช่วงเวลาของห้องที่เลือก"]`,'any');state.hash=String(++revision)
- assert.equal(await page.$$eval(`${options} select[aria-label="สถานที่ของห้องที่เลือก"] option`,els=>els.some(el=>el.textContent==='ห้องปฏิบัติการจำลอง')),true,'New places survive page reload')
+ await math();await rooms();await click(`${modal} .prep-activity-teachers strong`,'ครู ตัวอย่าง 1');await openOptions();await page.select(row('math1')+' select[aria-label^=ช่วงเวลา]','any');state.hash=String(++revision)
+ await page.click(row('math1')+' [role=combobox]');assert.equal(await page.$$eval(row('math1')+' [role=option]',els=>els.some(el=>el.textContent.includes('ห้องปฏิบัติการจำลอง'))),true,'New places survive page reload');await page.keyboard.press('Escape')
  const before=structuredClone(state.plan);await saveOptions();await page.waitForSelector(`${options} .prep-workload-status.is-error`)
  assert.deepEqual(state.plan,before);assert.ok(await page.$eval(`${options}>footer`,el=>el.textContent.includes('ข้อมูลเปลี่ยนแล้ว')))
+ await page.keyboard.press('Escape');await page.keyboard.press('Escape')
+ state=structuredClone(fixture);state.hash=String(++revision);state.classrooms=Array.from({length:6},(_,i)=>({id:'r'+(i+1),level:'ม.1',name:String(i+1),room:i+1}));state.lessons=Array.from({length:6},(_,i)=>({...fixture.lessons[0],id:'math'+(i+1),classroomId:'r'+(i+1)}));state.plan.rooms=Array.from({length:6},(_,i)=>({id:'venue'+(i+1),name:'ห้องทดสอบ '+(i+1)}));
+ await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('.prep-workload');await math();await rooms();await click(modal+' .prep-activity-teachers strong','ครู ตัวอย่าง 1');await openOptions()
+ assert.equal(await page.$$eval(options+' .prep-code-settings-row',els=>els.length),6)
+ for(let i=1;i<=6;i++){await chooseVenue('math'+i,'ห้องทดสอบ '+i,i===6);await page.select(row('math'+i)+' select[aria-label^=ช่วงเวลา]',['any','morning','afternoon'][(i-1)%3]);if(i%2===0)await page.select(row('math'+i)+' select[aria-label^=รูปแบบคาบ]','double')}
+ for(const width of [360,390,768,1024,1440]){await page.setViewport({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.equal(await page.$eval(options,el=>el.scrollWidth<=el.clientWidth),true);assert.equal(await page.$eval(options+'>footer .prep-primary',el=>el.getBoundingClientRect().bottom<=innerHeight),true)}
+ await page.setViewport({width:390,height:844});await page.screenshot({path:path.join(out,'mobile-code-settings.png')});await page.setViewport({width:1440,height:1000});await page.screenshot({path:path.join(out,'desktop-code-settings.png')});await saveOptions()
+ for(let i=1;i<=6;i++){const rule=state.plan.rules['math'+i];assert.equal(rule.roomId,'venue'+i);assert.equal(rule.timePreference,['any','morning','afternoon'][(i-1)%3]);assert.deepEqual(rule.pattern,i%2===0?[2,1]:[1,1,1])}
+ console.log('PASS: six rooms saved in one confirmation with six distinct venue IDs; independent session and block choices; five viewport widths')
  assert.deepEqual(errors,[])
  console.log('PASS: room and teacher views autosave; reload retains assignments; partial-write retry uses latest hash; concurrent changes do not get overwritten; five widths fit; no JS errors')
-}catch(error){if(page){await page.screenshot({path:path.join(out,'failure.png'),fullPage:true});fs.writeFileSync(path.join(out,'failure.txt'),await page.evaluate(()=>document.body.innerText))}throw error}
+}catch(error){if(page){await page.screenshot({path:path.join(out,'failure.png'),fullPage:true});fs.writeFileSync(path.join(out,'failure.txt'),await page.evaluate(()=>document.body.innerText));console.error(await page.evaluate(()=>({busy:window.isBusy,dialogs:[...document.querySelectorAll('dialog')].map(el=>({class:el.className,open:el.open})),popups:[...document.querySelectorAll('.swal2-container')].map(el=>({visible:!!el.getClientRects().length,text:el.textContent}))})))}throw error}
 finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve))}

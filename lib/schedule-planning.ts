@@ -2,15 +2,17 @@ import type { ActivityTeam } from './schedule-activity-teams'
 import { solveSchoolSchedule } from './schedule-solver'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
-export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean }
+export type TimePreference = 'any' | 'morning' | 'afternoon'
+export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean; timePreference?: TimePreference }
 export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[]; roomLabels?: Record<string, string> }
-export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; subjectGroup?: string; fullName?: string; name?: string }
+export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; timePreference?: TimePreference; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; subjectGroup?: string; fullName?: string; name?: string }
 export function lessonPrefersMorning(lesson: { subjectGroup?: string; fullName?: string; name?: string; label?: string }) {
   return /ภาษาไทย|คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา|สังคมศึกษา|ภาษาอังกฤษ|ภาษาต่างประเทศ/.test(`${lesson.subjectGroup || ''} ${lesson.fullName || ''} ${lesson.name || ''}`)
 }
 /** Explicit choices come first, then maths/sciences, then other core subjects. */
-export function lessonMorningPriority(lesson: {subjectGroup?:string;fullName?:string;name?:string;label?:string;morning?:boolean;preferMorning?:boolean;activity?:boolean;fixedOnly?:boolean}) {
+export function lessonMorningPriority(lesson: {subjectGroup?:string;fullName?:string;name?:string;label?:string;morning?:boolean;timePreference?:TimePreference;preferMorning?:boolean;activity?:boolean;fixedOnly?:boolean}) {
   if(lesson.activity||lesson.fixedOnly)return 0
+  if(lesson.timePreference)return lesson.timePreference==='morning'?3:lesson.timePreference==='afternoon'?-3:0
   if(lesson.morning)return 3
   if(/คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา/.test(`${lesson.subjectGroup||''} ${lesson.fullName||lesson.name||lesson.label||''}`))return 2
   return lesson.preferMorning||lessonPrefersMorning(lesson)?1:0
@@ -38,6 +40,7 @@ export function validatePlan(plan: SchedulePlan, lessonIds: string[]) {
     if (!lessonIds.includes(id) || !Number.isInteger(r.count)||r.count<1||r.count>40 || !Array.isArray(r.pattern)||!r.pattern.length||r.pattern.some(n=>!Number.isInteger(n)||n<1||n>8)||r.pattern.reduce((a,b)=>a+b,0)!==r.count) throw Error('ภาระสอนและผลรวมรูปแบบคาบต้องตรงกัน')
     if (r.roomId && !plan.rooms.some(room=>room.id===r.roomId)) throw Error('ไม่พบห้องสถานที่ที่เลือก')
     if(typeof r.morning!=='boolean'||typeof r.spread!=='boolean')throw Error('เงื่อนไขรายวิชาไม่ถูกต้อง')
+    if(r.timePreference!==undefined&&!['any','morning','afternoon'].includes(r.timePreference))throw Error('ช่วงเวลาที่ต้องการไม่ถูกต้อง')
   }
 }
 /** Consecutive teaching IDs alone are insufficient: lunch/gaps split blocks. */
@@ -125,25 +128,27 @@ export function improveMorningAssignments(lessons:PlannedLesson[],fixed:PlannedS
     const gaps=occupiedIndexes.length?occupiedIndexes[occupiedIndexes.length-1]-occupiedIndexes[0]+1-occupiedIndexes.length:0
     return (preferences.reduceGaps?gaps:0)+(preferences.maxContinuous?Math.max(0,longest-preferences.maxContinuous)*20:0)
   }
-  const morningCells=days.flatMap(day=>times.filter(time=>!time.is_break&&isMorningPeriod(time.period,times)).map(time=>({day,period:time.period})))
+  const teachingCells=days.flatMap(day=>times.filter(time=>!time.is_break).map(time=>({day,period:time.period})))
+  const misplaced=(row:PlannedSlot)=>{const value=priority.get(row.lessonId||'')||0;return value>0?!isMorningPeriod(row.period,times):value<0&&isMorningPeriod(row.period,times)}
   const deadline=Date.now()+150
   for(let pass=0;pass<3;pass++){
     let changed=false
-    const candidates=result.filter(row=>row.lessonId&&!isMorningPeriod(row.period,times)&&single(byId.get(row.lessonId)!)).sort((a,b)=>(priority.get(b.lessonId!)||0)-(priority.get(a.lessonId!)||0))
+    const candidates=result.filter(row=>row.lessonId&&misplaced(row)&&single(byId.get(row.lessonId)!)).sort((a,b)=>Math.abs(priority.get(b.lessonId!)||0)-Math.abs(priority.get(a.lessonId!)||0))
     for(const row of candidates){
       if(Date.now()>=deadline)return result
       const lesson=byId.get(row.lessonId!)!,value=priority.get(lesson.id)||0
-      if(!value||isMorningPeriod(row.period,times)||retained.has(cell(row.classroomId,row.day,row.period)))continue
-      const destinations=morningCells.slice().sort((a,b)=>{
+      if(!value||!misplaced(row)||retained.has(cell(row.classroomId,row.day,row.period)))continue
+      const direction=Math.sign(value)
+      const destinations=teachingCells.filter(target=>isMorningPeriod(target.period,times)===(value>0)).sort((a,b)=>{
         const first=occupied.get(cell(row.classroomId,a.day,a.period)),second=occupied.get(cell(row.classroomId,b.day,b.period))
-        return (priority.get(first?.lessonId||'')||0)-(priority.get(second?.lessonId||'')||0)||Number(!!first)-Number(!!second)||Number(a.day!==row.day)-Number(b.day!==row.day)||a.day-b.day||a.period-b.period
+        return direction*((priority.get(first?.lessonId||'')||0)-(priority.get(second?.lessonId||'')||0))||Number(!!first)-Number(!!second)||Number(a.day!==row.day)-Number(b.day!==row.day)||a.day-b.day||a.period-b.period
       })
       for(const destination of destinations){
         const key=cell(row.classroomId,destination.day,destination.period)
         if(retained.has(key))continue
         const other=occupied.get(key),otherLesson=other?.lessonId?byId.get(other.lessonId):undefined
         if(other&&(!otherLesson||!single(otherLesson)))continue
-        if(otherLesson&&(priority.get(otherLesson.id)||0)>=value)continue
+        if(otherLesson&&direction*((priority.get(otherLesson.id)||0)-value)>=0)continue
         if(spreadDelta(lesson,row.day,destination.day)+(otherLesson?spreadDelta(otherLesson,destination.day,row.day):0)>0)continue
         const ignore=new Set(other?[row,other]:[row])
         if(!available(lesson,destination.day,destination.period,ignore)||otherLesson&&!available(otherLesson,row.day,row.period,ignore))continue
@@ -200,14 +205,14 @@ function solveSinglePeriodMatching(lessons:PlannedLesson[],fixed:PlannedSlot[],p
   for(let round=0;round<maxDegree;round++){
     let matched:Map<string,{left:string;edge:{left:string;right:string;lessonId:string|null;serial:number}}>|null=null
     let color=''
-    const stillPrefers=edges.some(e=>!!(e.lessonId&&priority.get(e.lessonId)))
-    if(stillPrefers)colors.sort((a,b)=>Number(isMorningPeriod(Number(b.split(':')[1]),times))-Number(isMorningPeriod(Number(a.split(':')[1]),times)))
+    const preference=edges.reduce((total,e)=>total+(e.lessonId?priority.get(e.lessonId)||0:0),0)
+    if(preference)colors.sort((a,b)=>Math.sign(preference)*(Number(isMorningPeriod(Number(b.split(':')[1]),times))-Number(isMorningPeriod(Number(a.split(':')[1]),times))))
     for(let ci=0;ci<colors.length;ci++){
       const candidate=colors[ci]
       const morningSlot=isMorningPeriod(Number(candidate.split(':')[1]),times)
-      const pools=morningSlot&&stillPrefers?[true,false]:[false]
+      const pools=edges.some(e=>e.lessonId&&(morningSlot?1:-1)*(priority.get(e.lessonId)||0)>0)?[true,false]:[false]
       for(const restrict of pools){
-        const allowed=edges.filter(e=>(e.right.startsWith('__dummy_teacher_')||!blocked.has(`${e.right}:${candidate}`))&&(!restrict||!e.lessonId||!!priority.get(e.lessonId)))
+        const allowed=edges.filter(e=>(e.right.startsWith('__dummy_teacher_')||!blocked.has(`${e.right}:${candidate}`))&&(!restrict||!e.lessonId||(morningSlot?1:-1)*(priority.get(e.lessonId)||0)>0))
         const adj=new Map<string,typeof allowed>()
         for(const edge of allowed){const list=adj.get(edge.left)||[];list.push(edge);adj.set(edge.left,list)}
         for(const list of adj.values())list.sort((a,b)=>{const pa=a.lessonId?priority.get(a.lessonId)||0:0,pb=b.lessonId?priority.get(b.lessonId)||0:0;if(pa!==pb)return morningSlot?pb-pa:pa-pb;return Number(!a.lessonId)-Number(!b.lessonId)||a.serial-b.serial})

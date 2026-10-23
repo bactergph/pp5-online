@@ -27,6 +27,10 @@ for(const name of ['คณิตศาสตร์ 4','วิทยาศาส�
 assert.equal(planning.lessonMorningPriority({name:'ภาษาอังกฤษ'}),1)
 assert.equal(planning.lessonMorningPriority({name:'ศิลปะ',morning:true}),3)
 assert.equal(planning.lessonMorningPriority({name:'วิทยาศาสตร์',activity:true}),0)
+assert.equal(planning.lessonMorningPriority({name:'คณิตศาสตร์',timePreference:'any'}),0)
+assert.equal(planning.lessonMorningPriority({name:'คณิตศาสตร์',timePreference:'afternoon'}),-3)
+assert.equal(planning.lessonMorningPriority({name:'ศิลปะ',timePreference:'morning'}),3)
+assert.throws(()=>planning.validatePlan({...planning.emptyPlan(),rules:{invalid:{count:1,pattern:[1],roomId:null,morning:false,spread:true,timePreference:'evening'}}},['invalid']),/ช่วงเวลา/)
 const basic=[lesson('english','ภาษาอังกฤษ'),lesson('art','ศิลปะ'),lesson('math','คณิตศาสตร์'),lesson('science','วิทยาศาสตร์')]
 const prioritized=solve(basic)
 assert.ok(prioritized.assignments.filter(row=>['math','science'].includes(row.lessonId)).every(row=>row.period<=2))
@@ -42,6 +46,22 @@ assert.deepEqual(Array.from(solve(doubles).assignments.filter(row=>row.lessonId=
 assert.deepEqual(Array.from(solve(doubles,[],blocked).assignments.filter(row=>row.lessonId==='math').map(row=>row.period).sort()),[3,4])
 const explicit=solve([lesson('math','คณิตศาสตร์',2),lesson('art','ศิลปะ',2,{morning:true})])
 assert.ok(explicit.assignments.filter(row=>row.lessonId==='art').every(row=>row.period<=2))
+
+// Explicit afternoon overrides subject-based morning defaults on both singles and doubles.
+for(const extra of [{pattern:[1,1]},{pattern:[2]}]){
+ const afternoon=solve([lesson('math','คณิตศาสตร์',2,{...extra,timePreference:'afternoon'}),lesson('art','ศิลปะ',2,{timePreference:'morning'})])
+ assert.ok(afternoon.assignments.filter(row=>row.lessonId==='math').every(row=>row.period>=3))
+ assert.ok(afternoon.assignments.filter(row=>row.lessonId==='art').every(row=>row.period<=2))
+}
+const afternoonBlocked=[3,4].map(period=>({teacherId:'T-math',day:1,period}))
+assert.ok(solve([lesson('math','คณิตศาสตร์',2,{timePreference:'afternoon'})],[],afternoonBlocked).assignments.every(row=>row.period<=2),'Session choice is soft; teacher blocks remain mandatory')
+const preferredAfternoon=planning.improveMorningAssignments([lesson('math','คณิตศาสตร์',1,{timePreference:'afternoon'}),lesson('art','ศิลปะ',1,{timePreference:'morning'})],[],[slot('math',1),slot('art',4)],[1],times,[])
+assert.equal(preferredAfternoon.find(row=>row.lessonId==='math').period,4)
+assert.equal(preferredAfternoon.find(row=>row.lessonId==='art').period,1)
+const fullWeekAfternoon=solve([lesson('math','คณิตศาสตร์',10,{timePreference:'afternoon'}),lesson('art','ศิลปะ',10,{timePreference:'morning'})],[],[],planning.emptyPlan())
+assert.equal(fullWeekAfternoon.solver,'edge_coloring')
+assert.ok(fullWeekAfternoon.assignments.filter(row=>row.lessonId==='math').every(row=>row.period>=3))
+console.log('PASS: explicit morning / afternoon / either sessions; single and double periods; edge-colouring and block solver; validation; fallback preserves hard constraints')
 
 const venueLessons=[lesson('math','คณิตศาสตร์',1,{roomId:'lab'}),lesson('outside','อื่น',1,{classroomId:'B',teacherId:'Outside',roomId:'lab',fixedOnly:true})]
 const venueRows=[slot('outside',1,{classroomId:'B'})]

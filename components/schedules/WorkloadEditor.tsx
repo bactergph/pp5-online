@@ -9,6 +9,7 @@ import { SUBJECT_GROUPS } from '@/lib/schedule-input'
 import type { PeriodTimeRow } from '@/lib/schedule-helpers'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import LessonPatternPicker from './LessonPatternPicker'
+import WorkloadPlacePicker from './WorkloadPlacePicker'
 
 type Classroom = Preparation['classrooms'][number]
 type Teacher = Preparation['teachers'][number]
@@ -18,7 +19,8 @@ export type WorkloadChange = {
   rules?: { lessonId: string; value: LessonRule }[]
   places?: Place[]
 }
-type Draft = { id: string; teacherId: string; count: number; pattern: number[]; roomId: string | null; spread: boolean; morning: boolean }
+type Draft = { id: string; teacherId: string; count: number; pattern: number[]; roomId: string | null; spread: boolean; morning: boolean; timePreference?: LessonRule['timePreference'] }
+type CodeSetting = { placeId: string; time: 'any' | 'morning' | 'afternoon'; pattern: 'single' | 'double' }
 
 function groupRank(lesson: ScheduleLesson) {
   const index = SUBJECT_GROUPS.indexOf(lesson.subjectGroup || '')
@@ -55,6 +57,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
 }) {
   const dialog = useRef<HTMLDialogElement>(null), addDialog = useRef<HTMLDialogElement>(null), codeDialog = useRef<HTMLDialogElement>(null), lockDialog = useRef<HTMLDialogElement>(null)
   const codeOptionsDialog = useRef<HTMLDialogElement>(null), codeSaveButton = useRef<HTMLButtonElement>(null)
+  const codePlaceDialog = useRef<HTMLDialogElement>(null), codeAddPlaceButton = useRef<HTMLButtonElement>(null)
   const [view, setView] = useState<'room' | 'teacher' | 'code' | 'lock'>('room')
   const [lockMode, setLockMode] = useState<'room' | 'teacher'>('room')
   const [lockCell, setLockCell] = useState<{ day: number; period: number } | null>(null)
@@ -85,7 +88,8 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     } finally { saveLock.current = false }
   }
   const [picked, setPicked] = useState<string[]>([]), [codeLessonIds, setCodeLessonIds] = useState<string[]>([]), [activeCode, setActiveCode] = useState(''), [codeLevel, setCodeLevel] = useState('')
-  const [codePlace, setCodePlace] = useState('keep'), [codeMorning, setCodeMorning] = useState('keep'), [codePattern, setCodePattern] = useState('keep')
+  const [codeSettings, setCodeSettings] = useState<Record<string, CodeSetting>>({})
+  const [codePlaceNotice, setCodePlaceNotice] = useState('')
   const [codePlaceName, setCodePlaceName] = useState(''), [codePlaces, setCodePlaces] = useState<Place[]>([]), [codePlaceError, setCodePlaceError] = useState('')
   const codeAvailablePlaces = [...places, ...codePlaces.filter(place => !places.some(existing => existing.id === place.id))]
   const levels = [...new Set(classrooms.map(room => room.level))]
@@ -120,8 +124,6 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   const shownCodeLevel = codeLevels.includes(codeLevel) ? codeLevel : codeLevels[0] || ''
   const codeLevelLessons = codeLessons.filter(lesson => roomOf(lesson.classroomId)?.level === shownCodeLevel)
   const chosenLessons = codeLessons.filter(lesson => codeLessonIds.includes(lesson.id))
-  const codeHasRules = codePlace !== 'keep' || codeMorning !== 'keep' || codePattern !== 'keep'
-  const codeHasChanges = codeHasRules || codePlaces.some(place => !places.some(existing => existing.id === place.id)) || chosenLessons.some(lesson => codeTeacher && teacherOf(lesson) !== codeTeacher)
   const codeTeacherRow = teachers.find(teacher => teacher.id === codeTeacher)
   const codeTeachers = codeTeacherRow && !teacherMatches.some(teacher => teacher.id === codeTeacher) ? [codeTeacherRow, ...teacherMatches] : teacherMatches
   function roomOf(id: string) { return classrooms.find(item => item.id === id) }
@@ -129,16 +131,27 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   function toggleCodeLesson(id: string) { setCodeLessonIds(values => values.includes(id) ? values.filter(item => item !== id) : [...values, id]) }
   function openCode(id: string) {
     setActiveCode(id); setCodeLessonIds([]); setCodeLevel(''); setCodeTeacher(''); setTeacherQuery('')
-    setCodePlace('keep'); setCodeMorning('keep'); setCodePattern('keep')
     const element = codeDialog.current
     if (element && !element.open) element.showModal()
   }
-  function closeCode() { if (!saveLock.current) { codeOptionsDialog.current?.close(); codeDialog.current?.close() } }
+  function closeCode() { if (!saveLock.current) { codePlaceDialog.current?.close(); codeOptionsDialog.current?.close(); codeDialog.current?.close() } }
   function openCodeOptions() {
     if (saving || !codeTeacher || !chosenLessons.length || chosenLessons.length > 500 || codeOptionsDialog.current?.open) return
-    setCodePlace('keep'); setCodeMorning('keep'); setCodePattern('keep'); setSaveStatus(null)
+    setCodeSettings(Object.fromEntries(chosenLessons.map(lesson => { const current = ruleOf(lesson); return [lesson.id, { placeId: current.roomId || '', time: current.timePreference || (current.morning ? 'morning' : 'any'), pattern: current.pattern.some(size => size > 1) ? 'double' : 'single' }] })))
+    setSaveStatus(null); setCodePlaceNotice('')
     setCodePlaceName(''); setCodePlaces([]); setCodePlaceError('')
     codeOptionsDialog.current?.showModal()
+  }
+  function openCodePlace() {
+    if (saving) return
+    setCodePlaceName(''); setCodePlaceError('')
+    codePlaceDialog.current?.showModal()
+  }
+  function closeCodePlace() {
+    codePlaceDialog.current?.close(); codeAddPlaceButton.current?.focus()
+  }
+  function updateCodeSetting(id: string, change: Partial<CodeSetting>) {
+    setCodeSettings(values => ({ ...values, [id]: { ...values[id], ...change } }))
   }
   function addCodePlace() {
     if (saving) return
@@ -149,18 +162,19 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     if (!known && codeAvailablePlaces.length >= 500) { setCodePlaceError('เพิ่มสถานที่ได้สูงสุด 500 แห่ง'); return }
     const place = known || { id: crypto.randomUUID(), name }
     if (!known) setCodePlaces(values => [...values, place])
-    setCodePlace(place.id); setCodePlaceName(''); setCodePlaceError('')
+    setCodePlaceNotice(`${known ? 'มีสถานที่นี้แล้ว' : 'เพิ่มสถานที่แล้ว'}: ${place.name} · เลือกใช้ให้แต่ละห้องได้ด้านล่าง`)
+    setCodePlaceName(''); setCodePlaceError(''); closeCodePlace()
   }
   function closeCodeOptions() {
     if (saveLock.current) return
-    codeOptionsDialog.current?.close()
+    codePlaceDialog.current?.close(); codeOptionsDialog.current?.close()
     codeSaveButton.current?.focus()
   }
   function openLesson(id: string) {
     const lesson = lessons.find(item => item.id === id)
     if (!lesson) return
     const current = ruleOf(lesson)
-    setDraft({ id: lesson.id, teacherId: teacherOf(lesson), count: current.count, pattern: [...current.pattern], roomId: current.roomId, spread: current.spread, morning: current.morning })
+    setDraft({ id: lesson.id, teacherId: teacherOf(lesson), count: current.count, pattern: [...current.pattern], roomId: current.roomId, spread: current.spread, morning: current.morning, timePreference: current.timePreference })
     setTeacherQuery(''); setPlaceName(''); setDraftPlaces([])
     const element = dialog.current
     if (element && !element.open) element.showModal()
@@ -172,7 +186,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     if (!lesson) return
     const total = draft.pattern.reduce((sum, size) => sum + size, 0)
     if (!draft.pattern.length || draft.pattern.some(size => !Number.isInteger(size) || size < 1 || size > 8) || total !== draft.count) return
-    const saved = await commit({ assignments: [{ lessonId: draft.id, teacherId: draft.teacherId }], rules: [{ lessonId: draft.id, value: { count: draft.count, pattern: draft.pattern, roomId: draft.roomId, spread: draft.spread, morning: draft.morning } }], places: draftPlaces })
+    const saved = await commit({ assignments: [{ lessonId: draft.id, teacherId: draft.teacherId }], rules: [{ lessonId: draft.id, value: { count: draft.count, pattern: draft.pattern, roomId: draft.roomId, spread: draft.spread, morning: draft.morning, timePreference: draft.timePreference } }], places: draftPlaces })
     if (saved) close()
   }
   function addPlace() {
@@ -260,18 +274,13 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     })
   }
   async function assignCodes() {
-    if (!codeOptionsDialog.current?.open || !codeTeacher || !codeHasChanges || !chosenLessons.length || chosenLessons.length > 500) return
-    if (codePlaceName.trim()) {
-      setCodePlaceError('กดเพิ่มเพื่อเลือกสถานที่ใหม่ก่อนบันทึก')
-      codeOptionsDialog.current?.querySelector<HTMLInputElement>('#code-place-name')?.focus()
-      return
-    }
-    const rules = codeHasRules ? chosenLessons.map(lesson => {
-      const current = ruleOf(lesson), count = current.count
-      const pattern = codePattern === 'single' ? Array(count).fill(1) : codePattern === 'double' ? [...Array(Math.floor(count / 2)).fill(2), ...(count % 2 ? [1] : [])] : current.pattern
-      return { lessonId: lesson.id, value: { ...current, pattern, roomId: codePlace === 'keep' ? current.roomId : codePlace || null, morning: codeMorning === 'keep' ? current.morning : codeMorning === 'morning' } }
-    }) : undefined
-    if (await commit({ assignments: chosenLessons.map(lesson => ({ lessonId: lesson.id, teacherId: codeTeacher })), rules, places: codePlaces })) {
+    if (!codeOptionsDialog.current?.open || codePlaceDialog.current?.open || !codeTeacher || !chosenLessons.length || chosenLessons.length > 500) return
+    const lessonRules = chosenLessons.map(lesson => {
+      const current = ruleOf(lesson), setting = codeSettings[lesson.id], count = current.count
+      const pattern = setting.pattern === 'double' ? [...Array(Math.floor(count / 2)).fill(2), ...(count % 2 ? [1] : [])] : Array(count).fill(1)
+      return { lessonId: lesson.id, value: { ...current, pattern, roomId: setting.placeId || null, morning: setting.time === 'morning', timePreference: setting.time } }
+    })
+    if (await commit({ assignments: chosenLessons.map(lesson => ({ lessonId: lesson.id, teacherId: codeTeacher })), rules: lessonRules, places: codePlaces })) {
       codeOptionsDialog.current?.close(); setCodeLessonIds([])
       codeDialog.current?.querySelector<HTMLInputElement>('input[type=search]')?.focus()
     }
@@ -387,7 +396,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
           <div className="prep-load-place"><input value={placeName} onChange={event => setPlaceName(event.target.value)} placeholder="เช่น ห้องคอมพิวเตอร์" aria-label="ชื่อสถานที่ใหม่" /><button type="button" disabled={!placeName.trim()} onClick={addPlace}>เพิ่มสถานที่</button></div>
         </section>
         <section className="prep-activity-block"><div className="prep-activity-head"><span>4</span><div><h3>ความต้องการ</h3><p>ใช้ช่วยจัดตาราง ระบบยังคงไม่ให้ครูหรือห้องชนกัน</p></div></div>
-          <div className="prep-activity-pills"><button type="button" aria-pressed={draft.spread} onClick={() => setDraft({ ...draft, spread: !draft.spread })}>กระจายวัน</button><button type="button" aria-pressed={draft.morning} onClick={() => setDraft({ ...draft, morning: !draft.morning })}>ช่วงเช้า</button></div>
+          <div className="prep-activity-pills"><button type="button" aria-pressed={draft.spread} onClick={() => setDraft({ ...draft, spread: !draft.spread })}>กระจายวัน</button><button type="button" aria-pressed={draft.morning} onClick={() => setDraft({ ...draft, morning: !draft.morning, timePreference: draft.morning ? 'any' : 'morning' })}>ช่วงเช้า</button></div>
         </section>
       </fieldset></div>
       <footer>{saveNotice}<button type="button" disabled={saving} onClick={close}>ยกเลิก</button><button type="button" className="prep-primary" disabled={saving || !draft.teacherId || !patternReady} onClick={() => void apply()}>{saving ? 'กำลังบันทึก…' : 'บันทึกวิชานี้'}</button></footer>
@@ -411,22 +420,28 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     <dialog ref={codeOptionsDialog} className="prep-team-dialog prep-activity-dialog prep-code-options-dialog" aria-labelledby="code-options-title" onCancel={event => { event.preventDefault(); closeCodeOptions() }}>{activeSubject && <>
       <header><div><h2 id="code-options-title">ตั้งค่าก่อนบันทึก</h2><p>{activeSubject.code} · {teacherName(codeTeacher)} · {chosenLessons.length} ห้อง</p></div><button type="button" disabled={saving} aria-label="ปิดการตั้งค่า" onClick={closeCodeOptions}>ปิด</button></header>
       <div className="prep-team-dialog-body"><fieldset disabled={saving}>
-          <div className="prep-code-settings">
-            <div className="prep-code-place">
-              <label>ห้องสถานที่<select aria-label="สถานที่ของห้องที่เลือก" value={codePlace} onChange={event => setCodePlace(event.target.value)}><option value="keep">คงสถานที่เดิม</option><option value="">ไม่กำหนดสถานที่</option>{codeAvailablePlaces.map(place => <option key={place.id} value={place.id}>{place.name}</option>)}</select></label>
-              <label htmlFor="code-place-name">เพิ่มสถานที่ใหม่</label>
-              <div className="prep-code-place-add"><input id="code-place-name" value={codePlaceName} maxLength={100} onChange={event => { setCodePlaceName(event.target.value); setCodePlaceError('') }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCodePlace() } }} placeholder="เช่น ห้องคอมพิวเตอร์"/><button type="button" disabled={saving || !codePlaceName.trim()} onClick={addCodePlace}>เพิ่ม</button></div>
-              {codePlaceError && <small className="prep-code-place-error" role="alert">{codePlaceError}</small>}
-              {codePlaces.some(place => place.id === codePlace) && !places.some(place => place.id === codePlace) && <small role="status">สถานที่ใหม่นี้จะบันทึกพร้อมภาระสอน</small>}
-            </div>
-            <label>ช่วงเวลาที่ต้องการ<select aria-label="ช่วงเวลาของห้องที่เลือก" value={codeMorning} onChange={event => setCodeMorning(event.target.value)}><option value="keep">คงความต้องการเดิม</option><option value="morning">ต้องการช่วงเช้า</option><option value="any">ได้ทั้งเช้าและบ่าย</option></select></label>
-            <label>รูปแบบคาบ<select aria-label="รูปแบบคาบของห้องที่เลือก" value={codePattern} onChange={event => setCodePattern(event.target.value)}><option value="keep">คงรูปแบบเดิม</option><option value="single">คาบเดี่ยวทั้งหมด</option><option value="double">คาบคู่ + คาบเดี่ยวที่เหลือ</option></select></label>
-          </div>
-          <p>คงจำนวนคาบเดิมของแต่ละห้อง · คาบคู่ที่เหลือเศษจะเป็นคาบเดี่ยว และไม่ข้ามพักกลางวัน</p>
-          <p>ช่วงเช้าเป็นความต้องการ ตัวจัดอาจเลือกช่วงบ่ายเมื่อจำเป็น</p>
+        <div className="prep-code-settings-toolbar"><p>กำหนดแยกแต่ละห้องได้ โดยคงจำนวนคาบต่อสัปดาห์เดิม</p><button ref={codeAddPlaceButton} type="button" onClick={openCodePlace}>+ เพิ่มสถานที่</button></div>
+        {codePlaceNotice && <p className="prep-code-place-notice" role="status">{codePlaceNotice}</p>}
+        <div className="prep-code-settings-table" role="table" aria-label="ตั้งค่าภาระสอนรายห้อง">
+          <div role="row" className="prep-code-settings-head"><span role="columnheader">ชั้น/ห้อง</span><span role="columnheader">ห้องสถานที่</span><span role="columnheader">ช่วงเวลา</span><span role="columnheader">รูปแบบคาบ</span></div>
+          {chosenLessons.map(lesson => { const setting = codeSettings[lesson.id]; if (!setting) return null; const label = roomLabel(lesson.classroomId); return <div role="row" key={lesson.id} className="prep-code-settings-row" data-lesson-id={lesson.id}>
+            <div role="cell" className="prep-code-room-label"><strong>{label}</strong><small>{ruleOf(lesson).count} คาบ/สัปดาห์</small></div>
+            <div role="cell"><span className="prep-code-mobile-label">ห้องสถานที่</span><WorkloadPlacePicker places={codeAvailablePlaces} value={setting.placeId} onChange={placeId => updateCodeSetting(lesson.id, { placeId })} label={'สถานที่ '+label} /></div>
+            <div role="cell"><span className="prep-code-mobile-label">ช่วงเวลา</span><select aria-label={'ช่วงเวลา '+label} value={setting.time} onChange={event => updateCodeSetting(lesson.id, { time: event.target.value as CodeSetting['time'] })}><option value="any">ทั้งเช้าและบ่าย</option><option value="morning">เช้า</option><option value="afternoon">บ่าย</option></select></div>
+            <div role="cell"><span className="prep-code-mobile-label">รูปแบบคาบ</span><select aria-label={'รูปแบบคาบ '+label} value={setting.pattern} onChange={event => updateCodeSetting(lesson.id, { pattern: event.target.value as CodeSetting['pattern'] })}><option value="single">เดี่ยวทั้งหมด</option><option value="double">คาบคู่ + เดี่ยวที่เหลือ</option></select></div>
+          </div> })}
+        </div>
+        <p className="prep-code-settings-help">ช่วงเวลาเป็นความต้องการ ตัวจัดอาจเลือกช่วงอื่นเมื่อจำเป็น · คาบคู่ไม่ข้ามพักกลางวัน</p>
       </fieldset></div>
-      <footer>{saveStatus && saveNotice}<button type="button" disabled={saving} onClick={closeCodeOptions}>ย้อนกลับ</button><button type="button" className="prep-primary" disabled={saving || !codeTeacher || !codeHasChanges || !chosenLessons.length || chosenLessons.length > 500} onClick={() => void assignCodes()}>{saving ? 'กำลังบันทึก…' : 'บันทึกภาระสอน'}</button></footer>
+      <footer>{saveStatus && saveNotice}<button type="button" disabled={saving} onClick={closeCodeOptions}>ย้อนกลับ</button><button type="button" className="prep-primary" disabled={saving || !codeTeacher || !chosenLessons.length || chosenLessons.length > 500} onClick={() => void assignCodes()}>{saving ? 'กำลังบันทึก…' : 'บันทึกภาระสอน'}</button></footer>
     </>}</dialog>
+    <dialog ref={codePlaceDialog} className="prep-team-dialog prep-code-place-dialog" aria-labelledby="code-place-title" onCancel={event => { event.preventDefault(); closeCodePlace() }}>
+      <header><h2 id="code-place-title">เพิ่มสถานที่ใหม่</h2><button type="button" aria-label="ปิดเพิ่มสถานที่" onClick={closeCodePlace}>ปิด</button></header>
+      <form onSubmit={event => { event.preventDefault(); addCodePlace() }}>
+        <div className="prep-team-dialog-body"><label htmlFor="code-place-name">ชื่อสถานที่</label><input id="code-place-name" autoFocus value={codePlaceName} maxLength={100} onChange={event => { setCodePlaceName(event.target.value); setCodePlaceError('') }} placeholder="เช่น ห้องคอมพิวเตอร์" />{codePlaceError && <p className="prep-code-place-error" role="alert">{codePlaceError}</p>}<p>สถานที่ใหม่จะบันทึกพร้อมภาระสอน</p></div>
+        <footer><button type="button" onClick={closeCodePlace}>ยกเลิก</button><button type="submit" className="prep-primary" disabled={!codePlaceName.trim()}>เพิ่มสถานที่</button></footer>
+      </form>
+    </dialog>
     <dialog ref={addDialog} className="prep-team-dialog prep-catalog-dialog" aria-labelledby="add-load-title" onCancel={event => { event.preventDefault(); if (!saveLock.current) addDialog.current?.close() }}>
       <header><div><h2 id="add-load-title">เพิ่มวิชาให้ครู</h2><p>{teacherName(teacherId)}</p></div><button type="button" aria-label="ปิด" disabled={saving} onClick={() => { if (!saveLock.current) addDialog.current?.close() }}>ปิด</button></header>
       <div className="prep-team-dialog-body"><fieldset disabled={saving}>

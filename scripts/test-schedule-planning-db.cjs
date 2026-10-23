@@ -167,8 +167,10 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   const cancelled=await addDraft(before);await db.query('update schedule_drafts set cancelled_at=now() where id=$1',[cancelled]);await assert.rejects(confirm(cancelled),/ยกเลิก/);
   const lockRows=before.map((s,i)=>i===0?{...s,locked:true}:s);await saveTerm(2,before,lockRows);
   const replace=await addDraft(lockRows.slice(1),{before:lockRows,unlock:[lockRows[0]]});await assert.rejects(confirm(replace),/ยืนยัน/);await confirm(replace,true);
-  const cfg={days:[1,2,3,4,5],rooms:[{id:id(99),name:'Lab'}],rules:{[id(50)]:{count:2,pattern:[2],roomId:id(99)},[id(52)]:{count:1,pattern:[1],roomId:id(99)}},reduceGaps:false,maxContinuous:0};
+  const cfg={days:[1,2,3,4,5],rooms:[{id:id(99),name:'Lab'}],rules:{[id(50)]:{count:2,pattern:[2],roomId:id(99),morning:false,spread:true,timePreference:'afternoon'},[id(52)]:{count:1,pattern:[1],roomId:id(99),morning:false,spread:true,timePreference:'any'}},reduceGaps:false,maxContinuous:0};
   await db.query('select save_schedule_plan($1,$2,2,$3,$4)',[id(1),id(10),await snap(),JSON.stringify(cfg)]);
+  const savedConfig=(await db.query('select config from schedule_plans where school_id=$1 and academic_year_id=$2 and semester=2',[id(1),id(10)])).rows[0].config;
+  assert.equal(savedConfig.rules[id(50)].timePreference,'afternoon');assert.equal(savedConfig.rules[id(52)].timePreference,'any');
   const current2=lockRows.slice(1);
   await assert.rejects(saveTerm(2,current2,[slot(20,50,1),slot(23,52,1)]),/สถานที่ชน/);
   await assert.rejects(saveTerm(2,current2,[slot(20,50,4),slot(20,50,5)]),/ข้ามช่วงพัก/);
