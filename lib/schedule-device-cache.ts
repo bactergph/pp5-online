@@ -28,11 +28,14 @@ export async function readScheduleCache<T>(year: string, term: number) {
 }
 
 export async function readFreePlan<T>() {
-  return readFreePlanRecord<T>()
+  return readFreePlanRecord<T>(true)
 }
 
-export async function readFreePlanRecord<T>() {
-  if (typeof indexedDB === 'undefined') return null
+export async function readFreePlanRecord<T>(strict = false) {
+  if (typeof indexedDB === 'undefined') {
+    if (strict) throw Error('เบราว์เซอร์นี้ไม่รองรับฐานข้อมูลบนเครื่อง')
+    return null
+  }
   try {
     const db = await openCache()
     const row = await new Promise<{ savedAt: string; data: T; uploadedHash?: string } | undefined>((resolve, reject) => {
@@ -42,7 +45,8 @@ export async function readFreePlanRecord<T>() {
     })
     db.close()
     return row || null
-  } catch {
+  } catch (error) {
+    if (strict) throw error
     return null
   }
 }
@@ -63,18 +67,25 @@ export async function markFreePlanUploaded(hash: string) {
   }
 }
 
-export async function writeFreePlan(data: unknown, savedAt = new Date().toISOString()) {
-  if (typeof indexedDB === 'undefined') return
+export async function writeFreePlan(data: unknown, savedAt = new Date().toISOString(), expectedSavedAt?: string) {
+  if (typeof indexedDB === 'undefined') throw Error('เบราว์เซอร์นี้ไม่รองรับฐานข้อมูลบนเครื่อง')
+  const db = await openCache()
   try {
-    const db = await openCache()
     await new Promise<void>((resolve, reject) => {
-      const request = db.transaction(STORE, 'readwrite').objectStore(STORE).put({ savedAt, data }, FREE_KEY)
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
+      const transaction = db.transaction(STORE, 'readwrite')
+      const store = transaction.objectStore(STORE)
+      let conflict = false
+      transaction.oncomplete = () => resolve()
+      transaction.onabort = () => reject(conflict ? Error('ข้อมูลถูกแก้จากแท็บอื่น กรุณาสำรองข้อมูลแล้วโหลดหน้าใหม่') : transaction.error || Error('บันทึกลงเครื่องไม่สำเร็จ'))
+      transaction.onerror = () => reject(transaction.error)
+      const request = store.get(FREE_KEY)
+      request.onsuccess = () => {
+        if (expectedSavedAt !== undefined && (request.result?.savedAt || '') !== expectedSavedAt) { conflict = true; transaction.abort(); return }
+        store.put({ savedAt, data }, FREE_KEY)
+      }
     })
+  } finally {
     db.close()
-  } catch {
-    // เครื่องนี้เก็บสำเนาไม่ได้
   }
 }
 

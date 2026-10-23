@@ -2,8 +2,14 @@ import type { ActivityTeam } from './schedule-activity-teams'
 import { emptyPlan } from './schedule-planning'
 import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
 import type { DeviceSnapshot } from './schedule-device-build'
+import { isTimetableClassroom } from './schedules'
 
-export type LocalCell = { classroomId: string; day: number; period: number; subjectId: string; locked?: boolean }
+export const FREE_SCHEDULE_TEACHER_LIMIT = 25
+export function deviceTeacherLimitMessage(count:number, limit?:number) {
+  return limit !== undefined && count > limit ? `จัดตารางฟรีรองรับครูสูงสุด ${limit} คน (มี ${count} คน) กรุณาลดรายชื่อครูก่อนจัดตาราง` : ''
+}
+
+export type LocalCell = { classroomId: string; day: number; period: number; subjectId: string; activityId?: string; locked?: boolean }
 
 export type FreeActivity = {
   id: string
@@ -12,6 +18,9 @@ export type FreeActivity = {
   roomIds: string[]
   teacherId: string
   roomTeachers: Record<string, string>
+  teacherIds?: string[]
+  roomTeacherIds?: Record<string, string[]>
+  weeklyPeriods?: number
   cells: { day: number; period: number }[]
 }
 
@@ -73,13 +82,25 @@ export function doublesIn(pattern: number[] | undefined, periods: number) {
 }
 
 export function activityTeacherId(activity: FreeActivity, roomId: string) {
-  if ((activity.mode || 'joint') === 'separate') return activity.roomTeachers?.[roomId] || ''
-  return activity.teacherId
+  return freeActivityTeachers(activity, roomId)[0] || ''
+}
+
+export function freeActivityTeachers(activity: FreeActivity, roomId: string) {
+  return activity.mode === 'separate'
+    ? activity.roomTeacherIds?.[roomId] ?? (activity.roomTeachers?.[roomId] ? [activity.roomTeachers[roomId]] : [])
+    : activity.teacherIds ?? (activity.teacherId ? [activity.teacherId] : [])
+}
+
+export function freeActivityGroup(activity: FreeActivity): ActivityTeam {
+  return { id: activity.id, settingId: activity.id, mode: activity.mode, roomIds: activity.roomIds,
+    teacherIds: activity.teacherIds ?? (activity.teacherId ? [activity.teacherId] : []),
+    roomTeachers: Object.fromEntries(activity.roomIds.map(id => [id, freeActivityTeachers(activity, id)])),
+    weeklyPeriods: activity.weeklyPeriods ?? (activity.cells.length || 1), cells: activity.cells }
 }
 
 export function roomNeed(plan: FreeWizardPlan, roomId: string) {
   const subjects = plan.subjects.filter(subject => subject.roomId === roomId).reduce((sum, subject) => sum + subject.periods, 0)
-  const activities = plan.activities.filter(activity => activity.roomIds.includes(roomId)).reduce((sum, activity) => sum + activity.cells.length, 0)
+  const activities = plan.activities.filter(activity => activity.roomIds.includes(roomId)).reduce((sum, activity) => sum + (activity.weeklyPeriods ?? (activity.cells.length || 1)), 0)
   return subjects + activities
 }
 
@@ -110,6 +131,9 @@ export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
       roomIds: activity.roomIds || [],
       teacherId: activity.teacherId || '',
       roomTeachers: activity.roomTeachers || {},
+      teacherIds: activity.teacherIds ?? (activity.teacherId ? [activity.teacherId] : []),
+      roomTeacherIds: activity.roomTeacherIds ?? Object.fromEntries(Object.entries(activity.roomTeachers || {}).map(([id, teacher]) => [id, teacher ? [teacher] : []])),
+      weeklyPeriods: activity.weeklyPeriods ?? (activity.cells?.length || 1),
       cells: activity.cells || [],
     })),
   }
@@ -125,7 +149,7 @@ function named<T extends { id: string }>(items: T[], name: string, label: (item:
 export function addLevelRooms(plan: FreeWizardPlan, levels: string[], count: number) {
   const rooms = [...plan.rooms]
   const total = Math.max(1, Math.min(20, Math.round(count) || 1))
-  for (const level of levels.map(level => level.trim()).filter(Boolean)) {
+  for (const level of levels.map(level => level.trim()).filter(level => level && isTimetableClassroom(level))) {
     for (let room = 1; room <= total; room += 1) {
       const label = `${level}/${room}`
       if (!rooms.some(item => item.label === label)) rooms.push({ id: newId(), label })
@@ -134,7 +158,7 @@ export function addLevelRooms(plan: FreeWizardPlan, levels: string[], count: num
   return { ...plan, rooms }
 }
 
-export function importSubjectTable(text: string, plan: FreeWizardPlan): { plan: FreeWizardPlan } | { error: string } {
+export function importSubjectTable(text: string, plan: FreeWizardPlan, teacherLimit?:number): { plan: FreeWizardPlan } | { error: string } {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (!lines.length) return { error: 'ยังไม่มีแถวให้นำเข้า' }
   let teachers = [...plan.teachers]
@@ -146,11 +170,11 @@ export function importSubjectTable(text: string, plan: FreeWizardPlan): { plan: 
     const cells = line.split(line.includes('\t') ? '\t' : ',').map(cell => cell.trim())
     if (index === 0 && /ห้อง/.test(cells[0] || '') && cells.some(cell => /วิชา|ครู/.test(cell))) continue
     const [roomLabel, code, name, teacherName, periodText, doubleText, placeName] = cells
-    if (!roomLabel || !name || !teacherName) return { error: `แถวที่ ${index + 1} ต้องมีห้อง รายวิชา และครู` }
+    if (!roomLabel || !name) return { error: `แถวที่ ${index + 1} ต้องมีห้องและรายวิชา ครูสามารถกำหนดในขั้นภาระสอนภายหลังได้` }
     const periods = Math.max(1, Math.min(40, Number(periodText) || 1))
     const room = named(rooms, roomLabel, item => item.label, () => ({ id: newId(), label: roomLabel }))
     rooms = room.items
-    const teacher = named(teachers, teacherName, item => item.name, () => ({ id: newId(), name: teacherName }))
+    const teacher = teacherName ? named(teachers, teacherName, item => item.name, () => ({ id: newId(), name: teacherName })) : {items:teachers,item:{id:'',name:''}}
     teachers = teacher.items
     let placeId: string | null = null
     if (placeName) {
@@ -165,6 +189,8 @@ export function importSubjectTable(text: string, plan: FreeWizardPlan): { plan: 
     imported += 1
   }
   if (!imported) return { error: 'ไม่พบแถวรายวิชา ใช้หัวตาราง ห้อง รหัส รายวิชา ครู คาบ คาบคู่ สถานที่' }
+  const limitError=deviceTeacherLimitMessage(teachers.length,teacherLimit)
+  if(limitError)return {error:limitError}
   return { plan: { ...plan, teachers, rooms, places, subjects } }
 }
 
@@ -199,7 +225,8 @@ export function withTeachingPeriods(periods: PeriodTimeRow[], count: number) {
   return rows
 }
 
-export function toDeviceSnapshot(plan: FreeWizardPlan, scope: string[]): DeviceSnapshot {
+export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): DeviceSnapshot {
+  void _scope // Include all rooms so conflicts outside the chosen scope remain visible.
   const lessons = plan.subjects.map(subject => {
     const room = plan.rooms.find(item => item.id === subject.roomId)
     const teacher = plan.teachers.find(item => item.id === subject.teacherId)
@@ -219,18 +246,15 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, scope: string[]): DeviceS
       spread: true,
     }
   })
-  const groups: ActivityTeam[] = []
-  for (const activity of plan.activities) {
-    if (!activity.roomIds.length || !activity.cells.length) continue
-    if (activity.mode === 'separate') {
-      if (activity.roomIds.some(roomId => !activity.roomTeachers[roomId])) continue
-      const roomTeachers: Record<string, string[]> = {}
-      for (const roomId of activity.roomIds) roomTeachers[roomId] = [activity.roomTeachers[roomId]]
-      groups.push({ id: activity.id, settingId: activity.id, mode: 'separate', roomIds: activity.roomIds, teacherIds: [], roomTeachers, weeklyPeriods: activity.cells.length, cells: activity.cells })
-    } else if (activity.teacherId) {
-      groups.push({ id: activity.id, settingId: activity.id, mode: 'joint', roomIds: activity.roomIds, teacherIds: [activity.teacherId], roomTeachers: {}, weeklyPeriods: activity.cells.length, cells: activity.cells })
-    }
-  }
+  const groups = plan.activities.map(freeActivityGroup)
+  const activityLessons = plan.activities.flatMap(activity => activity.roomIds.map(classroomId => ({
+    id: `activity:${activity.id}:${classroomId}`, classroomId, teacherId: null,
+    teacherIds: freeActivityTeachers(activity, classroomId), count: activity.weeklyPeriods ?? (activity.cells.length || 1),
+    subjectId: activity.id, name: activity.name, fullName: activity.name,
+    label: `${plan.rooms.find(room => room.id === classroomId)?.label || ''} · ${activity.name}`,
+    teacherName: freeActivityTeachers(activity, classroomId).map(id => plan.teachers.find(teacher => teacher.id === id)?.name || '').filter(Boolean).join(', '),
+    activity: true, teacherOptional: true, activityGroupId: activity.mode === 'joint' ? activity.id : undefined,
+  })))
   return {
     hash: 'local',
     plan: {
@@ -242,9 +266,9 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, scope: string[]): DeviceS
     },
     periods: plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES,
     timesConfigured: !validatePeriodTimes(plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES),
-    classrooms: plan.rooms.map(room => ({ id: room.id, level: room.label, room: 0 })),
-    lessons,
-    slots: plan.timetable.filter(cell => cell.subjectId && (cell.locked || !scope.includes(cell.classroomId))).map(cell => ({ classroom_id: cell.classroomId, academic_year_id: 'local', day_of_week: cell.day, period: cell.period, class_subject_id: cell.subjectId, activity_id: null, note: null, locked: true })),
+    classrooms: plan.rooms.filter(room => isTimetableClassroom(room.label.split('/')[0])).map(room => ({ id: room.id, level: room.label, room: 0 })),
+    lessons: [...lessons, ...activityLessons],
+    slots: plan.timetable.map(cell => ({ classroom_id: cell.classroomId, academic_year_id: 'local', day_of_week: cell.day, period: cell.period, class_subject_id: cell.subjectId || null, activity_id: cell.activityId ? `${cell.activityId}:${cell.classroomId}` : null, note: null, locked: !!cell.locked })),
     blocks: plan.blocks,
     activities: plan.activities.map(activity => ({ id: activity.id, label: activity.name })),
     teachers: plan.teachers.map(teacher => ({ id: teacher.id, full_name: teacher.name })),
