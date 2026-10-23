@@ -104,7 +104,7 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
       <p>{clear?'ย้ายวิชาที่ไม่ล็อกในห้องที่เลือกได้ โดยคงคาบล็อกและกิจกรรมที่ระบุวันไว้':'คงวิชาที่จัดไว้แล้ว แล้วนำคาบที่เหลือไปเติมในช่องว่าง'}</p>
       <details className="prep-review-conditions">
         <summary><FiInfo aria-hidden="true"/>เงื่อนไขที่ใช้จัดตาราง</summary>
-        <ul><li>ตรวจครูและสถานที่ชน รวมตารางของห้องนอกขอบเขตที่เลือก</li><li>รักษาคาบพัก คาบล็อก ช่วงครูไม่ว่าง และรูปแบบคาบที่กำหนด</li><li>พยายามวางคณิตศาสตร์และวิทยาศาสตร์ก่อนพักกลางวัน หากเงื่อนไขไม่เอื้อจะใช้ช่วงบ่ายเพื่อจัดให้ครบ</li></ul>
+        <ul><li>ตรวจครูและสถานที่ชน รวมตารางของห้องนอกขอบเขตที่เลือก</li><li>รักษาคาบพัก คาบล็อก ช่วงครูไม่ว่าง และรูปแบบคาบที่กำหนด</li><li>เน้นจัดภาษาไทย วิทยาศาสตร์ และคณิตศาสตร์ไว้ก่อนพักกลางวัน แม้เลือกได้ทั้งเช้าและบ่าย หากเงื่อนไขไม่เอื้อจะใช้ช่วงบ่ายเพื่อจัดให้ครบ</li></ul>
       </details>
       {groups.length>0&&<details className="prep-review-activities"><summary>กิจกรรมที่นำมาจัด {groups.length} กลุ่ม</summary><ul>{groups.map(group=><li key={group.id}><b>{data.activities.find(activity=>activity.id===group.settingId)?.label||'กิจกรรม'}</b><span>{group.weeklyPeriods} คาบ/สัปดาห์ · {group.cells.length?group.cells.map(cell=>`${SCHEDULE_DAYS.find(day=>day.value===cell.day)?.label} คาบ ${cell.period}`).join(', '):'จัดวันและคาบอัตโนมัติ'}</span>{group.mode==='joint'&&group.roomIds.some(id=>!rooms.includes(id))&&<small>กิจกรรมรวมกลุ่มอาจเปลี่ยนคาบในอีก {group.roomIds.filter(id=>!rooms.includes(id)).length} ห้อง เพื่อให้จัดพร้อมกัน</small>}</li>)}</ul></details>}
     </section>

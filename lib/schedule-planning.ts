@@ -9,12 +9,14 @@ export type PlannedLesson = { id: string; classroomId: string; teacherId: string
 export function lessonPrefersMorning(lesson: { subjectGroup?: string; fullName?: string; name?: string; label?: string }) {
   return /ภาษาไทย|คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา|สังคมศึกษา|ภาษาอังกฤษ|ภาษาต่างประเทศ/.test(`${lesson.subjectGroup || ''} ${lesson.fullName || ''} ${lesson.name || ''}`)
 }
-/** Explicit choices come first, then maths/sciences, then other core subjects. */
+/** Explicit session choices come first, then Thai/maths/sciences. "Any" allows
+ * either session; it does not disable the school's automatic subject priority. */
 export function lessonMorningPriority(lesson: {subjectGroup?:string;fullName?:string;name?:string;label?:string;morning?:boolean;timePreference?:TimePreference;preferMorning?:boolean;activity?:boolean;fixedOnly?:boolean}) {
   if(lesson.activity||lesson.fixedOnly)return 0
-  if(lesson.timePreference)return lesson.timePreference==='morning'?3:lesson.timePreference==='afternoon'?-3:0
-  if(lesson.morning)return 3
-  if(/คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา/.test(`${lesson.subjectGroup||''} ${lesson.fullName||lesson.name||lesson.label||''}`))return 2
+  if(lesson.timePreference==='morning')return 3
+  if(lesson.timePreference==='afternoon')return -3
+  if(!lesson.timePreference&&lesson.morning)return 3
+  if(/ภาษาไทย|คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา/.test(`${lesson.subjectGroup||''} ${lesson.fullName||lesson.name||lesson.label||''}`))return 2
   return lesson.preferMorning||lessonPrefersMorning(lesson)?1:0
 }
 function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
@@ -561,7 +563,9 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
     if(plan.maxContinuous&&l.teacherId){let run=0,max=0;for(const t of times){run=!t.is_break&&(occupiedPeriods.includes(t.period)||b.periods.includes(t.period))?run+1:0;max=Math.max(max,run)}value+=Math.max(0,max-plan.maxContinuous)*20}return value}
   function search():boolean{nodes++;if(nodes>maxNodes){limitReason='node_limit';return false}if(Date.now()>=deadline){limitReason='time_limit';return false}if(usedTask.size===tasks.length)return fixed.every(s=>!s.lessonId||covered.has(cell(s.classroomId,s.day,s.period)))
     let best=-1,options:ReturnType<typeof candidates>=[]
-    for(let i=0;i<tasks.length;i++){if(usedTask.has(i))continue;const c=candidates(tasks[i]);if(!c.length)return false;if(best<0||c.length<options.length){best=i;options=c}}
+    // Keep the most constrained task first; with equal domains, give preferred
+    // sessions a chance before neutral lessons consume their available cells.
+    for(let i=0;i<tasks.length;i++){if(usedTask.has(i))continue;const c=candidates(tasks[i]);if(!c.length)return false;if(best<0||c.length<options.length||c.length===options.length&&Math.abs(priority.get(tasks[i].l.id)||0)>Math.abs(priority.get(tasks[best].l.id)||0)){best=i;options=c}}
     // MRV needs only domain sizes while comparing tasks. Rank (which consults
     // current teacher occupancy) only the chosen task's options.
     options.sort((a,b)=>rank(tasks[best].l,a)-rank(tasks[best].l,b))
