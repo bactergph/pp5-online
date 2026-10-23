@@ -359,6 +359,16 @@
 .schedule-prep .prep-code-settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
 .schedule-prep .prep-code-settings label{display:grid;gap:6px;min-width:0;align-content:start}
 .schedule-prep .prep-code-settings select{width:100%;min-width:0;max-width:100%}
+.schedule-prep .prep-code-options-dialog{width:min(540px,calc(100vw - 24px))}
+.schedule-prep .prep-code-options-dialog .prep-code-settings{grid-template-columns:1fr}
+.schedule-prep .prep-code-options-dialog>footer{justify-content:flex-end}
+.schedule-prep .prep-code-options-dialog>footer>.prep-workload-status{flex:1 0 100%;white-space:pre-line}
+.schedule-prep .prep-code-place{display:grid;gap:8px;min-width:0}
+.schedule-prep .prep-code-place>label[for]{min-height:0;font-size:14px;color:#525e70}
+.schedule-prep .prep-code-place-add{display:flex;gap:8px;min-width:0}
+.schedule-prep .prep-code-place-add input{width:100%;min-width:0;flex:1}
+.schedule-prep .prep-code-place-add button{flex:none}
+.schedule-prep .prep-code-place-error{color:#9f1239}
 .schedule-prep .prep-activity-dialog>footer>.prep-workload-status{flex:1 0 100%;margin:0}
 .schedule-prep .prep-load-count{display:grid;gap:6px;max-width:180px;margin:0 0 12px;font-size:13px;font-weight:700}
 .schedule-prep .prep-load-place{display:flex;gap:8px;margin-top:10px}
