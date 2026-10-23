@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
 import { periodTimeLabel, schedulePeriods, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { formatThaiDate } from '@/lib/thaiDate'
 
 const PAGE_W = 297
 const PAGE_H = 210
@@ -30,6 +31,8 @@ export type SchedulePdfInput = {
   schoolName: string
   schoolLogoUrl?: string | null
   title: string
+  /** วันที่พิมพ์บนเอกสารในรูปแบบ YYYY-MM-DD; ไม่ใช่วันที่ลงนาม */
+  printDate?: string
   days?: number[]
   periodTimes: PeriodTimeRow[]
   gridData: Record<string, SchedulePdfCell>
@@ -212,6 +215,11 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   doc.setFontSize(14)
   y += 7
   doc.text(fitText(doc, sheet.title || '', titleMaxW), textX, y, { align: 'center' })
+  if (input.printDate) {
+    y += 6
+    doc.setFontSize(12)
+    doc.text(`พิมพ์วันที่ ${formatThaiDate(input.printDate)}`, textX, y, { align: 'center' })
+  }
 
   y += 3
   doc.setDrawColor(0, 0, 0)

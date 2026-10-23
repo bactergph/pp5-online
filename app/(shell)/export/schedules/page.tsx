@@ -17,6 +17,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
+import { formatThaiDate } from '@/lib/thaiDate'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 type Classroom = { id: string; level: string; room: number; label: string }
@@ -58,7 +59,7 @@ const STYLES = `
   }
   .sched-export-field { display: grid; gap: 6px; min-width: 0; }
   .sched-export-field label { font-size: 13px; font-weight: 600; color: #52647c; }
-  .sched-export-field select, .sched-export-search {
+  .sched-export-field select, .sched-export-field input[type=date], .sched-export-search {
     height: 46px; width: 100%; border: 1px solid #cad8e8; border-radius: 9px; padding: 0 12px;
     background: #fbfcfe; color: #182b49; font-size: 15px;
   }
@@ -167,6 +168,7 @@ export default function ScheduleExportPage() {
   const [pickQuery, setPickQuery] = useState('')
   const [gridData, setGridData] = useState<Record<string, { line1: string; line2: string; line3?: string; line4?: string }>>({})
   const [semester, setSemester] = useState(() => String(scheduleSemesterForYear(null)))
+  const [printDate, setPrintDate] = useState('')
   const selectedClass = classrooms.find(c => c.id === classroomId)
   const classLabel = (selectedClass?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
   const selectedTeacher = teachers.find(t => t.id === teacherId)
@@ -206,6 +208,7 @@ export default function ScheduleExportPage() {
       setPeriodTimes(ctx.periodTimes as PeriodTimeRow[])
 
       const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+      setPrintDate(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()))
       const isPrint = params?.get('print') === '1'
       const requestedTerm = params?.get('semester')
       const active = (initData.years as Year[]).find(y => y.is_active) || (initData.years as Year[])[0]
@@ -323,7 +326,7 @@ export default function ScheduleExportPage() {
 
   function exportPdf() {
     const ids = exportType === 'class' ? classIds : teacherIds
-    if (!ids.length || !yearId) return
+    if (!ids.length || !yearId || !printDate) return
     setError('')
     const fileName = (exportType === 'class'
       ? ids.length === 1 ? `ตารางเรียน_${classrooms.find(c => c.id === ids[0])?.label || 'ห้อง'}` : `ตารางเรียน_${ids.length}_ห้อง`
@@ -342,7 +345,7 @@ export default function ScheduleExportPage() {
           const teacher = teachers.find(t => t.id === id)
           return { title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix} ${teacher.full_name}` : ''}`, gridData: grids[id] }
         })
-        return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, directorName, directorPosition, fileName })
+        return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, directorName, directorPosition, printDate, fileName })
       },
     })
   }
@@ -373,7 +376,7 @@ export default function ScheduleExportPage() {
     return teachers.filter(teacher => `${teacher.prefix} ${teacher.full_name}`.toLowerCase().includes(query))
   }, [teachers, pickQuery])
   const selectedCount = exportType === 'class' ? classIds.length : teacherIds.length
-  const pdfReady = !loading && previewReady && loadedContext === currentContext && !error && selectedCount > 0
+  const pdfReady = !loading && previewReady && loadedContext === currentContext && !error && selectedCount > 0 && !!printDate
 
   function applyClassIds(next: string[]) {
     setClassIds(next)
@@ -442,6 +445,11 @@ export default function ScheduleExportPage() {
               <option value="1">ภาคเรียนที่ 1</option>
               <option value="2">ภาคเรียนที่ 2</option>
             </select>
+          </div>
+          <div className="sched-export-field">
+            <label htmlFor="schedule-print-date">วันที่พิมพ์บนเอกสาร</label>
+            <input id="schedule-print-date" type="date" required min="0001-01-01" max="9999-12-31" value={printDate} onChange={e => setPrintDate(e.target.validity.valid ? e.target.value : '')} aria-describedby="schedule-print-date-note" />
+            <p id="schedule-print-date-note" className="sched-export-note">{printDate ? `${formatThaiDate(printDate)} · ใช้กับทุกหน้าที่เลือก` : 'เลือกวันที่ก่อนบันทึก PDF'}</p>
           </div>
           {exportType === 'class' ? (
             <div className="sched-export-field">
@@ -517,6 +525,7 @@ export default function ScheduleExportPage() {
             <div>
               <h2>{schoolName || 'ชื่อโรงเรียน'}</h2>
               <p>{title}</p>
+              {printDate && <p>พิมพ์วันที่ {formatThaiDate(printDate)}</p>}
             </div>
           </header>
 
