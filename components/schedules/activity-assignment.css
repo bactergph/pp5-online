@@ -53,6 +53,30 @@
 .schedule-prep .activity-apply-team{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:14px;margin-top:12px;background:#f4f8fd;border:1px solid #d5e3f5;border-radius:12px}
 .schedule-prep .activity-apply-team p{flex:1 1 220px;margin:0;font-size:13px;line-height:1.7}
 .schedule-prep .activity-apply-team button{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.schedule-prep .activity-per-room{position:relative;min-width:0}
+.schedule-prep .activity-per-room>.activity-apply-team{position:sticky;top:0;z-index:3;margin:12px 0;padding:12px;background:#f4f8fd;box-shadow:0 4px 10px #14243d0a}
+.schedule-prep .activity-apply-summary{flex:1 1 180px;min-width:0}
+.schedule-prep .activity-apply-summary strong{display:block;color:#182b49;font-size:14px;line-height:1.6}
+.schedule-prep .activity-apply-summary span{display:block;color:#52647c;font-size:12px;line-height:1.6}
+.schedule-prep .activity-assignment .activity-cancel-team{background:transparent;border:0;box-shadow:none;color:#52647c;padding:6px 8px;font-size:12px}
+.schedule-prep .activity-assignment-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.schedule-prep .activity-assignment-workspace>section{min-width:0;padding:12px;border:1px solid #dce6f2;border-radius:12px;background:#fff;scroll-margin-top:132px}
+.schedule-prep .activity-pick-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+.schedule-prep .activity-assignment-workspace h4{margin:0 0 4px;font-size:15px}
+.schedule-prep .activity-assignment-workspace p{font-size:13px;line-height:1.6;margin:0 0 10px}
+.schedule-prep .activity-target-scroll{max-height:340px;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:2px;min-width:0}
+.schedule-prep .activity-target-panel .activity-scope-rooms{grid-template-columns:repeat(auto-fit,minmax(105px,1fr))}
+.schedule-prep .activity-pick-panel .activity-teacher-checks{grid-template-columns:minmax(0,1fr);max-height:220px}
+.schedule-prep .activity-pick-panel .activity-selected-teachers{max-height:110px;overflow:auto;overscroll-behavior:contain}
+.schedule-prep .activity-target-scroll:focus-visible{outline:3px solid #245bdb;outline-offset:3px}
+.schedule-prep .activity-assignment-workspace input,.schedule-prep .activity-assignment-workspace button{scroll-margin-block:130px 20px}
+@media(max-width:740px){
+ .schedule-prep .activity-assignment-workspace{grid-template-columns:minmax(0,1fr);gap:10px}
+ .schedule-prep .activity-target-scroll{max-height:200px}
+ .schedule-prep .activity-per-room>.activity-apply-team{gap:8px;padding:10px}
+ .schedule-prep .activity-per-room>.activity-apply-team>.prep-primary{width:100%}
+ .schedule-prep .activity-assignment-workspace>section{padding:10px}
+}
 .schedule-prep .activity-assignment .activity-apply-message{display:flex;align-items:flex-start;gap:8px;margin:12px 0;padding:12px;border-radius:10px;background:#f0fdf4;color:#166534;font-size:13px;line-height:1.7}
 .schedule-prep .activity-apply-message svg{flex:none;margin-top:3px}
 .schedule-prep .activity-mode-confirm,.schedule-prep .activity-pending-team{border:1px solid #e8d6ae;background:#fffdf7;border-radius:12px;padding:14px;margin:12px 0}

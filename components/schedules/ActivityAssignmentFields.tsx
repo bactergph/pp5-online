@@ -124,16 +124,23 @@ export default function ActivityAssignmentFields({ classrooms, teachers, eligibl
         <p className="activity-inline-note">ทีมนี้รับผิดชอบ {rooms.length} ห้องร่วมกัน · นับภาระครู {draft.weeklyPeriods} คาบ/สัปดาห์ต่อคน</p>
         <TeacherPicker teachers={teachers} eligible={eligibleTeacherIds} selected={draft.teacherIds} onChange={teacherIds => onChange({ teacherIds })}/>
       </> : <div className="activity-per-room">
-        <h4>ก. เลือกห้องที่จะกำหนดทีมครู</h4>
-        <p>เลือกหลายห้องเพื่อกำหนดครูครั้งเดียว ห้องอื่นจะคงทีมเดิม</p>
-        <button type="button" className="activity-unassigned" onClick={() => pickTargets(rooms.filter(room => !activityTeachers(draft, room.id).length).map(room => room.id))}>เลือกห้องที่ยังไม่มีครู</button>
-        <RoomScope classrooms={rooms} selected={validTargets} onChange={pickTargets} label="ห้องที่จะใช้ทีมครูนี้" teams={id => names(activityTeachers(draft, id))}/>
-        <h4>ข. เลือกครู แล้วใช้ทีมกับห้องที่เลือก</h4>
-        <TeacherPicker teachers={teachers} eligible={eligibleTeacherIds} selected={team} onChange={ids => { setTeam(ids); setTeamDirty(true); onPendingChange(true); setApplied('') }}/>
-        <div className="activity-apply-team"><p>ทีมที่เลือกจะ<b>แทนรายชื่อครูเดิม</b>เฉพาะ {validTargets.length} ห้องที่เลือกในข้อ ก.</p><button type="button" className="prep-primary" disabled={!validTargets.length} onClick={applyTeam}><FiCheck aria-hidden="true"/>{team.length ? `ใช้ครู ${team.length} คนกับ ${validTargets.length} ห้อง` : `ไม่ระบุครูให้ ${validTargets.length} ห้อง`}</button></div>
-        {teamDirty && <div className="activity-pending-team" role="status"><span>ยังไม่ได้นำทีมครูนี้ไปใช้กับห้อง กดใช้ทีมด้านบนก่อนบันทึก</span><button type="button" onClick={() => { setTeam([]); setTeamDirty(false); onPendingChange(false) }}>ยกเลิกทีมที่กำลังเลือก</button></div>}
+        <div className="activity-apply-team">
+          <div className="activity-apply-summary" aria-live="polite"><strong>เลือก {validTargets.length} ห้อง · ครู {team.length} คน</strong><span>{applied && !teamDirty ? 'ใช้ทีมแล้ว · กดบันทึกกิจกรรมเมื่อกำหนดครบ' : teamDirty ? 'กดใช้ทีมเพื่อแทนรายชื่อครูในห้องที่เลือก' : 'เลือกห้องและครู แล้วกดใช้ทีมได้ที่แถบนี้'}</span></div>
+          <button type="button" className="prep-primary" disabled={!validTargets.length} onClick={applyTeam}><FiCheck aria-hidden="true"/>{team.length ? `ใช้ครู ${team.length} คนกับ ${validTargets.length} ห้อง` : `ไม่ระบุครูให้ ${validTargets.length} ห้อง`}</button>
+        </div>
+        <div className="activity-assignment-workspace">
+          <section className="activity-target-panel" aria-label="เลือกห้องสำหรับทีมครู">
+            <h4>1. เลือกห้อง</h4><p>เลือกหลายห้องได้ ห้องอื่นจะคงทีมเดิม</p>
+            <button type="button" className="activity-unassigned" onClick={() => pickTargets(rooms.filter(room => !activityTeachers(draft, room.id).length).map(room => room.id))}>เลือกห้องที่ยังไม่มีครู</button>
+            <div className="activity-target-scroll" tabIndex={0} role="region" aria-label="รายการห้อง เลื่อนเพื่อดูห้องอื่น"><RoomScope classrooms={rooms} selected={validTargets} onChange={pickTargets} label="ห้องที่จะใช้ทีมครูนี้" teams={id => names(activityTeachers(draft, id))}/></div>
+          </section>
+          <section className="activity-pick-panel" aria-label="เลือกครูสำหรับห้องที่เลือก">
+            <div className="activity-pick-panel-heading"><h4>2. เลือกครู</h4>{teamDirty && <button type="button" className="activity-cancel-team" onClick={() => { setTeam([]); setTeamDirty(false); onPendingChange(false) }}>ยกเลิกการเลือกครู</button>}</div><p>เลือกได้หลายคน แล้วกดใช้ทีมที่แถบด้านบน</p>
+            <TeacherPicker teachers={teachers} eligible={eligibleTeacherIds} selected={team} onChange={ids => { setTeam(ids); setTeamDirty(true); onPendingChange(true); setApplied('') }}/>
+          </section>
+        </div>
       </div>}
-      {applied && <p className="activity-apply-message" role="status"><FiCheck aria-hidden="true"/>{applied}</p>}
+      {applied && draft.mode === 'joint' && <p className="activity-apply-message" role="status"><FiCheck aria-hidden="true"/>{applied}</p>}
       <details className="activity-team-review"><summary>ตรวจรายชื่อห้องและครูก่อนบันทึก · กำหนดครูแล้ว {teacherRoomCount}/{rooms.length} ห้อง</summary><ul>{rooms.map(room => <li key={room.id}><b>{roomLabel(room)}</b><span>{names(activityTeachers(draft, room.id)) || 'ยังไม่กำหนดครู'}</span></li>)}</ul></details>
     </section>
   </>
