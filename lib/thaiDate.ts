@@ -36,6 +36,14 @@ export function formatThaiDate(date: string | Date | null | undefined): string {
   return `${day} ${month} ${year}`
 }
 
+// แสดงเดือนและปี พ.ศ. เช่น "ตุลาคม 2569"
+export function formatThaiMonthYear(date: string | Date | null | undefined): string {
+  if (!date) return '-'
+  const d = dayjs(date)
+  if (!d.isValid()) return '-'
+  return `${THAI_MONTHS[d.month()]} ${toBuddhistYear(d.year())}`
+}
+
 // แสดงวันที่แบบย่อ เช่น "18 พ.ค. 2569"
 export function formatThaiDateShort(date: string | Date | null | undefined): string {
   if (!date) return '-'

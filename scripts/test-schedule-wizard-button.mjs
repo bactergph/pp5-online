@@ -30,7 +30,7 @@ const names=['คณิตศาสตร์','วิทยาศาสตร์
 const lessons=classrooms.flatMap((room,r)=>names.map((name,s)=>({id:`lesson-${r}-${s}`,classroomId:room.id,teacherId:teachers[(r*3+s)%20].id,count:s===9?2:3,subjectId:`subject-${s}`,name,fullName:name,code:`TEST${r}${s}`,label:`${room.level}/1 · ${name}`,teacherName:teachers[(r*3+s)%20].full_name,sourceHours:(s===9?2:3)*40,roomName:'',activity:false})))
 const group={id:'11111111-1111-4111-8111-111111111111',settingId:'activity-test',mode:'joint',roomIds:classrooms.map(r=>r.id),teacherIds:teachers.slice(0,2).map(t=>t.id),roomTeachers:{},weeklyPeriods:1,cells:[{day:5,period:6}]}
 const plan={...planning.emptyPlan(),teacherIds:teachers.map(t=>t.id),activityGroups:[group],rules:Object.fromEntries(lessons.map(l=>[l.id,{count:l.count,pattern:Array(l.count).fill(1),roomId:null,morning:false,spread:true}]))}
-let state={seed:0,slots:[],blocks:[]},drafts=[],createCalls=0,lastResult=null,lastElapsed=0
+let state={seed:0,slots:[],blocks:[]},drafts=[],createCalls=0,lastResult=null,lastElapsed=0,confirmCalls=0,discardCalls=0,checkCalls=0
 const lessonKey=s=>s.activity_id?'activity:'+s.activity_id:s.class_subject_id
 const db={
   rpc:async name=>{assert.equal(name,'schedule_snapshot');return {data:`fixture-${state.seed}`,error:null}},
@@ -77,7 +77,8 @@ async function bundle(){
   const write=(name,source)=>{const file=path.join(out,name);fs.writeFileSync(file,source);return file}
   const bridge=write('actions.js',`async function call(method,args){const response=await fetch('/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method,args})});if(!response.ok)throw Error(await response.text());return response.json()}
     export const fetchPreparation=(...args)=>call('fetchPreparation',args),createScheduleDraft=(...args)=>call('createScheduleDraft',args);
-    export const saveScheduleTeachingAssignments=()=>{},savePreparation=()=>{},checkPreparation=()=>{},confirmScheduleDraft=()=>{},discardScheduleDraft=()=>{};`)
+    export const checkPreparation=(...args)=>call('checkPreparation',args),confirmScheduleDraft=(...args)=>call('confirmScheduleDraft',args),discardScheduleDraft=(...args)=>call('discardScheduleDraft',args);
+    export const saveScheduleTeachingAssignments=()=>{},savePreparation=()=>{};`)
   const noop=write('unused-panels.js','export default function Panel(){return null};export const savePeriodTimes=()=>{};')
   const entry=write('entry.js',`import React from 'react';import {createRoot} from 'react-dom/client';import Wizard from ${JSON.stringify(path.join(root,'components/schedules/SchedulePreparation.tsx'))};createRoot(document.getElementById('root')).render(React.createElement(Wizard,{yearId:'test-year',semester:2,initialStep:7,onChanged:()=>{}}));`)
   const tsLoader=write('typescript-loader.cjs',`const ts=require('typescript');module.exports=function(source){return ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText}`)
@@ -102,8 +103,22 @@ async function main(){
       if(req.url==='/bundle.js'){res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync(path.join(out,'bundle.js')));return}
       if(req.url==='/rpc'){
         let body='';for await(const chunk of req)body+=chunk
-        const {method,args}=JSON.parse(body);assert.ok(['fetchPreparation','createScheduleDraft'].includes(method))
-        const started=performance.now(),result=await actions[method](...args)
+        const {method,args}=JSON.parse(body);assert.ok(['fetchPreparation','createScheduleDraft','checkPreparation','confirmScheduleDraft','discardScheduleDraft'].includes(method))
+        const started=performance.now()
+        let result
+        if(method==='confirmScheduleDraft'){
+          // UI confirmation writes only this isolated in-memory fixture. SQL atomicity
+          // is exercised separately by the existing database test suite.
+          assert.equal(args[0],drafts.at(-1).id);confirmCalls++
+          state.slots=structuredClone(lastResult.data.rows)
+          result={data:{committed:true},error:null}
+        }else if(method==='discardScheduleDraft'){
+          assert.equal(args[0],drafts.at(-1).id);discardCalls++
+          result={data:null,error:null}
+        }else{
+          result=await actions[method](...args)
+          if(method==='checkPreparation')checkCalls++
+        }
         if(method==='createScheduleDraft'){createCalls++;lastResult=result;lastElapsed=performance.now()-started}
         res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));return
       }
@@ -133,10 +148,27 @@ async function main(){
       const before=JSON.stringify(state.slots)
       await page.setViewport({width:index===4?390:1440,height:1000,deviceScaleFactor:1})
       await page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'domcontentloaded',timeout:60_000})
-      await page.waitForSelector('.prep-review-rebuild input');await page.click('.prep-review-rebuild input')
+      await page.waitForSelector('.prep-review-rebuild button[data-rebuild=true]')
+      const clickButton=async text=>{const handle=await page.evaluateHandle(text=>[...document.querySelectorAll('button')].find(button=>button.textContent===text),text);assert.ok(handle.asElement(),`Missing button ${text}`);await handle.asElement().click()}
+      if(index===0){
+        await clickButton('ล้างการเลือก')
+        assert.equal(await page.evaluate(()=>[...document.querySelectorAll('button')].find(button=>button.textContent==='สร้างตารางฉบับร่าง').disabled),true)
+        await page.click('.prep-review-room-picks input')
+        assert.ok((await page.$eval('.prep-review-count',el=>el.textContent)).includes('1 / 6'))
+        await clickButton('เลือกทั้งโรงเรียน')
+        assert.ok((await page.$eval('.prep-review-count',el=>el.textContent)).includes('6 / 6'))
+        await page.focus('.prep-review-conditions summary');await page.keyboard.press('Enter')
+        assert.equal(await page.$eval('.prep-review-conditions',el=>el.open),true)
+        await page.keyboard.press('Enter')
+        await page.screenshot({path:path.join(out,'empty-desktop.png'),fullPage:true})
+        await clickButton('ตรวจข้อมูลล่าสุด')
+        await page.waitForSelector('.prep-review-status.is-success')
+        assert.equal(checkCalls,1)
+      }
+      await page.click('.prep-review-rebuild button[data-rebuild=true]')
       const button=await page.evaluateHandle(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='สร้างตารางฉบับร่าง'))
       const started=performance.now();await button.asElement().click({clickCount:2})
-      await page.waitForFunction(()=>document.body.textContent.includes('ฉบับร่างพร้อมตรวจ')&&!document.querySelector('.prep-working'),{timeout:60_000})
+      await page.waitForFunction(()=>document.body.textContent.includes('ฉบับร่างพร้อมตรวจ')&&!document.querySelector('.prep-review-working'),{timeout:60_000})
       const displayedMs=Math.round(performance.now()-started)
       assert.equal(createCalls,1,'Double click must create only one draft');assert.equal(lastResult.error,null)
       verify(lastResult.data);assert.equal(JSON.stringify(state.slots),before,'Generating must never change the live timetable')
@@ -149,14 +181,35 @@ async function main(){
       }
       await page.select('.prep-draft select',classrooms[0].id)
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Page must not overflow horizontally')
+      if(index===4){
+        for(const width of [360,390,768,1024,1440]){
+          await page.setViewport({width,height:1000})
+          assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`No page overflow at ${width}px`)
+        }
+        await page.setViewport({width:390,height:1000})
+      }
       if(index===0||index===4)await page.screenshot({path:path.join(out,index===0?'desktop.png':'mobile.png'),fullPage:true})
       report.push({seed,teachers:20,teacherBlocks:blocks.length,lockedLessons:locked.length,classrooms:6,scheduled:lastResult.data.rows.length,actionMs:Math.round(lastElapsed),displayedMs,viewport:index===4?390:1440})
       fs.writeFileSync(path.join(out,`case-${seed}.json`),JSON.stringify({blocks,locked,rows:lastResult.data.rows},null,2))
       console.log('PASS:',JSON.stringify(report.at(-1)))
+      if(index===0||index===1){
+        await clickButton(index===0?'บันทึกใช้ตารางนี้':'ทิ้งฉบับร่าง')
+        await page.waitForSelector('.swal2-confirm')
+        await page.click('.swal2-confirm')
+        if(index===0){
+          await page.waitForFunction(()=>document.querySelector('.swal2-title')?.textContent==='บันทึกตารางแล้ว')
+          await page.click('.swal2-confirm')
+          assert.equal(confirmCalls,1);assert.equal(state.slots.length,180)
+        }else{
+          await page.waitForFunction(()=>!document.querySelector('.prep-draft')&&!document.querySelector('.prep-review-working'))
+          assert.equal(discardCalls,1);assert.equal(JSON.stringify(state.slots),before,'Discarding must preserve original timetable')
+        }
+        await page.waitForFunction(()=>!document.querySelector('.prep-draft')&&!document.querySelector('.prep-review-working'))
+      }
       await page.close()
     }
     assert.equal(consoleErrors.length,0,consoleErrors.join('\n'))
-    fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({environment:'Isolated real React wizard and server action; mock database; synthetic data',results:report,consoleErrors},null,2))
+    fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({environment:'Real React wizard and create/check actions; isolated mock database; confirmation/discard RPC mocked in memory',results:report,confirmCalls,discardCalls,checkCalls,responsiveWidths:[360,390,768,1024,1440],consoleErrors},null,2))
     console.log('PASS: clicked real wizard button; twenty teachers randomly blocked in five seeded runs; six-room drafts complete; no class/teacher/lunch collisions; locks retained; save button displayed; duplicate-click guarded; desktop/mobile without page overflow; no browser errors')
   }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve))}
 }

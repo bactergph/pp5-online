@@ -3,7 +3,7 @@ import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
 import { periodTimeLabel, schedulePeriods, type PeriodTimeRow } from '@/lib/schedule-helpers'
-import { formatThaiDate } from '@/lib/thaiDate'
+import { formatThaiMonthYear } from '@/lib/thaiDate'
 
 const PAGE_W = 297
 const PAGE_H = 210
@@ -31,7 +31,7 @@ export type SchedulePdfInput = {
   schoolName: string
   schoolLogoUrl?: string | null
   title: string
-  /** วันที่พิมพ์บนเอกสารในรูปแบบ YYYY-MM-DD; ไม่ใช่วันที่ลงนาม */
+  /** วันที่อ้างอิง YYYY-MM-DD; แสดงเฉพาะเดือนและปี พ.ศ. บนเอกสาร */
   printDate?: string
   days?: number[]
   periodTimes: PeriodTimeRow[]
@@ -98,6 +98,7 @@ function drawSigners(
   pageW: number,
   marginX: number,
   signers: { name?: string; role: string }[],
+  printDate?: string,
 ) {
   const colW = (pageW - marginX * 2) / signers.length
   const maxW = colW - 8
@@ -108,7 +109,7 @@ function drawSigners(
       'ลงชื่อ ................................................',
       `(${signer.name?.trim() || '................................'})`,
       signer.role,
-      'วันที่ ......../......../........',
+      printDate ? formatThaiMonthYear(printDate) : 'วันที่ ......../......../........',
     ]
     doc.setFont('THSarabunNew', 'normal')
     doc.setTextColor(...TEXT)
@@ -218,7 +219,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   if (input.printDate) {
     y += 6
     doc.setFontSize(12)
-    doc.text(`พิมพ์วันที่ ${formatThaiDate(input.printDate)}`, textX, y, { align: 'center' })
+    doc.text(`พิมพ์: ${formatThaiMonthYear(input.printDate)}`, textX, y, { align: 'center' })
   }
 
   y += 3
@@ -272,7 +273,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
     y += rowH
   }
 
-  drawSigners(doc, Math.min(y + 8, PAGE_H - MARGIN_BOTTOM - signBlock), PAGE_W, MARGIN_X, signers)
+  drawSigners(doc, Math.min(y + 8, PAGE_H - MARGIN_BOTTOM - signBlock), PAGE_W, MARGIN_X, signers, input.printDate)
   }
   const fileName = (input.fileName || scheduleFileName(input.title)).replace(/[\\/:*?"<>|]/g, '-')
   return { blob: doc.output('blob'), fileName }

@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs && node scripts/test-substitute-availability.cjs",
     "test:schedule-wizard-button": "node scripts/test-schedule-wizard-button.mjs",
+    "test:schedule-print-date": "node scripts/test-schedule-print-date.mjs",
     "test:schedule-planning": "node scripts/test-schedule-input.cjs && node scripts/test-schedule-planning.cjs && node scripts/test-schedule-preparation.cjs && node scripts/test-schedule-planning-db.cjs && node scripts/test-schedule-planning-scale.cjs && node scripts/test-free-schedule-gaps.cjs && node scripts/test-flexible-activities.mjs && node scripts/test-schedule-review.mjs && node scripts/test-schedule-morning.mjs && node scripts/test-schedule-dense-school.mjs",
     "test:subject-settings": "node scripts/test-subject-semester.mjs && node scripts/test-class-subject-copy.mjs"
   },
