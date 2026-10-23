@@ -380,6 +380,7 @@
 .schedule-prep .prep-place-options [role=option]{padding:10px 12px;min-height:44px;cursor:pointer;font-size:14px;overflow-wrap:anywhere}
 .schedule-prep .prep-place-options [role=option]:hover,.schedule-prep .prep-place-options [role=option].is-active{background:#eaf3ff;color:#174f95}
 .schedule-prep .prep-place-options p{padding:10px;font-size:13px}
+.schedule-prep .prep-place-options .prep-place-create{font-weight:600;color:#174f95;border-top:1px solid #dce3ed}
 .schedule-prep .prep-code-settings-help,.schedule-prep .prep-code-place-notice{font-size:14px;line-height:1.7;color:#525e70;margin:14px 0 0}
 .schedule-prep .prep-code-place-notice{margin:0 0 12px;color:#174f95}
 .schedule-prep .prep-code-place-dialog{width:min(460px,calc(100vw - 24px))}

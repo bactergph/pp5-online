@@ -153,17 +153,23 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   function updateCodeSetting(id: string, change: Partial<CodeSetting>) {
     setCodeSettings(values => ({ ...values, [id]: { ...values[id], ...change } }))
   }
-  function addCodePlace() {
-    if (saving) return
-    const name = codePlaceName.replace(/\s+/g, ' ').trim()
-    if (!name) return
-    if (name.length > 100) { setCodePlaceError('ชื่อสถานที่ต้องไม่เกิน 100 ตัวอักษร'); return }
+  function stageCodePlace(rawName: string) {
+    if (saving) throw Error('กำลังบันทึก กรุณารอสักครู่')
+    const name = rawName.replace(/\s+/g, ' ').trim()
+    if (!name) throw Error('กรอกชื่อสถานที่')
+    if (name.length > 100) throw Error('ชื่อสถานที่ต้องไม่เกิน 100 ตัวอักษร')
     const known = codeAvailablePlaces.find(place => place.name.replace(/\s+/g, ' ').trim().toLowerCase() === name.toLowerCase())
-    if (!known && codeAvailablePlaces.length >= 500) { setCodePlaceError('เพิ่มสถานที่ได้สูงสุด 500 แห่ง'); return }
+    if (!known && codeAvailablePlaces.length >= 500) throw Error('เพิ่มสถานที่ได้สูงสุด 500 แห่ง')
     const place = known || { id: crypto.randomUUID(), name }
     if (!known) setCodePlaces(values => [...values, place])
-    setCodePlaceNotice(`${known ? 'มีสถานที่นี้แล้ว' : 'เพิ่มสถานที่แล้ว'}: ${place.name} · เลือกใช้ให้แต่ละห้องได้ด้านล่าง`)
-    setCodePlaceName(''); setCodePlaceError(''); closeCodePlace()
+    return { place, known }
+  }
+  function addCodePlace() {
+    try {
+      const { place, known } = stageCodePlace(codePlaceName)
+      setCodePlaceNotice(`${known ? 'มีสถานที่นี้แล้ว' : 'เพิ่มสถานที่แล้ว'}: ${place.name} · เลือกใช้ให้แต่ละห้องได้ด้านล่าง`)
+      setCodePlaceName(''); setCodePlaceError(''); closeCodePlace()
+    } catch (error) { setCodePlaceError(error instanceof Error ? error.message : 'เพิ่มสถานที่ไม่สำเร็จ กรุณาลองใหม่') }
   }
   function closeCodeOptions() {
     if (saveLock.current) return
@@ -426,7 +432,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
           <div role="row" className="prep-code-settings-head"><span role="columnheader">ชั้น/ห้อง</span><span role="columnheader">ห้องสถานที่</span><span role="columnheader">ช่วงเวลา</span><span role="columnheader">รูปแบบคาบ</span></div>
           {chosenLessons.map(lesson => { const setting = codeSettings[lesson.id]; if (!setting) return null; const label = roomLabel(lesson.classroomId); return <div role="row" key={lesson.id} className="prep-code-settings-row" data-lesson-id={lesson.id}>
             <div role="cell" className="prep-code-room-label"><strong>{label}</strong><small>{ruleOf(lesson).count} คาบ/สัปดาห์</small></div>
-            <div role="cell"><span className="prep-code-mobile-label">ห้องสถานที่</span><WorkloadPlacePicker places={codeAvailablePlaces} value={setting.placeId} onChange={placeId => updateCodeSetting(lesson.id, { placeId })} label={'สถานที่ '+label} /></div>
+            <div role="cell"><span className="prep-code-mobile-label">ห้องสถานที่</span><WorkloadPlacePicker places={codeAvailablePlaces} value={setting.placeId} onChange={placeId => updateCodeSetting(lesson.id, { placeId })} onCreate={name => { const { place } = stageCodePlace(name); setCodePlaceNotice(`เพิ่ม ${place.name} แล้ว · สถานที่ใหม่จะบันทึกพร้อมภาระสอน`); return place.id }} label={'สถานที่ '+label} /></div>
             <div role="cell"><span className="prep-code-mobile-label">ช่วงเวลา</span><select aria-label={'ช่วงเวลา '+label} value={setting.time} onChange={event => updateCodeSetting(lesson.id, { time: event.target.value as CodeSetting['time'] })}><option value="any">ทั้งเช้าและบ่าย</option><option value="morning">เช้า</option><option value="afternoon">บ่าย</option></select></div>
             <div role="cell"><span className="prep-code-mobile-label">รูปแบบคาบ</span><select aria-label={'รูปแบบคาบ '+label} value={setting.pattern} onChange={event => updateCodeSetting(lesson.id, { pattern: event.target.value as CodeSetting['pattern'] })}><option value="single">เดี่ยวทั้งหมด</option><option value="double">คาบคู่ + เดี่ยวที่เหลือ</option></select></div>
           </div> })}
