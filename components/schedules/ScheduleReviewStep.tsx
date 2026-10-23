@@ -5,7 +5,7 @@ import type { PlanningIssue } from '@/lib/schedule-planning'
 import type { ScheduleSlot } from '@/lib/schedule-store'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import { activityTeachers } from '@/lib/schedule-activity-teams'
-import { activityTeacherLabel, teacherGivenName } from '@/lib/schedule-helpers'
+import { activityTimetableTeacherLabel, teacherTimetableName } from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
 import { FiAlertCircle, FiCheckCircle, FiChevronRight, FiGrid, FiInfo, FiRefreshCw, FiSave, FiTrash2, FiZap } from 'react-icons/fi'
 import './schedule-review.css'
@@ -57,11 +57,11 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
     if(slot?.activity_id){
       const group=(data.plan.activityGroups||[]).find(group=>group.roomIds.includes(activeRoom)&&group.settingId===activity?.subjectId)
       const teachers=draft?.preview?(activity?.teacherName||''):activity?.teacherName||(group?teacherNames(activityTeachers(group,activeRoom)):'')
-      return <div className="prep-slot prep-slot-activity"><b>{activity?.name||'กิจกรรม'}</b><small>กิจกรรม</small>{teachers&&<small>{activityTeacherLabel(teachers)}</small>}{slot.locked&&<small>ล็อก</small>}</div>
+      return <div className="prep-slot prep-slot-activity"><b>{activity?.name||'กิจกรรม'}</b><small>กิจกรรม</small>{teachers&&<small>{activityTimetableTeacherLabel(teachers)}</small>}{slot.locked&&<small>ล็อก</small>}</div>
     }
     if(!slot?.class_subject_id)return <div className="prep-slot prep-slot-empty">{slot?.locked?'ล็อกช่องว่าง':slot?.note||'ว่าง'}</div>
     const lesson=(draft?.preview?.lessons||data.lessons).find(lesson=>lesson.id===slot.class_subject_id)
-    return <div className={`prep-slot${slot.locked?' prep-slot-locked':''}`}><b>{lesson?.name||slot.note||'—'}</b>{lesson?.code&&<small>({lesson.code})</small>}{lesson?.teacherName&&<small>{teacherGivenName(lesson.teacherName)}</small>}{lesson?.roomName&&<small className="prep-slot-room">{lesson.roomName}</small>}{slot.locked&&<small>ล็อก</small>}</div>
+    return <div className={`prep-slot${slot.locked?' prep-slot-locked':''}`}><b>{lesson?.name||slot.note||'—'}</b>{lesson?.code&&<small>({lesson.code})</small>}{lesson?.teacherName&&<small>{teacherTimetableName(lesson.teacherName)}</small>}{lesson?.roomName&&<small className="prep-slot-room">{lesson.roomName}</small>}{slot.locked&&<small>ล็อก</small>}</div>
   }
   return <section className="prep-review-step" aria-label="ตรวจและจัดตารางเรียน">
     <div className="prep-teacher-title prep-review-header">
@@ -121,7 +121,7 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
         <div className={`prep-review-status ${errors.length?'is-error':'is-success'}`}>{errors.length?<FiAlertCircle aria-hidden="true"/>:<FiCheckCircle aria-hidden="true"/>}<div><strong>{errors.length?`ต้องแก้ ${errors.length} รายการก่อนจัดตาราง`:'ผ่านการตรวจเบื้องต้น'}</strong><p>{errors.length?'แยกตามขั้นตอนด้านล่าง กดไปแก้ข้อมูลแล้วกลับมาตรวจใหม่':'การตรวจเบื้องต้นไม่รับประกันว่าจะค้นหาตารางที่ตรงทุกเงื่อนไขได้เสมอ'}</p></div></div>
         {byStep.map(({step,items})=><details key={step} className="prep-review-issues" open={errors.length<=12}>
           <summary>ขั้น {step} · {steps[step]||'ตรวจข้อมูล'}<span>{items.length} รายการ</span></summary>
-          <ul>{items.slice(0,limits[step]||12).map((issue,index)=><li key={index}>{issue.message}</li>)}</ul>
+          <ul>{items.slice(0,limits[step]||12).map((issue,index)=><li key={index}>{issue.message}{!!issue.details?.length&&<details><summary>ดูรายวิชาและกิจกรรมที่นับภาระสอน</summary><ul>{issue.details.map((detail,i)=><li key={i}>{detail}</li>)}</ul></details>}</li>)}</ul>
           <div className="prep-review-issue-actions"><button type="button" onClick={()=>onFix(step)}>ไปแก้{steps[step]||'ข้อมูล'}<FiChevronRight aria-hidden="true"/></button>{items.length>(limits[step]||12)&&<button type="button" onClick={()=>setLimits(current=>({...current,[step]:(current[step]||12)+50}))}>แสดงเพิ่มอีก {Math.min(50,items.length-(limits[step]||12))} รายการ</button>}</div>
         </details>)}
         {!!warnings.length&&<details className="prep-review-warnings"><summary>คำเตือน {warnings.length} รายการ</summary><ul>{warnings.map((issue,index)=><li key={index}><span>{issue.message}</span><button type="button" onClick={()=>onFix(issue.step)}>ไปตรวจข้อมูล<FiChevronRight aria-hidden="true"/></button></li>)}</ul></details>}

@@ -8,7 +8,7 @@ function load(file,deps={}){
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:name=>deps[name]||{}})
   return exports
 }
-const solver=load('lib/schedule-solver.ts'),planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver})
+const solver=load('lib/schedule-solver.ts'),planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':load('lib/schedule-block-repair.ts')})
 const {verifyCompleteSchedule}=load('lib/schedule-verification.ts',{'./schedule-planning':planning})
 // Numeric identifiers, subject categories and counts only; no staff/student data.
 const fixture=JSON.parse(fs.readFileSync('scripts/fixtures/schedule-dense-school-63.json','utf8'))

@@ -11,9 +11,8 @@ import {
   SCHEDULE_EDIT_ROLES,
   SCHEDULE_PERIOD_COUNT,
   SCHEDULE_VIEW_ROLES,
-  classroomShortName,
 } from '@/lib/schedules'
-import { activityTeacherLabel, isActivityLessonId, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTimetableTeacherLabel, isActivityLessonId, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 
 type ScheduleSession = {
   userId: string
@@ -230,7 +229,7 @@ function classPdfGrid(data: ScheduleData, classroomId: string) {
       ? {
         line1: lesson.name || (activity ? 'กิจกรรม' : '—'),
         line2: lesson.code ? `(${lesson.code})` : activity ? '(กิจกรรม)' : '',
-        line3: activity ? activityTeacherLabel(lesson.teacherName) : teacherGivenName(lesson.teacherName),
+        line3: activity ? activityTimetableTeacherLabel(lesson.teacherName) : teacherTimetableName(lesson.teacherName),
         line4: lesson.roomName || '',
       }
       : { line1: cell.note || '—', line2: '' }

@@ -1,7 +1,8 @@
 import 'server-only'
-import { activityTeachers, lessonTeachers } from '@/lib/schedule-activity-teams'
+import { lessonTeachers } from '@/lib/schedule-activity-teams'
 import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import * as scheduleOps from '@/lib/schedule-operations'
+import { summarizeScheduleWorkload } from '@/lib/schedule-workload'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
@@ -10,14 +11,11 @@ import {
   DEFAULT_PERIOD_TIMES,
   normalizePeriodTimes,
   type PeriodTimeRow,
-  workloadStatus,
-  workloadLabel,
   validatePeriodTimes,
 } from '@/lib/schedule-helpers'
 import {
   SCHEDULE_DAYS,
   SCHEDULE_EDIT_ROLES,
-  SCHEDULE_PERIOD_COUNT,
   SCHEDULE_VIEW_ROLES,
 } from '@/lib/schedules'
 
@@ -158,45 +156,15 @@ export async function fetchScheduleWorkload(yearId: string, semester = 1) {
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
 
   const data = await loadSchedule(session.schoolId, yearId, semester)
-  const hoursMap: Record<string, number> = {}
-  const seen = new Set<string>()
-  const addHour = (teacherId: string, day: number, period: number) => {
-    if (!teacherId) return
-    const key = `${teacherId}:${day}:${period}`
-    if (seen.has(key)) return
-    seen.add(key)
-    hoursMap[teacherId] = (hoursMap[teacherId] || 0) + 1
-  }
-  for (const row of data.slots) {
-    const lesson = data.lessons.find(item => item.id === lessonKey(row))
-    if (!lesson || lesson.activity) continue
-    for (const teacherId of lessonTeachers(lesson)) addHour(teacherId, row.day_of_week, row.period)
-  }
-  for (const group of data.activityGroups || []) {
-    const rooms = group.mode === 'joint' ? group.roomIds.slice(0, 1) : group.roomIds
-    for (const roomId of rooms) for (const cell of group.cells || []) for (const teacherId of activityTeachers(group, roomId)) addHour(teacherId, Number(cell.day), Number(cell.period))
-  }
-
   const db = createServerClient()
-  const { data: teachers } = await db.from('users')
+  const { data: teachers, error } = await db.from('users')
     .select('id, prefix, full_name, position')
     .eq('school_id', session.schoolId)
     .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin', 'principal'])
     .order('full_name')
 
-  return (teachers || []).flatMap(t => {
-    const hours = hoursMap[t.id] || 0
-    if (hours <= 0) return []
-    const status = workloadStatus(hours)
-    return [{
-      id: t.id,
-      name: `${t.prefix} ${t.full_name}`.trim(),
-      position: t.position,
-      hours,
-      status,
-      status_label: workloadLabel(status),
-    }]
-  }).sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name, 'th'))
+  if (error) throw new Error('โหลดรายชื่อครูสำหรับสรุปภาระสอนไม่สำเร็จ กรุณาลองใหม่')
+  return summarizeScheduleWorkload(data, teachers || [])
 }
 
 export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: string, semester = 1) {

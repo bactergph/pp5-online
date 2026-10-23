@@ -1,7 +1,7 @@
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
-import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
+import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS } from '@/lib/schedules'
 import { periodTimeLabel, schedulePeriods, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { formatThaiDate } from '@/lib/thaiDate'
 
@@ -11,8 +11,6 @@ const MARGIN_X = 10
 const MARGIN_TOP = 6
 const MARGIN_BOTTOM = 8
 const LOGO_SIZE = 12
-const PERIODS = SCHEDULE_PERIODS
-const MORNING = SCHEDULE_MORNING_PERIODS
 
 const BORDER: [number, number, number] = [0, 0, 0]
 const HEADER_BG: [number, number, number] = [255, 255, 255]
@@ -31,7 +29,7 @@ export type SchedulePdfInput = {
   schoolName: string
   schoolLogoUrl?: string | null
   title: string
-  /** วันที่อ้างอิง YYYY-MM-DD; แสดงวัน เดือนเต็ม และปี พ.ศ. บนเอกสาร */
+  /** วันที่อ้างอิง YYYY-MM-DD; แสดงใต้ลายเซ็นเท่านั้น */
   printDate?: string
   days?: number[]
   periodTimes: PeriodTimeRow[]
@@ -216,11 +214,6 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   doc.setFontSize(14)
   y += 7
   doc.text(fitText(doc, sheet.title || '', titleMaxW), textX, y, { align: 'center' })
-  if (input.printDate) {
-    y += 6
-    doc.setFontSize(12)
-    doc.text(`พิมพ์: ${formatThaiDate(input.printDate)}`, textX, y, { align: 'center' })
-  }
 
   y += 3
   doc.setDrawColor(0, 0, 0)
@@ -287,7 +280,7 @@ export async function buildWorkloadPdfBlob(input: {
   academicHeadName?: string
   directorName?: string
   directorPosition?: string
-  rows: { name: string; position: string | null; hours: number; note?: string }[]
+  rows: { name: string; position: string | null; hours: number; scheduled_hours?: number; remaining?: number }[]
 }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
   await applyThaiFonts(doc)
@@ -303,8 +296,8 @@ export async function buildWorkloadPdfBlob(input: {
     return y + 16
   }
   let y = drawHeader()
-  const widths = [14, 68, 46, 28, 26]
-  const headers = ['ที่', 'ครูผู้สอน', 'ตำแหน่ง', 'คาบ/สัปดาห์', 'หมายเหตุ']
+  const widths = [10, 64, 36, 26, 24, 22]
+  const headers = ['ที่', 'ครูผู้สอน', 'ตำแหน่ง', 'คาบ/สัปดาห์', 'จัดแล้ว', 'คงเหลือ']
   const drawHead = () => {
     let x = margin
     headers.forEach((label, i) => { drawCell(doc, x, y, widths[i], 10, label, '', { fill: HEADER_BG, line1Size: 14 }); x += widths[i] })
@@ -313,7 +306,7 @@ export async function buildWorkloadPdfBlob(input: {
   drawHead()
   input.rows.forEach((row, index) => {
     if (y > 250) { doc.addPage(); y = drawHeader(); drawHead() }
-    const values = [String(index + 1), row.name, row.position || '—', String(row.hours), row.note || '']
+    const values = [String(index + 1), row.name, row.position || '—', String(row.hours), row.scheduled_hours === undefined ? '—' : String(row.scheduled_hours), row.remaining === undefined ? '—' : String(row.remaining)]
     let x = margin
     values.forEach((value, i) => { drawCell(doc, x, y, widths[i], 9, value, '', { line1Size: 13, line1Bold: i === 0 || i === 3 }); x += widths[i] })
     y += 9

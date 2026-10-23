@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createRequire } from 'node:module'
 const require=createRequire(import.meta.url)
 function load(file,deps={}){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,{exports,console,require:name=>deps[name]||(['react','react/jsx-runtime','react-icons/fi'].includes(name)?require(name):{})});return exports}
-const solver=load('lib/schedule-solver.ts'),planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver})
+const solver=load('lib/schedule-solver.ts'),planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':load('lib/schedule-block-repair.ts')})
 const {verifyCompleteSchedule}=load('lib/schedule-verification.ts',{'./schedule-planning':planning})
 const periods=[{period:1,start_time:'08:00',end_time:'09:00',is_break:false},{period:2,start_time:'09:00',end_time:'10:00',is_break:false},{period:0,start_time:'10:00',end_time:'11:00',is_break:true},{period:3,start_time:'11:00',end_time:'12:00',is_break:false}]
 const lesson={id:'math',classroomId:'A',teacherId:'T',count:2,label:'A · คณิต',pattern:[2]}
@@ -63,4 +63,7 @@ assert.ok(warningsOnly.includes('ผ่านการตรวจเบื้�
 const many=html({issues:Array.from({length:100},(_,index)=>({severity:'error',message:`ยังไม่มีครู ${index}`,step:6}))})
 assert.ok(many.includes('ต้องแก้ 100 รายการ'))
 assert.ok(many.includes('แสดงเพิ่มอีก'))
+const loadDetails=html({issues:[{severity:'error',message:'ครู ตัวอย่าง ต้องสอน 38 คาบ แต่มีเวลาว่าง 35 คาบ',step:6,details:['ม.2/1 · คณิตศาสตร์: 18 คาบ/สัปดาห์','ม.5/1 · อังกฤษ: 19 คาบ/สัปดาห์']}]})
+assert.ok(loadDetails.includes('ดูรายวิชาและกิจกรรมที่นับภาระสอน'))
+assert.ok(loadDetails.includes('คณิตศาสตร์: 18 คาบ/สัปดาห์'));assert.ok(loadDetails.includes('อังกฤษ: 19 คาบ/สัปดาห์'))
 console.log('PASS: independent quota/pattern/room/teacher/joint verification; venue readiness; draft/timeout/conflict UI; true activity cells; outside-scope review and bounded issue lists')

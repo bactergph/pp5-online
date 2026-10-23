@@ -25,7 +25,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
-import { activityTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTimetableTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import ScheduleLessonPicker from './ScheduleLessonPicker'
 import ScheduleLessonPalette from './ScheduleLessonPalette'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -121,7 +121,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
       activity,
       name: subject.subject_name || (activity ? 'กิจกรรม' : 'รายวิชา'),
       code: subject.subject_code ? `(${subject.subject_code})` : activity ? '(กิจกรรม)' : '',
-      teacher: (activity ? activityTeacherLabel(subject.teacher_name) : teacherGivenName(subject.teacher_name)) || (activity ? 'ยังไม่กำหนดทีมครู' : 'ยังไม่กำหนดครู'),
+      teacher: (activity ? activityTimetableTeacherLabel(subject.teacher_name) : teacherTimetableName(subject.teacher_name)) || (activity ? 'ยังไม่กำหนดทีมครู' : 'ยังไม่กำหนดครู'),
       room: subject.room_name || '',
     }
   }

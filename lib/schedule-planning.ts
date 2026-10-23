@@ -1,11 +1,12 @@
 import type { ActivityTeam } from './schedule-activity-teams'
 import { solveSchoolSchedule } from './schedule-solver'
+import { solveBlockRepair } from './schedule-block-repair'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
 export type TimePreference = 'any' | 'morning' | 'afternoon'
 export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean; timePreference?: TimePreference }
 export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[]; roomLabels?: Record<string, string> }
-export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; timePreference?: TimePreference; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; subjectGroup?: string; fullName?: string; name?: string }
+export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; timePreference?: TimePreference; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; subjectGroup?: string; fullName?: string; name?: string; teacherName?: string }
 export function lessonPrefersMorning(lesson: { subjectGroup?: string; fullName?: string; name?: string; label?: string }) {
   return /ภาษาไทย|คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา|สังคมศึกษา|ภาษาอังกฤษ|ภาษาต่างประเทศ/.test(`${lesson.subjectGroup || ''} ${lesson.fullName || ''} ${lesson.name || ''}`)
 }
@@ -27,8 +28,8 @@ function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
 }
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
 export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota'
-export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; code?: FixedScheduleIssueCode }
-export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking';elapsedMs?:number;timeLimitMs?:number}
+export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; code?: FixedScheduleIssueCode; details?: string[] }
+export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking'|'block_repair';elapsedMs?:number;timeLimitMs?:number}
 export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
 export const SCHEDULE_SEARCH_TIME_LIMIT_MS = 45_000
 export const emptyPlan = (): SchedulePlan => ({ days: [1,2,3,4,5], rooms: [], rules: {}, reduceGaps: false, maxContinuous: 0 })
@@ -90,7 +91,24 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
     if(fixed.filter(s=>s.lessonId===l.id).length>l.count)fixedError('fixed_over_quota',l.label+' คาบเดิมเกินเป้าหมาย',5)
   }
   for(const room of new Set(lessons.map(l=>l.classroomId))){const need=lessons.filter(l=>l.classroomId===room).reduce((n,l)=>n+l.count,0)+fixed.filter(s=>s.classroomId===room&&!s.lessonId).length;if(need>capacity)err(`${lessons.find(l=>l.classroomId===room)?.label.split(' · ')[0]} ต้องการ ${need} คาบ แต่มี ${capacity} ช่อง`,5)}
-  for(const teacher of new Set(lessons.flatMap(l=>lessonTeachers(l)))){const load=new Map<string,number>();for(const l of lessons.filter(l=>lessonTeachers(l).includes(teacher)))load.set(l.activityGroupId||l.id,Math.max(load.get(l.activityGroupId||l.id)||0,l.count));const need=[...load.values()].reduce((n,v)=>n+v,0),free=capacity-new Set(unavailable.filter(b=>b.teacherId===teacher&&days.includes(b.day)&&periods.includes(b.period)).map(b=>`${b.day}:${b.period}`)).size;if(need>free)err(`ครูของ ${lessons.find(l=>lessonTeachers(l).includes(teacher))?.label} ต้องสอน ${need} คาบ แต่มีเวลาว่าง ${free} คาบ`,4)}
+  for(const teacher of new Set(lessons.flatMap(l=>lessonTeachers(l)))) {
+    const taught=lessons.filter(l=>lessonTeachers(l).includes(teacher)),load=new Map<string,{count:number;activity:boolean;labels:Set<string>}>()
+    for(const l of taught) {
+      const key=l.activityGroupId||l.id,entry=load.get(key)||{count:0,activity:!!l.activity,labels:new Set<string>()}
+      entry.count=Math.max(entry.count,l.count);entry.labels.add(l.label);load.set(key,entry)
+    }
+    const entries=[...load.values()],need=entries.reduce((n,v)=>n+v.count,0)
+    const blockedCount=new Set(unavailable.filter(b=>b.teacherId===teacher&&days.includes(b.day)&&periods.includes(b.period)).map(b=>`${b.day}:${b.period}`)).size,free=capacity-blockedCount
+    if(!(need>free))continue
+    // A classroom/subject label identifies only one assignment, not the teacher
+    // whose combined load is over capacity. Prefer an unambiguous single-teacher name.
+    const named=taught.find(l=>lessonTeachers(l).length===1&&l.teacherName?.trim())
+    let name=named?.teacherName?.trim()
+    if(!name)for(const l of taught){const names=l.teacherName?.split(/[,、]/).map(n=>n.trim()),ids=lessonTeachers(l);if(names?.length===ids.length&&names[ids.indexOf(teacher)]){name=names[ids.indexOf(teacher)];break}}
+    const subjects=entries.filter(e=>!e.activity).reduce((n,e)=>n+e.count,0),activities=need-subjects
+    issues.push({severity:'error',step:4,message:`${name||`ครูรหัส ${teacher}`} ต้องสอน ${need} คาบ แต่มีเวลาว่าง ${free} คาบ (รายวิชา ${subjects} · กิจกรรม ${activities} · คาบไม่ว่าง ${blockedCount})`,
+      details:entries.filter(e=>e.count>0).map(e=>`${[...e.labels].join(' / ')}: ${e.count} คาบ/สัปดาห์${e.labels.size>1?' (รวมกลุ่ม นับครั้งเดียว)':''}`)})
+  }
   for(const venue of new Set(lessons.flatMap(l=>l.roomId?[l.roomId]:[]))){const uses=lessons.filter(l=>l.roomId===venue),need=uses.reduce((sum,l)=>sum+l.count,0);if(need>capacity)err(`สถานที่ของ ${uses[0]?.label} ต้องใช้ ${need} คาบ แต่มี ${capacity} ช่อง`,5)}
 
   return issues
@@ -486,10 +504,20 @@ function solveFlexibleActivities(lessons:PlannedLesson[],fixed:PlannedSlot[],pla
 
 /** Bounded block search. Fixed lessons may be completed into a double block. */
 export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],maxNodes=SCHEDULE_SEARCH_MAX_NODES,timeLimitMs=SCHEDULE_SEARCH_TIME_LIMIT_MS):PlannedScheduleResult{
-  const started=Date.now()
-  const finish=(result:PlannedScheduleResult):PlannedScheduleResult=>result.status!=='complete'?result:{...result,assignments:improveMorningAssignments(lessons,fixed,result.assignments,plan.days,times,unavailable,plan),elapsedMs:Date.now()-started}
+  const started=Date.now(),requestedTimeLimitMs=timeLimitMs
+  let repairNodes=0
+  const finish=(result:PlannedScheduleResult):PlannedScheduleResult=>({...result,
+    assignments:result.status==='complete'?improveMorningAssignments(lessons,fixed,result.assignments,plan.days,times,unavailable,plan):result.assignments,
+    nodes:result.nodes+repairNodes,elapsedMs:Date.now()-started,timeLimitMs:requestedTimeLimitMs})
   const issues=checkPlanning(lessons,fixed,plan.days,times,unavailable)
   if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,assignments:[] as PlannedSlot[],issues,nodes:0}
+  if(!plan.reduceGaps&&plan.maxContinuous===0&&lessons.length>=50&&lessons.some(l=>!l.fixedOnly&&(l.activity||l.pattern?.some(length=>length>1)))&&maxNodes>0&&timeLimitMs>0){
+    const repairStarted=Date.now(),repair=solveBlockRepair(lessons,fixed,plan,times,unavailable,lessonMorningPriority,Math.min(maxNodes,120_000),Math.min(timeLimitMs,6000))
+    if(repair?.status==='complete')return finish({...repair,issues,solver:'block_repair',timeLimitMs})
+    repairNodes=repair?.nodes||0
+    timeLimitMs=Math.max(0,timeLimitMs-(Date.now()-repairStarted));maxNodes=Math.max(0,maxNodes-repairNodes)
+    if(!timeLimitMs||!maxNodes)return finish({status:'timeout',assignments:[],issues,nodes:0,solver:'block_repair',limitReason:!maxNodes?'node_limit':'time_limit'})
+  }
   if(lessons.some(l=>l.activity&&!l.fixedOnly&&l.count>0))return finish(solveFlexibleActivities(lessons,fixed,plan,times,unavailable,maxNodes,timeLimitMs))
   // Most school timetables use one-period lessons. Route this common case,
   // including lessons that need a shared venue, through the slot-based solver: the general
@@ -512,7 +540,7 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
       const legacy=solveSchoolSchedule(lessons.map(l=>({id:l.id,classroomId:l.classroomId,teacherId:l.activity?null:l.teacherId,count:l.count,label:l.label,teacherOptional:l.teacherOptional||l.activity})),fixed,Math.min(maxNodes,1_000_000),teachingPeriods.length,teacherBlocks)
       if(!legacy.error)return finish({status:'complete' as const,assignments:legacy.assignments,issues,nodes:0,solver:'legacy_backtracking',elapsedMs:Date.now()-started,timeLimitMs:8000})
       const timedOut=legacy.error.includes('ค้นหาไม่ทัน')
-      return {status:timedOut?'timeout' as const:'conflict' as const,limitReason:timedOut?'time_limit' as const:null,message:legacy.error,assignments:[] as PlannedSlot[],issues,nodes:0,solver:'legacy_backtracking',elapsedMs:Date.now()-started,timeLimitMs:8000}
+      return finish({status:timedOut?'timeout' as const:'conflict' as const,limitReason:timedOut?'time_limit' as const:null,message:legacy.error,assignments:[] as PlannedSlot[],issues,nodes:0,solver:'legacy_backtracking'})
     }
   }
   const deadline=Date.now()+timeLimitMs;let nodes=0,limitReason:'node_limit'|'time_limit'|null=null

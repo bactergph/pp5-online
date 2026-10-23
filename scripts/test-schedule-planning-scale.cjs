@@ -1,6 +1,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
-const exportsObject={}
-vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:()=>({})})
+const exportsObject={},repair={}
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-block-repair.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:repair,require:()=>({})})
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-block-repair'?repair:{}})
 const {solvePlannedSchedule,emptyPlan}=exportsObject
 const days=[1,2,3,4,5]
 const times=[
@@ -24,7 +25,7 @@ for(let room=0;room<60;room++){
 }
 const result=solvePlannedSchedule(lessons,[],plan,times,[])
 assert.equal(result.status,'complete',`60-room schedule should fit; got ${result.status} (${result.limitReason||'no limit'})`)
-assert.equal(result.solver,'block_backtracking','the 60-room stress fixture exercises the advanced block-search path')
+assert.equal(result.solver,'block_backtracking','gap/continuous preferences keep the existing advanced block-search ranking')
 assert.equal(result.assignments.length,1440)
 const occupiedClasses=new Set(),occupiedTeachers=new Set(),occupiedVenues=new Set()
 const teachersById=new Map(lessons.map(lesson=>[lesson.id,lesson.teacherId]))

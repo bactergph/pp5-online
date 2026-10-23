@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
-const exportsObject={},legacySolver={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-solver.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:legacySolver,require:()=>({})});vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-solver'?legacySolver:{}});
+const exportsObject={},legacySolver={},repairSolver={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-solver.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:legacySolver,require:()=>({})});vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-block-repair.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:repairSolver,require:()=>({})});vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-solver'?legacySolver:name==='./schedule-block-repair'?repairSolver:{}});
 const {solvePlannedSchedule:solve,emptyPlan,checkPlanning,blocksFor}=exportsObject
 const times=[1,2,0,3,4].map((period,i)=>({period,is_break:period===0,sort_order:i+1,start_time:`${8+i}:00`,end_time:`${9+i}:00`,label:''}))
 const plan=emptyPlan();plan.days=[1,2];
@@ -24,6 +24,27 @@ const nodeLimited=solve([lesson('A','T','A',2)],[],plan,times,[],0);assert.equal
 const timeLimited=solve([lesson('A','T','A',2)],[],plan,times,[],500000,0);assert.equal(timeLimited.status,'timeout');assert.equal(timeLimited.limitReason,'time_limit')
 assert.ok(checkPlanning([lesson('A',null)],[],plan.days,times,[]).some(i=>i.message.includes('ครู')))
 assert.ok(checkPlanning([lesson('A','T','A',2,{pattern:[3]})],[],plan.days,times,[]).some(i=>i.message.includes('รูปแบบ')))
+// Similar names remain separate by teacher ID. Overload diagnostics describe
+// the teacher's combined assignments, not the first classroom/subject found.
+const capacityTimes=Array.from({length:7},(_,i)=>({period:i+1,is_break:false,start_time:`${8+i}:00`,end_time:`${9+i}:00`}))
+const overloadLessons=[
+  lesson('english','english','E',19,{teacherName:'ครู อัญชลี ป้ายภูมิ',label:'ม.5/1 · อังกฤษ'}),
+  lesson('wrong-math','english','M',18,{teacherName:'ครู อัญชลี ป้ายภูมิ',label:'ม.2/1 · คณิตศาสตร์ 4'}),
+  ...['A','B'].map(room=>lesson('guide-'+room,null,room,1,{activity:true,teacherIds:['english'],teacherName:'ครู อัญชลี ป้ายภูมิ',activityGroupId:'guide',label:room+' · แนะแนว'})),
+  lesson('correct-math','math','C',18,{teacherName:'ครู อัญชลีญา บุญระมี'}),
+]
+const overload=checkPlanning(overloadLessons,[],[1,2,3,4,5],capacityTimes,[]).filter(i=>/ต้องสอน.*คาบ แต่มีเวลาว่าง/.test(i.message))
+assert.equal(overload.length,1);assert.ok(overload[0].message.startsWith('ครู อัญชลี ป้ายภูมิ ต้องสอน 38 คาบ แต่มีเวลาว่าง 35 คาบ'))
+assert.ok(overload[0].message.includes('รายวิชา 37 · กิจกรรม 1'));assert.equal(overload[0].details.length,3)
+assert.ok(overload[0].details.some(row=>row.includes('รวมกลุ่ม นับครั้งเดียว')))
+const blocks=[{teacherId:'english',day:1,period:1},{teacherId:'english',day:1,period:1},{teacherId:'english',day:7,period:1},{teacherId:'english',day:1,period:99}]
+assert.ok(checkPlanning(overloadLessons,[],[1,2,3,4,5],capacityTimes,blocks).some(i=>i.message.includes('มีเวลาว่าง 34 คาบ')&&i.message.includes('คาบไม่ว่าง 1')))
+const separated=overloadLessons.map(l=>l.id==='wrong-math'?{...l,teacherId:'math2',teacherName:'ครู อีกคน'}:l)
+assert.ok(!checkPlanning(separated,[],[1,2,3,4,5],capacityTimes,[]).some(i=>/ต้องสอน.*คาบ แต่มีเวลาว่าง/.test(i.message)))
+const teamOnly=checkPlanning([lesson('team',null,'A',36,{activity:true,teacherIds:['a','b'],teacherName:'ครู หนึ่ง, ครู สอง'})],[],[1,2,3,4,5],capacityTimes,[]).filter(i=>/ต้องสอน.*คาบ แต่มีเวลาว่าง/.test(i.message))
+assert.ok(teamOnly[0].message.startsWith('ครู หนึ่ง'));assert.ok(teamOnly[1].message.startsWith('ครู สอง'))
+assert.ok(!checkPlanning([{...overloadLessons[0],count:NaN}],[],[1,2,3,4,5],capacityTimes,[]).some(i=>i.message.includes('ต้องสอน NaN')))
+console.log('PASS: named teacher capacity diagnostics; subject/activity breakdown; joint groups and unavailable slots counted once; similar teacher names remain distinct')
 const activities=[lesson('act',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true}),lesson('actB',null,'B',1,{activity:true,teacherOptional:true,fixedOnly:true})];result=solve([...activities,lesson('A','T','A',2),lesson('B','T','B',2)],[slot('act','A',1,1),slot('actB','B',1,1)],plan,times,[]);assert.equal(result.status,'complete');assert.ok(result.assignments.every(s=>s.day!==1||s.period!==1));
 console.log('PASS: shared teacher/venue; actual lunch boundaries; locked doubles; outside scope; teacher unavailable; capacity; timeout; activity preservation')
 const week=emptyPlan()
@@ -45,6 +66,11 @@ const editorTimes=helpers.normalizePeriodTimes(storedTimes);assert.equal(helpers
 assert.equal(helpers.validatePeriodTimes(helpers.moveLunchBreak(editorTimes,4)),null);
 assert.equal(helpers.teacherGivenName('นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน'),'สมชาย, สมหญิง');
 assert.equal(helpers.activityTeacherLabel('นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน, ว่าที่ ร.ต. สมศักดิ์ มีสุข'),'สมชาย, สมหญิง');
+assert.equal(helpers.teacherTimetableName('นาย สมชาย ใจดี, นางสาวสมหญิง รักเรียน'),'นายสมชาย, นางสาวสมหญิง');
+assert.equal(helpers.teacherTimetableName('ครู อัญชลีญา บุญระมี'),'ครูอัญชลีญา');
+assert.equal(helpers.teacherTimetableName('ว่าที่ ร.ต. สมศักดิ์ มีสุข'),'ว่าที่ ร.ต.สมศักดิ์');
+assert.equal(helpers.teacherTimetableName('ครู ว่าที่ ร.ต. สมศักดิ์ มีสุข'),'ครูสมศักดิ์');
+assert.equal(helpers.activityTimetableTeacherLabel('นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน, ครูสมศักดิ์ มีสุข'),'นายสมชาย, นางสาวสมหญิง');
 assert.equal(helpers.isActivityLessonId('activity:abc'),true);assert.equal(helpers.isActivityLessonId('activity-team:g:r'),true);assert.equal(helpers.isActivityLessonId('subject'),false);
 const teams={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-activity-teams.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:teams,require:()=>({})});
 const activityGroup={id:'g1',settingId:'set1',mode:'joint',roomIds:['roomA'],teacherIds:['t1','t2'],roomTeachers:{},weeklyPeriods:1,cells:[{day:1,period:6}]};

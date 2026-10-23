@@ -21,7 +21,7 @@ function load(file,deps={}){
 }
 const schedules=load('lib/schedules.ts'),helpers=load('lib/schedule-helpers.ts',{'@/lib/schedules':schedules})
 const teams=load('lib/schedule-activity-teams.ts'),solver=load('lib/schedule-solver.ts')
-const planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver})
+const planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':load('lib/schedule-block-repair.ts')})
 const verification=load('lib/schedule-verification.ts',{'./schedule-planning':planning})
 const periods=[1,2,3,0,4,5,6].map((period,index)=>({period,label:period?`คาบ ${period}`:'พักกลางวัน',is_break:period===0,sort_order:index+1,start_time:`${String(index+8).padStart(2,'0')}:00`,end_time:`${String(index+9).padStart(2,'0')}:00`}))
 const teachers=Array.from({length:20},(_,i)=>({id:`teacher-${i}`,prefix:'ครู',full_name:`ทดสอบ ${i+1}`,position:'ครู'}))

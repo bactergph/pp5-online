@@ -12,7 +12,7 @@ import {
   fetchScheduleExportContext,
 } from '@/app/schedules/actions'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
-import { activityTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherGivenName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTimetableTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
@@ -189,7 +189,7 @@ export default function ScheduleExportPage() {
   const yearLabel = years.find(y => y.id === yearId)?.year_be || ''
   const title = exportType === 'class'
     ? `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${classLabel}`
-    : `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${selectedTeacher ? `${selectedTeacher.prefix} ${selectedTeacher.full_name}` : ''}`
+    : `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${selectedTeacher ? `${selectedTeacher.prefix.trim()}${selectedTeacher.full_name.trim()}` : ''}`
   const [error, setError] = useState('')
   const [previewReady, setPreviewReady] = useState(false)
   const gridRequest = useRef(0)
@@ -265,7 +265,7 @@ export default function ScheduleExportPage() {
       data[key] = subj ? {
         line1: subj.subject_name || subj.label || (activity ? 'กิจกรรม' : '—'),
         line2: subj.subject_code ? `(${subj.subject_code})` : activity ? '(กิจกรรม)' : '',
-        line3: activity ? activityTeacherLabel(subj.teacher_name) : teacherGivenName(subj.teacher_name),
+        line3: activity ? activityTimetableTeacherLabel(subj.teacher_name) : teacherTimetableName(subj.teacher_name),
         line4: subj.room_name || '',
       } : { line1: cell.note || '—', line2: '' }
     }
@@ -357,7 +357,7 @@ export default function ScheduleExportPage() {
             return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id] }
           }
           const teacher = teachers.find(t => t.id === id)
-          return { title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix} ${teacher.full_name}` : ''}`, gridData: grids[id] }
+          return { title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix.trim()}${teacher.full_name.trim()}` : ''}`, gridData: grids[id] }
         })
         return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, directorName, directorPosition, printDate, fileName })
       },
@@ -549,7 +549,6 @@ export default function ScheduleExportPage() {
             <div>
               <h2>{schoolName || 'ชื่อโรงเรียน'}</h2>
               <p>{title}</p>
-              {printDate && <p>พิมพ์: {formatThaiDate(printDate)}</p>}
             </div>
           </header>
 

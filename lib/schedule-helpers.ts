@@ -73,6 +73,19 @@ export function teacherGivenName(name: string) {
 export function activityTeacherLabel(name: string) {
   return teacherGivenName(name).split(',').map(part => part.trim()).filter(Boolean).slice(0, 2).join(', ')
 }
+/** Compact timetable names retain the recorded title, attached to the given name. */
+export function teacherTimetableName(name: string) {
+  return name.split(/[,、]/).map(part => {
+    const text = part.trim(), title = text.match(THAI_NAME_PREFIX)?.[0].trim() || ''
+    let rest = text.slice(title.length).trim()
+    while (THAI_NAME_PREFIX.test(rest)) rest = rest.replace(THAI_NAME_PREFIX, '').trim()
+    const given = rest.split(/\s+/)[0] || ''
+    return given ? title + given : ''
+  }).filter(Boolean).join(', ')
+}
+export function activityTimetableTeacherLabel(name: string) {
+  return teacherTimetableName(name).split(',').map(part => part.trim()).filter(Boolean).slice(0, 2).join(', ')
+}
 export function isActivityLessonId(id: string | null | undefined) {
   return !!id && (id.startsWith('activity:') || id.startsWith('activity-team:'))
 }

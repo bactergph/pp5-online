@@ -152,11 +152,9 @@ const CLASSROOM_ADMIN_MAIN: NavItem = {
 }
 const SCHEDULE_CHECK_VIEW_CHILDREN: Child[] = [
   { href: '/schedules/conflicts', label: 'ตรวจความขัดแย้ง', icon: ic(I.shield) },
-  { href: '/schedules/workload', label: 'ภาระงานสอน', icon: ic(I.chart) },
 ]
 const SCHEDULE_CHECK_MANAGE_CHILDREN: Child[] = [
   { href: '/schedules/conflicts', label: 'ตรวจความขัดแย้ง', icon: ic(I.shield) },
-  { href: '/schedules/workload', label: 'ภาระงานสอน', icon: ic(I.chart) },
 ]
 const SCHEDULE_VIEW_CHILDREN: Child[] = [
   {
@@ -180,6 +178,7 @@ const SCHEDULE_VIEW_CHILDREN: Child[] = [
     tone: 'docs',
     children: [
       { href: '/export/schedules', label: 'พิมพ์ตาราง', icon: ic(I.export) },
+      { href: '/schedules/workload', label: 'ภาระงานสอน', icon: ic(I.chart) },
     ],
   },
 ]
@@ -215,6 +214,7 @@ const SCHEDULE_MANAGE_CHILDREN: Child[] = [
     tone: 'docs',
     children: [
       { href: '/export/schedules', label: 'พิมพ์ตาราง', icon: ic(I.export) },
+      { href: '/schedules/workload', label: 'ภาระงานสอน', icon: ic(I.chart) },
     ],
   },
 ]
@@ -555,19 +555,15 @@ export default function Sidebar({
 }: Props) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement | null>(null)
-  const [expanded, setExpanded] = useState<string[]>([])
-  const [manualExpand, setManualExpand] = useState(false)
+  const [expansion, setExpansion] = useState<{ path: string; items: string[] } | null>(null)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     Promise.resolve().then(() => setMounted(true))
   }, [])
 
-  useEffect(() => {
-    // เปลี่ยนหน้าแล้วกลับไปเปิดตามเมนูที่กำลังอยู่
-    setManualExpand(false)
-    setExpanded([])
-  }, [pathname])
+  // A new route returns to its active menu before the next screen is painted.
+  if (expansion && expansion.path !== pathname) setExpansion(null)
 
   const sections = buildNav(navRole, isHomeroom).map(section => {
     const byEducation = filterSchoolMenu(section.items, educationType)
@@ -607,13 +603,12 @@ export default function Sidebar({
     })
   }
   const isExpanded = (item: NavItem) => {
-    if (manualExpand) return expanded.includes(item.href)
+    if (expansion) return expansion.items.includes(item.href)
     return isActive(item.href) || hasActiveChild(item.children)
   }
   const toggle = (item: NavItem) => {
     const currentlyOpen = isExpanded(item)
-    setManualExpand(true)
-    setExpanded(currentlyOpen ? [] : [item.href])
+    setExpansion({ path: pathname, items: currentlyOpen ? [] : [item.href] })
   }
 
   useEffect(() => {

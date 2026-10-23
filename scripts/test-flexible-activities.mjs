@@ -9,7 +9,7 @@ function load(path,deps={}) {
   return exports
 }
 const solver=load('lib/schedule-solver.ts')
-const {solvePlannedSchedule}=load('lib/schedule-planning.ts',{'./schedule-solver':solver})
+const {solvePlannedSchedule}=load('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':load('lib/schedule-block-repair.ts')})
 const {validateActivityTeam}=load('lib/schedule-activity-teams.ts')
 const periods=[
   {period:1,start_time:'08:00',end_time:'09:00',is_break:false},
