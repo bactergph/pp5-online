@@ -1,0 +1,13 @@
+/* SweetAlert is mounted under body; scope every rule to this activity confirmation. */
+.swal2-popup.activity-confirmation{width:420px;max-width:calc(100vw - 32px);padding:28px 24px 24px;border:1px solid #e2e8f0;border-radius:20px;background:#fff;color:#182b49;font-family:inherit;box-shadow:0 20px 64px #14243d24}
+.activity-confirmation .activity-confirmation-title{padding:0;margin:0;font-size:23px;font-weight:700;line-height:1.55;color:#182b49}
+.activity-confirmation .activity-confirmation-message{margin:12px 0 0;padding:0;font-size:15px;line-height:1.7;color:#52647c}
+.activity-confirmation .activity-confirmation-actions{display:flex;flex-wrap:nowrap;gap:12px;width:100%;margin:24px 0 0;padding:0}
+.activity-confirmation .activity-confirmation-actions button{flex:1;min-width:0;min-height:48px;margin:0;padding:10px 16px;border:1px solid transparent;border-radius:10px;font:inherit;font-size:16px;font-weight:600;line-height:1.5;cursor:pointer;transition:background .15s}
+.activity-confirmation .activity-confirmation-actions .activity-confirmation-save{background:#1373d9;border-color:#1373d9;color:#fff}
+.activity-confirmation .activity-confirmation-save:hover{background:#0c5bb3;border-color:#0c5bb3}
+.activity-confirmation .activity-confirmation-actions .activity-confirmation-cancel{background:#fff;border-color:#cbd5e1;color:#334155}
+.activity-confirmation .activity-confirmation-cancel:hover{background:#f4f7fc}
+.activity-confirmation .activity-confirmation-actions button:focus-visible{outline:3px solid #245bdb;outline-offset:3px;box-shadow:none}
+@media(max-width:480px){.swal2-popup.activity-confirmation{padding:24px 20px 20px}.activity-confirmation .activity-confirmation-title{font-size:20px}}
+@media(prefers-reduced-motion:reduce){.activity-confirmation .activity-confirmation-actions button{transition:none}}

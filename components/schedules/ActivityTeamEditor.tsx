@@ -6,6 +6,13 @@ import { activityTeachers, activityTeamWorkload, validateActivityTeam, type Acti
 import { previewScheduleActivityTeam, removeScheduleActivityName, saveScheduleActivityName, saveScheduleActivityTeam } from '@/app/schedules/planning-actions'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import ActivityAssignmentFields from './ActivityAssignmentFields'
+import './activity-confirmation.css'
+
+const activityConfirmation = {
+  customClass: { popup:'activity-confirmation', title:'activity-confirmation-title', htmlContainer:'activity-confirmation-message', actions:'activity-confirmation-actions', confirmButton:'activity-confirmation-save', cancelButton:'activity-confirmation-cancel' },
+  buttonsStyling:false, showCancelButton:true, reverseButtons:true, cancelButtonText:'ยกเลิก',
+  showClass:{popup:''}, hideClass:{popup:''},
+}
 
 export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, onDirty, blocked }: { data: Preparation; year: string; term: number; onSaved: () => Promise<void>; onBusy: (b: boolean) => void; onDirty: (b: boolean) => void; blocked: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null), catalogDialog = useRef<HTMLDialogElement>(null), lock = useRef(false), opener = useRef<HTMLElement | null>(null)
@@ -82,12 +89,11 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
       const preview = await previewScheduleActivityTeam(year, term, data.hash, group, remove)
       if (preview.error || !preview.data) throw Error(preview.error || 'ตรวจผลกระทบไม่สำเร็จ')
       if (editorOpen) dialog.current?.close()
-      const label = activities.find(a => a.id === group.settingId)?.label || 'กิจกรรม'
-      const overlapLines = preview.data.overwrites.flatMap(g => g.rooms.map(r => `ห้อง ${roomName(r.roomId)}\nทีมเดิม: ${names(r.previous) || 'ไม่ระบุ'}\nทีมใหม่: ${names(r.next) || 'ไม่ระบุ'}\nครูที่ซ้ำ: ${names(r.duplicates) || 'ไม่มี'}${r.duplicates.length ? ` (${r.duplicates.length} คน)` : ''}`))
-      const details = `${label} · ${group.roomIds.map(roomName).join(', ')} · ${group.weeklyPeriods} คาบ/สัปดาห์\n${when(group)}\n${group.mode === 'joint' ? names(group.teacherIds) : group.roomIds.map(id => roomName(id) + ': ' + names(activityTeachers(group, id))).join('\n')}\nกระทบคาบเดิม ${preview.data.affected} ช่อง${remove ? ' การนำออกไม่คืนวิชาเดิม' : ''}`
-      if (!(await Swal.fire({ icon: 'warning', title: remove ? 'นำกิจกรรมและทีมครูออก?' : overlapLines.length ? 'พบทีมกิจกรรมเดิมในห้องที่เลือก' : 'ยืนยันกิจกรรมและทีมครู?', text: overlapLines.length ? `${details}\n\nรายการที่จะบันทึกทับ:\n${overlapLines.join('\n\n')}\n\nยืนยันเพื่อแทนทีมเดิมในห้องที่ระบุ` : details, showCancelButton: true, confirmButtonText: overlapLines.length ? 'บันทึกทับทีมเดิม' : 'ยืนยัน', cancelButtonText: 'กลับไปแก้', confirmButtonColor: '#1373d9' })).isConfirmed) return
+      const overwrittenRooms = new Set(preview.data.overwrites.flatMap(group => group.rooms.map(room => room.roomId))).size
+      const impact = [overwrittenRooms ? `แทนที่ทีมเดิมใน ${overwrittenRooms} ห้อง` : '', preview.data.affected ? `เปลี่ยนคาบเดิม ${preview.data.affected} ช่อง` : ''].filter(Boolean).join(' · ')
+      if (!(await Swal.fire({ ...activityConfirmation, title:remove ? 'นำกิจกรรมออกหรือไม่?' : 'ต้องการบันทึกกิจกรรมหรือไม่?', text:remove ? 'การนำออกจะไม่คืนวิชาเดิม' : impact || undefined, confirmButtonText:remove ? 'นำออก' : 'บันทึก' })).isConfirmed) return
       let unlock = false
-      if (preview.data.locked) { unlock = (await Swal.fire({ icon: 'warning', title: `ยืนยันแทนที่คาบล็อก ${preview.data.locked} ช่อง`, text: 'ปลดล็อกเฉพาะคาบที่ได้รับผลกระทบ', showCancelButton: true, confirmButtonText: 'ยืนยันแทนที่คาบล็อก', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#be3340' })).isConfirmed; if (!unlock) return }
+      if (preview.data.locked) { unlock = (await Swal.fire({ ...activityConfirmation, title:`แทนที่คาบล็อก ${preview.data.locked} ช่อง?`, text:'ปลดล็อกเฉพาะคาบที่ได้รับผลกระทบ', confirmButtonText:'แทนที่คาบล็อก', focusCancel:true })).isConfirmed; if (!unlock) return }
       const result = await saveScheduleActivityTeam(year, term, preview.data.hash, group, remove, unlock, preview.data.overwrites.length > 0)
       if (result.error) throw Error(result.error)
       committed = true; dialog.current?.close(); setDraft(null); onDirty(false); setMessage(remove ? 'นำกิจกรรมออกแล้ว' : 'บันทึกกิจกรรมแล้ว'); await onSaved()

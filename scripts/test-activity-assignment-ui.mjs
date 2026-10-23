@@ -72,7 +72,27 @@ try{
   const clickText=async(selector,text)=>{const handle=await page.evaluateHandle((selector,text)=>[...document.querySelectorAll(selector)].find(el=>el.textContent===text),selector,text);assert.ok(handle.asElement(),`Missing ${text}`);await handle.asElement().click()}
   const open=async()=>{await page.waitForFunction(()=>!window.editorBusy&&!document.querySelector('.swal2-container'));await page.locator('.prep-activity-assign-tools .prep-primary').click();await page.waitForSelector(modal)}
   const chooseTeacher=async n=>page.click(`${modal} .activity-teacher-checks input[aria-label="ครู ตัวอย่าง ${['หนึ่ง','สอง','สาม'][n-1]}"]`)
-  const save=async expected=>{await page.click(`${modal}>footer .prep-primary`);await page.waitForSelector('.swal2-confirm');await page.click('.swal2-confirm');await page.waitForFunction(()=>!window.editorBusy&&!document.querySelector('.prep-activity-dialog[open]')&&!document.querySelector('.swal2-container'));assert.equal(saves.length,expected)}
+  const save=async expected=>{
+    await page.click(`${modal}>footer .prep-primary`);await page.waitForSelector('.swal2-confirm')
+    assert.equal(await page.$eval('.swal2-title',el=>el.textContent),'ต้องการบันทึกกิจกรรมหรือไม่?')
+    assert.equal(await page.$eval('.swal2-confirm',el=>el.textContent),'บันทึก')
+    assert.equal(await page.$eval('.swal2-cancel',el=>el.textContent),'ยกเลิก')
+    assert.equal(await page.$eval('.swal2-html-container',el=>el.textContent),'','Do not repeat room and teacher lists')
+    if(expected===1){
+      for(const width of [360,390,768,1024,1440]){
+        await page.setViewport({width,height:844})
+        assert.equal(await page.$eval('.activity-confirmation',el=>el.getBoundingClientRect().width<=innerWidth-32),true)
+        assert.equal(await page.$eval('.swal2-confirm',el=>el.getBoundingClientRect().height>=44),true)
+        assert.equal(await page.evaluate(()=>document.querySelector('.swal2-cancel').getBoundingClientRect().left<document.querySelector('.swal2-confirm').getBoundingClientRect().left),true)
+      }
+      await page.setViewport({width:1440,height:1000});await page.screenshot({path:path.join(out,'confirmation-desktop.png')})
+      await page.setViewport({width:390,height:844});await page.screenshot({path:path.join(out,'confirmation-mobile.png')})
+      await page.click('.swal2-cancel');await page.waitForFunction(()=>!window.editorBusy&&!document.querySelector('.swal2-container')&&!!document.querySelector('.prep-activity-dialog[open]'))
+      assert.equal(saves.length,0,'Cancel leaves the editor and selections available without saving')
+      await page.click(`${modal}>footer .prep-primary`);await page.waitForSelector('.swal2-confirm')
+    }
+    await page.click('.swal2-confirm');await page.waitForFunction(()=>!window.editorBusy&&!document.querySelector('.prep-activity-dialog[open]')&&!document.querySelector('.swal2-container'));assert.equal(saves.length,expected)
+  }
   await open()
   await page.select(`${modal} select[aria-label="กิจกรรมที่จะกำหนด"]`,'scouts')
   await page.click(`${main} input[aria-label="เลือกทั้งชั้น ป.1"]`)
