@@ -5,13 +5,14 @@ import type { Preparation } from '@/lib/schedule-preparation'
 import { activityTeachers, activityTeamWorkload, validateActivityTeam, type ActivityTeam } from '@/lib/schedule-activity-teams'
 import { previewScheduleActivityTeam, removeScheduleActivityName, saveScheduleActivityName, saveScheduleActivityTeam } from '@/app/schedules/planning-actions'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
+import ActivityAssignmentFields from './ActivityAssignmentFields'
 
 export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, onDirty, blocked }: { data: Preparation; year: string; term: number; onSaved: () => Promise<void>; onBusy: (b: boolean) => void; onDirty: (b: boolean) => void; blocked: boolean }) {
   const dialog = useRef<HTMLDialogElement>(null), catalogDialog = useRef<HTMLDialogElement>(null), lock = useRef(false), opener = useRef<HTMLElement | null>(null)
   const [draft, setDraft] = useState<ActivityTeam | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
   const [activities, setActivities] = useState(data.activities), [catalog, setCatalog] = useState<{ id: string | null; label: string; shortLabel: string; weeklyPeriods: number } | null>(null)
   const [activityLevel, setActivityLevel] = useState(''), [activityRoom, setActivityRoom] = useState(''), [query, setQuery] = useState('')
-  const [dialogLevel, setDialogLevel] = useState(''), [teacherQuery, setTeacherQuery] = useState(''), [teacherRoom, setTeacherRoom] = useState('')
+  const [pendingTeam, setPendingTeam] = useState(false), [showTimes, setShowTimes] = useState(false)
   const groups = data.plan.activityGroups || [], workload = activityTeamWorkload(groups), eligibleTeacherIds = data.plan.teacherIds ?? data.teachers.map(t => t.id)
   function openCatalog(item?: { id: string; label: string; short_label?: string; weeklyPeriods?: number }) {
     if (busy) return
@@ -60,24 +61,22 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
     opener.current = document.activeElement as HTMLElement
     setError('')
     const opened = group ? { ...structuredClone(group), ...(copy ? { id: crypto.randomUUID(), roomIds: roomId ? [roomId] : [], roomTeachers: {} } : {}) } : { id: crypto.randomUUID(), settingId: activities[0]?.id || '', mode: 'joint' as const, roomIds: roomId ? [roomId] : [], teacherIds: [], roomTeachers: {}, weeklyPeriods: activities[0]?.weeklyPeriods || 1, cells: [] }
-    const focus = data.classrooms.find(room => room.id === (roomId || opened.roomIds[0]))
-    setDialogLevel(focus?.level || data.classrooms[0]?.level || '')
-    setTeacherQuery('')
-    setTeacherRoom(roomId || opened.roomIds[0] || '')
+    setPendingTeam(false)
+    setShowTimes(opened.cells.length > 0)
     setDraft(opened)
     onDirty(true)
     const element = dialog.current
     if (element && !element.open) element.showModal()
   }
-  function close() { if (busy) return; dialog.current?.close(); setDraft(null); onDirty(false); opener.current?.focus() }
+  function close() { if (busy) return; dialog.current?.close(); setDraft(null); setPendingTeam(false); onDirty(false); opener.current?.focus() }
   function change(patch: Partial<ActivityTeam>) { if (draft) setDraft({ ...draft, ...patch }) }
-  const toggle = (ids: string[], id: string) => ids.includes(id) ? ids.filter(v => v !== id) : [...ids, id]
   async function save(group: ActivityTeam, remove = false) {
     if (lock.current) return
     lock.current = true; setBusy(true); onBusy(true); setError('')
     const editorOpen = dialog.current?.open
     let committed = false
     try {
+      if (!remove) group = { ...group, roomTeachers: Object.fromEntries(Object.entries(group.roomTeachers).filter(([id]) => group.roomIds.includes(id))) }
       if (!remove && group.roomIds.length < 2 && group.mode === 'separate') group = { ...group, mode: 'joint', teacherIds: activityTeachers(group, group.roomIds[0] || '') }
       if (!remove) validateActivityTeam(group, data.classrooms.map(c => c.id), data.teachers.map(t => t.id), activities.map(a => a.id), data.plan.days, data.periods)
       const preview = await previewScheduleActivityTeam(year, term, data.hash, group, remove)
@@ -128,51 +127,11 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
     if (!answer.isConfirmed) return
     await removeFromRoom(targets, roomId)
   }
-  function withRooms(roomIds: string[]) {
-    if (!draft) return
-    if (roomIds.length < 2) {
-      const source = draft.mode === 'joint' ? draft.teacherIds : activityTeachers(draft, roomIds[0] || '')
-      change({ roomIds, mode: 'joint', teacherIds: source.length ? source : draft.teacherIds })
-    } else change({ roomIds })
-  }
-  function coverLevel(level: string) {
-    if (!draft) return
-    const ids = data.classrooms.filter(room => room.level === level).map(room => room.id)
-    const kept = draft.roomIds.filter(id => data.classrooms.find(room => room.id === id)?.level !== level)
-    withRooms([...kept, ...ids])
-  }
-  function toggleRoom(id: string) {
-    if (!draft) return
-    withRooms(toggle(draft.roomIds, id))
-  }
-  function setMode(mode: 'joint' | 'separate') {
-    if (!draft) return
-    if (mode === 'separate') {
-      const roomTeachers = { ...draft.roomTeachers }
-      for (const id of draft.roomIds) if (!roomTeachers[id]?.length) roomTeachers[id] = [...draft.teacherIds]
-      change({ mode, roomTeachers })
-      setTeacherRoom(current => draft.roomIds.includes(current) ? current : draft.roomIds[0] || '')
-    } else change({ mode })
-  }
   function toggleCell(day: number, period: number) {
     if (!draft) return
     const exists = draft.cells.some(cell => cell.day === day && cell.period === period)
     const cells = exists ? draft.cells.filter(cell => cell.day !== day || cell.period !== period) : draft.cells.length >= draft.weeklyPeriods ? draft.cells : [...draft.cells, { day, period }]
     change({ cells })
-  }
-  function teacherPicker(selected: string[], onToggle: (id: string) => void) {
-    const needle = teacherQuery.trim().toLowerCase()
-    const selectable = data.teachers.filter(teacher => eligibleTeacherIds.includes(teacher.id) || selected.includes(teacher.id))
-    const visible = selectable.filter(teacher => !needle || `${teacher.prefix || ''} ${teacher.full_name} ${teacher.position || ''}`.toLowerCase().includes(needle))
-    if (!selectable.length) return <p className="prep-error" role="status">ยังไม่มีครูที่เลือกไว้ กลับไปขั้นกำหนดครูแล้วบันทึกรายชื่อก่อน</p>
-    return <div className="prep-activity-teachers">
-      <input type="search" value={teacherQuery} onChange={event => setTeacherQuery(event.target.value)} placeholder="ค้นหาชื่อหรือตำแหน่ง" aria-label="ค้นหาครูสำหรับกิจกรรม" />
-      <div>{visible.map(teacher => {
-        const label = `${teacher.prefix || ''} ${teacher.full_name}`.trim()
-        return <button type="button" key={teacher.id} aria-pressed={selected.includes(teacher.id)} onClick={() => onToggle(teacher.id)}><strong>{label}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'}</small></button>
-      })}</div>
-      <p>{selected.length ? `เลือกแล้ว ${selected.length} คน` : 'ยังไม่กำหนดครูผู้รับผิดชอบ'}</p>
-    </div>
   }
   const levels = [...new Set(data.classrooms.map(room => room.level))]
   const activeLevel = levels.includes(activityLevel) ? activityLevel : levels[0] || ''
@@ -239,15 +198,10 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
         <button type="button" className="prep-primary" disabled={busy || !catalog.label.trim() || !Number.isInteger(catalog.weeklyPeriods) || catalog.weeklyPeriods < 1 || catalog.weeklyPeriods > 8} onClick={() => void saveCatalog()}>{busy ? 'กำลังบันทึก…' : 'บันทึก'}</button>
       </footer>
     </>}</dialog>
-    <dialog ref={dialog} className="prep-team-dialog prep-activity-dialog" aria-labelledby="team-title" onCancel={event => { event.preventDefault(); close() }}>{draft && (() => {
-      const composerLevel = levels.includes(dialogLevel) ? dialogLevel : levels[0] || ''
-      const composerRooms = data.classrooms.filter(room => room.level === composerLevel).slice().sort((a, b) => a.room - b.room)
-      const shared = draft.mode === 'joint' || draft.roomIds.length < 2
-      const activeTeacherRoom = draft.roomIds.includes(teacherRoom) ? teacherRoom : draft.roomIds[0] || ''
-      const selectedTeachers = shared ? draft.teacherIds : activityTeachers(draft, activeTeacherRoom)
-      const hasTeacher = shared ? draft.teacherIds.length > 0 : draft.roomIds.some(id => activityTeachers(draft, id).length > 0)
-      const ready = draft.roomIds.length > 0 && Number.isInteger(draft.weeklyPeriods) && draft.weeklyPeriods >= 1 && draft.weeklyPeriods <= 8 && (draft.cells.length === 0 || draft.cells.length === draft.weeklyPeriods)
-      const elsewhere = draft.roomIds.filter(id => data.classrooms.find(room => room.id === id)?.level !== composerLevel)
+    <dialog ref={dialog} className="prep-team-dialog prep-activity-dialog activity-assignment-dialog" aria-labelledby="team-title" onCancel={event => { event.preventDefault(); close() }}>{draft && (() => {
+      const hasTeacher = draft.roomIds.some(id => activityTeachers(draft, id).length > 0)
+      const fixedTeacherConflicts = draft.mode === 'separate' && draft.cells.length > 0 ? [...new Set(draft.roomIds.flatMap(id => activityTeachers(draft, id)))].filter(teacher => draft.roomIds.filter(id => activityTeachers(draft, id).includes(teacher)).length > 1) : []
+      const ready = !pendingTeam && !fixedTeacherConflicts.length && draft.roomIds.length > 0 && Number.isInteger(draft.weeklyPeriods) && draft.weeklyPeriods >= 1 && draft.weeklyPeriods <= 8 && (draft.cells.length === 0 || draft.cells.length === draft.weeklyPeriods)
       return <>
         <header>
           <div><h2 id="team-title">กำหนดกิจกรรมให้ชั้น/ห้อง</h2><p>{draft.roomIds.length ? `เลือกแล้ว ${draft.roomIds.length} ห้อง` : 'ยังไม่ได้เลือกห้อง'} · {draft.weeklyPeriods} คาบ/สัปดาห์ · {draft.cells.length ? 'กำหนดคาบเอง' : 'จัดอัตโนมัติ'}</p></div>
@@ -256,40 +210,27 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
         <div className="prep-team-dialog-body">
           <fieldset className="prep-activity-sections" disabled={busy}>
             <section className="prep-activity-block">
-              <div className="prep-activity-head"><span>1</span><div><h3>กิจกรรม</h3><p>เลือกชื่อกิจกรรมที่จะกำหนด</p></div></div>
-              <div className="prep-activity-pills">{activities.map(item => <button type="button" key={item.id} aria-pressed={draft.settingId === item.id} onClick={() => { if(draft.settingId !== item.id) change({ settingId: item.id, weeklyPeriods: item.weeklyPeriods || 1, cells: [] }) }}>{item.label}</button>)}</div>
-              <label>ชั่วโมงต่อสัปดาห์สำหรับห้องที่เลือก<input type="number" min={1} max={8} step={1} value={draft.weeklyPeriods} onChange={event => change({ weeklyPeriods: Number(event.target.value), cells: [] })} /></label>
+              <div className="prep-activity-head"><span>1</span><div><h3>กิจกรรม</h3><p>เลือกครั้งเดียว ใช้กับทุกห้องที่เลือกด้านล่าง</p></div></div>
+              <div className="activity-catalog-fields"><label>ชื่อกิจกรรม<select aria-label="กิจกรรมที่จะกำหนด" value={draft.settingId} onChange={event => { const item = activities.find(activity => activity.id === event.target.value); if (item) change({ settingId: item.id, weeklyPeriods: item.weeklyPeriods || 1, cells: [] }) }}>{activities.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><label>คาบต่อสัปดาห์<input aria-label="คาบกิจกรรมต่อสัปดาห์" type="number" min={1} max={8} step={1} value={draft.weeklyPeriods} onChange={event => change({ weeklyPeriods: Number(event.target.value), cells: [] })}/></label></div>
             </section>
+            <ActivityAssignmentFields key={draft.id} classrooms={data.classrooms} teachers={data.teachers} eligibleTeacherIds={eligibleTeacherIds} draft={draft} onChange={change} onPendingChange={setPendingTeam}/>
             <section className="prep-activity-block">
-              <div className="prep-activity-head"><span>2</span><div><h3>ห้อง</h3><p>เลือกชั้น แล้วแตะห้อง หรือเลือกทั้งชั้น</p></div></div>
-              <div className="prep-subject-levels" role="tablist" aria-label="ชั้นสำหรับกิจกรรม">{levels.map(level => <button key={level} type="button" aria-pressed={level === composerLevel} onClick={() => setDialogLevel(level)}>{level}</button>)}</div>
-              <div className="prep-activity-scope">
-                <button type="button" onClick={() => coverLevel(composerLevel)}>ทั้ง {composerLevel}</button>
-                <button type="button" onClick={() => withRooms(draft.roomIds.filter(id => data.classrooms.find(room => room.id === id)?.level !== composerLevel))}>เอาห้องชั้นนี้ออก</button>
-              </div>
-              <div className="prep-activity-room-picks">{composerRooms.map(room => <button type="button" key={room.id} aria-pressed={draft.roomIds.includes(room.id)} onClick={() => toggleRoom(room.id)}>ห้อง {room.name}</button>)}</div>
-              {elsewhere.length > 0 && <p className="prep-activity-kept">เลือกไว้อีก {elsewhere.map(roomName).join(' · ')}</p>}
-            </section>
-            <section className="prep-activity-block">
-              <div className="prep-activity-head"><span>3</span><div><h3>ครูผู้รับผิดชอบ</h3><p>เลือกเมื่อมีผู้รับผิดชอบ ถ้าไม่มีก็เว้นชื่อครูไว้ได้</p></div></div>
-              {draft.roomIds.length > 1 && <div className="prep-view-switch" role="group" aria-label="รูปแบบครู"><button type="button" aria-pressed={draft.mode === 'joint'} onClick={() => setMode('joint')}>ครูชุดเดียวกัน</button><button type="button" aria-pressed={draft.mode === 'separate'} onClick={() => setMode('separate')}>ครูคนละชุด</button></div>}
-              {!shared && <div className="prep-activity-room-picks">{draft.roomIds.map(id => <button type="button" key={id} aria-pressed={id === activeTeacherRoom} onClick={() => setTeacherRoom(id)}>{roomName(id)}</button>)}</div>}
-              {teacherPicker(selectedTeachers, id => shared ? change({ teacherIds: toggle(draft.teacherIds, id) }) : change({ roomTeachers: { ...draft.roomTeachers, [activeTeacherRoom]: toggle(activityTeachers(draft, activeTeacherRoom), id) } }))}
-            </section>
-            <section className="prep-activity-block">
-              <div className="prep-activity-head"><span>4</span><div><h3>วันและคาบ (ไม่บังคับ)</h3><p>เว้นว่างเพื่อให้ระบบจัดอัตโนมัติ {draft.weeklyPeriods} คาบ/สัปดาห์ หรือเลือกคาบเองให้ครบจำนวน</p></div></div>
+              <div className="prep-activity-head"><span>4</span><div><h3>วันและคาบ</h3><p>{when(draft)} · {draft.weeklyPeriods} คาบ/สัปดาห์</p></div></div>
+              <details className="activity-time-details" open={showTimes} onToggle={event => setShowTimes(event.currentTarget.open)}><summary>กำหนดวันและคาบเอง (ไม่บังคับ)</summary>
               {!!draft.cells.length && <button type="button" onClick={() => change({ cells: [] })}>ล้างคาบที่เลือก ให้ระบบจัดอัตโนมัติ</button>}
               <div className="prep-scroll"><table className="prep-activity-grid"><thead><tr><th>วัน</th>{data.periods.map((period, index) => <th key={index}>{period.is_break ? 'พัก' : period.period}</th>)}</tr></thead><tbody>{SCHEDULE_DAYS.filter(day => data.plan.days.includes(day.value)).map(day => <tr key={day.value}><th>{day.short}</th>{data.periods.map((period, index) => {
                 const on = draft.cells.some(cell => cell.day === day.value && cell.period === period.period)
                 return <td key={index}>{period.is_break ? <span>พัก</span> : <button type="button" aria-pressed={on} aria-label={`${day.label} คาบ ${period.period}`} disabled={!on && draft.cells.length >= draft.weeklyPeriods} onClick={() => toggleCell(day.value, period.period)} />}</td>
               })}</tr>)}</tbody></table></div>
               <p role="status">{draft.cells.length ? `${when(draft)} · เลือก ${draft.cells.length}/${draft.weeklyPeriods} คาบ` : `ระบบจะเลือกวันและคาบให้เมื่อสร้างตารางฉบับร่าง จำนวน ${draft.weeklyPeriods} คาบ/สัปดาห์`}</p>
+              </details>
+              {!!fixedTeacherConflicts.length && <p className="prep-error" role="alert">ครู {names(fixedTeacherConflicts)} รับผิดชอบหลายห้องในคาบเดียวกัน ให้เลือกทีมร่วมถ้าจัดพร้อมกัน หรือเปลี่ยนครูแต่ละห้อง / ล้างคาบเพื่อให้ระบบจัดแยก</p>}
             </section>
           </fieldset>
           {error && <p className="prep-error" role="alert">{error}</p>}
         </div>
         <footer>
-          <span>{ready ? `พร้อมบันทึก ${draft.roomIds.length} ห้อง · ${draft.weeklyPeriods} คาบ${draft.cells.length ? '' : ' · จัดอัตโนมัติ'}${hasTeacher ? '' : ' · ยังไม่กำหนดครู'}` : 'เลือกห้อง และเลือกคาบให้ครบจำนวนหรือเว้นว่างทั้งหมด'}</span>
+          <span>{pendingTeam ? 'ตรวจการเลือกทีมครูให้เรียบร้อยก่อนบันทึก' : fixedTeacherConflicts.length ? 'แก้ครูที่ซ้ำหลายห้องในคาบเดียวกันก่อนบันทึก' : ready ? `พร้อมบันทึก ${draft.roomIds.length} ห้อง · ${draft.weeklyPeriods} คาบ/สัปดาห์${draft.cells.length ? '' : ' · จัดอัตโนมัติ'}${hasTeacher ? '' : ' · ยังไม่กำหนดครู'}` : 'เลือกห้อง และเลือกคาบให้ครบจำนวนหรือเว้นว่างทั้งหมด'}</span>
           <button type="button" disabled={busy} onClick={close}>ยกเลิก</button>
           <button type="button" className="prep-primary" disabled={busy || !ready} onClick={() => void save(draft)}>{busy ? 'กำลังบันทึก…' : 'บันทึกกิจกรรม'}</button>
         </footer>
