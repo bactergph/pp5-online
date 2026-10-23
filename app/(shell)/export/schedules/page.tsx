@@ -17,7 +17,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
-import { formatThaiMonthYear, getThaiMonthName } from '@/lib/thaiDate'
+import { formatThaiDate, getThaiMonthName } from '@/lib/thaiDate'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 type Classroom = { id: string; level: string; room: number; label: string }
@@ -63,7 +63,11 @@ const STYLES = `
     box-sizing: border-box; min-width: 0; max-width: 100%; height: 46px; width: 100%; border: 1px solid #cad8e8; border-radius: 9px; padding: 0 12px;
     background: #fbfcfe; color: #182b49; font-size: 15px;
   }
-  .sched-export-date { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; min-width: 0; }
+  .sched-export-date { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .sched-export-date select { flex: 1 1 112px; font-size: 16px; }
+  .sched-export-date #schedule-print-day { flex: 0 0 64px; }
+  .sched-export-date #schedule-print-month { flex-basis: 130px; }
+  .sched-export-date #schedule-print-year { flex-basis: 128px; }
   .sched-export-btn, .sched-export-btn-quiet {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     min-height: 44px; padding: 8px 16px; border-radius: 10px; cursor: pointer;
@@ -171,7 +175,14 @@ export default function ScheduleExportPage() {
   const [semester, setSemester] = useState(() => String(scheduleSemesterForYear(null)))
   const [printDate, setPrintDate] = useState('')
   const printYear = Number(printDate.slice(0, 4))
+  const printMonth = Number(printDate.slice(5, 7))
+  const printDay = Number(printDate.slice(8, 10))
+  const printDaysInMonth = printYear && printMonth ? new Date(Date.UTC(printYear, printMonth, 0)).getUTCDate() : 31
   const printYearOptions = printYear ? Array.from({ length: 21 }, (_, index) => printYear - 10 + index) : []
+  function updatePrintDate(year: number, month: number, day: number) {
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+    setPrintDate(`${year}-${String(month).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`)
+  }
   const selectedClass = classrooms.find(c => c.id === classroomId)
   const classLabel = (selectedClass?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
   const selectedTeacher = teachers.find(t => t.id === teacherId)
@@ -450,16 +461,19 @@ export default function ScheduleExportPage() {
             </select>
           </div>
           <div className="sched-export-field">
-            <label htmlFor="schedule-print-month">เดือนและปีบนเอกสาร</label>
-            <div className="sched-export-date" role="group" aria-label="เดือนและปีบนเอกสาร" aria-describedby="schedule-print-date-note">
-              <select id="schedule-print-month" aria-label="เดือนที่พิมพ์" value={printDate.slice(5, 7)} onChange={e => setPrintDate(`${printDate.slice(0, 4)}-${e.target.value}-01`)}>
+            <label htmlFor="schedule-print-day">วันที่บนเอกสาร</label>
+            <div className="sched-export-date" role="group" aria-label="วัน เดือน และปีบนเอกสาร" aria-describedby="schedule-print-date-note">
+              <select id="schedule-print-day" aria-label="วันที่พิมพ์" value={printDay || ''} onChange={e => updatePrintDate(printYear, printMonth, Number(e.target.value))}>
+                {Array.from({ length: printDaysInMonth }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
+              </select>
+              <select id="schedule-print-month" aria-label="เดือนที่พิมพ์" value={printDate.slice(5, 7)} onChange={e => updatePrintDate(printYear, Number(e.target.value), printDay)}>
                 {Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1).padStart(2, '0')}>{getThaiMonthName(index + 1)}</option>)}
               </select>
-              <select id="schedule-print-year" aria-label="ปี พ.ศ. ที่พิมพ์" value={printYear || ''} onChange={e => setPrintDate(`${e.target.value}-${printDate.slice(5, 7)}-01`)}>
+              <select id="schedule-print-year" aria-label="ปี พ.ศ. ที่พิมพ์" value={printYear || ''} onChange={e => updatePrintDate(Number(e.target.value), printMonth, printDay)}>
                 {printYearOptions.map(year => <option key={year} value={year}>พ.ศ. {year + 543}</option>)}
               </select>
             </div>
-            <p id="schedule-print-date-note" className="sched-export-note">{printDate ? `${formatThaiMonthYear(printDate)} · ใช้กับทุกหน้าที่เลือก` : 'เลือกเดือนและปีก่อนบันทึก PDF'}</p>
+            <p id="schedule-print-date-note" className="sched-export-note">{printDate ? `${formatThaiDate(printDate)} · ใช้กับทุกหน้าที่เลือก` : 'เลือกวันที่ก่อนบันทึก PDF'}</p>
           </div>
           {exportType === 'class' ? (
             <div className="sched-export-field">
@@ -535,7 +549,7 @@ export default function ScheduleExportPage() {
             <div>
               <h2>{schoolName || 'ชื่อโรงเรียน'}</h2>
               <p>{title}</p>
-              {printDate && <p>พิมพ์: {formatThaiMonthYear(printDate)}</p>}
+              {printDate && <p>พิมพ์: {formatThaiDate(printDate)}</p>}
             </div>
           </header>
 
@@ -573,7 +587,7 @@ export default function ScheduleExportPage() {
           </div>
           <div className="sched-print-sign">
             {[{name:academicHeadName,role:'หัวหน้าวิชาการ'},{name:directorName,role:directorPosition}].map(s=><div key={s.role}>
-              <p>ลงชื่อ ........................................................</p><p>({s.name || '........................................................'})</p><p>{s.role}</p><p>{printDate ? formatThaiMonthYear(printDate) : 'วันที่ ........../........../..........'}</p>
+              <p>ลงชื่อ ........................................................</p><p>({s.name || '........................................................'})</p><p>{s.role}</p><p>{printDate ? formatThaiDate(printDate) : 'วันที่ ........../........../..........'}</p>
             </div>)}
           </div>
         </div>}

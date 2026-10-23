@@ -1,4 +1,4 @@
-// Regression: the selected month/year must reach both signer rows on every PDF page.
+// Regression: the selected full date must reach both signer rows on every PDF page.
 import fs from 'node:fs'
 import vm from 'node:vm'
 import assert from 'node:assert/strict'
@@ -48,19 +48,19 @@ const pdf = load('lib/jspdf-schedules.ts', {
   '@/lib/schedule-helpers': helpers,
   '@/lib/thaiDate': dates,
 })
-assert.equal(dates.formatThaiMonthYear('2026-10-26'), 'ตุลาคม 2569')
-assert.equal(dates.formatThaiMonthYear('2027-01-01'), 'มกราคม 2570')
+assert.equal(dates.formatThaiDate('2026-10-29'), '29 ตุลาคม 2569')
+assert.equal(dates.formatThaiDate('2027-01-01'), '1 มกราคม 2570')
 const result = await pdf.buildSchedulePdfBlob({
-  schoolName: 'โรงเรียนข้อมูลสมมติ', title: 'ตารางสอน', printDate: '2026-10-26',
+  schoolName: 'โรงเรียนข้อมูลสมมติ', title: 'ตารางสอน', printDate: '2026-10-29',
   periodTimes: [], gridData: {}, pages: [{ title: 'ครูตัวอย่าง 1', gridData: {} }, { title: 'ครูตัวอย่าง 2', gridData: {} }],
 })
 assert.ok(result.blob.size > 0)
 for (const page of [1, 2]) {
-  assert.equal(drawn.filter(row => row.page === page && row.value === 'ตุลาคม 2569').length, 2)
-  assert.equal(drawn.filter(row => row.page === page && row.value === 'พิมพ์: ตุลาคม 2569').length, 1)
+  assert.equal(drawn.filter(row => row.page === page && row.value === '29 ตุลาคม 2569').length, 2)
+  assert.equal(drawn.filter(row => row.page === page && row.value === 'พิมพ์: 29 ตุลาคม 2569').length, 1)
   assert.ok(!drawn.some(row => row.page === page && String(row.value).includes('......../......../........')))
 }
 drawn.length = 0
 await pdf.buildSchedulePdfBlob({ schoolName: 'โรงเรียนข้อมูลสมมติ', title: 'ตารางเรียนเดิม', periodTimes: [], gridData: {} })
 assert.equal(drawn.filter(row => row.value === 'วันที่ ......../......../........').length, 2, 'Legacy callers retain blank signer dates')
-console.log('PASS: Thai month/year, selected date on both signer rows of every PDF page, legacy exports unchanged')
+console.log('PASS: full Thai date, selected day on both signer rows of every PDF page, legacy exports unchanged')

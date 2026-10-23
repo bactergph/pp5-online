@@ -3,7 +3,7 @@ import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
 import { periodTimeLabel, schedulePeriods, type PeriodTimeRow } from '@/lib/schedule-helpers'
-import { formatThaiMonthYear } from '@/lib/thaiDate'
+import { formatThaiDate } from '@/lib/thaiDate'
 
 const PAGE_W = 297
 const PAGE_H = 210
@@ -31,7 +31,7 @@ export type SchedulePdfInput = {
   schoolName: string
   schoolLogoUrl?: string | null
   title: string
-  /** วันที่อ้างอิง YYYY-MM-DD; แสดงเฉพาะเดือนและปี พ.ศ. บนเอกสาร */
+  /** วันที่อ้างอิง YYYY-MM-DD; แสดงวัน เดือนเต็ม และปี พ.ศ. บนเอกสาร */
   printDate?: string
   days?: number[]
   periodTimes: PeriodTimeRow[]
@@ -109,7 +109,7 @@ function drawSigners(
       'ลงชื่อ ................................................',
       `(${signer.name?.trim() || '................................'})`,
       signer.role,
-      printDate ? formatThaiMonthYear(printDate) : 'วันที่ ......../......../........',
+      printDate ? formatThaiDate(printDate) : 'วันที่ ......../......../........',
     ]
     doc.setFont('THSarabunNew', 'normal')
     doc.setTextColor(...TEXT)
@@ -219,7 +219,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   if (input.printDate) {
     y += 6
     doc.setFontSize(12)
-    doc.text(`พิมพ์: ${formatThaiMonthYear(input.printDate)}`, textX, y, { align: 'center' })
+    doc.text(`พิมพ์: ${formatThaiDate(input.printDate)}`, textX, y, { align: 'center' })
   }
 
   y += 3
