@@ -356,6 +356,19 @@
 .schedule-prep .prep-load-count{display:grid;gap:6px;max-width:180px;margin:0 0 12px;font-size:13px;font-weight:700}
 .schedule-prep .prep-load-place{display:flex;gap:8px;margin-top:10px}
 .schedule-prep .prep-load-place input{flex:1}
+.schedule-prep .prep-review-selection{padding:18px;border:1px solid #d5e3f5;border-radius:14px;background:#f8fbff}
+.schedule-prep .prep-review-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.schedule-prep .prep-review-title h3{margin:0;font-size:18px}
+.schedule-prep .prep-review-title strong{color:#174f95;white-space:nowrap}
+.schedule-prep .prep-room-groups details{padding:10px 0;border-top:1px solid #d5e3f5}
+.schedule-prep .prep-room-groups summary,.schedule-prep .prep-review-issues summary,.schedule-prep .prep-review-activities summary{padding:10px 0;cursor:pointer;font-weight:600}
+.schedule-prep .prep-review-rebuild{display:flex;gap:12px;align-items:flex-start;margin:18px 0}
+.schedule-prep .prep-review-rebuild small,.schedule-prep .prep-review-activities small{display:block;margin-top:4px;color:#52647c;font-size:14px;line-height:1.7}
+.schedule-prep .prep-review-actions{margin:18px 0}
+.schedule-prep .prep-review-actions button{min-height:44px}
+.schedule-prep .prep-review-issues{margin:10px 0;padding:0 14px 12px;border:1px solid #f2c9cf;border-radius:12px;background:#fff}
+.schedule-prep .prep-review-issues li{margin:6px 0;overflow-wrap:anywhere}
+.schedule-prep .prep-result:focus-visible{outline:3px solid #245bdb;outline-offset:4px}
 .schedule-prep .prep-load-pick{list-style:none;margin:12px 0 0;padding:0;max-height:360px;overflow:auto}
 .schedule-prep .prep-load-pick li{border-top:1px solid #e6eef8}
 .schedule-prep .prep-load-pick label{display:flex;gap:10px;align-items:flex-start;padding:10px 4px}

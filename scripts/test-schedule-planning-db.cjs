@@ -260,6 +260,28 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   await assert.rejects(db.exec('update evaluation_settings set schedule_weekly_periods=9'),/schedule_weekly_periods_check/);
   assert.equal((await db.query('select schedule_weekly_periods from evaluation_settings where id=$1',[id(60)])).rows[0].schedule_weekly_periods,1);
   console.log('PASS: 080 repeatable, empty-cell activity saved, generated quota accepted, joint sync/over-quota/teacher collision enforced, no-teacher activity allowed');
+  const reviewMigration=fs.readFileSync('supabase/migrations/081_schedule_review_substitute_constraints.sql','utf8');
+  await db.exec(reviewMigration);await db.exec(reviewMigration);
+  await db.exec('delete from schedule_substitute_entries;delete from schedule_teacher_blocks;delete from class_schedule_slots where semester=1');
+  await db.query('update schedule_plans set config=$1 where school_id=$2 and academic_year_id=$3 and semester=1',[JSON.stringify({days:[1,2,3,4,5],rules:{},rooms:[],activityGroups:[]}),id(1),id(10)]);
+  const untouchedTermHash=await snap();
+  const createReviewDraft=async(after)=>{const draftId=crypto.randomUUID();await db.query('insert into schedule_drafts(id,school_id,academic_year_id,semester,actor_id,base_hash,before_rows,after_rows) values($1,$2,$3,1,$4,$5,$6,$7)',[draftId,id(1),id(10),id(30),await teamHash(),'[]',JSON.stringify(after)]);return draftId};
+  const conflictingRows=[{...slot(20,50,1),day_of_week:5}];
+  const staleReview=await createReviewDraft(conflictingRows);
+  const oldReviewHash=await teamHash();
+  await db.query('insert into schedule_substitute_days(id,school_id,academic_year_id,semester,day_of_week) values($1,$2,$3,1,5)',[id(901),id(1),id(10)]);
+  await db.query('insert into schedule_substitute_entries(substitute_day_id,substitute_teacher_id,period,absent_teacher_id,classroom_id) values($1,$2,1,$3,$4)',[id(901),id(30),id(31),id(21)]);
+  assert.notEqual(await teamHash(),oldReviewHash);
+  assert.equal(await snap(),untouchedTermHash);
+  await assert.rejects(confirm(staleReview),/ข้อมูลเปลี่ยน/);
+  const currentConflict=await createReviewDraft(conflictingRows);
+  await assert.rejects(confirm(currentConflict),/สอนแทน/);
+  assert.equal((await db.query('select count(*)::int n from class_schedule_slots where semester=1')).rows[0].n,0);
+  assert.equal((await db.query('select committed_at from schedule_drafts where id=$1',[currentConflict])).rows[0].committed_at,null);
+  const validReview=await createReviewDraft([{...slot(20,50,2),day_of_week:5}]);
+  assert.equal((await confirm(validReview)).rows[0].done,true);
+  assert.equal((await confirm(validReview)).rows[0].done,false);
+  console.log('PASS: 081 repeatable; substitute changes invalidate drafts in their term only; subject/substitute collision rolls back the whole commit; valid review confirms idempotently');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

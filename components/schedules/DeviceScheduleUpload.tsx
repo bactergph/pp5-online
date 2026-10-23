@@ -27,7 +27,7 @@ export default function DeviceScheduleUpload() {
         setMessage(result.error)
         return
       }
-      if (result.stored && result.hash) await markFreePlanUploaded(result.hash)
+      if (result.stored && 'hash' in result && result.hash) await markFreePlanUploaded(result.hash)
       setError(false)
       setMessage(result.message || 'ส่งข้อมูลจากเครื่องนี้ขึ้นระบบแล้ว')
     })

@@ -60,7 +60,7 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
   const session = await getSession()
   if (!session?.schoolId || session.mustChangePassword || !SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])) throw Error('ไม่มีสิทธิ์จัดตารางเรียน')
   validateSubjectInputs(rows)
-  let current = await preparation(year, term)
+  const current = await preparation(year, term)
   if (hash !== current.hash) throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
   for (const row of rows) {
     if (!current.classrooms.some(c => c.id === row.classroomId)) throw Error('ห้องไม่ได้อยู่ในโรงเรียนและปีการศึกษานี้')
@@ -103,11 +103,15 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
   }
   for (let offset = 0; offset < missing.length; offset += 500) {
     const chunk = missing.slice(offset, offset + 500)
-    const rowsToInsert = levelColumn ? chunk : chunk.map(({ level: _level, ...item }) => item)
-    let created = await db.from('subjects').insert(rowsToInsert).select(levelColumn ? 'id,code,name,level' : 'id,code,name')
+    const withoutLevel = ({school_id,code,name,subject_group,type,hours_per_year}: typeof missing[number]) => ({school_id,code,name,subject_group,type,hours_per_year})
+    const rowsToInsert = levelColumn ? chunk : chunk.map(withoutLevel)
+    // Keep select strings literal so Supabase can infer the returned columns.
+    let created = levelColumn
+      ? await db.from('subjects').insert(rowsToInsert).select('id,code,name,level')
+      : await db.from('subjects').insert(rowsToInsert).select('id,code,name')
     if (created.error && levelColumn && /level/i.test(created.error.message)) {
       levelColumn = false
-      created = await db.from('subjects').insert(chunk.map(({ level: _level, ...item }) => item)).select('id,code,name')
+      created = await db.from('subjects').insert(chunk.map(withoutLevel)).select('id,code,name')
     }
     failWrite(created.error, 'บันทึกรายวิชาใหม่ไม่สำเร็จ')
     for (const item of created.data || []) {
@@ -125,7 +129,7 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
     const offering = offerings.get(key)
     const level = current.classrooms.find(room => room.id === row.classroomId)?.level || ''
     const semester = /^(ม\.|มัธยม)/.test(level) ? term : 0
-    let offeringId = offering?.id || ''
+    const offeringId = offering?.id || ''
     if (!offering) {
       const subject = findSubject(code, level)
       if (!subject?.id) throw Error('บันทึกรายวิชาไม่สำเร็จ')
@@ -143,7 +147,7 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
   }
   for (let offset = 0; offset < fresh.length; offset += 500) {
     const chunk = fresh.slice(offset, offset + 500)
-    const created = await db.from('class_subjects').insert(chunk.map(({ key: _key, ...item }) => item)).select('id,classroom_id,subject_id')
+    const created = await db.from('class_subjects').insert(chunk.map(({classroom_id,subject_id,teacher_id,academic_year_id,semester}) => ({classroom_id,subject_id,teacher_id,academic_year_id,semester}))).select('id,classroom_id,subject_id')
     failWrite(created.error, 'บันทึกวิชาของห้องไม่สำเร็จ')
     if ((created.data || []).length !== chunk.length) throw Error('บันทึกวิชาของห้องไม่สำเร็จ')
     for (const item of created.data || []) {
@@ -204,7 +208,7 @@ export async function saveTeachingAssignments(year: string, term: number, hash: 
       count:rule?.count ?? lesson.count, pattern:rule?.pattern ?? Array(lesson.count).fill(1),
       venue:current.plan.rooms.find(r=>r.id===rule?.roomId)?.name || lesson.roomName || '', group:lesson.subjectGroup || '', type:lesson.subjectType || 'พื้นฐาน'})
   }
-  let saved = rows.length ? await importScheduleSubjects(year, term, hash, rows) : current
+  const saved = rows.length ? await importScheduleSubjects(year, term, hash, rows) : current
   if (!clears.length) return saved
   const db = createServerClient()
   for (const lesson of clears) {

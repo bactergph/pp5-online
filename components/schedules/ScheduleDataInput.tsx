@@ -232,7 +232,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
       setError(error instanceof Error ? error.message : 'อ่านไฟล์ไม่สำเร็จ')
     }
   }
-  function addForRoom(room: { id: string; level: string; room: number }) {
+  function addForRoom(room: Preparation['classrooms'][number]) {
     setSubjectLevel(room.level); setSubjectRoom(room.id); setError(''); setMessage(''); setStatuses({})
     setRows([[`${room.level}/${room.name}`, '', '', '', '', 'พื้นฐาน'], ...Array.from({ length: 7 }, () => Array(6).fill(''))])
     onDirty(true); openAdd()

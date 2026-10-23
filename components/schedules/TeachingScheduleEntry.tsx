@@ -163,7 +163,7 @@ export default function TeachingScheduleEntry() {
           </div>
           <div className="schedule-field">
             <label>ภาคเรียน</label>
-            <select value={semester} onChange={e => setSemester(Number(e.target.value))}>
+            <select value={semester} onChange={e => setSemester(e.target.value === '2' ? 2 : 1)}>
               <option value={1}>ภาคเรียนที่ 1</option>
               <option value={2}>ภาคเรียนที่ 2</option>
             </select>
