@@ -60,6 +60,8 @@ try{
  const addVenue=async name=>{await click(options+' .prep-code-settings-toolbar button','+ เพิ่มสถานที่');await page.waitForSelector(placeDialog);await page.type(placeDialog+' #code-place-name',name);await click(placeDialog+' button[type=submit]','เพิ่มสถานที่');await page.waitForSelector(placeDialog,{hidden:true})}
  const chooseVenue=async(id,name,keyboard=false)=>{const input=await page.$(row(id)+' [role=combobox]');await input.click();await input.type(name);if(keyboard)await page.keyboard.press('Enter');else await click(row(id)+' [role=option]',name);await page.$eval(row(id)+' [role=combobox]',el=>el.blur())}
  await page.waitForSelector('.prep-workload');await math();await rooms()
+ const mathCard=()=>page.evaluate(()=>{const el=[...document.querySelectorAll('.prep-code-cards button')].find(el=>el.textContent.includes('ค21102'));return {text:el.textContent,state:el.dataset.state,green:el.classList.contains('is-complete')}})
+ assert.equal((await mathCard()).state,'empty');assert.ok((await mathCard()).text.includes('3–4 ชม./สัปดาห์/ห้อง'),'A card shows the per-room workload range, not the sum across classrooms')
  assert.deepEqual(await page.$$eval(modal+' .prep-activity-head h3',els=>els.map(el=>el.textContent)),['ห้องที่เรียนวิชานี้','ครูผู้สอน'])
  await click(modal+' .prep-activity-teachers strong','ครู ตัวอย่าง 1');await openOptions()
  assert.equal(calls.length,0,'First Save does not write data')
@@ -110,6 +112,7 @@ try{
  assert.deepEqual(state.plan.rules.math1.pattern,[2,1]);assert.deepEqual(state.plan.rules.math2.pattern,[2,2]);assert.equal(state.plan.rules.math1.count,3);assert.equal(state.plan.rules.math2.count,4)
  assert.equal(state.plan.rules.math1.roomId,newVenue);assert.equal(state.plan.rules.math2.roomId,'venue');assert.equal(state.plan.rules.math1.timePreference,'morning');assert.equal(state.plan.rules.math2.timePreference,'afternoon')
  assert.equal(state.lessons[0].teacherId,'t1');assert.equal(state.lessons[1].teacherId,'t1')
+ assert.equal((await mathCard()).state,'complete');assert.equal((await mathCard()).green,true);assert.ok((await mathCard()).text.includes('กำหนดครบแล้ว'),'The card updates immediately after a successful save')
  console.log('PASS: inline place creation by click/Enter; selected room only; typing/cancel never writes; normalized duplicates reuse IDs; per-room session and block settings; one final commit')
  await page.keyboard.press('Escape');await math();await rooms();await click(modal+' .prep-activity-teachers strong','ครู ตัวอย่าง 1');await openOptions()
  assert.equal(await page.$eval(row('math2')+' select[aria-label^=ช่วงเวลา]',el=>el.value),'afternoon','Saved per-room preferences are loaded back')
@@ -156,6 +159,18 @@ try{
  await page.setViewport({width:390,height:844});await page.screenshot({path:path.join(out,'mobile-code-settings.png')});await page.setViewport({width:1440,height:1000});await page.screenshot({path:path.join(out,'desktop-code-settings.png')});await saveOptions()
  for(let i=1;i<=6;i++){const rule=state.plan.rules['math'+i];assert.equal(rule.roomId,'venue'+i);assert.equal(rule.timePreference,['any','morning','afternoon'][(i-1)%3]);assert.deepEqual(rule.pattern,i%2===0?[2,1]:[1,1,1])}
  console.log('PASS: six rooms saved in one confirmation with six distinct venue IDs; independent session and block choices; five viewport widths')
+ await page.keyboard.press('Escape')
+ state.lessons.find(lesson=>lesson.id==='math6').teacherId=null
+ state.plan.rules.math5.pattern=[2,2]
+ state.lessons.push({...fixture.lessons[2],teacherId:'t2'},{...fixture.lessons[2],id:'art',code:'ศ21102',name:'ศิลปะ',subjectGroup:'ศิลปะ',teacherId:null})
+ await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('.prep-workload');await click('.prep-workload>.prep-view-switch button','ตามรหัส')
+ assert.equal((await mathCard()).state,'partial');assert.equal((await mathCard()).green,false);assert.ok((await mathCard()).text.includes('กำหนดครบ 4/6 ห้อง'),'A missing teacher or invalid pattern prevents a completed border')
+ assert.deepEqual(await page.$$eval('.prep-code-cards button',els=>els.map(el=>el.dataset.state).sort()),['complete','empty','partial'])
+ for(const width of [360,390,768,1024,1440]){await page.setViewport({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)}
+ await page.setViewport({width:1440,height:1000});await page.screenshot({path:path.join(out,'desktop-workload-cards.png')});await page.setViewport({width:390,height:844});await page.screenshot({path:path.join(out,'mobile-workload-cards.png'),fullPage:true})
+ state.periods[0].end_time='8:50';await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('.prep-workload');await click('.prep-workload>.prep-view-switch button','ตามรหัส')
+ assert.ok((await mathCard()).text.includes('3 คาบ/สัปดาห์/ห้อง'));assert.ok(!(await mathCard()).text.includes('ชม./สัปดาห์'),'Variable-length school periods must not be reported as fixed clock hours')
+ console.log('PASS: cards show per-room weekly hours/periods and quota ranges; complete/partial/unassigned states; invalid patterns are not complete; mixed period lengths stay in periods; five viewport widths')
  assert.deepEqual(errors,[])
  console.log('PASS: room and teacher views autosave; reload retains assignments; partial-write retry uses latest hash; concurrent changes do not get overwritten; five widths fit; no JS errors')
 }catch(error){if(page){await page.screenshot({path:path.join(out,'failure.png'),fullPage:true});fs.writeFileSync(path.join(out,'failure.txt'),await page.evaluate(()=>document.body.innerText));console.error(await page.evaluate(()=>({busy:window.isBusy,dialogs:[...document.querySelectorAll('dialog')].map(el=>({class:el.className,open:el.open})),popups:[...document.querySelectorAll('.swal2-container')].map(el=>({visible:!!el.getClientRects().length,text:el.textContent}))})))}throw error}

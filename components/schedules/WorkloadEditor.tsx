@@ -37,6 +37,12 @@ function placedCount(slots: ScheduleSlot[], lessonId: string) {
   for (const slot of slots) if (slot.class_subject_id === lessonId) cells.add(`${slot.day_of_week}:${slot.period}`)
   return cells.size
 }
+const workloadNumbers = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 2 })
+function numberRange(values: number[]) {
+  const min = Math.min(...values), max = Math.max(...values)
+  const number = (value: number) => workloadNumbers.format(value)
+  return min === max ? number(min) : `${number(min)}–${number(max)}`
+}
 
 export default function WorkloadEditor({ classrooms, lessons, teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh }: {
   classrooms: Classroom[]
@@ -100,6 +106,18 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   const activeRoom = levelRooms.some(room => room.id === roomId) ? roomId : levelRooms[0]?.id || ''
   const ruleOf = (lesson: ScheduleLesson): LessonRule => rules[lesson.id] || { count: lesson.count, pattern: Array(Math.max(0, Math.min(40, lesson.count))).fill(1), roomId: null, morning: false, spread: true }
   const teacherOf = (lesson: ScheduleLesson) => teacherAssignments[lesson.id] ?? lesson.teacherId ?? ''
+  const teacherIds = new Set(teachers.map(teacher => teacher.id))
+  const periodMinutes = periods.filter(period => !period.is_break).map(period => {
+    const minute = (clock: string) => { const [hour, minute] = clock.split(':').map(Number); return hour * 60 + minute }
+    return minute(period.end_time) - minute(period.start_time)
+  })
+  const uniformMinutes = periodMinutes.length && periodMinutes.every(minutes => minutes > 0 && minutes === periodMinutes[0]) ? periodMinutes[0] : null
+  function lessonReady(lesson: ScheduleLesson) {
+    const rule = ruleOf(lesson)
+    return teacherIds.has(teacherOf(lesson)) && Number.isInteger(rule.count) && rule.count >= 1 && rule.count <= 40
+      && Array.isArray(rule.pattern) && rule.pattern.length > 0 && rule.pattern.every(size => Number.isInteger(size) && size >= 1 && size <= 8) && rule.pattern.reduce((sum, size) => sum + size, 0) === rule.count
+      && (!rule.roomId || places.some(place => place.id === rule.roomId))
+  }
   const teacherName = (id: string) => { const teacher = teachers.find(item => item.id === id); return teacher ? `${teacher.prefix || ''} ${teacher.full_name}`.trim() : '' }
   const venueOf = (lesson: ScheduleLesson) => places.find(place => place.id === ruleOf(lesson).roomId)?.name || lesson.roomName || 'ไม่กำหนดสถานที่'
   const needle = query.trim().toLowerCase()
@@ -374,7 +392,16 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     {view === 'code' && <>
       {cardSections.length === 0 ? <p className="prep-teacher-empty">ไม่พบรหัสวิชานี้</p> : <div className="prep-code-board">{cardSections.map(section => <section key={section.name}><h3 className="prep-code-group">{section.name}</h3><ul className="prep-code-cards">{section.cards.map(card => {
         const assigned = card.lessons.filter(lesson => teacherOf(lesson)).length
-        return <li key={card.id}><button type="button" onClick={() => openCode(card.id)}><strong>{card.name}</strong><b>{card.code}</b><small>{card.lessons.length} ห้อง · มีครู {assigned}</small></button></li>
+        const complete = card.lessons.filter(lessonReady).length, allComplete = complete === card.lessons.length
+        const counts = card.lessons.map(lesson => ruleOf(lesson).count), validCounts = counts.every(count => Number.isInteger(count) && count > 0 && count <= 40)
+        const weekly = validCounts ? `${numberRange(uniformMinutes ? counts.map(count => count * uniformMinutes / 60) : counts)} ${uniformMinutes ? 'ชม.' : 'คาบ'}/สัปดาห์/ห้อง` : 'ยังต้องกำหนดคาบต่อสัปดาห์'
+        return <li key={card.id}><button type="button" className={allComplete ? 'is-complete' : undefined} data-state={allComplete ? 'complete' : complete ? 'partial' : 'empty'} onClick={() => openCode(card.id)}>
+          <strong>{card.name}</strong><b>{card.code}</b>
+          <span className="prep-code-weekly">{weekly}</span>
+          {validCounts && <small className="prep-code-period-count">{uniformMinutes ? `${numberRange(counts)} คาบ · คาบละ ${uniformMinutes} นาที` : 'ชั่วโมงขึ้นอยู่กับระยะเวลาคาบที่จัด'}</small>}
+          <small>{card.lessons.length} ห้อง · มีครู {assigned} ห้อง</small>
+          <span className={`prep-code-status${allComplete ? ' is-complete' : ''}`}>{allComplete ? '✓ กำหนดครบแล้ว' : complete ? `กำหนดครบ ${complete}/${card.lessons.length} ห้อง` : assigned ? 'ยังต้องตรวจภาระสอน' : 'ยังไม่กำหนดครู'}</span>
+        </button></li>
       })}</ul></section>)}</div>}
     </>}
     <div className="prep-load-save"><span>{ready ? 'กำหนดครูและภาระสอนครบแล้ว' : 'ยังมีวิชาที่ยังไม่กำหนดครูหรือคาบให้ครบ'}</span>{saveNotice}</div>
