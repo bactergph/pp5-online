@@ -17,31 +17,24 @@
 .workload-report-search>div{position:relative}
 .workload-report-search svg{position:absolute;left:12px;top:14px;color:#64748b}
 .workload-report-search input{padding-left:36px}
-.workload-report-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.workload-report-summary>div{display:flex;align-items:center;gap:12px;padding:16px 18px;border:1px solid #dce6f2;border-radius:12px;background:#f8fbff}
-.workload-report-summary>div>svg{width:20px;height:20px;color:#1373d9;flex-shrink:0}
-.workload-report-summary span{font-size:12px;color:#52647c}
-.workload-report-summary strong{display:flex;align-items:baseline;flex-wrap:wrap;gap:7px;color:#182b49;font-size:23px;line-height:1.4}
-.workload-report-summary small{font-size:12px;font-weight:500;color:#52647c}
 .workload-report-card{overflow:hidden;min-width:0;border:1px solid #dce6f2;border-radius:14px;background:#fff}
 .workload-report-table-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:16px 20px}
 .workload-report h2{margin:0;font-size:16px;font-weight:700}
 .workload-report-table-head>span{font-size:13px;color:#52647c}
 .workload-report-scroll{overflow:auto;max-height:65vh}
-.workload-report table{width:100%;min-width:680px;border-collapse:separate;border-spacing:0;font-size:14px}
-.workload-report th,.workload-report td{padding:13px 18px;text-align:left;border-bottom:1px solid #e8eef6;vertical-align:middle}
+.workload-report table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:14px}
+.workload-report-order-col{width:72px}
+.workload-report-hours-col{width:160px}
+.workload-report-note-col{width:180px}
+.workload-report th,.workload-report td{padding:13px 18px;text-align:left;border-bottom:1px solid #e8eef6;vertical-align:middle;overflow-wrap:anywhere}
 .workload-report thead th{position:sticky;top:0;z-index:1;background:#eef3f9;color:#52647c;font-size:12px;font-weight:600}
 .workload-report thead th>span{display:block;font-size:11px;margin-top:2px;font-weight:400}
 .workload-report tbody th{color:#182b49;font-weight:600}
-.workload-report-teacher-position,.workload-report-scroll-note{display:none}
 .workload-report tbody tr:hover{background:#f8fbff}
 .workload-report tbody tr:last-child>*{border-bottom:0}
-.workload-report table th:nth-child(n+3),.workload-report td.workload-report-number{text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap}
+.workload-report thead th:first-child,.workload-report thead th:nth-child(3),.workload-report td.workload-report-number{text-align:center;font-variant-numeric:tabular-nums}
+.workload-report td.workload-report-number{white-space:nowrap}
 .workload-report-number>b{font-size:16px}
-.workload-report-number>small{display:block;color:#64748b;font-size:11px;font-weight:400;margin-top:3px}
-.workload-report-complete{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;background:#edf9f2;color:#187347;border-radius:7px;font-size:12px}
-.workload-report-pending{display:inline-block;padding:4px 12px;background:#eff6ff;color:#195dab;border-radius:7px}
-.workload-report-over{display:inline-block;padding:4px 10px;background:#fff1f2;color:#b4233b;border-radius:7px;font-size:12px}
 .workload-report-empty{display:flex;align-items:center;justify-content:center;gap:10px;padding:44px 16px;color:#64748b;font-size:14px;font-weight:400;text-align:center}
 .workload-report-spinner{display:inline-block;width:18px;height:18px;border:2px solid #d4e6fb;border-top-color:#1373d9;border-radius:50%;animation:workload-spin .8s linear infinite;flex-shrink:0}
 .workload-report-card>footer{padding:12px 20px;border-top:1px solid #e8eef6;color:#52647c;font-size:12px;line-height:1.7}
@@ -54,6 +47,19 @@
 .workload-report :focus-visible{outline:3px solid #1373d9;outline-offset:3px}
 @keyframes workload-spin{to{transform:rotate(360deg)}}
 @media(max-width:1000px){.workload-report-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:600px){.workload-report-head{align-items:stretch;flex-direction:column;padding:18px;gap:14px}.workload-report-primary{width:100%}.workload-report-filters{padding:16px;gap:12px}.workload-report-search,.workload-report-filters>button{grid-column:1/-1}.workload-report-summary{gap:6px}.workload-report-summary>div{padding:12px 9px;gap:6px;align-items:flex-start}.workload-report-summary>div>svg{display:none}.workload-report-summary strong{font-size:20px;gap:0;display:block}.workload-report-summary small{display:block;font-size:10px}.workload-report-summary span{font-size:11px}.workload-report-table-head{padding:14px 16px}.workload-report-error{flex-wrap:wrap}.workload-report-scroll{max-height:60vh}.workload-report table{min-width:560px;table-layout:fixed}.workload-report th,.workload-report td{padding:12px}.workload-report thead th:nth-child(2),.workload-report tbody td:nth-child(2){display:none}.workload-report tbody th,.workload-report thead th:first-child{position:sticky;left:0;width:180px;background:#fff;z-index:1;box-shadow:1px 0 #e8eef6}.workload-report thead th:first-child{background:#eef3f9;z-index:2}.workload-report-teacher-position{display:block;margin-top:4px;color:#64748b;font-size:11px;font-weight:400}.workload-report-scroll-note{display:block;margin:0;padding:0 16px 10px;color:#64748b;font-size:11px}}
+@media(max-width:600px){
+  .workload-report-head{align-items:stretch;flex-direction:column;padding:18px;gap:14px}
+  .workload-report-primary{width:100%}
+  .workload-report-filters{padding:16px;gap:12px}
+  .workload-report-search,.workload-report-filters>button{grid-column:1/-1}
+  .workload-report-table-head{padding:14px 16px}
+  .workload-report-error{flex-wrap:wrap}
+  .workload-report-scroll{max-height:60vh}
+  .workload-report-order-col{width:44px}
+  .workload-report-hours-col{width:92px}
+  .workload-report-note-col{width:64px}
+  .workload-report th,.workload-report td{padding:12px 6px;font-size:13px}
+  .workload-report thead th{font-size:11px}
+}
 @media(prefers-reduced-motion:reduce){.workload-report-spinner{animation:none}}
-@media print{.workload-report-filters,.workload-report-head button,.workload-report-summary,.workload-report-error{display:none}.workload-report-scroll{max-height:none;overflow:visible}.workload-report table{min-width:0}.workload-report th,.workload-report td{position:static!important;box-shadow:none!important}}
+@media print{.workload-report-filters,.workload-report-head button,.workload-report-error{display:none}.workload-report-scroll{max-height:none;overflow:visible}.workload-report th,.workload-report td{position:static!important}}

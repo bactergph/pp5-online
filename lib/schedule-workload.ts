@@ -3,7 +3,7 @@ import type { ScheduleLesson, ScheduleSlot } from './schedule-store'
 import { workloadStatus, workloadLabel } from './schedule-helpers'
 
 export type ScheduleWorkloadRow = {
-  id: string; name: string; position: string | null
+  id: string; name: string; position: string | null; note?: string
   hours: number; subject_hours: number; activity_hours: number
   scheduled_hours: number; remaining: number
   status: 'ok' | 'warn' | 'over'; status_label: string

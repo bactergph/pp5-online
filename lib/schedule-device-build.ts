@@ -1,7 +1,7 @@
 import { verifyCompleteSchedule } from './schedule-verification'
 import { activityTeachers } from './schedule-activity-teams'
 import { validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
-import { checkPlanning, lessonPrefersMorning, solvePlannedSchedule, type PlanningIssue, type SchedulePlan } from './schedule-planning'
+import { checkPlanning, lessonPrefersMorning, solvePlannedSchedule, type PlannedScheduleResult, type PlanningIssue, type SchedulePlan } from './schedule-planning'
 
 export type DeviceSlot = {
   classroom_id: string
@@ -63,7 +63,7 @@ export type DeviceDraft = {
   nodes?: number
   limitReason?: 'node_limit' | 'time_limit' | null
   message?: string
-  solver?: 'edge_coloring' | 'dense_slot_matching' | 'legacy_backtracking' | 'block_backtracking'
+  solver?: PlannedScheduleResult['solver']
   elapsedMs?: number
   timeLimitMs?: number
   lessons?: DeviceLesson[]

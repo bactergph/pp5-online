@@ -8,7 +8,7 @@ import webpackPackage from 'next/dist/compiled/webpack/webpack.js'
 const { webpack } = webpackPackage, root = process.cwd(), out = path.resolve('tmp/schedule-workload-ui')
 fs.mkdirSync(out, { recursive: true })
 const write = (name, content) => { const p = path.join(out, name); fs.writeFileSync(p, content); return p }
-const rows = Array.from({ length: 12 }, (_, i) => ({ id: 't' + i, name: `ครูตัวอย่าง${i + 1} ใจดี`, position: i % 2 ? 'ครู' : 'ครูชำนาญการ', hours: 19, subject_hours: 18, activity_hours: 1, scheduled_hours: i % 3 ? 12 : 19, remaining: i % 3 ? 7 : 0 }))
+const rows = Array.from({ length: 12 }, (_, i) => ({ id: 't' + i, name: `ครูตัวอย่าง${i + 1} ใจดี`, position: i % 2 ? 'ครู' : 'ครูชำนาญการ', hours: 10 + i * 7 % 17, subject_hours: 18, activity_hours: 1, scheduled_hours: i % 3 ? 12 : 19, remaining: i % 3 ? 7 : 0, note: i === 0 ? 'ตัวอย่างหมายเหตุ' : '' }))
 const years = [{ id: 'year', year_be: 2569, is_active: true, term2_start_date: '2020-01-01', term2_end_date: '2099-12-31' }]
 let failNext = false, failInit = false, noYears = false
 const calls = []
@@ -53,9 +53,19 @@ try {
   await page.setViewport({ width: 1440, height: 1000 }); await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await ready(); assert.equal(await page.$eval('#workload-semester', el => el.value), '2'); assert.equal(calls.find(call => call.method === 'report').args[1], 2)
   assert.equal(await page.$$eval('tbody th', els => els.length), 12)
+  assert.deepEqual(await page.$$eval('thead th', els => els.map(el => el.textContent)), ['ลำดับ','ชื่อ-นามสกุล','ภาระงานคาบ/สัปดาห์','หมายเหตุ'])
+  const expected = [...rows].sort((a,b) => b.hours-a.hours || a.name.localeCompare(b.name,'th'))
+  assert.deepEqual(await page.$$eval('tbody th', els => els.map(el => el.textContent)), expected.map(row => row.name))
+  assert.deepEqual(await page.$$eval('tbody tr td:first-child', els => els.map(el => Number(el.textContent))), Array.from({length:12},(_,i)=>i+1))
+  assert.deepEqual(await page.$$eval('tbody tr td:nth-child(3)', els => els.map(el => Number(el.textContent))), expected.map(row => row.hours))
+  assert.ok((await page.$eval('tbody', el => el.textContent)).includes('ตัวอย่างหมายเหตุ'))
+  assert.ok(!(await page.$eval('main', el => el.textContent)).match(/จัดแล้ว|คงเหลือ|กำหนดไว้|ครูชำนาญการ/))
   await page.type('#workload-search', 'ครู ตัวอย่าง1'); assert.equal(await page.$$eval('tbody th', els => els.length), 4)
   await click('บันทึก PDF'); await page.waitForFunction(() => window.exportedReport?.rows.length === 4)
   assert.ok((await page.evaluate(() => window.exportedReport.title)).includes('ภาคเรียนที่ 2'))
+  const exported=await page.evaluate(() => window.exportedReport.rows)
+  assert.deepEqual(exported.map(row=>row.hours), [...exported].sort((a,b)=>b.hours-a.hours).map(row=>row.hours))
+  assert.ok(exported.every(row=>Object.keys(row).sort().join(',')==='hours,name,note'))
   await page.$eval('#workload-search', el => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })) })
   failNext = true; await click('โหลดข้อมูลล่าสุด'); await page.waitForSelector('[role=status]'); assert.equal(await page.$eval('.workload-report-primary', el => el.disabled), true)
   await page.waitForSelector('[role=alert]'); assert.ok((await page.$eval('[role=alert]', el => el.textContent)).includes('เครือข่ายขัดข้องจำลอง'))
@@ -70,5 +80,5 @@ try {
   failInit = true; await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); await page.waitForSelector('[role=alert]'); await click('ลองใหม่'); await ready()
   noYears = true; const count = calls.filter(call => call.method === 'report').length; await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }); await page.waitForFunction(() => document.querySelector('tbody')?.textContent.includes('ยังไม่มีปีการศึกษาให้แสดงรายงาน')); assert.equal(calls.filter(call => call.method === 'report').length, count)
   assert.deepEqual(errors, [])
-  console.log('PASS: actual workload UI; default term 2; rows before generation; search and filtered PDF; loading/error/retry; stale term protection; empty years; desktop/mobile at five widths')
+  console.log('PASS: four-column workload UI; full names and weekly periods sorted descending; remarks; filtered PDF parity; loading/error/retry; stale term protection; empty years; desktop/mobile at five widths')
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)) }

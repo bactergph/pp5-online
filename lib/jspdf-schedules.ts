@@ -280,7 +280,7 @@ export async function buildWorkloadPdfBlob(input: {
   academicHeadName?: string
   directorName?: string
   directorPosition?: string
-  rows: { name: string; position: string | null; hours: number; scheduled_hours?: number; remaining?: number }[]
+  rows: { name: string; hours: number; note?: string }[]
 }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
   await applyThaiFonts(doc)
@@ -296,19 +296,20 @@ export async function buildWorkloadPdfBlob(input: {
     return y + 16
   }
   let y = drawHeader()
-  const widths = [10, 64, 36, 26, 24, 22]
-  const headers = ['ที่', 'ครูผู้สอน', 'ตำแหน่ง', 'คาบ/สัปดาห์', 'จัดแล้ว', 'คงเหลือ']
+  const widths = [14, 90, 38, 40]
+  const headers = ['ลำดับ', 'ชื่อ-นามสกุล', 'ภาระงาน', 'หมายเหตุ']
   const drawHead = () => {
     let x = margin
-    headers.forEach((label, i) => { drawCell(doc, x, y, widths[i], 10, label, '', { fill: HEADER_BG, line1Size: 14 }); x += widths[i] })
-    y += 10
+    headers.forEach((label, i) => { drawCell(doc, x, y, widths[i], 13, label, i === 2 ? 'คาบ/สัปดาห์' : '', { fill: HEADER_BG, line1Size: 14, line2Size: 12 }); x += widths[i] })
+    y += 13
   }
   drawHead()
-  input.rows.forEach((row, index) => {
+  const rows = [...input.rows].sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name, 'th'))
+  rows.forEach((row, index) => {
     if (y > 250) { doc.addPage(); y = drawHeader(); drawHead() }
-    const values = [String(index + 1), row.name, row.position || '—', String(row.hours), row.scheduled_hours === undefined ? '—' : String(row.scheduled_hours), row.remaining === undefined ? '—' : String(row.remaining)]
+    const values = [String(index + 1), row.name, String(row.hours), row.note || '']
     let x = margin
-    values.forEach((value, i) => { drawCell(doc, x, y, widths[i], 9, value, '', { line1Size: 13, line1Bold: i === 0 || i === 3 }); x += widths[i] })
+    values.forEach((value, i) => { drawCell(doc, x, y, widths[i], 9, value, '', { line1Size: 14, line1Bold: i === 0 || i === 2 }); x += widths[i] })
     y += 9
   })
   if (y + 8 + 6.3 * 3 > 297 - 8) { doc.addPage(); y = 24 }
