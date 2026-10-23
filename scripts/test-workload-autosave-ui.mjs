@@ -8,7 +8,7 @@ import webpackPackage from 'next/dist/compiled/webpack/webpack.js'
 const {webpack}=webpackPackage, root=process.cwd(), out=path.resolve('tmp/workload-autosave-ui')
 fs.mkdirSync(out,{recursive:true})
 const fixture={hash:'0',timesConfigured:true,classrooms:[1,2].map(n=>({id:`r${n}`,level:'ม.1',name:String(n),room:n})),teachers:[1,2].map(n=>({id:`t${n}`,prefix:'ครู',full_name:`ตัวอย่าง ${n}`})),activities:[],slots:[],blocks:[],periods:[1,2,0,3].map((n,i)=>({period:n,is_break:!n,sort_order:i+1,start_time:`${8+i}:00`,end_time:`${9+i}:00`})),plan:{days:[1,2,3,4,5],rooms:[{id:'venue',name:'ห้องวิทยาศาสตร์'}],rules:{},reduceGaps:false,maxContinuous:0,activityGroups:[]},lessons:[{id:'math1',classroomId:'r1',code:'ค21102',name:'คณิตศาสตร์',count:3,subjectGroup:'คณิตศาสตร์',teacherId:null},{id:'math2',classroomId:'r2',code:'ค21102',name:'คณิตศาสตร์',count:4,subjectGroup:'คณิตศาสตร์',teacherId:null},{id:'thai',classroomId:'r1',code:'ท21102',name:'ภาษาไทย',count:2,subjectGroup:'ภาษาไทย',teacherId:null}]}
-let state=structuredClone(fixture),failAssignment=false,revision=0,activeWrites=0,maxWrites=0
+let state=structuredClone(fixture),failAssignment=false,revision=0,activeWrites=0,maxWrites=0,writeDelay=180
 const calls=[]
 const write=(name,text)=>{const file=path.join(out,name);fs.writeFileSync(file,text);return file}
 const bridge=write('actions.js',`async function call(method,args){const r=await fetch('/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method,args})});if(!r.ok)throw Error(await r.text());return r.json()};export const fetchPreparation=(...args)=>call('fetch',args),savePreparation=(...args)=>call('plan',args),saveScheduleTeachingAssignments=(...args)=>call('assign',args);export const checkPreparation=()=>{},createScheduleDraft=()=>{},confirmScheduleDraft=()=>{},discardScheduleDraft=()=>{};`)
@@ -30,7 +30,7 @@ const server=http.createServer(async(req,res)=>{
    const {method,args}=JSON.parse(body);assert.equal(args[0],'year');assert.equal(args[1],2)
    if(method!=='fetch'){
     calls.push({method,args});activeWrites++;maxWrites=Math.max(maxWrites,activeWrites)
-    await new Promise(resolve=>setTimeout(resolve,180));activeWrites--
+    await new Promise(resolve=>setTimeout(resolve,writeDelay));activeWrites--
     if(args[2]!==state.hash){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:'ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก'}));return}
     if(method==='assign'&&failAssignment){failAssignment=false;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:'เครือข่ายขัดข้องจำลอง กรุณาลองใหม่'}));return}
     if(method==='plan')state.plan=structuredClone(args[3])
@@ -49,7 +49,7 @@ try{
  browser=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true,userDataDir:fs.mkdtempSync(path.join(out,'profile-')),args:['--no-first-run','--disable-gpu']})
  page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())})
  await page.setViewport({width:1440,height:1000});await page.goto(`http://127.0.0.1:${server.address().port}`,{waitUntil:'domcontentloaded',timeout:60000})
- const click=async(selector,text)=>{const el=await page.evaluateHandle((s,t)=>[...document.querySelectorAll(s)].find(el=>el.textContent.trim()===t),selector,text);assert.ok(el.asElement(),`Missing ${text}`);await el.asElement().click()}
+ const click=async(selector,text)=>{const el=await page.evaluateHandle((s,t)=>[...document.querySelectorAll(s)].find(el=>(el.getAttribute('role')==='option'?el.textContent.replace(/\s*✓$/,''):el.textContent).trim()===t),selector,text);assert.ok(el.asElement(),`Missing ${text}`);await el.asElement().click()}
  const modal='dialog[open]:not(.prep-code-options-dialog):not(.prep-code-place-dialog)', options='.prep-code-options-dialog[open]', idle=()=>page.waitForFunction(()=>!window.isBusy&&!document.querySelector('.swal2-container'))
  // Thai card comes first, so identify the math card by its actual code.
  const math=async()=>{await idle();await click('.prep-workload>.prep-view-switch button','ตามรหัส');const el=await page.evaluateHandle(()=>[...document.querySelectorAll('.prep-code-cards button')].find(el=>el.textContent.includes('ค21102')));await el.asElement().click();await page.waitForSelector(modal)}
@@ -70,18 +70,41 @@ try{
  await openOptions();await click(options+'>footer button','ย้อนกลับ');assert.equal(await page.$(options),null);await openOptions()
  await page.click(row('math1')+' [role=combobox]');assert.equal(await page.$$eval(row('math1')+' [role=option]',els=>els.some(el=>el.textContent.includes('สถานที่ที่ยกเลิก'))),false);await page.keyboard.press('Escape');assert.ok(await page.$(options),'Escape closes search before modal')
  await page.click(row('math1')+' [role=combobox]');await page.type(row('math1')+' [role=combobox]','ยังไม่เพิ่ม');await page.keyboard.press('Escape');assert.equal(state.plan.rooms.length,1,'Typing alone does not create a place')
+ await page.click(row('math1')+' [role=combobox]');await page.type(row('math1')+' [role=combobox]','สถานที่ที่ยังไม่ได้ยืนยัน')
+ await click(options+'>footer button','บันทึกภาระสอน')
+ assert.equal(calls.length,0,'Never save a null/old venue while an unconfirmed name is displayed')
+ assert.equal(await page.$eval(row('math1')+' [role=combobox]',el=>el.value),'สถานที่ที่ยังไม่ได้ยืนยัน','Blur keeps the pending venue name')
+ await page.waitForSelector(options+' .prep-workload-status.is-error');await page.waitForFunction(selector=>document.querySelector(selector)===document.activeElement,{},row('math1')+' [role=combobox]')
+ await page.keyboard.press('Escape')
  await addVenue('  ห้องวิทยาศาสตร์  ')
  await page.click(row('math1')+' [role=combobox]');await page.type(row('math1')+' [role=combobox]','ห้องปฏิบัติการจำลอง');await click(row('math1')+' [role=option]','+ เพิ่มสถานที่ “ห้องปฏิบัติการจำลอง”')
  assert.equal(await page.$eval(row('math1')+' [role=combobox]',el=>el.value),'ห้องปฏิบัติการจำลอง','Inline Add selects the venue for this room')
  assert.equal(await page.$eval(row('math2')+' [role=combobox]',el=>el.value),'','Other rooms remain unchanged')
  await page.click(row('math2')+' [role=combobox]');await page.type(row('math2')+' [role=combobox]','  ห้องปฏิบัติการจำลอง  ')
  assert.equal(await page.$(row('math2')+' .prep-place-create'),null,'An exact normalized match cannot be added again');await page.keyboard.press('Enter')
+ await page.click(row('math2')+' [role=combobox]');await page.type(row('math2')+' [role=combobox]',' ห้องวิทยาศาสตร์ ');await page.$eval(row('math2')+' [role=combobox]',el=>el.blur())
+ assert.equal(await page.$eval(row('math2')+' [role=combobox]',el=>el.value),'ห้องวิทยาศาสตร์','Typing an exact existing name resolves its ID on blur')
  await addVenue(' ห้องปฏิบัติการจำลอง ')
  await chooseVenue('math1','ห้องปฏิบัติการจำลอง',true);await chooseVenue('math2','ห้องวิทยาศาสตร์')
  await page.select(row('math1')+' select[aria-label^=ช่วงเวลา]','morning');await page.select(row('math2')+' select[aria-label^=ช่วงเวลา]','afternoon')
  for(const id of ['math1','math2'])await page.select(row(id)+' select[aria-label^=รูปแบบคาบ]','double')
  for(const width of [360,390,768,1024,1440]){await page.setViewport({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.equal(await page.$eval(options,el=>el.scrollWidth<=el.clientWidth),true);assert.equal(await page.$eval(options+'>footer .prep-primary',el=>el.getBoundingClientRect().height>=44),true)}
- await page.$eval(options+'>footer .prep-primary',el=>{el.click();el.click()});await idle();assert.equal(await page.$(options),null)
+ writeDelay=1000
+ await page.$eval(options+'>footer .prep-primary',el=>{el.click();el.click()})
+ await page.waitForSelector('.prep-save-feedback.is-saving:popover-open')
+ assert.equal(await page.$eval(options+'>footer .prep-primary',el=>el.disabled),true,'Saving cannot be submitted twice')
+ assert.equal(await page.$eval(options+' .prep-workload-status .prep-save-spinner',el=>getComputedStyle(el).width),'18px','Dialog footer layout must not stretch the spinner')
+ assert.equal(await page.$eval('.prep-save-feedback',el=>getComputedStyle(el).pointerEvents),'none','Processing feedback must not block dialog controls')
+ await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);assert.equal(await page.$eval('.prep-save-feedback .prep-save-spinner',el=>getComputedStyle(el).animationName),'none');await page.emulateMediaFeatures([])
+ await page.screenshot({path:path.join(out,'desktop-workload-saving.png')})
+ await idle();writeDelay=180;assert.equal(await page.$(options),null)
+ await page.waitForSelector('.prep-save-feedback.is-saved:popover-open')
+ await page.waitForFunction(selector=>document.querySelector(selector)?.contains(document.activeElement),{},modal)
+ assert.equal(await page.$eval(modal+' input[type=search]',el=>document.activeElement===el),true,'Focus returns to teacher search once saving controls are enabled')
+ await page.setViewport({width:390,height:844});assert.equal(await page.$eval('.prep-save-feedback',el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth}),true)
+ await page.screenshot({path:path.join(out,'mobile-workload-saved.png')});await page.setViewport({width:1440,height:1000})
+ await page.waitForFunction(()=>!document.querySelector('.prep-save-feedback:popover-open'),{timeout:5000})
+ console.log('PASS: processing feedback above native dialogs; submit lock; success only after all writes; non-blocking toast restores focus, fits mobile and dismisses automatically; reduced motion')
  assert.equal(calls.filter(c=>c.method==='plan').length,1);assert.equal(calls.filter(c=>c.method==='assign').length,1);assert.equal(maxWrites,1)
  const newVenue=state.plan.rooms.find(place=>place.name==='ห้องปฏิบัติการจำลอง').id;assert.equal(state.plan.rooms.length,2,'Duplicate names reuse saved or staged venue IDs')
  assert.deepEqual(state.plan.rules.math1.pattern,[2,1]);assert.deepEqual(state.plan.rules.math2.pattern,[2,2]);assert.equal(state.plan.rules.math1.count,3);assert.equal(state.plan.rules.math2.count,4)
@@ -93,6 +116,7 @@ try{
  await page.select(row('math1')+' select[aria-label^=รูปแบบคาบ]','single');const assignments=calls.filter(c=>c.method==='assign').length;await saveOptions();assert.equal(calls.filter(c=>c.method==='assign').length,assignments)
  await page.keyboard.press('Escape');await math();await rooms();await click(modal+' .prep-activity-teachers strong','ครู ตัวอย่าง 2');await openOptions();failAssignment=true
  await addVenue('ห้องทดสอบการลองใหม่');await chooseVenue('math1','ห้องทดสอบการลองใหม่');await saveOptions();await page.waitForSelector(options+' .prep-workload-status.is-error')
+ assert.equal(await page.$('.prep-save-feedback.is-saved:popover-open'),null,'Failed saves never show a success toast')
  const retryVenue=state.plan.rooms.find(place=>place.name==='ห้องทดสอบการลองใหม่').id;assert.equal(state.plan.rooms.filter(place=>place.id===retryVenue).length,1)
  await page.click(row('math1')+' [role=combobox]');assert.equal(await page.$$eval(row('math1')+' [role=option]',els=>els.filter(el=>el.textContent.includes('ห้องทดสอบการลองใหม่')).length),1);await page.keyboard.press('Escape')
  assert.equal(state.lessons[0].teacherId,'t1');await saveOptions();assert.equal(state.lessons[0].teacherId,'t2');assert.equal(state.plan.rooms.filter(place=>place.id===retryVenue).length,1)

@@ -24,7 +24,8 @@ function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
   return index >= 0 && index < breakAt
 }
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
-export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number }
+export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota'
+export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; code?: FixedScheduleIssueCode }
 export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking';elapsedMs?:number;timeLimitMs?:number}
 export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
 export const SCHEDULE_SEARCH_TIME_LIMIT_MS = 45_000
@@ -56,15 +57,16 @@ export function blocksFor(length: number, days: number[], times: PeriodTimeRow[]
 export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], days:number[], times:PeriodTimeRow[], unavailable:{teacherId:string;day:number;period:number}[]):PlanningIssue[] {
   const issues:PlanningIssue[]=[];const periods=times.filter(t=>!t.is_break).map(t=>t.period),capacity=periods.length*days.length
   const err=(message:string,step=6)=>issues.push({severity:'error',message,step})
+  const fixedError=(code:FixedScheduleIssueCode,message:string,step=6)=>issues.push({severity:'error',message,step,code})
   const occupied=new Set<string>(),slotOwners=new Map<string,string>(),teachers=new Map<string,string>(),places=new Map<string,string>()
   const blocked=new Set(unavailable.map(block=>`${block.teacherId}:${block.day}:${block.period}`))
   for(const slot of fixed){const l=lessons.find(l=>l.id===slot.lessonId);const key=`${slot.day}:${slot.period}`
-    if(!days.includes(slot.day)||!periods.includes(slot.period))err('คาบเดิมอยู่นอกวันหรือเวลาที่เลือก',1)
-    if(occupied.has(slot.classroomId+':'+key))err('มีคาบนักเรียนซ้ำ');occupied.add(slot.classroomId+':'+key);slotOwners.set(slot.classroomId+':'+key,slot.lessonId||'locked-empty')
-    if(slot.lessonId&&!l)err('คาบเดิมอ้างถึงรายวิชาที่ไม่พบ',3)
-    if(l&&l.classroomId!==slot.classroomId)err(l.label+' ถูกลงในห้องนักเรียนที่ไม่ตรงกับรายวิชา',3)
-    if(l)for(const id of lessonTeachers(l)){const owner=l.activityGroupId||l.id,busy=teachers.get(id+':'+key);if((busy&&busy!==owner)||unavailable.some(b=>b.teacherId===id&&b.day===slot.day&&b.period===slot.period))err(l.label+' ครูชนหรือไม่ว่าง',4);teachers.set(id+':'+key,owner)}
-    if(l?.roomId){if(places.has(l.roomId+':'+key))err(l.label+' ห้องสถานที่ชน',5);places.set(l.roomId+':'+key,l.id)}
+    if(!days.includes(slot.day)||!periods.includes(slot.period))fixedError('fixed_outside','คาบเดิมอยู่นอกวันหรือเวลาที่เลือก',1)
+    if(occupied.has(slot.classroomId+':'+key))fixedError('fixed_classroom_collision','มีคาบนักเรียนซ้ำ');occupied.add(slot.classroomId+':'+key);slotOwners.set(slot.classroomId+':'+key,slot.lessonId||'locked-empty')
+    if(slot.lessonId&&!l)fixedError('fixed_unknown_lesson','คาบเดิมอ้างถึงรายวิชาที่ไม่พบ',3)
+    if(l&&l.classroomId!==slot.classroomId)fixedError('fixed_classroom_mismatch',l.label+' ถูกลงในห้องนักเรียนที่ไม่ตรงกับรายวิชา',3)
+    if(l)for(const id of lessonTeachers(l)){const owner=l.activityGroupId||l.id,busy=teachers.get(id+':'+key);if((busy&&busy!==owner)||unavailable.some(b=>b.teacherId===id&&b.day===slot.day&&b.period===slot.period))fixedError('fixed_teacher_conflict',l.label+' ครูชนหรือไม่ว่าง',4);teachers.set(id+':'+key,owner)}
+    if(l?.roomId){if(places.has(l.roomId+':'+key))fixedError('fixed_venue_conflict',l.label+' ห้องสถานที่ชน',5);places.set(l.roomId+':'+key,l.id)}
   }
   for(const l of lessons){
     if(!lessonTeachers(l).length&&!l.teacherOptional&&l.count>0)err(l.label+' ยังไม่มีครู',5)
@@ -83,7 +85,7 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
       if(impossible)err(l.label+' ไม่มีช่วงว่างต่อเนื่องสำหรับรูปแบบคาบ กรุณาตรวจคาบล็อก ครูไม่ว่าง และห้องสถานที่',4)
       else if(available.size<l.count)err(`${l.label} ต้องการ ${l.count} คาบ แต่มีช่องที่ครู ห้องนักเรียน และสถานที่ว่างตรงกัน ${available.size} คาบ`,5)
     }
-    if(fixed.filter(s=>s.lessonId===l.id).length>l.count)err(l.label+' คาบเดิมเกินเป้าหมาย',5)
+    if(fixed.filter(s=>s.lessonId===l.id).length>l.count)fixedError('fixed_over_quota',l.label+' คาบเดิมเกินเป้าหมาย',5)
   }
   for(const room of new Set(lessons.map(l=>l.classroomId))){const need=lessons.filter(l=>l.classroomId===room).reduce((n,l)=>n+l.count,0)+fixed.filter(s=>s.classroomId===room&&!s.lessonId).length;if(need>capacity)err(`${lessons.find(l=>l.classroomId===room)?.label.split(' · ')[0]} ต้องการ ${need} คาบ แต่มี ${capacity} ช่อง`,5)}
   for(const teacher of new Set(lessons.flatMap(l=>lessonTeachers(l)))){const load=new Map<string,number>();for(const l of lessons.filter(l=>lessonTeachers(l).includes(teacher)))load.set(l.activityGroupId||l.id,Math.max(load.get(l.activityGroupId||l.id)||0,l.count));const need=[...load.values()].reduce((n,v)=>n+v,0),free=capacity-new Set(unavailable.filter(b=>b.teacherId===teacher&&days.includes(b.day)&&periods.includes(b.period)).map(b=>`${b.day}:${b.period}`)).size;if(need>free)err(`ครูของ ${lessons.find(l=>lessonTeachers(l).includes(teacher))?.label} ต้องสอน ${need} คาบ แต่มีเวลาว่าง ${free} คาบ`,4)}

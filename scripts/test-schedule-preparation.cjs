@@ -5,12 +5,39 @@ const teams=moduleFrom('lib/schedule-activity-teams.ts',{'./schedule-helpers':{}
 for(const level of ['อ.2','อ.3','อ2','อนุบาล 2'])assert.equal(schedules.isTimetableClassroom(level),false);
 for(const level of ['ป.1','ป.6','ม.1','ม.6'])assert.equal(schedules.isTimetableClassroom(level),true);
 const solver=moduleFrom('lib/schedule-solver.ts',{});const planning=moduleFrom('lib/schedule-planning.ts',{'./schedule-solver':solver});const periods=[1,0,2].map((period,i)=>({period,is_break:period===0,sort_order:i+1,label:'คาบ',start_time:'0'+(8+i)+':00',end_time:(9+i<10?'0':'')+(9+i)+':00'}));periods[2].start_time='10:00';
-let session={schoolId:'school',userId:'admin',role:'admin'},captured=null,liveWrites=0,planConfig=null;
+let session={schoolId:'school',userId:'admin',role:'admin'},captured=null,liveWrites=0,planConfig=null,planWrites=0;
 const data={classrooms:[{id:'A',level:'ป.1',room:1},{id:'B',level:'ป.1',room:2}],lessons:[{id:'math',classroomId:'A',teacherId:'T',count:1,label:'Math',name:'คณิต',activity:false}],slots:[{classroom_id:'A',academic_year_id:'year',day_of_week:1,period:1,class_subject_id:'math',activity_id:null,note:null,locked:true}]};
-const db={rpc:async(name,args)=>({data:name==='schedule_snapshot'?'snapshot':true,error:null}),from(table){let inserted;const q={select(){return q},eq(){return q},or(){return q},in(){return q},limit(){return q},order(){return q},is(){return q},insert(value){assert.equal(table,'schedule_drafts');captured=value;inserted=value;return q},update(){return q},async single(){return {data:{id:'draft'},error:null}},async maybeSingle(){return {data:table==='schedule_plans'&&planConfig?{config:planConfig}:null,error:null}},then(resolve){resolve({data:table==='users'?[{id:'T',prefix:'ครู',full_name:'ทดสอบ'}]:table==='school_period_times'?periods:table==='evaluation_settings'?[{id:'activity',label:'แนะแนว'}]:[],error:null})}};return q}};
+const db={rpc:async(name,args)=>{if(name==='save_schedule_plan'){planWrites++;planConfig=structuredClone(args.p_config)}return {data:name==='schedule_snapshot'?'snapshot':true,error:null}},from(table){let inserted;const q={select(){return q},eq(){return q},or(){return q},in(){return q},limit(){return q},order(){return q},is(){return q},insert(value){assert.equal(table,'schedule_drafts');captured=value;inserted=value;return q},update(){return q},async single(){return {data:{id:'draft'},error:null}},async maybeSingle(){return {data:table==='schedule_plans'&&planConfig?{config:planConfig}:null,error:null}},then(resolve){resolve({data:table==='users'?[{id:'T',prefix:'ครู',full_name:'ทดสอบ'}]:table==='school_period_times'?periods:table==='evaluation_settings'?[{id:'activity',label:'แนะแนว'}]:[],error:null})}};return q}};
 const key=s=>s.activity_id?'activity:'+s.activity_id:s.class_subject_id;
 const api=moduleFrom('lib/schedule-preparation.ts',{'node:crypto':require('crypto'),'./session':{getSession:async()=>session},'./supabase':{createServerClient:()=>db},'./schedules':schedules,'./schedule-activity-teams':teams,'./schedule-store':{loadSchedule:async()=>structuredClone(data),loadScheduleConstraints:async()=>({blocks:[]}),lessonKey:key,lessonColumns:id=>({class_subject_id:id&&!id.startsWith('activity:')?id:null,activity_id:id?.startsWith('activity:')?id.slice(9):null})},'./schedule-helpers':{DEFAULT_PERIOD_TIMES:periods,normalizePeriodTimes:times=>times.map(r=>({...r,start_time:r.start_time.slice(0,5),end_time:r.end_time.slice(0,5)})),validatePeriodTimes:()=>null},'./schedule-planning':planning,'./schedule-verification':moduleFrom('lib/schedule-verification.ts',{'./schedule-planning':planning})});
-(async()=>{const before=JSON.stringify(data.slots);const draft=await api.generate('year',1,['A'],true);assert.equal(draft.status,'complete');assert.equal(JSON.stringify(data.slots),before);assert.ok(captured.after_rows);assert.equal(captured.actor_id,'admin');assert.equal(captured.school_id,'school');
+(async()=>{
+// Reproduce the reported save: unrelated ม.6 subjects containing “ชน” have no teacher.
+const originalData=structuredClone(data),venue='11111111-1111-4111-8111-111111111199';
+for(const [index,room] of ['2PL','3PS','1PA'].entries()){
+ const classroomId='six-'+index;data.classrooms.push({id:classroomId,level:'ม.6',room:index+1});
+ data.lessons.push({id:'community-'+index,classroomId,teacherId:null,count:1,label:'ม.6/'+room+' · การพูดต่อหน้าชุมชน',name:'การพูดต่อหน้าชุมชน',activity:false});
+}
+let config={...planning.emptyPlan(),rooms:[{id:venue,name:'ห้อง ป.1/1'}],rules:{math:{count:2,pattern:[1,1],roomId:venue,morning:false,spread:true,timePreference:'any'}}};
+await api.savePlan('year',1,'snapshot',config);assert.equal(planWrites,1,'An unrelated missing teacher must not block an incremental workload save');
+assert.equal(planConfig.rules.math.roomId,venue);assert.equal(planConfig.rules.math.count,2);
+const partialCheck=await api.preflight('year',1,data.classrooms.map(room=>room.id),true);
+assert.equal(partialCheck.issues.filter(issue=>issue.message.includes('การพูดต่อหน้าชุมชน')&&issue.message.includes('ยังไม่มีครู')).length,3,'Final readiness still requires teachers for all selected subjects');
+const partialDraft=await api.generate('year',1,data.classrooms.map(room=>room.id),true);assert.equal(partialDraft.status,'invalid','Saving partial inputs must not allow incomplete timetables');
+// Real timetable conflicts still block preparation saves without writing.
+const existing=structuredClone(data.slots),writeCount=planWrites;
+data.lessons.push({id:'other',classroomId:'B',teacherId:'T',count:1,label:'Other',activity:false});
+const second={...data.slots[0],classroom_id:'B',class_subject_id:'other'};data.slots.push(second);
+await assert.rejects(api.savePlan('year',1,'snapshot',config),/ครูชน/);assert.equal(planWrites,writeCount);
+data.lessons.find(row=>row.id==='other').teacherId='T2';
+config={...config,rules:{...config.rules,other:{count:1,pattern:[1],roomId:venue,morning:false,spread:true}}};
+await assert.rejects(api.savePlan('year',1,'snapshot',config),/สถานที่ชน/);assert.equal(planWrites,writeCount);
+data.slots=structuredClone(existing);delete config.rules.other;
+await assert.rejects(api.savePlan('year',1,'snapshot',{...config,days:[2,3,4,5]}),/นอกวัน/);assert.equal(planWrites,writeCount);
+data.slots.push({...existing[0],day_of_week:2});
+await assert.rejects(api.savePlan('year',1,'snapshot',{...config,rules:{math:{...config.rules.math,count:1,pattern:[1]}}}),/คาบเดิมเกิน/);assert.equal(planWrites,writeCount);
+data.classrooms=originalData.classrooms;data.lessons=originalData.lessons;data.slots=originalData.slots;planConfig=null;
+console.log('PASS: community-named subjects without teachers do not block saving other workloads; final readiness and generation still reject missing teachers; teacher/venue/day/quota conflicts still block saves');
+const before=JSON.stringify(data.slots);const draft=await api.generate('year',1,['A'],true);assert.equal(draft.status,'complete');assert.equal(JSON.stringify(data.slots),before);assert.ok(captured.after_rows);assert.equal(captured.actor_id,'admin');assert.equal(captured.school_id,'school');
 const bulk=await api.activityDraft('year',1,'activity',['A','B'],[{day:1,period:1},{day:2,period:2}],false);assert.equal(bulk.locked,1);assert.equal(bulk.affected,1);assert.equal(captured.after_rows.length,4);assert.equal(captured.offerings.length,2);assert.equal(captured.unlock_cells.length,1);assert.equal(JSON.stringify(data.slots),before);
 await assert.rejects(api.activityDraft('year',1,'activity',['foreign'],[{day:1,period:1}],false),/เลือก/);await assert.rejects(api.activityDraft('year',1,'activity',['A'],[{day:1,period:0}],false),/นอกเวลา/);await assert.rejects(api.activityDraft('year',1,'activity',['A','A'],[{day:1,period:1}],false),/ซ้ำ/);
 data.classrooms.push({id:'K2',level:'อ.2',room:1},{id:'K3',level:'อ.3',room:1});

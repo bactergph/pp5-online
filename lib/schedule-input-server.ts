@@ -192,21 +192,40 @@ export async function removeScheduleSubjects(year: string, term: number, hash: s
 
 /** Update existing offerings only; curriculum metadata comes from the server. */
 export async function saveTeachingAssignments(year: string, term: number, hash: string, assignments: { lessonId: string; teacherId: string }[]) {
+  const session = await getSession()
+  if (!session?.schoolId || session.mustChangePassword || !SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])) throw Error('ไม่มีสิทธิ์จัดตารางเรียน')
   const current = await preparation(year, term)
   if (current.hash !== hash) throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
   if (!Array.isArray(assignments) || !assignments.length || assignments.length > 500 || new Set(assignments.map(r=>r.lessonId)).size !== assignments.length) throw Error('เลือกได้ครั้งละ 1–500 รายวิชาและห้ามซ้ำ')
   const eligible = current.plan.teacherIds ?? current.teachers.map(t=>t.id)
+  const changes: { lessonId: string; teacherId: string; code: string }[] = []
   const clears: typeof current.lessons = []
   const rows: SubjectInputRow[] = []
   for (const row of assignments) {
     const lesson = current.lessons.find(l=>l.id===row.lessonId && !l.activity && current.classrooms.some(c=>c.id===l.classroomId))
     if (!lesson) throw Error('รายวิชาหรือครูไม่ได้อยู่ในขอบเขตจัดตารางของโรงเรียน')
+    if (row.teacherId && (!eligible.includes(row.teacherId) || !current.teachers.some(t=>t.id===row.teacherId))) throw Error('รายวิชาหรือครูไม่ได้อยู่ในขอบเขตจัดตารางของโรงเรียน')
+    if ((lesson.teacherId || '') !== row.teacherId) changes.push({ ...row, code: lesson.code })
     if (!row.teacherId) { clears.push(lesson); continue }
-    if (!eligible.includes(row.teacherId) || !current.teachers.some(t=>t.id===row.teacherId)) throw Error('รายวิชาหรือครูไม่ได้อยู่ในขอบเขตจัดตารางของโรงเรียน')
     const rule = current.plan.rules[lesson.id]
     rows.push({classroomId:lesson.classroomId, code:lesson.code, name:lesson.fullName || lesson.name, teacherId:row.teacherId,
       count:rule?.count ?? lesson.count, pattern:rule?.pattern ?? Array(lesson.count).fill(1),
       venue:current.plan.rooms.find(r=>r.id===rule?.roomId)?.name || lesson.roomName || '', group:lesson.subjectGroup || '', type:lesson.subjectType || 'พื้นฐาน'})
+  }
+  if (!changes.length) return current
+  // The room/code/teacher editors assign one teacher (or clear one teacher) at a
+  // time. Update their existing offerings together: do not import the curriculum,
+  // rewrite its plan/venues or reload the full school between every operation.
+  if (new Set(changes.map(row=>row.teacherId)).size === 1) {
+    const occupied = new Set(current.slots.map(slot=>slot.class_subject_id).filter(Boolean))
+    const placed = changes.find(row=>occupied.has(row.lessonId))
+    if (placed) throw Error(`วิชา ${placed.code} มีคาบในตารางแล้ว นำคาบออกก่อนเปลี่ยนผู้สอน`)
+    const updated = await createServerClient().from('class_subjects')
+      .update({ teacher_id: changes[0].teacherId || null }).eq('academic_year_id', year)
+      .in('id', changes.map(row=>row.lessonId)).select('id')
+    failWrite(updated.error, 'บันทึกครูผู้สอนไม่สำเร็จ')
+    if ((updated.data || []).length !== changes.length) throw Error('ข้อมูลรายวิชาเปลี่ยนระหว่างบันทึก กรุณาโหลดข้อมูลล่าสุด')
+    return preparation(year, term)
   }
   const saved = rows.length ? await importScheduleSubjects(year, term, hash, rows) : current
   if (!clears.length) return saved

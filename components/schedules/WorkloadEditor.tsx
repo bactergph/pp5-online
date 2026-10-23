@@ -10,6 +10,7 @@ import type { PeriodTimeRow } from '@/lib/schedule-helpers'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import LessonPatternPicker from './LessonPatternPicker'
 import WorkloadPlacePicker from './WorkloadPlacePicker'
+import WorkloadSaveFeedback from './WorkloadSaveFeedback'
 
 type Classroom = Preparation['classrooms'][number]
 type Teacher = Preparation['teachers'][number]
@@ -73,7 +74,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   const saveLock = useRef(false)
   const [saveStatus, setSaveStatus] = useState<{ kind: 'saving' | 'saved' | 'error'; text: string } | null>(null)
   const saving = busy || saveStatus?.kind === 'saving'
-  const saveNotice = <span className={`prep-workload-status${saveStatus?.kind === 'error' ? ' is-error' : ''}`} role={saveStatus?.kind === 'error' ? 'alert' : 'status'}>{saveStatus?.text || 'ระบบบันทึกให้เมื่อยืนยันข้อมูลเรียบร้อย'}</span>
+  const saveNotice = <span className={`prep-workload-status${saveStatus ? ` is-${saveStatus.kind}` : ''}`} role={saveStatus?.kind === 'error' ? 'alert' : 'status'}>{saveStatus?.kind === 'saving' && <span className="prep-save-spinner" aria-hidden="true" />}{saveStatus?.text || 'ระบบบันทึกให้เมื่อยืนยันข้อมูลเรียบร้อย'}</span>
   async function commit(change: WorkloadChange) {
     if (saveLock.current || busy || queuedLocks.current.size) return false
     saveLock.current = true
@@ -89,6 +90,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   }
   const [picked, setPicked] = useState<string[]>([]), [codeLessonIds, setCodeLessonIds] = useState<string[]>([]), [activeCode, setActiveCode] = useState(''), [codeLevel, setCodeLevel] = useState('')
   const [codeSettings, setCodeSettings] = useState<Record<string, CodeSetting>>({})
+  const [codePendingPlaces, setCodePendingPlaces] = useState<Record<string, boolean>>({})
   const [codePlaceNotice, setCodePlaceNotice] = useState('')
   const [codePlaceName, setCodePlaceName] = useState(''), [codePlaces, setCodePlaces] = useState<Place[]>([]), [codePlaceError, setCodePlaceError] = useState('')
   const codeAvailablePlaces = [...places, ...codePlaces.filter(place => !places.some(existing => existing.id === place.id))]
@@ -138,7 +140,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   function openCodeOptions() {
     if (saving || !codeTeacher || !chosenLessons.length || chosenLessons.length > 500 || codeOptionsDialog.current?.open) return
     setCodeSettings(Object.fromEntries(chosenLessons.map(lesson => { const current = ruleOf(lesson); return [lesson.id, { placeId: current.roomId || '', time: current.timePreference || (current.morning ? 'morning' : 'any'), pattern: current.pattern.some(size => size > 1) ? 'double' : 'single' }] })))
-    setSaveStatus(null); setCodePlaceNotice('')
+    setSaveStatus(null); setCodePlaceNotice(''); setCodePendingPlaces({})
     setCodePlaceName(''); setCodePlaces([]); setCodePlaceError('')
     codeOptionsDialog.current?.showModal()
   }
@@ -281,6 +283,11 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   }
   async function assignCodes() {
     if (!codeOptionsDialog.current?.open || codePlaceDialog.current?.open || !codeTeacher || !chosenLessons.length || chosenLessons.length > 500) return
+    if (Object.values(codePendingPlaces).some(Boolean)) {
+      setSaveStatus({ kind: 'error', text: 'ยังมีชื่อสถานที่ที่ไม่ได้เลือกจากรายการ กรุณาเลือกหรือกดเพิ่มก่อนบันทึก' })
+      requestAnimationFrame(() => codeOptionsDialog.current?.querySelector<HTMLInputElement>('[role=combobox][aria-invalid=true]')?.focus())
+      return
+    }
     const lessonRules = chosenLessons.map(lesson => {
       const current = ruleOf(lesson), setting = codeSettings[lesson.id], count = current.count
       const pattern = setting.pattern === 'double' ? [...Array(Math.floor(count / 2)).fill(2), ...(count % 2 ? [1] : [])] : Array(count).fill(1)
@@ -288,7 +295,10 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     })
     if (await commit({ assignments: chosenLessons.map(lesson => ({ lessonId: lesson.id, teacherId: codeTeacher })), rules: lessonRules, places: codePlaces })) {
       codeOptionsDialog.current?.close(); setCodeLessonIds([])
-      codeDialog.current?.querySelector<HTMLInputElement>('input[type=search]')?.focus()
+      // Wait for the saving fieldset to be enabled before returning focus.
+      requestAnimationFrame(() => {
+        if (codeDialog.current?.open && !codeOptionsDialog.current?.open && !saveLock.current) codeDialog.current.querySelector<HTMLInputElement>('input[type=search]')?.focus()
+      })
     }
   }
   async function assignPicked() {
@@ -297,7 +307,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     const changed = targets.filter(lesson => teacherOf(lesson))
     // Native dialogs sit above body-level SweetAlerts; keep the confirmation in this dialog.
     if (changed.length) {
-      const answer = await Swal.fire({ target: addDialog.current!, icon: 'warning', title: `เปลี่ยนผู้สอนเดิม ${changed.length} วิชา?`, showCancelButton: true, confirmButtonText: 'กำหนด', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#1373d9' })
+      const answer = await Swal.fire({ target: addDialog.current!, icon: 'warning', title: `เปลี่ยนผู้สอนเดิม ${changed.length} วิชา?`, showCancelButton: true, confirmButtonText: 'กำหนด', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#1373d9', hideClass: { popup: '', backdrop: '', icon: '' } })
       if (!answer.isConfirmed) return
     }
     if (await commit({ assignments: targets.map(lesson => ({ lessonId: lesson.id, teacherId })) })) { setPicked([]); addDialog.current?.close() }
@@ -316,6 +326,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   }
   const rowProps = { busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit: openLesson, hasLessons: lessons.length > 0 }
   return <section className="prep-input-panel prep-teacher-panel prep-workload">
+    <WorkloadSaveFeedback status={saveStatus} />
     <div className="prep-teacher-bar">
       <div className="prep-teacher-title"><h2>กำหนดภาระสอน</h2><p>{view === 'room' ? `${activeLevel}/${levelRooms.find(room => room.id === activeRoom)?.room || ''} · ${visible.length} วิชา` : view === 'teacher' ? (teacherId ? `${teacherName(teacherId)} · จากครู ${teachers.length} คน` : `ครูในชุดนี้ ${teachers.length} คน`) : view === 'lock' ? (lockMode === 'room' ? 'เลือกห้อง แล้วแตะคาบเพื่อกำหนดวิชาและล็อกคาบเรียน' : `เลือกจากครู ${teachers.length} คน แล้วแตะคาบเพื่อกำหนดวิชาหรือล็อกคาบว่าง`) : 'แตะการ์ดวิชา แล้วเลือกหลายห้องเพื่อกำหนดครู'}</p></div>
       <div className="prep-teacher-tools prep-subject-tools">
@@ -432,7 +443,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
           <div role="row" className="prep-code-settings-head"><span role="columnheader">ชั้น/ห้อง</span><span role="columnheader">ห้องสถานที่</span><span role="columnheader">ช่วงเวลา</span><span role="columnheader">รูปแบบคาบ</span></div>
           {chosenLessons.map(lesson => { const setting = codeSettings[lesson.id]; if (!setting) return null; const label = roomLabel(lesson.classroomId); return <div role="row" key={lesson.id} className="prep-code-settings-row" data-lesson-id={lesson.id}>
             <div role="cell" className="prep-code-room-label"><strong>{label}</strong><small>{ruleOf(lesson).count} คาบ/สัปดาห์</small></div>
-            <div role="cell"><span className="prep-code-mobile-label">ห้องสถานที่</span><WorkloadPlacePicker places={codeAvailablePlaces} value={setting.placeId} onChange={placeId => updateCodeSetting(lesson.id, { placeId })} onCreate={name => { const { place } = stageCodePlace(name); setCodePlaceNotice(`เพิ่ม ${place.name} แล้ว · สถานที่ใหม่จะบันทึกพร้อมภาระสอน`); return place.id }} label={'สถานที่ '+label} /></div>
+            <div role="cell"><span className="prep-code-mobile-label">ห้องสถานที่</span><WorkloadPlacePicker places={codeAvailablePlaces} value={setting.placeId} onChange={placeId => updateCodeSetting(lesson.id, { placeId })} onCreate={name => { const { place } = stageCodePlace(name); setCodePlaceNotice(`เพิ่ม ${place.name} แล้ว · สถานที่ใหม่จะบันทึกพร้อมภาระสอน`); return place.id }} onPendingChange={pending => setCodePendingPlaces(values => ({ ...values, [lesson.id]: pending }))} label={'สถานที่ '+label} /></div>
             <div role="cell"><span className="prep-code-mobile-label">ช่วงเวลา</span><select aria-label={'ช่วงเวลา '+label} value={setting.time} onChange={event => updateCodeSetting(lesson.id, { time: event.target.value as CodeSetting['time'] })}><option value="any">ทั้งเช้าและบ่าย</option><option value="morning">เช้า</option><option value="afternoon">บ่าย</option></select></div>
             <div role="cell"><span className="prep-code-mobile-label">รูปแบบคาบ</span><select aria-label={'รูปแบบคาบ '+label} value={setting.pattern} onChange={event => updateCodeSetting(lesson.id, { pattern: event.target.value as CodeSetting['pattern'] })}><option value="single">เดี่ยวทั้งหมด</option><option value="double">คาบคู่ + เดี่ยวที่เหลือ</option></select></div>
           </div> })}

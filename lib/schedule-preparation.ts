@@ -106,7 +106,9 @@ export async function savePlan(year:string,term:number,hash:string,plan:Schedule
  if(JSON.stringify(plan.activityGroups||[])!==JSON.stringify(current.plan.activityGroups||[]))throw Error('แก้ทีมครูผ่านเมนูกิจกรรมและครูผู้รับผิดชอบ')
  if(plan.teacherIds?.some(id=>!current.teachers.some(t=>t.id===id)))throw Error('ครูที่เลือกไม่ได้อยู่ในโรงเรียนนี้')
  const lessons=current.lessons.map(l=>({...l,...plan.rules[l.id],count:l.activity?current.slots.filter(r=>lessonKey(r)===l.id).length:(plan.rules[l.id]?.count??l.count)}))
- const issues=checkPlanning(lessons,current.slots.map(toPlanned),plan.days,current.periods,current.blocks).filter(i=>/คาบเดิม|ชน|นอกวัน/.test(i.message))
+ // Saving preparation may be incremental. Only conflicts with existing timetable
+ // cells block it; subject names (e.g. “ชุมชน”) must never classify an issue.
+ const issues=checkPlanning(lessons,current.slots.map(toPlanned),plan.days,current.periods,current.blocks).filter(i=>i.code?.startsWith('fixed_'))
  if(issues.length)throw Error(issues.map(i=>i.message).join('\n'))
  const r=await createServerClient().rpc('save_schedule_plan',{p_school:s.schoolId,p_year:year,p_term:term,p_hash:hash,p_config:plan});fail(r.error)
  return preparation(year,term)
@@ -217,7 +219,7 @@ export async function activityDraft(year:string,term:number,setting:string,rooms
  if(!remove&&lesson)rows.push({classroom_id:room,academic_year_id:year,day_of_week:c.day,period:c.period,...lessonColumns(lesson.id),note:null,locked:false})
  }}
  const activityLessons=[...data.lessons,...offerings.map(o=>({id:'activity:'+o.id,classroomId:o.classroom_id,teacherId:null,count:0,label:data.activities.find(a=>a.id===setting)?.label||'กิจกรรม',activity:true,teacherOptional:true}))].map(l=>({...l,count:l.activity?rows.filter(s=>lessonKey(s)===l.id).length:l.count}))
- const conflicts=checkPlanning(activityLessons,rows.map(toPlanned),data.plan.days,data.periods,data.blocks).filter(i=>/ครูชน|สถานที่ชน|นอกวัน|คาบนักเรียนซ้ำ/.test(i.message))
+ const conflicts=checkPlanning(activityLessons,rows.map(toPlanned),data.plan.days,data.periods,data.blocks).filter(i=>['fixed_teacher_conflict','fixed_venue_conflict','fixed_outside','fixed_classroom_collision'].includes(i.code||''))
  if(conflicts.length)throw Error(conflicts.map(i=>i.message).join('\n'))
  const id=await storeDraft(year,term,data,rows,offerings,unlock)
  return {id,affected:affected.length,locked:unlock.length,rooms:rooms.length,cells:cells.length,remove}

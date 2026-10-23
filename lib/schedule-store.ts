@@ -74,9 +74,15 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   if (!classrooms.length) return { classrooms, lessons: [] as ScheduleLesson[], slots: [] as ScheduleSlot[], activityGroups: [] as ActivityTeam[], teacherNames: {} as Record<string, string> }
   const ids = classrooms.map(c => c.id)
   const subjectQuery = () => db.from('class_subjects').select('*,subjects(code,name,short_name,hours_per_year,credits,subject_group,type)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')
-  let subjects = await readAll(subjectQuery().in('semester', [0, semester]))
-  if (subjects.error && /semester/.test(subjects.error.message)) subjects = await readAll(subjectQuery())
-  const [activities, slots, teachers] = await Promise.all([
+  const readSubjects = async () => {
+    let subjects = await readAll(subjectQuery().in('semester', [0, semester]))
+    if (subjects.error && /semester/.test(subjects.error.message)) subjects = await readAll(subjectQuery())
+    return subjects
+  }
+  // These scoped reads are independent. Do not wait for every subject page
+  // before starting the school's activity, timetable and teacher reads.
+  const [subjects, activities, slots, teachers] = await Promise.all([
+    readSubjects(),
     readAll(db.from('class_schedule_activities').select('id,classroom_id,evaluation_setting_id,teacher_id,weekly_periods,evaluation_settings(label,short_label,is_active,sort_order)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')),
     readTermSlots(ids, yearId, semester),
     readAll(db.from('users').select('id,prefix,full_name').eq('school_id', schoolId).order('id')),

@@ -11,11 +11,11 @@ console.log('PASS: Excel CRLF, quoted multiline/tab cells, escaped quotes, blank
 
 function loadServer(deps){const out={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-input-server.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:out,require:name=>deps[name]||{}});return out}
 ;(async()=>{
-let session={schoolId:'school',role:'admin',userId:'actor'},staffCalls=0,rpcCalls=0;
+let session={schoolId:'school',role:'admin',userId:'actor'},staffCalls=0,rpcCalls=0,preparationCalls=0;
 const current={hash:'hash',classrooms:[{id:'c1',level:'ม.1'}],teachers:[{id:'t1',prefix:'นาย',full_name:'ครูเดิม'},{id:'t2',prefix:'นาง',full_name:'ครูสอง'}],plan:{teacherIds:['t1','t2'],rooms:[],rules:{l1:{count:3,pattern:[2,1],roomId:null,morning:false,spread:true}},reduceGaps:false,maxContinuous:0,days:[1,2,3,4,5]},lessons:[{id:'l1',classroomId:'c1',code:row.code,name:row.name,fullName:row.name,subjectId:'sub1',subjectGroup:row.group,subjectType:row.type,count:3,activity:false,teacherId:'t1'}],slots:[]};
-function sheetClient(capture){return {from(table){const state={op:'select',payload:null};const builder={select(){return builder},insert(payload){state.op='insert';state.payload=payload;return builder},update(payload){state.op='update';state.payload=payload;capture.updates.push([table,payload]);return builder},upsert(payload){state.op='upsert';state.payload=payload;capture.plans.push(payload);return builder},eq(){return builder},in(){return builder},range(){return builder},maybeSingle(){return Promise.resolve({data:null,error:null})},then(resolve,reject){let data=[];if(state.op==='insert'){const rows=(Array.isArray(state.payload)?state.payload:[state.payload]).map((item,index)=>({...item,id:`${table}-${capture.inserts.length}-${index}`}));capture.inserts.push([table,rows]);data=rows}else if(state.op==='select'&&table==='subjects')data=[{id:'sub1',code:row.code,name:row.name}];return Promise.resolve({data,error:null,count:0}).then(resolve,reject)}};return builder}}}
+function sheetClient(capture){return {from(table){const state={op:'select',payload:null};const builder={select(){if(state.op==='update')state.returning=true;return builder},insert(payload){state.op='insert';state.payload=payload;return builder},update(payload){state.op='update';state.payload=payload;capture.updates.push([table,payload]);return builder},upsert(payload){state.op='upsert';state.payload=payload;capture.plans.push(payload);return builder},eq(column,value){if(column==='id')state.ids=[value];return builder},in(column,ids){if(column==='id')state.ids=ids;return builder},range(){return builder},maybeSingle(){return Promise.resolve({data:null,error:null})},then(resolve,reject){let data=state.returning?(state.ids||[]).map(id=>({id})):[];if(state.op==='insert'){const rows=(Array.isArray(state.payload)?state.payload:[state.payload]).map((item,index)=>({...item,id:`${table}-${capture.inserts.length}-${index}`}));capture.inserts.push([table,rows]);data=rows}else if(state.op==='select'&&table==='subjects')data=[{id:'sub1',code:row.code,name:row.name}];return Promise.resolve({data,error:null,count:0}).then(resolve,reject)}};return builder}}}
 const capture={inserts:[],updates:[],plans:[]};
-const server=loadServer({'./session':{getSession:async()=>session},'./supabase':{createServerClient:()=>sheetClient(capture)},'./schedules':{SCHEDULE_EDIT_ROLES:['admin','academic_head']},'./schedule-preparation':{preparation:async()=>current},'./schedule-input':api,'./staff-table':{saveStaffRows:async rows=>{staffCalls++;assert.equal(rows.length,1);assert.equal(rows[0].username,'');assert.equal(rows[0].role,'');assert.equal(rows[0].password,'');return rows.map(r=>({key:r.key,id:'new'}))}}});
+const server=loadServer({'./session':{getSession:async()=>session},'./supabase':{createServerClient:()=>sheetClient(capture)},'./schedules':{SCHEDULE_EDIT_ROLES:['admin','academic_head']},'./schedule-preparation':{preparation:async()=>{preparationCalls++;return current}},'./schedule-input':api,'./staff-table':{saveStaffRows:async rows=>{staffCalls++;assert.equal(rows.length,1);assert.equal(rows[0].username,'');assert.equal(rows[0].role,'');assert.equal(rows[0].password,'');return rows.map(r=>({key:r.key,id:'new'}))}}});
 const reused=await server.importScheduleTeachers('year',1,[{key:'1',prefix:'นาย',name:'ครูเดิม',position:'ครู'}]);assert.equal(reused.reused,1);assert.equal(staffCalls,0);
 await server.importScheduleTeachers('year',1,[{key:'1',prefix:'นาง',name:'ครูใหม่',position:'ครู'},{key:'2',prefix:'นาง',name:'ครูใหม่',position:'ครู'}]);assert.equal(staffCalls,1);
 await assert.rejects(server.importScheduleSubjects('year',1,'stale',[row]),/ข้อมูลเปลี่ยน/);await assert.rejects(server.importScheduleSubjects('year',1,'hash',[{...row,teacherId:'foreign'}]),/ครู/);assert.equal(capture.inserts.length,0);
@@ -31,7 +31,35 @@ await assert.rejects(server.saveTeachingAssignments('year',1,'stale',[{lessonId:
 await assert.rejects(server.saveTeachingAssignments('year',1,'hash',[{lessonId:'foreign',teacherId:'t2'}]),/ขอบเขต/);
 await assert.rejects(server.saveTeachingAssignments('year',1,'hash',[{lessonId:'l1',teacherId:'foreign'}]),/ขอบเขต/);
 await assert.rejects(server.saveTeachingAssignments('year',1,'hash',[{lessonId:'l1',teacherId:'t2'},{lessonId:'l1',teacherId:'t2'}]),/ซ้ำ/);
-capture.updates.length=0;capture.plans.length=0;await server.saveTeachingAssignments('year',1,'hash',[{lessonId:'l1',teacherId:'t2'}]);assert.equal(capture.updates.at(-1)[1].teacher_id,'t2');assert.equal(capture.plans.at(-1).config.rules.l1.pattern.join('+'),'2+1');
+capture.updates.length=0;capture.plans.length=0;await server.saveTeachingAssignments('year',1,'hash',[{lessonId:'l1',teacherId:'t2'}]);assert.equal(capture.updates.at(-1)[1].teacher_id,'t2');assert.equal(capture.plans.length,0,'Teacher-only updates never rewrite the plan');assert.equal(current.plan.rules.l1.pattern.join('+'),'2+1');
+const previousPlan=structuredClone(current.plan);
+current.plan.rooms=[{id:'11111111-1111-4111-8111-111111111111',name:'สถานที่เดิม'},{id:'22222222-2222-4222-8222-222222222222',name:'สถานที่ใหม่'}];
+current.plan.rules.l1={...current.plan.rules.l1,roomId:current.plan.rooms[1].id,timePreference:'afternoon'};
+current.plan.rules.unrelated={count:1,pattern:[1],roomId:current.plan.rooms[0].id,morning:false,spread:true};
+const expectedPlan=structuredClone(current.plan);
+await server.saveTeachingAssignments('year',1,'hash',[{lessonId:'l1',teacherId:'t2'}]);
+assert.equal(JSON.stringify(current.plan),JSON.stringify(expectedPlan),'Teacher assignment preserves old/new venue IDs and all unrelated rules');assert.equal(capture.plans.length,0);
+current.plan=previousPlan;
+console.log('PASS: saving a teacher retains all existing and newly added venues, per-lesson venue IDs and session choices');
+const originalLessons=current.lessons,originalRooms=current.classrooms;
+current.classrooms=Array.from({length:6},(_,n)=>({id:'room-'+n,level:'ม.1'}));
+current.lessons=current.classrooms.map((room,n)=>({...originalLessons[0],id:'lesson-'+n,classroomId:room.id}));
+let beforeReads=preparationCalls,beforeUpdates=capture.updates.length;
+await server.saveTeachingAssignments('year',1,'hash',current.lessons.map(lesson=>({lessonId:lesson.id,teacherId:'t2'})));
+assert.equal(capture.updates.length-beforeUpdates,1,'Six classrooms assigned to one teacher use one batch update');
+assert.equal(preparationCalls-beforeReads,2,'Only load the school before validation and after the batch, without import reloads');
+assert.equal(capture.plans.length,0,'A teacher batch must not write the venue catalog or other workloads');
+beforeReads=preparationCalls;beforeUpdates=capture.updates.length;
+await server.saveTeachingAssignments('year',1,'hash',current.lessons.map(lesson=>({lessonId:lesson.id,teacherId:'t1'})));
+assert.equal(capture.updates.length,beforeUpdates);assert.equal(preparationCalls-beforeReads,1,'Unchanged teachers do not trigger writes or a second school load');
+current.slots=[{class_subject_id:'lesson-0'}];
+await assert.rejects(server.saveTeachingAssignments('year',1,'hash',current.lessons.map(lesson=>({lessonId:lesson.id,teacherId:'t2'}))),/มีคาบ/);
+assert.equal(capture.updates.length,beforeUpdates,'A conflict in one room blocks the whole batch before writing');
+current.slots=[];
+await server.saveTeachingAssignments('year',1,'hash',current.lessons.map(lesson=>({lessonId:lesson.id,teacherId:''})));
+assert.equal(capture.updates.length-beforeUpdates,1);assert.equal(capture.updates.at(-1)[1].teacher_id,null,'Clearing a teacher also uses one batch');
+current.lessons=originalLessons;current.classrooms=originalRooms;
+console.log('PASS: six classrooms saved in one teacher update and two school reads; no plan/catalog rewrite; unchanged teachers skip writes; occupied-room rejection precedes every write; batch clear');
 const calls=[];let scoreCount=0,slotCount=0;
 const remover=loadServer({'./session':{getSession:async()=>session},'./supabase':{createServerClient:()=>({from(table){const result=table==='scores'?{count:scoreCount,error:null}:table==='class_schedule_slots'?{count:slotCount,error:null}:{error:null};const builder={select(){return builder},update(payload){calls.push(['update',payload]);return builder},eq(){return builder},in(_column,ids){calls.push(['in',table,ids]);return Promise.resolve(result)},delete(){return{in(_column,ids){calls.push(['delete',ids]);return Promise.resolve({error:null})}}},then(resolve,reject){return Promise.resolve(result).then(resolve,reject)}};return builder}})},'./schedules':{SCHEDULE_EDIT_ROLES:['admin','academic_head']},'./schedule-preparation':{preparation:async()=>current},'./schedule-input':api,'./staff-table':{}});
 await assert.rejects(remover.removeScheduleSubjects('year',1,'stale',['l1']),/ข้อมูลเปลี่ยน/);
@@ -41,5 +69,6 @@ slotCount=2;await assert.rejects(remover.removeScheduleSubjects('year',1,'hash',
 await remover.removeScheduleSubjects('year',1,'hash',['l1']);assert.equal(calls.at(-1)[0],'delete');assert.equal(calls.at(-1)[1][0],'l1');assert.equal(calls.find(call=>call[0]==='update')[1].config.rules.l1,undefined);
 console.log('PASS: teaching assignment rejects stale/foreign/duplicate rows and reuses server curriculum and saved workload');
 const writes=capture.inserts.length+capture.updates.length;session={...session,role:'teacher'};await assert.rejects(server.importScheduleSubjects('year',1,'hash',[row]),/สิทธิ์/);session={...session,role:'admin',mustChangePassword:true};await assert.rejects(server.importScheduleSubjects('year',1,'hash',[row]),/สิทธิ์/);assert.equal(capture.inserts.length+capture.updates.length,writes);
+await assert.rejects(server.saveTeachingAssignments('year',1,'hash',[{lessonId:'l1',teacherId:'t2'}]),/สิทธิ์/);assert.equal(capture.inserts.length+capture.updates.length,writes);
 console.log('PASS: reuse staff, duplicate input names, no account activation, stale/foreign/role/password guard before writes');
 })().catch(error=>{console.error(error);process.exitCode=1});
