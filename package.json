@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs && node scripts/test-substitute-availability.cjs && node scripts/test-schedule-workload.mjs",
+    "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs && node scripts/test-substitute-availability.cjs && node scripts/test-substitute-services.cjs && node scripts/test-schedule-workload.mjs",
     "test:schedule-wizard-button": "node scripts/test-schedule-wizard-button.mjs",
     "test:schedule-print-date": "node scripts/test-schedule-print-date.mjs",
     "test:activity-assignment-ui": "node scripts/test-activity-assignment-ui.mjs",

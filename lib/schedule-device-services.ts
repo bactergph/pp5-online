@@ -148,7 +148,7 @@ export function createDeviceScheduleServices({read,write,onComputing}:Options): 
     fetchScheduleInit:async()=>{
       const bundle=read(),year=deviceYear(bundle)
       selectedYear=year;selectedTerm=bundle.semester
-      return {canEdit:true,role:'admin',homeroomClassroomIds:[],defaultTeacherId:plan().teachers[0]?.id||null,years:[year,...Object.keys(bundle.archives||{})].sort().reverse().map(id=>({id,year_be:Number(id),is_active:id===year,term1_start_date:null,term1_end_date:null,term2_start_date:null,term2_end_date:null})),teachers:devicePreparation(plan()).teachers}
+      return {canEdit:true,role:'admin',homeroomClassroomIds:[],defaultSemester:bundle.semester,defaultTeacherId:plan().teachers[0]?.id||null,years:[year,...Object.keys(bundle.archives||{})].sort().reverse().map(id=>({id,year_be:Number(id),is_active:id===year,term1_start_date:null,term1_end_date:null,term2_start_date:null,term2_end_date:null})),teachers:devicePreparation(plan()).teachers}
     },
     fetchPreparation:async(year,term)=>outcome(async()=>preparation(year,term)),
     fetchScheduleDays:async(year,term=1)=>plan(year,term).days,
@@ -335,7 +335,9 @@ export function createDeviceScheduleServices({read,write,onComputing}:Options): 
     loadSubstituteSlotsForTeacher:async(date,year,teacher,term=1)=>teacherSlots(date,year,teacher,term),
     importSubstituteFromSchedule:(dayId,date,year,teacher,leaveType,term=1)=>outcome(()=>mutate(year,term,async current=>{
       if(dayId!==key(year,term,date))throw Error('วันที่นำเข้าเปลี่ยนแล้ว')
+      if((current.substitutes[date]||[]).some(entry=>entry.substituteTeacherId===teacher))throw Error('ครูที่ลายังถูกกำหนดให้สอนแทน กรุณานำออกก่อน')
       const slots=teacherSlots(date,year,teacher,term),entries=slots.map(slot=>({id:newId(),absentTeacherId:teacher,period:slot.period,subjectId:slot.class_subject_id||'',roomId:slot.classroom_id,subjectLabel:slot.subject_label,roomLabel:slot.room_label,substituteTeacherId:null,leaveType,note:null}))
+      if(!slots.length)throw Error('ครูท่านนี้ไม่มีคาบสอนในวันที่และภาคเรียนที่เลือก กรุณาตรวจวันที่และภาคเรียน')
       await put(year,term,{...current,substitutes:{...current.substitutes,[date]:[...(current.substitutes[date]||[]).filter(row=>row.absentTeacherId!==teacher),...entries]}});return {ok:true,count:slots.length}
     })),
     saveSubstituteDay:(id,expected,rows)=>outcome(async()=>{
@@ -349,6 +351,17 @@ export function createDeviceScheduleServices({read,write,onComputing}:Options): 
       })
     }),
     fetchSubstitutePdfContext:async()=>({...exportContext(),academicHead:plan().document?.academicHeadName||''}),
+    deleteSubstituteEntries:(id,expected,ids)=>outcome(async()=>{
+      const {year,term,date}=dayKey(id)
+      return mutate(year,term,async current=>{
+        const entries=current.substitutes[date]||[],changes=entries.map(entry=>({id:entry.id,substitute_teacher_id:entry.substituteTeacherId,leave_type:entry.leaveType,note:entry.note}))
+        if(deviceDataKey(changes)!==deviceDataKey(expected))throw Error('มีการแก้ไขตารางสอนแทน กรุณาโหลดใหม่ก่อนลบ')
+        if(!ids.length||new Set(ids).size!==ids.length||ids.some(id=>!entries.some(entry=>entry.id===id)))throw Error('ไม่พบรายการสอนแทนที่ต้องการลบ')
+        const substitutes={...current.substitutes,[date]:entries.filter(entry=>!ids.includes(entry.id))}
+        if(!substitutes[date].length)delete substitutes[date]
+        await put(year,term,{...current,substitutes});return {ok:true}
+      })
+    }),
     fetchActivityLevelOptions:async(year,term)=>({levels:[...new Set(plan(year,term).rooms.map(room=>room.label.split('/')[0]))],activities:(plan(year,term).activityCatalog||[]).map(item=>({id:item.id,name:item.label}))}),
     saveActivityLevelSchedule:(year,term,setting,levels,day,period)=>outcome(async()=>{
       const current=plan(year,term),rooms=current.rooms.filter(room=>levels.includes(room.label.split('/')[0])).map(room=>room.id)

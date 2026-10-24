@@ -9,6 +9,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'copyClassSchedule' |
   'createScheduleDraft' |
   'discardScheduleDraft' |
+  'deleteSubstituteEntries' |
   'editTeacherScheduleCell' |
   'fetchActivityLevelOptions' |
   'fetchClassScheduleBundle' |

@@ -4,7 +4,7 @@ import { useScheduleGuard, useScheduleOperations } from './ScheduleServices'
 import { SCHEDULE_PRESENTATION } from './schedule-presentation'
 
 import { Fragment, useEffect, useState, useRef, useCallback } from 'react'
-import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { periodTimeLabel, currentScheduleSemester, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { availableSubstitutes } from '@/lib/substitute-availability'
 import { directorDisplayName } from '@/lib/school-director'
 import { buildSubstitutePdf } from '@/lib/jspdf-substitute'
@@ -51,6 +51,9 @@ const STYLES = `
     background: #fff; color: #334155; font-size: 12px; font-weight: 800; cursor: pointer;
   }
   .sub-btn.primary { border-color: #C49212; background: #C49212; color: #fff; }
+  .schedule-workspace .sub-btn.danger { color:#b42342; border-color:#fecdd3; background:#fff; }
+  .schedule-workspace .sub-group-summary { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+  .sub-loading { padding:12px 16px; border-radius:12px; background:#eff6ff; color:#1d4ed8; font-size:13px; }
   .sub-table-wrap {
     overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
   }
@@ -77,7 +80,7 @@ function todayIso() {
 }
 
 export default function SubstituteScheduleEntry() {
-  const { fetchScheduleInit, fetchPeriodTimes, fetchSubstituteDay, importSubstituteFromSchedule, loadSubstituteSlotsForTeacher, saveSubstituteDay, fetchSubstitutePdfContext } = useScheduleOperations()
+  const { fetchScheduleInit, fetchPeriodTimes, fetchSubstituteDay, importSubstituteFromSchedule, loadSubstituteSlotsForTeacher, saveSubstituteDay, fetchSubstitutePdfContext, deleteSubstituteEntries } = useScheduleOperations()
 
   const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,7 +91,7 @@ export default function SubstituteScheduleEntry() {
   const [years, setYears] = useState<Year[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [selectedYear, setSelectedYear] = useState('')
-  const [term, setTerm] = useState('1')
+  const [term, setTerm] = useState(() => String(currentScheduleSemester()))
   const [date, setDate] = useState(todayIso())
   const blocked = saving || loadingDay || loadedDay !== `${selectedYear}:${term}:${date}`
   const [dayLabel, setDayLabel] = useState('')
@@ -101,6 +104,7 @@ export default function SubstituteScheduleEntry() {
   const [absentTeacherId, setAbsentTeacherId] = useState('')
   const [leaveType, setLeaveType] = useState('ลาป่วย')
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ids:string[]; label:string} | null>(null)
 
   const init = useCallback(async () => {
     try {
@@ -108,6 +112,7 @@ export default function SubstituteScheduleEntry() {
       setPeriodTimes(periods.times)
       setYears(data.years as Year[])
       setTeachers(data.teachers as Teacher[])
+      setTerm(String(data.defaultSemester))
       const active = (data.years as Year[]).find(y => y.is_active) || (data.years as Year[])[0]
       if (active) setSelectedYear(active.id)
       if (data.teachers?.[0]) setAbsentTeacherId(data.teachers[0].id)
@@ -125,16 +130,18 @@ export default function SubstituteScheduleEntry() {
       const data = await fetchSubstituteDay(date, selectedYear, Number(term))
       if (request !== dayRequest.current) return
       setSubstituteDayId(data.day?.id || '')
-      setDayLabel(data.day_label || '')
+      setDayLabel(data.day_label || new Intl.DateTimeFormat('th-TH', {weekday:'long', timeZone:'Asia/Bangkok'}).format(new Date(date+'T12:00:00+07:00')).replace(/^วัน/, ''))
       setEntries(data.entries as SubstituteEntry[])
       setOriginal(data.entries as SubstituteEntry[])
       setBusy(data.busy)
       setDirty(false)
       setLoadedDay(`${selectedYear}:${term}:${date}`)
+      return true
     } catch (e) {
       if (request !== dayRequest.current) return
       setLoadedDay(''); setEntries([]); setSubstituteDayId('')
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
+      return false
     } finally { if (request === dayRequest.current) setLoadingDay(false) }
   }, [date, selectedYear, term,fetchSubstituteDay])
 
@@ -155,11 +162,10 @@ export default function SubstituteScheduleEntry() {
       )
       if (response.error || !response.data) throw new Error(response.error || 'นำเข้าไม่สำเร็จ')
       const result = response.data
-      await loadDay()
-      setAlert({
+      if (await loadDay()) setAlert({
         type: 'success',
         title: 'นำเข้าสำเร็จ',
-        message: `ดึง ${result.count} คาบจากตารางเรียน`,
+        message: `ดึง ${result.count} คาบจากตารางเรียน ภาคเรียนที่ ${term}`,
       })
     } catch (e) {
       setAlert({ type: 'error', title: 'นำเข้าไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
@@ -177,11 +183,24 @@ export default function SubstituteScheduleEntry() {
       if (invalid) throw new Error('ครูสอนแทนมีคาบชนกันหรือเป็นครูที่ลา กรุณาเลือกใหม่')
       const result = await saveSubstituteDay(substituteDayId, changes(original), changes(entries))
       if (result.error) throw new Error(result.error)
-      await loadDay()
-      setAlert({type:'success',title:'บันทึกตารางสอนแทนทั้งหมดแล้ว'})
+      if (await loadDay()) setAlert({type:'success',title:'บันทึกตารางสอนแทนทั้งหมดแล้ว'})
     } catch(e) { setAlert({type:'error',title:'บันทึกไม่สำเร็จ',message:e instanceof Error ? e.message : 'กรุณาลองใหม่'}) }
     finally {setSaving(false)}
   }
+  async function handleDelete() {
+    if (!deleteTarget || blocked || dirty) return
+    const target = deleteTarget
+    setDeleteTarget(null)
+    setSaving(true)
+    try {
+      const result = await deleteSubstituteEntries(substituteDayId, changes(original), target.ids)
+      if (result.error) throw new Error(result.error)
+      if (await loadDay()) setAlert({type:'success', title:'ลบรายการสอนแทนแล้ว', message:`ลบ ${target.ids.length} คาบ`})
+    } catch (e) {
+      setAlert({type:'error', title:'ลบไม่สำเร็จ', message:e instanceof Error ? e.message : 'เกิดข้อผิดพลาด'})
+    } finally { setSaving(false) }
+  }
+
   async function downloadPdf() {
     if (blocked || dirty || !entries.length) return
     setSaving(true)
@@ -260,6 +279,7 @@ export default function SubstituteScheduleEntry() {
 
         <div className="sub-actions">
           <select
+            disabled={blocked}
             value={leaveType}
             onChange={e => setLeaveType(e.target.value)}
             style={{ minHeight: 36, borderRadius: 8, border: '1px solid #CBD5E1', padding: '0 10px', fontWeight: 800 }}
@@ -268,9 +288,13 @@ export default function SubstituteScheduleEntry() {
           </select>
           <button type="button" className="sub-btn" disabled={blocked} onClick={previewSlots}>ดูคาบจากตารางเรียน</button>
           <button type="button" className="sub-btn primary" onClick={handleImport} disabled={blocked || !absentTeacherId}>
-            {saving ? 'กำลังนำเข้า...' : 'นำเข้าจากตารางเรียน'}
+            นำเข้าจากตารางเรียน
           </button>
+          <button type="button" className="sub-btn" disabled={saving || loadingDay || dirty || !selectedYear || !date} onClick={() => void loadDay()}>โหลดข้อมูลใหม่</button>
+          {dirty && <button type="button" className="sub-btn" disabled={saving || loadingDay} onClick={()=>{setEntries(original);setDirty(false);void loadDay()}}>ยกเลิกการแก้ไข</button>}
         </div>
+
+        {(saving || loadingDay) && <p className="sub-loading" role="status">{saving ? 'กำลังบันทึกการเปลี่ยนแปลง…' : 'กำลังโหลดตารางสอนแทน…'}</p>}
 
         {entries.length === 0 ? (
           <div className="schedule-empty">
@@ -286,13 +310,13 @@ export default function SubstituteScheduleEntry() {
                   <th>วิชา</th>
                   <th>ประเภทการลา</th>
                   <th>ครูสอนแทน</th>
-                  <th>หมายเหตุ</th>
+                  <th>หมายเหตุ</th><th>จัดการ</th>
 
                 </tr>
               </thead>
               <tbody>
                 {Array.from(new Set(entries.map(e=>e.absent_teacher_id))).map(absentId => <Fragment key={absentId}>
-                  <tr className="sub-group-head"><td colSpan={7}><div className="sub-group-summary"><span>ครูที่ลา: {teachers.find(t=>t.id===absentId)?.full_name || '—'} · {entries.filter(e=>e.absent_teacher_id===absentId).length} คาบ</span><span className={`sub-status${entries.some(e=>e.absent_teacher_id===absentId && !entryReady(e))?' pending':''}`}>{entries.some(e=>e.absent_teacher_id===absentId && !entryReady(e))?'ยังขาดครูสอนแทน':'กำหนดครบแล้ว'}</span></div></td></tr>
+                  <tr className="sub-group-head"><td colSpan={8}><div className="sub-group-summary"><span>ครูที่ลา: {teachers.find(t=>t.id===absentId)?.full_name || '—'} · {entries.filter(e=>e.absent_teacher_id===absentId).length} คาบ</span><span className={`sub-status${entries.some(e=>e.absent_teacher_id===absentId && !entryReady(e))?' pending':''}`}>{entries.some(e=>e.absent_teacher_id===absentId && !entryReady(e))?'ยังขาดครูสอนแทน':'กำหนดครบแล้ว'}</span><button type="button" className="sub-btn danger" disabled={blocked || dirty} title={dirty ? 'บันทึกการแก้ไขก่อนลบ' : 'ลบทุกคาบของครูที่ลาในวันนี้'} onClick={()=>setDeleteTarget({ids:entries.filter(e=>e.absent_teacher_id===absentId).map(e=>e.id),label:`ทุกคาบของ ${teachers.find(t=>t.id===absentId)?.full_name || 'ครูที่เลือก'}`})}>ลบรายการครูคนนี้</button></div></td></tr>
                   {entries.filter(e=>e.absent_teacher_id===absentId).sort((a,b)=>a.period-b.period).map(entry => (
                   <tr key={entry.id}>
                     <td>คาบ {entry.period}<span className="sub-period-time">{periodTimeLabel(periodTimes,entry.period)}</span></td>
@@ -327,9 +351,10 @@ export default function SubstituteScheduleEntry() {
                         value={entry.note || ''}
                         onChange={e => updateEntry(entry.id, 'note', e.target.value || null)}
                         placeholder="หมายเหตุ"
+                        maxLength={1000}
                       />
                     </td>
-
+                    <td><button type="button" className="sub-btn danger" disabled={blocked || dirty} title={dirty ? 'บันทึกการแก้ไขก่อนลบ' : 'ลบคาบสอนแทนนี้'} onClick={()=>setDeleteTarget({ids:[entry.id],label:`คาบ ${entry.period} · ${entry.room_label || ''} · ${entry.subject_label || ''}`})}>ลบคาบ</button></td>
                   </tr>
                 ))}
                 </Fragment>)}
@@ -341,6 +366,7 @@ export default function SubstituteScheduleEntry() {
           <span>{entries.length} คาบ · พร้อม {entries.length-pendingCount} คาบ · ยังขาด/ต้องแก้ {pendingCount} คาบ{dirty ? ' · มีการแก้ไขที่ยังไม่บันทึก' : ''}</span>
 
           <button className="sub-btn" disabled={blocked || dirty} title={dirty ? 'บันทึกการแก้ไขก่อนออก PDF' : 'ดาวน์โหลดเอกสารจากรายการที่บันทึกแล้ว'} onClick={downloadPdf}>ดาวน์โหลด PDF</button>
+          <button type="button" className="sub-btn danger" disabled={blocked || dirty} title={dirty ? 'บันทึกการแก้ไขก่อนลบ' : 'ลบรายการสอนแทนทั้งหมดในวันที่เลือก'} onClick={()=>setDeleteTarget({ids:entries.map(e=>e.id),label:'ทุกรายการในวันที่เลือก'})}>ลบทั้งหมดของวันนี้</button>
           <button className="sub-btn primary" disabled={blocked} onClick={handleSaveAll}>{saving ? 'กำลังดำเนินการ...' : 'บันทึกทั้งหมด'}</button>
         </div>}
       </div>
@@ -348,6 +374,7 @@ export default function SubstituteScheduleEntry() {
       {alert && (
         <AppAlertModal open type={alert.type} title={alert.title} message={alert.message} onClose={() => setAlert(null)} />
       )}
+      {deleteTarget && <AppAlertModal open type="confirm" title="ลบรายการสอนแทน?" message={`${deleteTarget.label} (${deleteTarget.ids.length} คาบ) ลบเฉพาะรายการสอนแทน ตารางเรียนเดิมยังคงอยู่`} confirmLabel="ยืนยันลบ" cancelLabel="ยกเลิก" onClose={()=>setDeleteTarget(null)} onConfirm={()=>void handleDelete()}/>}
     </>
   )
 }

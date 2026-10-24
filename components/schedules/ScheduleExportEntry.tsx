@@ -79,22 +79,24 @@ const STYLES = `
     border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700;
   }
   .sched-export-search { max-width: 280px; }
-  .sched-export-group { display: grid; gap: 8px; }
+  .sched-export-class-groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr)); gap:10px; align-items:start; max-height:380px; overflow:auto; padding:2px; }
+  .sched-export-group { display: grid; gap: 10px; padding:12px; border:1px solid #dce6f2; border-radius:12px; background:#fbfcfe; min-width:0; }
   .sched-export-group-head { display: flex; align-items: center; gap: 8px; }
   .sched-export-group-head h3 { margin: 0; font-size: 13px; font-weight: 700; color: #52647c; }
   .sched-export-group-head button {
     min-height: 32px; padding: 0 10px; border: 1px solid #d5e0ec; border-radius: 8px;
     background: #fff; color: #174f95; font-size: 12px; font-weight: 700; cursor: pointer;
   }
-  .sched-export-picks { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sched-export-picks { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:8px; min-width:0; }
+  .sched-export-picks.is-teachers { grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr)); }
   .sched-export-picks.is-teachers { max-height: 280px; overflow: auto; align-content: flex-start; }
   .sched-export-picks label {
-    display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 4px 12px;
-    border: 1px solid #d5e0ec; border-radius: 999px; background: #fff;
+    display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; min-width:0; overflow-wrap:anywhere;
+    border: 1px solid #d5e0ec; border-radius: 9px; background: #fff;
     color: #334155; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .sched-export-picks label.is-on { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
-  .sched-export-picks input { accent-color: #1373d9; }
+  .sched-export-picks input { accent-color: #1373d9; width:17px; height:17px; flex:none; margin:0; }
   .sched-export-note { margin: 0; color: #52647c; font-size: 13px; }
   .sched-export-error {
     padding: 12px 14px; border: 1px solid #fecaca; border-radius: 12px;
@@ -498,7 +500,7 @@ export default function ScheduleExportPage() {
               <input className="sched-export-search" value={pickQuery} onChange={e => setPickQuery(e.target.value)} placeholder="ค้นหาชื่อครู" aria-label="ค้นหาชื่อครู" />
             )}
           </div>
-          {exportType === 'class' ? classGroups.map(([level, rooms]) => (
+          {exportType === 'class' ? <div className="sched-export-class-groups">{classGroups.map(([level, rooms]) => (
             <div className="sched-export-group" key={level}>
               <div className="sched-export-group-head">
                 <h3>{level}</h3>
@@ -513,7 +515,7 @@ export default function ScheduleExportPage() {
                 ))}
               </div>
             </div>
-          )) : (
+          ))}</div> : (
             <div className="sched-export-picks is-teachers">
               {visibleTeachers.map(teacher => (
                 <label key={teacher.id} className={teacherIds.includes(teacher.id) ? 'is-on' : undefined}>

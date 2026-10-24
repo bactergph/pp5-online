@@ -1,8 +1,8 @@
 import 'server-only'
-import { lessonTeachers } from '@/lib/schedule-activity-teams'
 import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import * as scheduleOps from '@/lib/schedule-operations'
 import { summarizeScheduleWorkload } from '@/lib/schedule-workload'
+import { substituteTimetableForDay, substituteWeekday } from '@/lib/schedule-substitute'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
@@ -203,12 +203,8 @@ export async function fetchSubstituteDay(date: string, yearId: string, semester 
   const session = await requireScheduleSession()
   if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
   const schedule = await loadSchedule(session.schoolId, yearId, semester)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new Error('วันที่ไม่ถูกต้อง')
+  const dayOfWeek = substituteWeekday(date)
   const db = createServerClient()
-
-  const d = new Date(date + 'T12:00:00')
-  const jsDay = d.getDay()
-  const dayOfWeek = jsDay === 0 ? 7 : jsDay
 
   let dayQuery = db.from('schedule_substitute_days')
     .select('id, date, day_of_week, note')
@@ -254,13 +250,16 @@ export async function fetchSubstituteDay(date: string, yearId: string, semester 
     .order('period')
   if (entriesError) throw new Error(entriesError.message)
 
+  // Recurring blocks only: loadScheduleConstraints also includes substitutes
+  // from every date, including this assignment itself, and would mark it busy.
+  const blocks = await db.from('schedule_teacher_blocks').select('teacher_id,period')
+    .eq('school_id', session.schoolId).eq('academic_year_id', yearId).eq('semester', semester).eq('day_of_week', dayOfWeek)
+  if (blocks.error) throw new Error('โหลดคาบไม่ว่างไม่สำเร็จ: ' + blocks.error.message)
   return {
     day: dayRow,
     day_label: SCHEDULE_DAYS.find(d => d.value === dayRow!.day_of_week)?.label || '',
-    busy: [...(await loadScheduleConstraints(session.schoolId!, yearId, semester)).blocks.filter(b=>b.day===dayOfWeek).map(b=>({teacherId:b.teacherId,period:b.period})), ...schedule.slots.filter(s => s.day_of_week === dayOfWeek).flatMap(s => {
-      const lesson = schedule.lessons.find(l => l.id === lessonKey(s))
-      return lesson ? lessonTeachers(lesson).map(teacherId=>({teacherId,period:s.period})) : []
-    })],
+    busy: [...(blocks.data || []).map(b => ({teacherId:b.teacher_id,period:b.period})),
+      ...substituteTimetableForDay(schedule, dayOfWeek).flatMap(slot => slot.teacherIds.map(teacherId => ({teacherId,period:slot.period})))],
     entries: entries || [],
   }
 }
@@ -273,33 +272,10 @@ export async function loadSubstituteSlotsForTeacher(
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
 
-  const d = new Date(date + 'T12:00:00')
-  const jsDay = d.getDay()
-  const dayOfWeek = jsDay === 0 ? 7 : jsDay
-
-  const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
-  return slots
-    .filter(row => {
-      const cs = Array.isArray(row.class_subjects) ? row.class_subjects[0] : row.class_subjects
-      return cs?.teacher_id === absentTeacherId
-        && row.day_of_week === dayOfWeek
-        && row.class_subject_id
-    })
-    .map(row => {
-      const cs = Array.isArray(row.class_subjects) ? row.class_subjects[0] : row.class_subjects
-      const classroom = Array.isArray(row.classrooms) ? row.classrooms[0] : row.classrooms
-      const subject = cs && (Array.isArray(cs.subjects) ? cs.subjects[0] : cs.subjects)
-      return {
-        period: row.period,
-        class_subject_id: row.activity_id ? null : row.class_subject_id,
-        classroom_id: row.classroom_id,
-        room_label: classroom ? `${classroom.level}/${classroom.room}` : '',
-        subject_label: subject
-          ? `${subject.code || ''} ${subject.short_name || subject.name || ''}`.trim()
-          : '',
-      }
-    })
-    .sort((a, b) => a.period - b.period)
+  const schedule = await loadSchedule(session.schoolId, yearId, semester)
+  return substituteTimetableForDay(schedule, substituteWeekday(date))
+    .filter(slot => slot.teacherIds.includes(absentTeacherId))
+    .map(slot => ({period:slot.period, class_subject_id:slot.class_subject_id, classroom_id:slot.classroom_id, room_label:slot.room_label, subject_label:slot.subject_label}))
 }
 
 export async function saveSubstituteTeacher(
@@ -348,7 +324,7 @@ export async function importSubstituteFromSchedule(
   if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
   const slots = await loadSubstituteSlotsForTeacher(date, yearId, absentTeacherId, semester)
   const db = createServerClient()
-  if (!slots.length) throw new Error('ครูท่านนี้ไม่มีคาบสอนในวันที่เลือก')
+  if (!slots.length) throw new Error('ครูท่านนี้ไม่มีคาบสอนในวันที่และภาคเรียนที่เลือก กรุณาตรวจวันที่และภาคเรียน')
   const { data: day } = await db.from('schedule_substitute_days').select('*').eq('id', substituteDayId).eq('school_id', session.schoolId || '').eq('academic_year_id', yearId).eq('date', date).maybeSingle()
   if (day && (day.semester || 1) !== semester) throw new Error('ภาคเรียนของตารางสอนแทนไม่ตรงกัน')
   if (!day) throw new Error('วันหรือปีการศึกษาของตารางสอนแทนไม่ตรงกัน')
@@ -395,4 +371,14 @@ export async function fetchSubstitutePdfContext() {
   if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
   const context = await fetchScheduleExportContext()
   return { ...context, academicHead: context.school?.academic_head_name || '' }
+}
+
+export async function deleteSubstituteEntries(dayId: string, expected: SubstituteChange[], ids: string[]) {
+  const session = await requireScheduleSession()
+  if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
+  const {error} = await createServerClient().rpc('delete_substitute_entries', {
+    p_school_id: session.schoolId, p_day_id: dayId, p_expected: expected, p_ids: ids,
+  })
+  if (error) throw new Error(error.code === 'PGRST202' ? 'กรุณารันไฟล์ฐานข้อมูล 083_substitute_delete.sql ก่อนลบ' : error.message)
+  return {ok: true}
 }

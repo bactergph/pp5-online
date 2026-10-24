@@ -12,7 +12,7 @@ import {
   SCHEDULE_PERIOD_COUNT,
   SCHEDULE_VIEW_ROLES,
 } from '@/lib/schedules'
-import { activityTimetableTeacherLabel, isActivityLessonId, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { activityTimetableTeacherLabel, isActivityLessonId, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 
 type ScheduleSession = {
   userId: string
@@ -39,11 +39,12 @@ export async function fetchScheduleInit() {
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
 
   const db = createServerClient()
-  const { data: years } = await db.from('academic_years')
+  const { data: years, error: yearsError } = await db.from('academic_years')
     .select('id, year_be, is_active, term1_start_date, term1_end_date, term2_start_date, term2_end_date')
     .eq('school_id', session.schoolId)
     .order('year_be', { ascending: false })
 
+  if (yearsError) throw new Error('โหลดปีการศึกษาไม่สำเร็จ: ' + yearsError.message)
   const activeYearId = (years || []).find(y => y.is_active)?.id || years?.[0]?.id || null
 
   let homeroomClassroomIds: string[] = []
@@ -56,15 +57,17 @@ export async function fetchScheduleInit() {
     homeroomClassroomIds = (homeroomRooms || []).map(r => r.id)
   }
 
-  const { data: teachers } = await db.from('users')
+  const { data: teachers, error: teachersError } = await db.from('users')
     .select('id, prefix, full_name')
     .or('is_active.eq.true,email.like.pending-%')
     .eq('school_id', session.schoolId)
     .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin', 'principal'])
     .order('full_name')
 
+  if (teachersError) throw new Error('โหลดรายชื่อครูไม่สำเร็จ: ' + teachersError.message)
   return {
     canEdit: canEditSchedule(session),
+    defaultSemester: scheduleSemesterForYear(years?.find(y => y.id === activeYearId)),
     years: years || [],
     teachers: teachers || [],
     homeroomClassroomIds,
@@ -424,6 +427,11 @@ export async function saveSubstituteDay(dayId: string, expected: import('./exten
 export async function fetchSubstitutePdfContext() {
   const mod = await import('./extended-actions')
   return mod.fetchSubstitutePdfContext()
+}
+
+export async function deleteSubstituteEntries(dayId: string, expected: import('./extended-actions').SubstituteChange[], ids: string[]) {
+  const mod = await import('./extended-actions')
+  return scheduleResult(() => mod.deleteSubstituteEntries(dayId, expected, ids))
 }
 
 export async function fetchScheduleDays(yearId:string,semester=1) {
