@@ -1,7 +1,8 @@
 import { deviceTeacherLimitMessage, normalizePlan, type FreeWizardPlan } from './schedule-device-free'
+import type {LocalScheduleBundle} from './schedule-device-years'
 import type { FreeSubstituteEntry } from '../components/schedules/FreeSubstituteDesk'
 type Plan = FreeWizardPlan & { substitutes:Record<string,FreeSubstituteEntry[]> }
-export type DeviceBundle = {semester:1|2;terms:{1:Plan;2:Plan}}
+export type DeviceBundle=LocalScheduleBundle
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value)
 const text=(value:unknown)=>typeof value==='string'&&value.length<=5000
 const integer=(value:unknown)=>Number.isInteger(value)
@@ -30,8 +31,25 @@ export function readDeviceBackup(raw:unknown,teacherLimit?:number):DeviceBundle 
     if(rows('timetable').some(row=>!text(row.classroomId)||!text(row.subjectId)||cell(row)||(row.activityId!==undefined&&!text(row.activityId)))||rows('blocks').some(row=>!text(row.teacherId)||cell(row)))return invalid()
     if(rows('activities').some(row=>!text(row.name)||!['joint','separate'].includes(String(row.mode))||!Array.isArray(row.roomIds)||row.roomIds.some(id=>!text(id))||!Array.isArray(row.cells)||row.cells.some(item=>!record(item)||cell(item))||!text(row.teacherId)||!record(row.roomTeachers)||Object.values(row.roomTeachers).some(id=>!text(id))||(row.teacherIds!==undefined&&(!Array.isArray(row.teacherIds)||row.teacherIds.some(id=>!text(id))))||(row.roomTeacherIds!==undefined&&(!record(row.roomTeacherIds)||Object.values(row.roomTeacherIds).some(ids=>!Array.isArray(ids)||ids.some(id=>!text(id)))))||(row.weeklyPeriods!==undefined&&(!integer(row.weeklyPeriods)||Number(row.weeklyPeriods)<1||Number(row.weeklyPeriods)>8))))return invalid()
     if(plan.substitutes!==undefined&&(!record(plan.substitutes)||Object.values(plan.substitutes).some(items=>!Array.isArray(items)||items.some(item=>!record(item)||!text(item.id)||!text(item.absentTeacherId)||!text(item.roomId)||!text(item.subjectId)||!integer(item.period)))))return invalid()
+    if(rows('subjects').some(row=>(row.timePreference!==undefined&&!['any','morning','afternoon'].includes(String(row.timePreference)))||(row.spread!==undefined&&typeof row.spread!=='boolean')||(row.subjectGroup!==undefined&&!text(row.subjectGroup))))return invalid()
+    if(plan.document!==undefined&&(!record(plan.document)||['schoolName','academicYear','printDate','academicHeadName','directorName'].some(key=>!text((plan.document as Record<string,unknown>)[key]))))return invalid()
+    if(plan.reduceGaps!==undefined&&typeof plan.reduceGaps!=='boolean'||plan.maxContinuous!==undefined&&(!integer(plan.maxContinuous)||Number(plan.maxContinuous)<0||Number(plan.maxContinuous)>8))return invalid()
     const normalized=normalizePlan(plan as Partial<FreeWizardPlan>)
     plans.push({...normalized,substitutes:(plan.substitutes||{}) as Record<string,FreeSubstituteEntry[]>})
   }
-  return {semester:data.semester,terms:{1:plans[0],2:plans[1]}}
+  const merge=<T extends {id:string}>(a:T[],b:T[])=>[...new Map([...b,...a].map(item=>[item.id,item])).values()]
+  const teachers=merge(plans[0].teachers,plans[1].teachers),rooms=merge(plans[0].rooms,plans[1].rooms),places=merge(plans[0].places,plans[1].places)
+  const combinedLimit=deviceTeacherLimitMessage(teachers.length,teacherLimit)
+  if(combinedLimit)throw Error(combinedLimit)
+  const archives:NonNullable<LocalScheduleBundle['archives']>={}
+  if(data.year!==undefined&&(typeof data.year!=='string'||!/^2\d{3}$/.test(data.year)))return invalid()
+  if(data.archives!==undefined){
+    if(!record(data.archives)||Object.keys(data.archives).length>30)return invalid()
+    for(const [year,workspace] of Object.entries(data.archives)){
+      if(!/^2\d{3}$/.test(year)||!record(workspace)||workspace.archives!==undefined)return invalid()
+      const restored=readDeviceBackup({format:'jarnsek-device-schedule',version:1,data:workspace},teacherLimit)
+      archives[year]={semester:restored.semester,terms:restored.terms}
+    }
+  }
+  return {year:data.year as string|undefined,archives,semester:data.semester,terms:{1:{...plans[0],teachers,rooms,places},2:{...plans[1],teachers,rooms,places}}}
 }

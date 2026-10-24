@@ -21,7 +21,7 @@ export function devicePreparation(plan: FreeWizardPlan): Preparation {
     }),
     teachers: plan.teachers.map(teacher => ({id:teacher.id,prefix:'',full_name:teacher.name,position:'ครู'})),
     activities: plan.activities.map(activity => ({id:activity.id,label:activity.name,short_label:activity.name,weeklyPeriods:activity.weeklyPeriods ?? (activity.cells.length || 1)})),
-    lessons: snapshot.lessons.map(lesson => ({...lesson, name:lesson.name || '', code:lesson.code || '', subjectId:lesson.subjectId || lesson.id, activity:!!lesson.activity, teacherName:lesson.teacherName || '', roomName:lesson.roomName, pattern:lesson.pattern || Array(lesson.count).fill(1), roomId:lesson.roomId || null, morning:!!lesson.morning, spread:true, source:'กำหนดคาบต่อสัปดาห์บนเครื่องนี้'})),
+    lessons: snapshot.lessons.map(lesson => ({...lesson, name:lesson.name || '', code:lesson.code || '', subjectId:lesson.subjectId || lesson.id, activity:!!lesson.activity, teacherName:lesson.teacherName || '', roomName:lesson.roomName, pattern:lesson.pattern || Array(lesson.count).fill(1), roomId:lesson.roomId || null, morning:!!lesson.morning, spread:lesson.spread ?? true, source:'กำหนดคาบต่อสัปดาห์บนเครื่องนี้'})),
   }
 }
 
@@ -54,5 +54,5 @@ export function deviceDraftView(plan: FreeWizardPlan, draft: DeviceDraft | null,
 }
 
 export function localDraftCells(draft: DeviceDraft) {
-  return draft.rows.filter(row => row.class_subject_id || row.activity_id).map(row => ({classroomId:row.classroom_id,day:row.day_of_week,period:row.period,subjectId:row.class_subject_id || '',activityId:row.activity_id ? (draft.offerings.find(item => item.id === row.activity_id)?.evaluation_setting_id || row.activity_id.slice(0,-(`:${row.classroom_id}`).length)) : undefined,locked:row.locked}))
+  return draft.rows.filter(row => row.class_subject_id || row.activity_id || row.locked).map(row => ({classroomId:row.classroom_id,day:row.day_of_week,period:row.period,subjectId:row.class_subject_id || '',activityId:row.activity_id ? (draft.offerings.find(item => item.id === row.activity_id)?.evaluation_setting_id || row.activity_id.slice(0,-(`:${row.classroom_id}`).length)) : undefined,locked:row.locked}))
 }

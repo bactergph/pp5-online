@@ -232,8 +232,26 @@ const SCHEDULE_MANAGE_MAIN: NavItem = {
 }
 const FREE_SCHEDULE: NavItem = {
   href: '/schedules/device',
-  label: 'จัดตารางฟรี',
+  label: 'จัดตารางสอนฟรี',
   icon: ic(I.calendar),
+  children: [
+    {label:'ดูตาราง',icon:ic(I.calendar),tone:'sky',children:[
+      {href:'/schedules/device/class',label:'ตารางเรียน',icon:ic(I.class)},
+      {href:'/schedules/device/teaching',label:'ตารางสอน',icon:ic(I.pen)},
+    ]},
+    {label:'จัดการตาราง',icon:ic(I.sliders),tone:'indigo',children:[
+      {href:'/schedules/device/manage',label:'จัดการตารางเรียน',icon:ic(I.grid)},
+      {href:'/schedules/device/period-times',label:'เวลาคาบเรียน',icon:ic(I.clock)},
+      {href:'/schedules/device/substitute',label:'ตารางสอนแทน',icon:ic(I.users)},
+    ]},
+    {label:'ตรวจสอบ',icon:ic(I.shield),tone:'violet',children:[
+      {href:'/schedules/device/conflicts',label:'ตรวจความขัดแย้ง',icon:ic(I.shield)},
+    ]},
+    {label:'พิมพ์เอกสาร',icon:ic(I.export),tone:'docs',children:[
+      {href:'/schedules/device/print',label:'พิมพ์ตาราง',icon:ic(I.export)},
+      {href:'/schedules/device/workload',label:'ภาระงานสอน',icon:ic(I.chart)},
+    ]},
+  ],
 }
 const PP5_MAIN: NavItem = {
   href: '/homeroom', label: 'ปพ.5 / ปพ.6', icon: ic(I.book),
@@ -461,7 +479,11 @@ function renderSubmenuLink(
     <Link
       key={`${child.href}::${child.label}`}
       href={childHref}
-      onClick={opts.onClose}
+      prefetch={child.href.startsWith('/schedules/device')?false:undefined}
+      onClick={event=>{
+        if(child.href?.startsWith('/schedules/device')&&opts.pathname.includes('/schedules/device')&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();window.history.pushState(null,'',childHref)}
+        opts.onClose()
+      }}
       data-sidebar-current={opts.isCurrent(child.href) ? 'true' : undefined}
       className={`sidebar-child-link sidebar-submenu-link sidebar-submenu-link--${tone} ${active ? 'is-active' : ''}`}
     >

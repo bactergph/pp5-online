@@ -11,7 +11,7 @@ import WizardPeriodEditor from './WizardPeriodEditor'
 import ActivityTeamEditor from './ActivityTeamEditor'
 import WorkloadEditor, { type WorkloadChange } from './WorkloadEditor'
 import ClassroomLevelEditor from './ClassroomLevelEditor'
-import { savePeriodTimes } from '@/app/schedules/actions'
+import { savePeriodTimes, editTeacherScheduleCell, saveClassScheduleCell, setTeacherAvailabilityBlock, toggleScheduleCellLock } from '@/app/schedules/actions'
 import './schedule-preparation.css'
 import { FiArrowLeft, FiArrowRight, FiCheck, FiZap } from 'react-icons/fi'
 const titles=['วันและเวลา','กำหนดชั้น','กำหนดครู','รายวิชา','กิจกรรม','กำหนดภาระสอน/ล็อกคาบ','ตรวจและจัดตาราง']
@@ -90,7 +90,7 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  {step===1&&<><h2>วันและเวลาคาบเรียน</h2><p>เลือกวันเรียน แล้วปรับเวลาและช่วงพักได้ที่นี่</p><div className="prep-checks">{SCHEDULE_DAYS.map(day=><label key={day.value}><input type="checkbox" checked={data.plan.days.includes(day.value)} onChange={()=>edit(d=>({...d,plan:{...d.plan,days:d.plan.days.includes(day.value)?d.plan.days.filter(v=>v!==day.value):[...d.plan.days,day.value].sort()}}))}/>{day.label}</label>)}</div><WizardPeriodEditor rows={data.periods} configured={data.timesConfigured} dirty={dirty||timeDirty} onSave={()=>void run(save)} onChange={periods=>{setData({...data,periods});setTimeDirty(true);setIssues(null);setDraft(null)}}/></>}
 
  {step===2&&<ClassroomLevelEditor classrooms={data.classrooms} year={yearId} term={semester} locked={dirty||timeDirty} busy={busy} onSaved={reload} onBusy={setBusy}/>}
- {step===6&&<WorkloadEditor classrooms={data.classrooms} lessons={teaching} teachers={data.teachers.filter(t=>eligibleTeachers.includes(t.id))} rules={data.plan.rules} teacherAssignments={teacherAssignments} slots={data.slots} places={data.plan.rooms} blocks={data.blocks} days={data.plan.days} periods={data.periods} year={yearId} term={semester} busy={busy} ready={workloadReady} onCommit={saveWorkload} onRefresh={refreshLocks}/>}
+ {step===6&&<WorkloadEditor classrooms={data.classrooms} lessons={teaching} teachers={data.teachers.filter(t=>eligibleTeachers.includes(t.id))} rules={data.plan.rules} teacherAssignments={teacherAssignments} slots={data.slots} places={data.plan.rooms} blocks={data.blocks} days={data.plan.days} periods={data.periods} year={yearId} term={semester} busy={busy} ready={workloadReady} onCommit={saveWorkload} onRefresh={refreshLocks} operations={{editTeacherScheduleCell,saveClassScheduleCell,setTeacherAvailabilityBlock,toggleScheduleCellLock}}/>}
  {step===5&&<ActivityTeamEditor data={data} year={yearId} term={semester} onSaved={reload} onBusy={setBusy} onDirty={setActivityDirty} blocked={dirty||timeDirty||hasInputDirty}/>}
  {step===7&&<ScheduleReviewStep data={data} rooms={rooms} clear={clear} issues={issues} draft={draft} blocked={hasUnsavedInput} workingLabel={busy?workingLabel:undefined}
  onRooms={next=>{setRooms(next);setIssues(null);setDraft(null)}} onClear={next=>{setClear(next);setIssues(null);setDraft(null)}} onFix={setStep}

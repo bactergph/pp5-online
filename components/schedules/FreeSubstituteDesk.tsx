@@ -44,6 +44,8 @@ export default function FreeSubstituteDesk({
   days,
   periods = DEFAULT_PERIOD_TIMES,
   onSave,
+  reservations=[],
+  onDirty,
 }: {
   teachers: Teacher[]
   rooms: Room[]
@@ -51,16 +53,23 @@ export default function FreeSubstituteDesk({
   timetable: LocalCell[]
   days: Record<string, FreeSubstituteEntry[]>
   periods?: PeriodTimeRow[]
-  onSave: (days: Record<string, FreeSubstituteEntry[]>) => void
+  onSave: (days: Record<string, FreeSubstituteEntry[]>) => void|boolean|Promise<void|boolean>
+  reservations?:{teacherId:string;day:number;period:number}[]
+  onDirty?:(dirty:boolean)=>void
 }) {
   const [date, setDate] = useState(bangkokToday)
-  const [absentId, setAbsentId] = useState(teachers[0]?.id || '')
+  const [chosenAbsent, setAbsentId] = useState(teachers[0]?.id || '')
+  const absentId=teachers.some(teacher=>teacher.id===chosenAbsent)?chosenAbsent:teachers[0]?.id||''
   const [leaveType, setLeaveType] = useState('ลาป่วย')
   const [entries, setEntries] = useState<FreeSubstituteEntry[]>([])
   const [dirty, setDirty] = useState(false)
   const [message, setMessage] = useState('')
+  const [saving,setSaving]=useState(false)
+  const savingRef=useRef(false)
   const savedDays = useRef(days)
-  savedDays.current = days
+  useEffect(()=>{savedDays.current=days},[days])
+  useEffect(()=>{onDirty?.(dirty)},[dirty,onDirty])
+  useEffect(()=>()=>{onDirty?.(false)},[onDirty])
 
   useEffect(() => {
     setEntries(savedDays.current[date] || [])
@@ -68,9 +77,6 @@ export default function FreeSubstituteDesk({
     setMessage('')
   }, [date])
 
-  useEffect(() => {
-    if (!absentId && teachers[0]) setAbsentId(teachers[0].id)
-  }, [absentId, teachers])
 
   const weekday = weekdayOf(date)
   const shaped = entries.map(entry => ({
@@ -83,7 +89,7 @@ export default function FreeSubstituteDesk({
     if (cell.day !== weekday) return []
     const teacherId = subjects.find(subject => subject.id === cell.subjectId)?.teacherId
     return teacherId ? [{ teacherId, period: cell.period }] : []
-  })
+  }).concat(reservations.filter(row=>row.day===weekday).map(({teacherId,period})=>({teacherId,period})))
   const slotsFor = (teacherId: string) => timetable.filter(cell => cell.day === weekday && subjects.find(subject => subject.id === cell.subjectId)?.teacherId === teacherId)
   const choices = (entry: FreeSubstituteEntry) => availableSubstitutes(teachers, busy, shaped, entry)
   const ready = (entry: FreeSubstituteEntry) => !!entry.substituteTeacherId && choices(entry).some(teacher => teacher.id === entry.substituteTeacherId)
@@ -139,6 +145,17 @@ export default function FreeSubstituteDesk({
     setEntries(current => current.map(entry => entry.id === id ? { ...entry, [field]: value } : entry))
   }
 
+  async function save(){
+    if(savingRef.current)return
+    if(entries.some(entry=>entry.substituteTeacherId&&!ready(entry))){setMessage('ครูสอนแทนบางคาบไม่ว่างหรือถูกกำหนดซ้ำ กรุณาเลือกใหม่');return}
+    savingRef.current=true;setSaving(true);setMessage('กำลังบันทึกลงเครื่อง…')
+    try{
+      if(await onSave({...savedDays.current,[date]:entries})===false)throw Error('บันทึกลงเครื่องไม่สำเร็จ')
+      setDirty(false);setMessage('บันทึกตารางสอนแทนไว้บนเครื่องนี้แล้ว')
+    }catch(error){setMessage(error instanceof Error?error.message:'บันทึกไม่สำเร็จ')}
+    finally{savingRef.current=false;setSaving(false)}
+  }
+
   return (
     <div className="free-sub">
       <div className="schedule-head">
@@ -148,7 +165,7 @@ export default function FreeSubstituteDesk({
       <div className="schedule-filters">
         <div className="schedule-field">
           <label>วันที่</label>
-          <input type="date" value={date} onChange={event => setDate(event.target.value)} />
+          <input type="date" disabled={saving} value={date} onChange={event => {if(!dirty||window.confirm('เปลี่ยนวันที่และยกเลิกข้อมูลที่ยังไม่บันทึก?'))setDate(event.target.value)}} />
         </div>
         <div className="schedule-field">
           <label>ครูที่ลา</label>
@@ -227,7 +244,7 @@ export default function FreeSubstituteDesk({
       {entries.length > 0 && (
         <div className="sub-footer">
           <span>{entries.length} คาบ · พร้อม {entries.length - pending} คาบ · ยังขาด/ต้องแก้ {pending} คาบ{dirty ? ' · มีการแก้ไขที่ยังไม่บันทึก' : ''}</span>
-          <button type="button" className="primary" onClick={() => { onSave({ ...days, [date]: entries }); setDirty(false); setMessage('บันทึกตารางสอนแทนไว้บนเครื่องนี้แล้ว') }}>บันทึกบนเครื่องนี้</button>
+          <button type="button" className="primary" disabled={saving} onClick={()=>void save()}>{saving?'กำลังบันทึก…':'บันทึกบนเครื่องนี้'}</button>
         </div>
       )}
     </div>

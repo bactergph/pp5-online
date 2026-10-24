@@ -1,3 +1,5 @@
+import type {FreeSubstituteEntry} from '../components/schedules/FreeSubstituteDesk'
+import type {DeviceDocumentSettings} from './schedule-device-documents'
 import type { ActivityTeam } from './schedule-activity-teams'
 import { emptyPlan } from './schedule-planning'
 import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
@@ -33,11 +35,18 @@ export type FreeSubject = {
   periods: number
   pattern: number[]
   placeId: string | null
+  timePreference?: 'any' | 'morning' | 'afternoon'
+  spread?: boolean
+  subjectGroup?: string
 }
 
 export type FreePlace = { id: string; name: string }
 
 export type FreeWizardPlan = {
+  substitutes?:Record<string,FreeSubstituteEntry[]>
+  document?: DeviceDocumentSettings
+  reduceGaps?:boolean
+  maxContinuous?:number
   teachers: { id: string; name: string }[]
   rooms: { id: string; label: string }[]
   places: FreePlace[]
@@ -107,6 +116,10 @@ export function roomNeed(plan: FreeWizardPlan, roomId: string) {
 export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
   const periods = raw?.periods?.length ? raw.periods : DEFAULT_PERIOD_TIMES
   return {
+    substitutes:raw?.substitutes,
+    document: raw?.document,
+    reduceGaps:raw?.reduceGaps ?? false,
+    maxContinuous:raw?.maxContinuous ?? 0,
     teachers: raw?.teachers || [],
     rooms: raw?.rooms || [],
     places: raw?.places || [],
@@ -117,11 +130,14 @@ export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
       name: subject.name,
       teacherId: subject.teacherId,
       periods: subject.periods,
-      pattern: subject.pattern && subject.pattern.reduce((sum, item) => sum + item, 0) === subject.periods && subject.pattern.every(item => item === 1 || item === 2) ? subject.pattern : patternFor(subject.periods, 0),
+      pattern: subject.pattern && subject.pattern.reduce((sum, item) => sum + item, 0) === subject.periods && subject.pattern.every(item => Number.isInteger(item) && item >= 1 && item <= 8) ? subject.pattern : patternFor(subject.periods, 0),
       placeId: subject.placeId || null,
+      timePreference: ['any','morning','afternoon'].includes(subject.timePreference || '') ? subject.timePreference : 'any',
+      spread: subject.spread ?? true,
+      subjectGroup: subject.subjectGroup || '',
     })),
     timetable: raw?.timetable || [],
-    days: raw?.days?.length ? raw.days : [1, 2, 3, 4, 5],
+    days: raw?.days ?? [1, 2, 3, 4, 5],
     periods,
     blocks: raw?.blocks || [],
     activities: (raw?.activities || []).map(activity => ({
@@ -239,11 +255,14 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
       label: `${room?.label || 'ห้อง'} · ${subject.name}`,
       name: subject.name,
       fullName: subject.name,
+      code: subject.code,
+      subjectGroup: subject.subjectGroup,
       teacherName: teacher?.name || '',
       pattern: subject.pattern,
       roomId: place?.id || null,
       roomName: place?.name || '',
-      spread: true,
+      spread: subject.spread ?? true,
+      timePreference: subject.timePreference || 'any',
     }
   })
   const groups = plan.activities.map(freeActivityGroup)
@@ -259,9 +278,11 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
     hash: 'local',
     plan: {
       ...emptyPlan(),
+      reduceGaps:plan.reduceGaps ?? false,
+      maxContinuous:plan.maxContinuous ?? 0,
       days: plan.days,
       rooms: plan.places.map(place => ({ id: place.id, name: place.name })),
-      rules: Object.fromEntries(lessons.map(lesson => [lesson.id, { count: lesson.count, pattern: lesson.pattern || [1], roomId: lesson.roomId || null, morning: false, spread: true }])),
+      rules: Object.fromEntries(lessons.map(lesson => [lesson.id, { count: lesson.count, pattern: lesson.pattern || [1], roomId: lesson.roomId || null, morning: lesson.timePreference==='morning', timePreference: lesson.timePreference, spread: lesson.spread }])),
       activityGroups: groups,
     },
     periods: plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES,
@@ -269,7 +290,10 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
     classrooms: plan.rooms.filter(room => isTimetableClassroom(room.label.split('/')[0])).map(room => ({ id: room.id, level: room.label, room: 0 })),
     lessons: [...lessons, ...activityLessons],
     slots: plan.timetable.map(cell => ({ classroom_id: cell.classroomId, academic_year_id: 'local', day_of_week: cell.day, period: cell.period, class_subject_id: cell.subjectId || null, activity_id: cell.activityId ? `${cell.activityId}:${cell.classroomId}` : null, note: null, locked: !!cell.locked })),
-    blocks: plan.blocks,
+    blocks: [...plan.blocks,...Object.entries(plan.substitutes||{}).flatMap(([date,entries])=>{
+      const day=new Date(date+'T12:00:00+07:00').getUTCDay()||7
+      return Number.isNaN(Date.parse(date))?[]:entries.filter(entry=>entry.substituteTeacherId).map(entry=>({teacherId:entry.substituteTeacherId!,day,period:entry.period}))
+    })],
     activities: plan.activities.map(activity => ({ id: activity.id, label: activity.name })),
     teachers: plan.teachers.map(teacher => ({ id: teacher.id, full_name: teacher.name })),
   }

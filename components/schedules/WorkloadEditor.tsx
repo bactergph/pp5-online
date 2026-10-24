@@ -4,7 +4,6 @@ import Swal from 'sweetalert2'
 import type { Preparation } from '@/lib/schedule-preparation'
 import type { LessonRule } from '@/lib/schedule-planning'
 import type { ScheduleLesson, ScheduleSlot } from '@/lib/schedule-store'
-import { editTeacherScheduleCell, saveClassScheduleCell, setTeacherAvailabilityBlock, toggleScheduleCellLock } from '@/app/schedules/actions'
 import { SUBJECT_GROUPS } from '@/lib/schedule-input'
 import type { PeriodTimeRow } from '@/lib/schedule-helpers'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -19,6 +18,11 @@ export type WorkloadChange = {
   assignments: { lessonId: string; teacherId: string }[]
   rules?: { lessonId: string; value: LessonRule }[]
   places?: Place[]
+}
+type OnlineActions = typeof import('@/app/schedules/actions')
+export type WorkloadOperations = {
+  [K in 'editTeacherScheduleCell' | 'saveClassScheduleCell' | 'setTeacherAvailabilityBlock' | 'toggleScheduleCellLock']:
+    (...args: Parameters<OnlineActions[K]>) => Promise<{error?:string|null}>
 }
 type Draft = { id: string; teacherId: string; count: number; pattern: number[]; roomId: string | null; spread: boolean; morning: boolean; timePreference?: LessonRule['timePreference'] }
 type CodeSetting = { placeId: string; time: 'any' | 'morning' | 'afternoon'; pattern: 'single' | 'double' }
@@ -44,7 +48,7 @@ function numberRange(values: number[]) {
   return min === max ? number(min) : `${number(min)}–${number(max)}`
 }
 
-export default function WorkloadEditor({ classrooms, lessons, teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh }: {
+export default function WorkloadEditor({ classrooms, lessons, teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh, operations }: {
   classrooms: Classroom[]
   lessons: ScheduleLesson[]
   teachers: Teacher[]
@@ -61,7 +65,12 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   ready: boolean
   onCommit: (change: WorkloadChange) => Promise<void>
   onRefresh: () => Promise<void>
+  operations?: WorkloadOperations
 }) {
+  const disconnected = async ():Promise<never> => {throw Error('ไม่พบตัวบันทึกคาบ กรุณาโหลดหน้าใหม่')}
+  const {editTeacherScheduleCell,saveClassScheduleCell,setTeacherAvailabilityBlock,toggleScheduleCellLock}=operations||{
+    editTeacherScheduleCell:disconnected,saveClassScheduleCell:disconnected,setTeacherAvailabilityBlock:disconnected,toggleScheduleCellLock:disconnected,
+  }
   const dialog = useRef<HTMLDialogElement>(null), addDialog = useRef<HTMLDialogElement>(null), codeDialog = useRef<HTMLDialogElement>(null), lockDialog = useRef<HTMLDialogElement>(null)
   const codeOptionsDialog = useRef<HTMLDialogElement>(null), codeSaveButton = useRef<HTMLButtonElement>(null)
   const codePlaceDialog = useRef<HTMLDialogElement>(null), codeAddPlaceButton = useRef<HTMLButtonElement>(null)

@@ -39,6 +39,7 @@ export type DeviceLesson = {
   fixedOnly?: boolean
   preferMorning?: boolean
   morning?: boolean
+  timePreference?: 'any' | 'morning' | 'afternoon'
 }
 export type DeviceSnapshot = {
   hash: string
