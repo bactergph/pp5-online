@@ -4,8 +4,6 @@ import { useFormStatus } from 'react-dom'
 import Link from 'next/link'
 import { logout } from '@/lib/actions/auth'
 import { withSchoolPrefix } from '@/lib/school-path'
-import { MembershipBadge } from './MembershipUI'
-import type { Membership } from '@/lib/membership'
 
 type Props = {
   title: string
@@ -15,7 +13,6 @@ type Props = {
   sidebarOpen?: boolean
   schoolCode?: string | null
   onMenuClick: () => void
-  membership?: Membership | null
 }
 
 function LogoutButton() {
@@ -30,7 +27,7 @@ function LogoutButton() {
   )
 }
 
-export default function Navbar({ title, userFullName, userRole, schoolCode, schoolName, sidebarOpen, onMenuClick, membership }: Props) {
+export default function Navbar({ title, userFullName, userRole, schoolCode, schoolName, sidebarOpen, onMenuClick }: Props) {
   const userButton = useRef<HTMLButtonElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const profileHref = schoolCode && userRole !== 'district'
@@ -58,7 +55,6 @@ export default function Navbar({ title, userFullName, userRole, schoolCode, scho
 
       {/* User */}
       <div className="navbar-user">
-        {membership && <MembershipBadge membership={membership} />}
         <button
           ref={userButton}
           onClick={() => setMenuOpen(!menuOpen)}

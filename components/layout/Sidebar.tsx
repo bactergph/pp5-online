@@ -8,7 +8,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { filterSchoolMenu, type SchoolEducationType } from '@/lib/school-education-type'
 import { membershipAllows, type Membership } from '@/lib/membership'
-import { MembershipAd, type MembershipAdData } from './MembershipUI'
+import { MembershipAd, MembershipBadge, type MembershipAdData } from './MembershipUI'
 
 type Child = { href?: string; label: string; icon?: React.ReactNode; children?: Child[]; tone?: SidebarTone }
 type NavItem = { href: string; label: string; icon: React.ReactNode; children?: Child[] }
@@ -749,6 +749,7 @@ export default function Sidebar({
           <div className="sidebar-user-role">
             {getRoleLabel(userRole, isActingDirector)}{isHomeroom ? ' · ครูประจำชั้น' : ''}
           </div>
+          {membership && <MembershipBadge membership={membership} />}
         </div>
       </div>
 

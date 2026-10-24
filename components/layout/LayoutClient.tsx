@@ -80,8 +80,14 @@ function LayoutClientInner({
   const packageName = membership?.subscribedPackage || (membership ? membershipPackage(membership) : null)
   const effectiveMembership = membership && packageName ? membershipFromRow({membership_kind:packageName==='school'?'school':'individual',member_plan:packageName==='school'?null:packageName,membership_started_on:membership.startsOn,membership_expires_on:membership.expiresOn},today) : null
   const freeAccess = !!effectiveMembership && isFreeMembership(effectiveMembership)
+  const upgradeRequested = searchParams.get('upgrade') === '1'
   useEffect(()=>{const timer=window.setInterval(()=>setToday(membershipToday()),60000);return()=>window.clearInterval(timer)},[])
-  useEffect(()=>{if(freeAccess && searchParams.get('upgrade')==='1')void Promise.resolve().then(()=>setUpgrade('ฟังก์ชันที่เลือก'))},[freeAccess,searchParams])
+  useEffect(() => {
+    if (!freeAccess || !upgradeRequested) return
+    let active = true
+    void Promise.resolve().then(() => { if (active) setUpgrade('ฟังก์ชันที่เลือก') })
+    return () => { active = false }
+  }, [freeAccess, upgradeRequested])
   const pageTitle = titleFromPath(pathname, title)
   // onboarding wizard: ไม่โชว์ sidebar/navbar — โหลดเต็มจอเลยหลังเลือกโรงเรียน
   const onSchoolSettings = pathname === '/settings/school' || pathname.endsWith('/settings/school')
@@ -92,6 +98,17 @@ function LayoutClientInner({
     || searchParams.get('onboarding') === '1'
     || (onSchoolSettings && userRole === 'admin' && !hasSchool)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  function closeUpgrade() {
+    // Consume the redirect prompt so refreshes and later renders stay in Free.
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('upgrade') === '1') {
+      url.searchParams.delete('upgrade')
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+    }
+    setUpgrade('')
+    setSidebarOpen(false)
+  }
 
   useEffect(() => {
     if (chromeless || !sidebarOpen) return
@@ -146,7 +163,6 @@ function LayoutClientInner({
       )}
 
       <Navbar
-        membership={effectiveMembership}
         title={pageTitle}
         userRole={userRole}
         userFullName={userFullName}
@@ -162,7 +178,7 @@ function LayoutClientInner({
           {effectiveMembership&&isFreeMembership(effectiveMembership)&&pathname.includes('/schedules/device')&&membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-mobile"/>}
         </div>
       </main>
-      <MembershipUpgradeDialog open={!!upgrade} feature={upgrade} membership={effectiveMembership} onClose={()=>setUpgrade('')}/>
+      <MembershipUpgradeDialog open={!!upgrade} feature={upgrade} membership={effectiveMembership} onClose={closeUpgrade}/>
     </div>
   )
 }
