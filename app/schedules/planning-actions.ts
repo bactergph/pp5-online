@@ -15,6 +15,7 @@ export async function fetchScheduleActivityCatalog(){return scheduleResult(()=>p
 export async function saveScheduleActivityName(id:string|null,label:string,shortLabel:string,weeklyPeriods=1){return scheduleResult(()=>planning.saveActivityName(id,label,shortLabel,weeklyPeriods))}
 export async function removeScheduleActivityName(id:string){return scheduleResult(()=>planning.removeActivityName(id))}
 export async function savePreparation(year:string,term:number,hash:string,plan:SchedulePlan){return scheduleResult(()=>planning.savePlan(year,term,hash,plan))}
+export async function saveSchedulePlaces(year:string,term:number,hash:string,change:import('@/lib/schedule-places').SchedulePlaceChange){return scheduleResult(()=>planning.savePlaces(year,term,hash,change))}
 export async function checkPreparation(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.preflight(year,term,rooms,clear).then(r=>r.issues))}
 export async function createScheduleDraft(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.generate(year,term,rooms,clear))}
 export async function createActivityDraft(year:string,term:number,setting:string,rooms:string[],cells:{day:number;period:number}[],remove:boolean){return scheduleResult(()=>planning.activityDraft(year,term,setting,rooms,cells,remove))}

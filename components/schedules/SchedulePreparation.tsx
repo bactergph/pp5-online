@@ -1,7 +1,7 @@
 'use client'
+import { useScheduleGuard, useScheduleOperations } from './ScheduleServices'
 import { useEffect, useState, useRef } from 'react'
 import Swal from 'sweetalert2'
-import { fetchPreparation,saveScheduleTeachingAssignments,savePreparation,checkPreparation,createScheduleDraft,confirmScheduleDraft,discardScheduleDraft } from '@/app/schedules/planning-actions'
 import type { Preparation } from '@/lib/schedule-preparation'
 import type { LessonRule,PlanningIssue } from '@/lib/schedule-planning'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -11,13 +11,14 @@ import WizardPeriodEditor from './WizardPeriodEditor'
 import ActivityTeamEditor from './ActivityTeamEditor'
 import WorkloadEditor, { type WorkloadChange } from './WorkloadEditor'
 import ClassroomLevelEditor from './ClassroomLevelEditor'
-import { savePeriodTimes, editTeacherScheduleCell, saveClassScheduleCell, setTeacherAvailabilityBlock, toggleScheduleCellLock } from '@/app/schedules/actions'
 import './schedule-preparation.css'
 import { FiArrowLeft, FiArrowRight, FiCheck, FiZap } from 'react-icons/fi'
 const titles=['วันและเวลา','กำหนดชั้น','กำหนดครู','รายวิชา','กิจกรรม','กำหนดภาระสอน/ล็อกคาบ','ตรวจและจัดตาราง']
 const descriptions=['ตั้งวันเรียนและตรวจช่วงพัก','เลือกชั้นที่เปิดสอน จำนวนห้อง และชื่อห้อง','เลือกครูหรือวางรายชื่อจาก Excel','เตรียมรายวิชาแต่ละห้อง','กำหนดกิจกรรม ชั้น/ห้อง และทีมครู','กำหนดครู คาบต่อสัปดาห์ และล็อกคาบที่ไม่ให้จัดตารางย้าย','ตรวจข้อขัดแย้งและสร้างฉบับร่าง']
 const alert=Swal.mixin({confirmButtonColor:'#245bdb',cancelButtonText:'ยกเลิก',confirmButtonText:'ยืนยัน',reverseButtons:true})
 export default function SchedulePreparation({yearId,semester,initialRooms,initialStep=1,onChanged,onUnsavedChange,onBusyChange}:{yearId:string;semester:number;initialRooms?:string[];initialStep?:number;onChanged:()=>void;onUnsavedChange?:(value:boolean)=>void;onBusyChange?:(value:boolean)=>void}){
+  const { fetchPreparation, saveScheduleTeachingAssignments, savePreparation, checkPreparation, createScheduleDraft, confirmScheduleDraft, discardScheduleDraft, savePeriodTimes, editTeacherScheduleCell, saveClassScheduleCell, setTeacherAvailabilityBlock, toggleScheduleCellLock } = useScheduleOperations()
+
  const [data,setData]=useState<Preparation|null>(null),[step,setStep]=useState(initialStep),[error,setError]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[message,setMessage]=useState('')
  const [rooms,setRooms]=useState<string[]>(initialRooms||[]),[clear,setClear]=useState(false),[issues,setIssues]=useState<PlanningIssue[]|null>(null),[draft,setDraft]=useState<ScheduleDraftView|null>(null)
  const [teacherAssignments,setTeacherAssignments]=useState<Record<string,string>>({})
@@ -28,9 +29,10 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  const [activityDirty,setActivityDirty]=useState(false)
  const hasInputDirty=inputDirty.teachers||inputDirty.subjects
  const hasUnsavedInput=hasInputDirty||activityDirty
+ useScheduleGuard(dirty||timeDirty||hasUnsavedInput||!!draft?.id,busy)
  useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false)},[busy,onBusyChange])
  useEffect(()=>{onUnsavedChange?.(dirty||timeDirty||busy||hasUnsavedInput||!!draft?.id);const guard=(e:BeforeUnloadEvent)=>{if(dirty||timeDirty||busy||hasUnsavedInput||draft?.id){e.preventDefault();e.returnValue=''}};window.addEventListener('beforeunload',guard);return()=>{window.removeEventListener('beforeunload',guard);onUnsavedChange?.(false)}},[dirty,timeDirty,busy,hasUnsavedInput,draft?.id,onUnsavedChange])
- useEffect(()=>{let active=true;fetchPreparation(yearId,semester).then(r=>{if(!active)return;if(r.error)setError(r.error);else if(r.data){setData(r.data);setRooms(initialRooms?.length?initialRooms.filter(id=>r.data!.classrooms.some(c=>c.id===id)):r.data.classrooms.map(c=>c.id))}}).catch(()=>{if(active)setError('โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่')});return()=>{active=false}},[yearId,semester,initialRooms])
+ useEffect(()=>{let active=true;fetchPreparation(yearId,semester).then(r=>{if(!active)return;if(r.error)setError(r.error);else if(r.data){setData(r.data);setRooms(initialRooms?.length?initialRooms.filter(id=>r.data!.classrooms.some(c=>c.id===id)):r.data.classrooms.map(c=>c.id))}}).catch(()=>{if(active)setError('โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่')});return()=>{active=false}},[yearId,semester,initialRooms,fetchPreparation])
  async function run(work:()=>Promise<void>,label='กำลังบันทึก กรุณารอ…'){if(runLock.current)return;runLock.current=true;setWorkingLabel(label);setBusy(true);setError('');setMessage('');try{await work()}catch(e){setError(e instanceof Error?e.message:'ดำเนินการไม่สำเร็จ')}finally{runLock.current=false;setBusy(false)}}
  function edit(update:(d:Preparation)=>Preparation){setData(current=>current?update(current):current);setDirty(true);setIssues(null);setDraft(null)}
  async function save(){if(!data)return;let hash=data.hash

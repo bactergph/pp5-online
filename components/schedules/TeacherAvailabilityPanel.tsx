@@ -1,15 +1,15 @@
 'use client'
-import { fetchScheduleDays } from '@/app/schedules/actions'
-
+import { useScheduleOperations } from './ScheduleServices'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import {useCallback, useEffect, useRef, useState} from 'react'
-import {fetchTeacherAvailability, setTeacherAvailabilityBlock, editTeacherScheduleCell, toggleScheduleCellLock, clearTeacherSchedule} from '@/app/schedules/actions'
 import {type PeriodTimeRow} from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
 
-type Availability = Awaited<ReturnType<typeof fetchTeacherAvailability>>
+type Availability = Awaited<ReturnType<import('./ScheduleServices').ScheduleOperations['fetchTeacherAvailability']>>
 export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded,onChanged}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean;onChanged?:()=>Promise<void>}) {
+  const { fetchScheduleDays, fetchTeacherAvailability, setTeacherAvailabilityBlock, editTeacherScheduleCell, toggleScheduleCellLock, clearTeacherSchedule } = useScheduleOperations()
+
   const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
   const [data,setData] = useState<Availability|null>(null)
   const [teacher,setTeacher] = useState('')
@@ -35,14 +35,14 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     }catch(e){await load(true);setError(e instanceof Error?e.message:'ล้างไม่สำเร็จ')}
     finally{setClearing(false)}
   }
-  useEffect(()=>{if(!yearId)return;let active=true;fetchScheduleDays(yearId,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[yearId,semester])
+  useEffect(()=>{if(!yearId)return;let active=true;fetchScheduleDays(yearId,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[yearId,semester,fetchScheduleDays])
   const request = useRef(0)
   const load = useCallback(async(keepSelection=false)=>{
     const id=++request.current
     if(!keepSelection){setData(null);setError('');setNotice('');setEditing(null)}
     try {const next=await fetchTeacherAvailability(yearId,semester);if(id!==request.current)return;setData(next);setTeacher(t=>fixedTeacher|| (next.teachers.some(x=>x.id===t)?t:next.teachers[0]?.id||''))}
     catch(e){if(id===request.current)setError(e instanceof Error?e.message:'โหลดไม่สำเร็จ')}
-  },[yearId,semester,fixedTeacher])
+  },[yearId,semester,fixedTeacher,fetchTeacherAvailability])
   useEffect(()=>{let active=true;const counter=request;void Promise.resolve().then(()=>{if(active)void load(true)});return()=>{active=false;counter.current++}},[load,refreshToken])
   useEffect(()=>{
     if(pending.length||clearing)return

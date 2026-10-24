@@ -114,7 +114,7 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
     const group=lesson.activity?plan?.activityGroups?.find(g=>g.settingId===lesson.subjectId&&g.roomIds.includes(lesson.classroomId)):undefined
     if(group){lesson.teacherIds=activityTeachers(group,lesson.classroomId);lesson.teacherId=null;lesson.teacherName=lesson.teacherIds.map(id=>names.get(id)||'').join(', ');lesson.activityGroupId=group.mode==='joint'?group.id:undefined;lesson.count=group.weeklyPeriods;lesson.selectable=false}
     const rule=plan?.rules?.[lesson.id]
-    if(rule){lesson.count=rule.count;lesson.roomName=plan?.rooms?.find(r=>r.id===rule.roomId)?.name||lesson.roomName}
+    if(rule){lesson.count=rule.count;lesson.roomName=plan?.rooms?.find(r=>r.id===rule.roomId)?.name||''}
   }
   const otherTerm = semester === 1 ? 2 : 1
   const otherPlan = await db.from('schedule_plans').select('config').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',otherTerm).maybeSingle()

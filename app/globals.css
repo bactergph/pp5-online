@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Generated browser fixtures and exported documents are not application UI sources. */
+@source not "../tmp";
+@source not "../output";
 
 /* ============================================================
    Design Tokens

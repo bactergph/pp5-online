@@ -8,6 +8,7 @@ import { loadSchedule, loadScheduleConstraints, lessonKey, lessonColumns, type S
 import { DEFAULT_PERIOD_TIMES, normalizePeriodTimes, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
 import { emptyPlan, validatePlan, checkPlanning, solvePlannedSchedule, lessonPrefersMorning, type SchedulePlan } from './schedule-planning'
 import { verifyCompleteSchedule } from './schedule-verification'
+import { applySchedulePlaceChange, type SchedulePlaceChange } from './schedule-places'
 
 async function actor(){const s=await getSession();if(!s?.schoolId||s.mustChangePassword||!SCHEDULE_EDIT_ROLES.includes(s.role as typeof SCHEDULE_EDIT_ROLES[number]))throw Error('ไม่มีสิทธิ์จัดตารางเรียน');return {...s,schoolId:s.schoolId}}
 function fail(error:{message:string;code?:string}|null){if(error)throw Error(['42P01','PGRST202','PGRST205'].includes(error.code||'')?'กรุณาติดตั้ง migration 063_schedule_planning_drafts.sql ในสภาพแวดล้อมทดสอบก่อนใช้ขั้นเตรียมและฉบับร่าง':'ดำเนินการไม่สำเร็จ: '+error.message)}
@@ -29,7 +30,7 @@ export async function preparation(year:string,term:number){
  const lessons=data.lessons.map(l=>{
   const title=roomTitle.get(l.classroomId)
   const label=title&&l.label.includes(' · ')?`${title} · ${l.label.split(' · ').slice(1).join(' · ')}`:l.label
-  return {...l,label,...plan.rules[l.id],spread:plan.rules[l.id]?.spread??true,roomName:plan.rooms.find(r=>r.id===plan.rules[l.id]?.roomId)?.name||l.roomName,source:plan.rules[l.id]?'กำหนดภาระสอนสำหรับภาคเรียนนี้':`${l.sourceHours||0} ชั่วโมงเทียบรายปี ÷ 40 สัปดาห์`}
+  return {...l,label,...plan.rules[l.id],spread:plan.rules[l.id]?.spread??true,roomName:plan.rules[l.id]?(plan.rooms.find(r=>r.id===plan.rules[l.id].roomId)?.name||''):l.roomName,source:plan.rules[l.id]?'กำหนดภาระสอนสำหรับภาคเรียนนี้':`${l.sourceHours||0} ชั่วโมงเทียบรายปี ÷ 40 สัปดาห์`}
  })
  // Keep all existing slots/lessons for outside-scope teacher and venue conflicts,
  // but only offer non-kindergarten classrooms for import, activities and generation.
@@ -100,6 +101,13 @@ export async function removeActivityName(id:string){
  const removed=await db.from('evaluation_settings').update({is_active:false,updated_at:new Date().toISOString()}).eq('id',id).eq('school_id',session.schoolId).eq('kind','activities')
  fail(removed.error)
  return activityCatalog()
+}
+export async function savePlaces(year:string,term:number,hash:string,change:SchedulePlaceChange){
+ const s=await actor(),current=await preparation(year,term)
+ if(current.hash!==hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
+ const plan=applySchedulePlaceChange(current,change)
+ const r=await createServerClient().rpc('save_schedule_plan',{p_school:s.schoolId,p_year:year,p_term:term,p_hash:hash,p_config:plan});fail(r.error)
+ return preparation(year,term)
 }
 export async function savePlan(year:string,term:number,hash:string,plan:SchedulePlan){
  const s=await actor(),current=await preparation(year,term);validatePlan(plan,current.lessons.filter(l=>!l.activity).map(l=>l.id))

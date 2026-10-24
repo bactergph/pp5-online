@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
-import { saveTimetableClassrooms } from '@/app/schedules/planning-actions'
+import { useScheduleOperations, useScheduleServices } from './ScheduleServices'
+import { useMemo, useState } from 'react'
 import { SCHOOL_LEVEL_GROUPS } from '@/lib/school-education-type'
 import { isTimetableClassroom } from '@/lib/schedules'
 
@@ -30,13 +30,17 @@ export default function ClassroomLevelEditor({ classrooms, year, term, locked, b
   onSaved: () => Promise<void>
   onBusy: (value: boolean) => void
 }) {
-  const levels = useMemo(() => timetableLevels(classrooms), [classrooms])
+  const { saveTimetableClassrooms } = useScheduleOperations()
+  const { local } = useScheduleServices()
+
+  const levels = useMemo(() => local ? [...new Set([...SCHOOL_LEVEL_GROUPS.primary,...SCHOOL_LEVEL_GROUPS.secondary].flatMap(group=>group.levels).filter(isTimetableClassroom))] : timetableLevels(classrooms), [classrooms,local])
   const saved = useMemo(() => namesByLevel(classrooms, levels), [classrooms, levels])
   const signature = JSON.stringify(saved)
-  const [draft, setDraft] = useState<Record<string, string[]>>(saved)
+  const [edited, setEdited] = useState({source:signature,values:saved})
+  const draft = edited.source === signature ? edited.values : saved
+  const setDraft = (change:(current:Record<string,string[]>)=>Record<string,string[]>) => setEdited(current=>({source:signature,values:change(current.source===signature?current.values:saved)}))
   const [active, setActive] = useState(levels.find(level => saved[level]?.length) || levels[0] || '')
   const [error, setError] = useState('')
-  useEffect(() => { setDraft(saved) }, [signature, saved])
   const names = draft[active] || []
   const dirty = JSON.stringify(draft) !== signature
 

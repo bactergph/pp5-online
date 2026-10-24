@@ -1,9 +1,7 @@
 'use client'
-import { fetchScheduleDays } from '@/app/schedules/actions'
-
+import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { fetchPeriodTimes, fetchScheduleInit, fetchTeachingScheduleGrid } from '@/app/schedules/actions'
+import Link from './ScheduleLink'
 import { scheduleSemesterForYear, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import AppAlertModal from '@/components/AppAlertModal'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
@@ -47,6 +45,8 @@ const STYLES = `
 `
 
 export default function TeachingScheduleEntry() {
+  const { fetchScheduleDays, fetchPeriodTimes, fetchScheduleInit, fetchTeachingScheduleGrid } = useScheduleOperations()
+
   const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
   const [loading, setLoading] = useState(true)
   const [years, setYears] = useState<Year[]>([])
@@ -68,7 +68,7 @@ export default function TeachingScheduleEntry() {
 
   const selectedYearObj = years.find(y => y.id === selectedYear)
 
-  async function init() {
+  const init = useCallback(async () => {
     try {
       const [data, periodData] = await Promise.all([
         fetchScheduleInit(),
@@ -87,7 +87,7 @@ export default function TeachingScheduleEntry() {
     } finally {
       setLoading(false)
     }
-  }
+  },[fetchScheduleInit,fetchPeriodTimes])
 
   const loadGrid = useCallback(async () => {
     const request = ++requestId.current
@@ -100,10 +100,10 @@ export default function TeachingScheduleEntry() {
       setCells({})
       setAlert({ type: 'error', title: 'โหลดตารางไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     }
-  }, [selectedTeacher, selectedYear, semester])
+  }, [selectedTeacher, selectedYear, semester,fetchTeachingScheduleGrid])
 
-  useEffect(()=>{if(!selectedYear)return;let active=true;fetchScheduleDays(selectedYear,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[selectedYear,semester])
-  useEffect(() => { void Promise.resolve().then(init) }, [])
+  useEffect(()=>{if(!selectedYear)return;let active=true;fetchScheduleDays(selectedYear,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[selectedYear,semester,fetchScheduleDays])
+  useEffect(() => { void Promise.resolve().then(init) }, [init])
 
   useEffect(() => {
     if (!selectedYear || !selectedTeacher) return

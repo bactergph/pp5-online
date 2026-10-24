@@ -1,8 +1,8 @@
 'use client'
+import { useScheduleOperations } from './ScheduleServices'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FiDownload, FiRefreshCw, FiSearch, FiAlertCircle } from 'react-icons/fi'
-import { fetchScheduleExportContext, fetchScheduleInit, fetchScheduleWorkload } from '@/app/schedules/actions'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildWorkloadPdfBlob } from '@/lib/jspdf-schedules'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
@@ -14,6 +14,8 @@ import './schedule-workload.css'
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 
 export default function ScheduleWorkloadEntry() {
+  const { fetchScheduleExportContext, fetchScheduleInit, fetchScheduleWorkload } = useScheduleOperations()
+
   const [initLoading, setInitLoading] = useState(true)
   const [initError, setInitError] = useState('')
   const [initAttempt, setInitAttempt] = useState(0)
@@ -47,7 +49,7 @@ export default function ScheduleWorkloadEntry() {
       } finally { if (!cancelled) setInitLoading(false) }
     })
     return () => { cancelled = true }
-  }, [initAttempt])
+  }, [initAttempt,fetchScheduleInit])
 
   const loadReport = useCallback(async () => {
     if (!selectedYear) return
@@ -59,7 +61,7 @@ export default function ScheduleWorkloadEntry() {
     } catch (error) {
       if (request === requestId.current) setReportError({ key, message: error instanceof Error ? error.message : 'โหลดภาระงานสอนไม่สำเร็จ' })
     } finally { if (request === requestId.current) setReportLoading(false) }
-  }, [selectedYear, semester])
+  }, [selectedYear, semester,fetchScheduleWorkload])
 
   useEffect(() => {
     const counter = requestId

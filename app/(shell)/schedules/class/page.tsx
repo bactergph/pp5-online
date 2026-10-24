@@ -1,5 +1,6 @@
+import OnlineScheduleProvider from '@/components/schedules/OnlineScheduleProvider'
 import ClassScheduleEntry from '@/components/schedules/ClassScheduleEntry'
 
 export default function ClassSchedulePage() {
-  return <ClassScheduleEntry mode="view" />
+  return <OnlineScheduleProvider><ClassScheduleEntry mode="view" /></OnlineScheduleProvider>
 }

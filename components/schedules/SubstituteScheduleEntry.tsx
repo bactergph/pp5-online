@@ -1,17 +1,9 @@
 'use client'
+import { useScheduleGuard, useScheduleOperations } from './ScheduleServices'
 
 import { SCHEDULE_PRESENTATION } from './schedule-presentation'
 
 import { Fragment, useEffect, useState, useRef, useCallback } from 'react'
-import {
-  fetchScheduleInit,
-  fetchPeriodTimes,
-  fetchSubstituteDay,
-  importSubstituteFromSchedule,
-  loadSubstituteSlotsForTeacher,
-  saveSubstituteDay,
-  fetchSubstitutePdfContext,
-} from '@/app/schedules/actions'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { availableSubstitutes } from '@/lib/substitute-availability'
 import { directorDisplayName } from '@/lib/school-director'
@@ -85,6 +77,8 @@ function todayIso() {
 }
 
 export default function SubstituteScheduleEntry() {
+  const { fetchScheduleInit, fetchPeriodTimes, fetchSubstituteDay, importSubstituteFromSchedule, loadSubstituteSlotsForTeacher, saveSubstituteDay, fetchSubstitutePdfContext } = useScheduleOperations()
+
   const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -102,12 +96,13 @@ export default function SubstituteScheduleEntry() {
   const [busy, setBusy] = useState<{teacherId:string;period:number}[]>([])
   const [original, setOriginal] = useState<SubstituteEntry[]>([])
   const [dirty, setDirty] = useState(false)
+  useScheduleGuard(dirty,saving)
   const [entries, setEntries] = useState<SubstituteEntry[]>([])
   const [absentTeacherId, setAbsentTeacherId] = useState('')
   const [leaveType, setLeaveType] = useState('ลาป่วย')
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
 
-  async function init() {
+  const init = useCallback(async () => {
     try {
       const [data, periods] = await Promise.all([fetchScheduleInit(), fetchPeriodTimes()])
       setPeriodTimes(periods.times)
@@ -121,7 +116,7 @@ export default function SubstituteScheduleEntry() {
     } finally {
       setLoading(false)
     }
-  }
+  },[fetchScheduleInit,fetchPeriodTimes])
 
   const loadDay = useCallback(async () => {
     const request = ++dayRequest.current
@@ -141,9 +136,9 @@ export default function SubstituteScheduleEntry() {
       setLoadedDay(''); setEntries([]); setSubstituteDayId('')
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     } finally { if (request === dayRequest.current) setLoadingDay(false) }
-  }, [date, selectedYear, term])
+  }, [date, selectedYear, term,fetchSubstituteDay])
 
-  useEffect(() => { void Promise.resolve().then(init) }, [])
+  useEffect(() => { void Promise.resolve().then(init) }, [init])
   useEffect(() => {
     if (!selectedYear || !date) return
     void Promise.resolve().then(loadDay)

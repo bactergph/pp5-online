@@ -1,8 +1,8 @@
 'use client'
+import { useScheduleOperations } from './ScheduleServices'
 
 import { useCallback, useRef, useEffect, useState } from 'react'
-import Link from 'next/link'
-import { fetchScheduleConflicts, fetchScheduleInit } from '@/app/schedules/actions'
+import Link from './ScheduleLink'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import AppAlertModal from '@/components/AppAlertModal'
 
@@ -64,6 +64,8 @@ const STYLES = `
 `
 
 export default function ScheduleConflictsEntry() {
+  const { fetchScheduleConflicts, fetchScheduleInit } = useScheduleOperations()
+
   const [loading, setLoading] = useState(true)
   const [years, setYears] = useState<Year[]>([])
   const [selectedYear, setSelectedYear] = useState('')
@@ -73,7 +75,7 @@ export default function ScheduleConflictsEntry() {
   const [count, setCount] = useState(0)
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
 
-  async function init() {
+  const init = useCallback(async () => {
     try {
       const data = await fetchScheduleInit()
       setYears(data.years as Year[])
@@ -84,7 +86,7 @@ export default function ScheduleConflictsEntry() {
     } finally {
       setLoading(false)
     }
-  }
+  },[fetchScheduleInit])
 
   const loadConflicts = useCallback(async () => {
     const request = ++requestId.current
@@ -96,9 +98,9 @@ export default function ScheduleConflictsEntry() {
     } catch (e) {
       setAlert({ type: 'error', title: 'โหลดไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     }
-  }, [selectedYear, semester])
+  }, [selectedYear, semester,fetchScheduleConflicts])
 
-  useEffect(() => { void Promise.resolve().then(init) }, [])
+  useEffect(() => { void Promise.resolve().then(init) }, [init])
 
   useEffect(() => {
     if (!selectedYear) return

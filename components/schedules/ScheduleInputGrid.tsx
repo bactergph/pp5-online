@@ -23,7 +23,7 @@ onPaste={e => {
             const values = parseSchedulePaste(e.clipboardData.getData('text/plain'))
             if (!values.length) return
             e.preventDefault()
-            if (i + values.length > 500) { setPasteError('วางได้สูงสุด 500 แถว'); return }
+            if (i + values.length > maxRows) { setPasteError(`วางได้สูงสุด ${maxRows} แถว`); return }
             const next = rows.map(r => [...r])
             while (next.length < i + values.length) next.push(empty())
             values.forEach((r, ri) => r.forEach((v, ci) => { if (j + ci < columns.length && !columns[j + ci].readOnly) next[i + ri][j + ci] = v }))

@@ -1,7 +1,7 @@
 'use client'
+import { useScheduleOperations } from './ScheduleServices'
 
 import { useEffect, useState } from 'react'
-import { fetchPeriodTimes, savePeriodTimes } from '@/app/schedules/actions'
 import { DEFAULT_PERIOD_TIMES, moveLunchBreak, validatePeriodTimes, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import AppAlertModal from '@/components/AppAlertModal'
 
@@ -57,6 +57,8 @@ const STYLES = `
 `
 
 export default function PeriodTimesEntry() {
+  const { fetchPeriodTimes, savePeriodTimes } = useScheduleOperations()
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [times, setTimes] = useState<PeriodTimeRow[]>([])
@@ -80,7 +82,7 @@ export default function PeriodTimesEntry() {
     }
     void load()
     return ()=>{active=false}
-  },[])
+  },[fetchPeriodTimes])
 
   function updateRow(index: number, field: keyof PeriodTimeRow, value: string | number | boolean) {
     setTimes(current => current.map((row, i) => i === index ? { ...row, [field]: value } : row))

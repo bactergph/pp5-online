@@ -1,3 +1,4 @@
+import OnlineScheduleProvider from '@/components/schedules/OnlineScheduleProvider'
 import { redirect } from 'next/navigation'
 import SubstituteScheduleEntry from '@/components/schedules/SubstituteScheduleEntry'
 import { verifySession } from '@/lib/dal'
@@ -8,5 +9,5 @@ export default async function SubstituteSchedulePage() {
   if (!SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])) {
     redirect('/schedules/class')
   }
-  return <SubstituteScheduleEntry />
+  return <OnlineScheduleProvider><SubstituteScheduleEntry /></OnlineScheduleProvider>
 }

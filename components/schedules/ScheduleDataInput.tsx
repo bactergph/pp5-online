@@ -1,17 +1,20 @@
 'use client'
+import { useScheduleOperations } from './ScheduleServices'
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
+import Link from './ScheduleLink'
 import Swal from 'sweetalert2'
-import { removeScheduleInputSubjects, saveScheduleInputTeachers, saveScheduleInputSubjects } from '@/app/schedules/planning-actions'
 import { SUBJECT_GROUPS, SUBJECT_IMPORT_COLUMNS, SUBJECT_ROW_LIMIT, matchClassroomLabel, parseSubjectTable, validateSubjectInputs, type SubjectInputRow } from '@/lib/schedule-input'
 import type { Preparation } from '@/lib/schedule-preparation'
 import ScheduleInputGrid from './ScheduleInputGrid'
+import LocalScheduleTeachers from './LocalScheduleTeachers'
 
 export default function ScheduleDataInput({ kind, data, year, term, onSaved, onDirty, locked, onBusy, onRoster }: {
   kind: 'teachers' | 'subjects'; data: Preparation; year: string; term: number
   onSaved: () => Promise<void>; onDirty: (value: boolean) => void; locked: boolean; onBusy: (value: boolean) => void
   onRoster: (ids: string[]) => void
 }) {
+  const { removeScheduleInputSubjects, saveScheduleInputTeachers, saveScheduleInputSubjects, localTeachers } = useScheduleOperations()
+
   const [rows, setRows] = useState<string[][]>(Array.from({ length: 8 }, () => Array(kind === 'teachers' ? 3 : 6).fill('')))
   const [addOpen, setAddOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -160,7 +163,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
       </div>
       <footer>
         <span>{locked ? 'บันทึกการตั้งค่าด้านบนก่อนนำเข้าข้อมูล' : `${filled.length} แถวพร้อมบันทึก`}</span>
-        <Link href="/settings/users">หน้าบุคลากร</Link>
+        {localTeachers ? <LocalScheduleTeachers data={data} onSaved={onSaved} onBusy={onBusy}/> : <Link href="/settings/users">หน้าบุคลากร</Link>}
         <button type="button" disabled={busy} onClick={closeAdd}>ยกเลิก</button>
         <button type="button" className="prep-primary" disabled={busy || locked || !filled.length} onClick={() => void save(true)}>{busy ? 'กำลังบันทึก…' : `บันทึก ${filled.length} รายการ`}</button>
       </footer>

@@ -2,8 +2,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 
 /** Keep IDs as values. A new venue is created only when its Add option is confirmed. */
-export default function WorkloadPlacePicker({ places, value, onChange, onCreate, onPendingChange, label }: {
-  places: { id: string; name: string }[]; value: string; onChange: (id: string) => void; onCreate: (name: string) => string; onPendingChange: (pending: boolean) => void; label: string
+export default function WorkloadPlacePicker({ places, value, onChange, onCreate, onPendingChange, label, fallbackName }: {
+  places: { id: string; name: string }[]; value: string; onChange: (id: string) => void; onCreate: (name: string) => string; onPendingChange: (pending: boolean) => void; label: string; fallbackName?: string
 }) {
   const id = useId()
   const [query, setQuery] = useState<string | null>(null)
@@ -32,7 +32,7 @@ export default function WorkloadPlacePicker({ places, value, onChange, onCreate,
   }
   return <div className="prep-place-picker">
     <input role="combobox" aria-label={label} aria-autocomplete="list" aria-expanded={open} aria-controls={`${id}-list`} aria-activedescendant={open && options[active] ? `${id}-${active}` : undefined}
-      value={query ?? selected?.name ?? ''} placeholder="ค้นหาหรือเพิ่มสถานที่" autoComplete="off" maxLength={100} aria-invalid={!!error} aria-describedby={error ? `${id}-error` : undefined}
+      value={query ?? selected?.name ?? fallbackName ?? ''} placeholder="ค้นหาหรือเพิ่มสถานที่" autoComplete="off" maxLength={100} aria-invalid={!!error} aria-describedby={error ? `${id}-error` : undefined}
       onFocus={() => { if (query === null) setQuery(''); setOpen(true); setActive(0) }} onClick={() => { if (!open) { if (query === null) setQuery(''); setOpen(true); setActive(0) } }}
       onChange={event => { setQuery(event.target.value); setOpen(true); setActive(0); setError(''); onPendingChange(!!event.target.value.trim()) }}
       onBlur={() => {

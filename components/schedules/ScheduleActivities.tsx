@@ -1,11 +1,13 @@
 'use client'
+import { useScheduleOperations } from './ScheduleServices'
 import { useEffect, useState } from 'react'
-import { fetchScheduleActivities, saveScheduleActivity } from '@/app/schedules/actions'
 import { LEARNER_DEVELOPMENT_KEY, LEARNER_DEVELOPMENT_NAME } from '@/lib/schedule-activity'
 
 export default function ScheduleActivities({ yearId, classroomId, onSaved, disabled, onBusy }: {
   yearId: string; classroomId: string; onSaved: () => Promise<void>; disabled: boolean; onBusy: (busy: boolean) => void
 }) {
+  const { fetchScheduleActivities, saveScheduleActivity } = useScheduleOperations()
+
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchScheduleActivities>> | null>(null)
   const [setting, setSetting] = useState(LEARNER_DEVELOPMENT_KEY)
   const [teacher, setTeacher] = useState('')
@@ -20,7 +22,7 @@ export default function ScheduleActivities({ yearId, classroomId, onSaved, disab
       setData(d); setSetting(LEARNER_DEVELOPMENT_KEY); setTeacher(existing?.teacher_id || ''); setCount(existing?.weekly_periods ?? 1)
     }).catch(e => { if (!cancelled) setMessage(e.message) })
     return () => { cancelled = true }
-  }, [yearId, classroomId])
+  }, [yearId, classroomId, fetchScheduleActivities])
   function selectActivity(id: string) {
     setSetting(id)
     const existing = data?.offerings.find(a => a.evaluation_setting_id === (id === LEARNER_DEVELOPMENT_KEY ? null : id))

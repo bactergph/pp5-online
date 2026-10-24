@@ -15,7 +15,7 @@ export function switchDeviceYear(bundle:LocalScheduleBundle,target:string):Local
   const archives={...bundle.archives,[year]:{semester:bundle.semester,terms:bundle.terms}}
   if(!archives[target]&&Object.keys(archives).length>30)throw Error('เก็บได้สูงสุด 31 ปีการศึกษาต่อไฟล์ กรุณาดาวน์โหลดสำเนาแยกก่อนเพิ่มปีใหม่')
   const current=bundle.terms[bundle.semester]
-  const blank=():Plan=>({...normalizePlan({teachers:current.teachers,rooms:current.rooms,places:current.places,days:current.days,periods:current.periods,document:{schoolName:'',printDate:'',academicHeadName:'',directorName:'',...current.document,academicYear:target}}),substitutes:{}})
+  const blank=():Plan=>({...normalizePlan({teachers:current.teachers,rooms:current.rooms,places:current.places,days:current.days,periods:current.periods,activityCatalog:current.activityCatalog,document:{schoolName:'',printDate:'',academicHeadName:'',directorName:'',...current.document,academicYear:target}}),substitutes:{}})
   const selected=archives[target]||{semester:1 as const,terms:{1:blank(),2:blank()}}
   delete archives[target]
   return {...selected,year:target,archives}

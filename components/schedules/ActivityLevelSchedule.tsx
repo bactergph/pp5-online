@@ -1,12 +1,14 @@
 'use client'
+import { useScheduleOperations } from './ScheduleServices'
 import {useEffect,useState} from 'react'
 import Swal from 'sweetalert2'
-import {fetchActivityLevelOptions,saveActivityLevelSchedule} from '@/app/schedules/actions'
 import {type PeriodTimeRow} from '@/lib/schedule-helpers'
 export default function ActivityLevelSchedule({yearId,semester,periodTimes,onChanged}:{yearId:string;semester:number;periodTimes:PeriodTimeRow[];onChanged:()=>Promise<void>}){
+  const { fetchActivityLevelOptions, saveActivityLevelSchedule } = useScheduleOperations()
+
   const [data,setData]=useState<Awaited<ReturnType<typeof fetchActivityLevelOptions>>|null>(null)
   const [activity,setActivity]=useState(''),[levels,setLevels]=useState<string[]>([]),[day,setDay]=useState(1),[period,setPeriod]=useState(1),[saving,setSaving]=useState(false)
-  useEffect(()=>{let active=true;void fetchActivityLevelOptions(yearId,semester).then(next=>{if(active){setData(next);setActivity(next.activities[0]?.id||'')}}).catch(e=>{if(active)void Swal.fire({icon:'error',title:'โหลดกิจกรรมไม่สำเร็จ',text:e.message})});return()=>{active=false}},[yearId,semester])
+  useEffect(()=>{let active=true;void fetchActivityLevelOptions(yearId,semester).then(next=>{if(active){setData(next);setActivity(next.activities[0]?.id||'')}}).catch(e=>{if(active)void Swal.fire({icon:'error',title:'โหลดกิจกรรมไม่สำเร็จ',text:e.message})});return()=>{active=false}},[yearId,semester,fetchActivityLevelOptions])
   async function save(){
     if(!activity||!levels.length)return
     const confirm=await Swal.fire({icon:'question',title:'ลงกิจกรรมในระดับชั้นที่เลือก?',text:`${data?.activities.find(a=>a.id===activity)?.name} · ${levels.join(', ')} · คาบ ${period} · ภาคเรียนที่ ${semester} ลงให้ทุกห้องในระดับชั้นที่เลือก และแทนรายวิชาหรือกิจกรรมเดิมในคาบนี้ (คาบที่ล็อกต้องปลดล็อกก่อน)`,showCancelButton:true,confirmButtonText:'ลงกิจกรรม',cancelButtonText:'ยกเลิก',confirmButtonColor:'#946b25'})

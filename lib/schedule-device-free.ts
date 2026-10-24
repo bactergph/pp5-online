@@ -15,6 +15,7 @@ export type LocalCell = { classroomId: string; day: number; period: number; subj
 
 export type FreeActivity = {
   id: string
+  settingId?: string
   name: string
   mode: 'joint' | 'separate'
   roomIds: string[]
@@ -38,6 +39,7 @@ export type FreeSubject = {
   timePreference?: 'any' | 'morning' | 'afternoon'
   spread?: boolean
   subjectGroup?: string
+  subjectType?: string
 }
 
 export type FreePlace = { id: string; name: string }
@@ -47,7 +49,9 @@ export type FreeWizardPlan = {
   document?: DeviceDocumentSettings
   reduceGaps?:boolean
   maxContinuous?:number
-  teachers: { id: string; name: string }[]
+  teacherIds?: string[]
+  activityCatalog?: {id:string;label:string;short_label:string;weeklyPeriods:number}[]
+  teachers: { id: string; name: string; prefix?:string; fullName?:string; position?:string }[]
   rooms: { id: string; label: string }[]
   places: FreePlace[]
   subjects: FreeSubject[]
@@ -101,10 +105,14 @@ export function freeActivityTeachers(activity: FreeActivity, roomId: string) {
 }
 
 export function freeActivityGroup(activity: FreeActivity): ActivityTeam {
-  return { id: activity.id, settingId: activity.id, mode: activity.mode, roomIds: activity.roomIds,
+  return { id: activity.id, settingId: activity.settingId || activity.id, mode: activity.mode, roomIds: activity.roomIds,
     teacherIds: activity.teacherIds ?? (activity.teacherId ? [activity.teacherId] : []),
     roomTeachers: Object.fromEntries(activity.roomIds.map(id => [id, freeActivityTeachers(activity, id)])),
     weeklyPeriods: activity.weeklyPeriods ?? (activity.cells.length || 1), cells: activity.cells }
+}
+
+export function deviceActivityCatalog(plan:Pick<FreeWizardPlan,'activities'|'activityCatalog'>) {
+  return [...new Map([...plan.activities.map(activity=>({id:activity.settingId||activity.id,label:activity.name,short_label:activity.name,weeklyPeriods:activity.weeklyPeriods??(activity.cells.length||1)})),...(plan.activityCatalog||[])].map(item=>[item.id,item])).values()]
 }
 
 export function roomNeed(plan: FreeWizardPlan, roomId: string) {
@@ -121,6 +129,8 @@ export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
     reduceGaps:raw?.reduceGaps ?? false,
     maxContinuous:raw?.maxContinuous ?? 0,
     teachers: raw?.teachers || [],
+    teacherIds: raw?.teacherIds,
+    activityCatalog: raw?.activityCatalog ?? (raw?.activities || []).map(activity=>({id:activity.settingId || activity.id,label:activity.name,short_label:activity.name,weeklyPeriods:activity.weeklyPeriods ?? (activity.cells?.length || 1)})).filter((item,index,items)=>items.findIndex(other=>other.id===item.id)===index),
     rooms: raw?.rooms || [],
     places: raw?.places || [],
     subjects: (raw?.subjects || []).map(subject => ({
@@ -135,6 +145,7 @@ export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
       timePreference: ['any','morning','afternoon'].includes(subject.timePreference || '') ? subject.timePreference : 'any',
       spread: subject.spread ?? true,
       subjectGroup: subject.subjectGroup || '',
+      subjectType: subject.subjectType || 'พื้นฐาน',
     })),
     timetable: raw?.timetable || [],
     days: raw?.days ?? [1, 2, 3, 4, 5],
@@ -142,6 +153,7 @@ export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
     blocks: raw?.blocks || [],
     activities: (raw?.activities || []).map(activity => ({
       id: activity.id,
+      settingId: activity.settingId,
       name: activity.name,
       mode: activity.mode === 'separate' ? 'separate' as const : 'joint' as const,
       roomIds: activity.roomIds || [],
@@ -257,6 +269,7 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
       fullName: subject.name,
       code: subject.code,
       subjectGroup: subject.subjectGroup,
+      subjectType: subject.subjectType,
       teacherName: teacher?.name || '',
       pattern: subject.pattern,
       roomId: place?.id || null,
@@ -269,7 +282,7 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
   const activityLessons = plan.activities.flatMap(activity => activity.roomIds.map(classroomId => ({
     id: `activity:${activity.id}:${classroomId}`, classroomId, teacherId: null,
     teacherIds: freeActivityTeachers(activity, classroomId), count: activity.weeklyPeriods ?? (activity.cells.length || 1),
-    subjectId: activity.id, name: activity.name, fullName: activity.name,
+    subjectId: activity.settingId || activity.id, name: activity.name, fullName: activity.name,
     label: `${plan.rooms.find(room => room.id === classroomId)?.label || ''} · ${activity.name}`,
     teacherName: freeActivityTeachers(activity, classroomId).map(id => plan.teachers.find(teacher => teacher.id === id)?.name || '').filter(Boolean).join(', '),
     activity: true, teacherOptional: true, activityGroupId: activity.mode === 'joint' ? activity.id : undefined,
@@ -281,6 +294,7 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
       reduceGaps:plan.reduceGaps ?? false,
       maxContinuous:plan.maxContinuous ?? 0,
       days: plan.days,
+      teacherIds: plan.teacherIds,
       rooms: plan.places.map(place => ({ id: place.id, name: place.name })),
       rules: Object.fromEntries(lessons.map(lesson => [lesson.id, { count: lesson.count, pattern: lesson.pattern || [1], roomId: lesson.roomId || null, morning: lesson.timePreference==='morning', timePreference: lesson.timePreference, spread: lesson.spread }])),
       activityGroups: groups,
@@ -294,7 +308,7 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
       const day=new Date(date+'T12:00:00+07:00').getUTCDay()||7
       return Number.isNaN(Date.parse(date))?[]:entries.filter(entry=>entry.substituteTeacherId).map(entry=>({teacherId:entry.substituteTeacherId!,day,period:entry.period}))
     })],
-    activities: plan.activities.map(activity => ({ id: activity.id, label: activity.name })),
+    activities: deviceActivityCatalog(plan),
     teachers: plan.teachers.map(teacher => ({ id: teacher.id, full_name: teacher.name })),
   }
 }

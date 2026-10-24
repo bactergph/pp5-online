@@ -1,9 +1,9 @@
 'use client'
+import { useScheduleOperations } from './ScheduleServices'
 import { useRef, useState } from 'react'
 import Swal from 'sweetalert2'
 import type { Preparation } from '@/lib/schedule-preparation'
 import { activityTeachers, activityTeamWorkload, restoreActivityRoomTeachers, validateActivityTeam, type ActivityTeam } from '@/lib/schedule-activity-teams'
-import { previewScheduleActivityTeam, removeScheduleActivityName, saveScheduleActivityName, saveScheduleActivityTeam } from '@/app/schedules/planning-actions'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import ActivityAssignmentFields from './ActivityAssignmentFields'
 import './activity-confirmation.css'
@@ -15,6 +15,8 @@ const activityConfirmation = {
 }
 
 export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, onDirty, blocked }: { data: Preparation; year: string; term: number; onSaved: () => Promise<void>; onBusy: (b: boolean) => void; onDirty: (b: boolean) => void; blocked: boolean }) {
+  const { previewScheduleActivityTeam, removeScheduleActivityName, saveScheduleActivityName, saveScheduleActivityTeam } = useScheduleOperations()
+
   const dialog = useRef<HTMLDialogElement>(null), catalogDialog = useRef<HTMLDialogElement>(null), lock = useRef(false), opener = useRef<HTMLElement | null>(null)
   const [draft, setDraft] = useState<ActivityTeam | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
   const [activities, setActivities] = useState(data.activities), [catalog, setCatalog] = useState<{ id: string | null; label: string; shortLabel: string; weeklyPeriods: number } | null>(null)

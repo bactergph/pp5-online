@@ -1,26 +1,10 @@
 'use client'
-import { fetchScheduleDays } from '@/app/schedules/actions'
-
+import { useScheduleOperations } from './ScheduleServices'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
-import Link from 'next/link'
-import {
-  fetchClassScheduleBundle,
-  fetchSchedulePdfGrids,
-  fetchScheduleExportContext,
-  fetchScheduleClassrooms,
-  fetchScheduleInit,
-  saveClassScheduleCell,
-  moveClassScheduleCell,
-  clearScheduleScope,
-  copyClassSchedule,
-  fetchPeriodTimes,
-  fetchScheduleQuotas,
-  getTeacherConflictAt,
-  toggleScheduleCellLock,
-} from '@/app/schedules/actions'
+import Link from './ScheduleLink'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
@@ -33,7 +17,8 @@ import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
 import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 import SchedulePreparation from './SchedulePreparation'
-import { FiZap, FiGrid, FiUsers, FiCalendar, FiDownload } from 'react-icons/fi'
+import SchedulePlacesEntry from './SchedulePlacesEntry'
+import { FiZap, FiGrid, FiUsers, FiCalendar, FiDownload, FiMapPin } from 'react-icons/fi'
 import './schedule-workspace.css'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
@@ -56,6 +41,8 @@ type QuotaData = {
 
 type Props = {
   mode: 'view' | 'manage'
+  initialWorkspace?: 'class' | 'prepare'
+  initialStep?: number
 }
 
 const scheduleAlert = Swal.mixin({confirmButtonColor:'#245bdb',cancelButtonColor:'#64748b',confirmButtonText:'ตกลง',cancelButtonText:'ยกเลิก',reverseButtons:true})
@@ -63,7 +50,9 @@ function setAlert(alert: {type:'success'|'error';title:string;message?:string}) 
   void scheduleAlert.fire({icon:alert.type,title:alert.title,text:alert.message})
 }
 
-export default function ClassScheduleEntry({ mode }: Props) {
+export default function ClassScheduleEntry({ mode, initialWorkspace='class', initialStep=1 }: Props) {
+  const { fetchScheduleDays, fetchClassScheduleBundle, fetchSchedulePdfGrids, fetchScheduleExportContext, fetchScheduleClassrooms, fetchScheduleInit, saveClassScheduleCell, moveClassScheduleCell, clearScheduleScope, copyClassSchedule, fetchPeriodTimes, fetchScheduleQuotas, getTeacherConflictAt, toggleScheduleCellLock } = useScheduleOperations()
+
   const [dragLesson,setDragLesson] = useState<{id:string;from?:{day:number;period:number};context:string}|null>(null)
   const [dropKey,setDropKey] = useState<string|null>(null)
   const [paletteFilter,setPaletteFilter] = useState('')
@@ -71,10 +60,10 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const [showCompleted,setShowCompleted] = useState(false)
   const [preparationBusy,setPreparationBusy]=useState(false)
   const [preparationDirty,setPreparationDirty]=useState(false)
-  async function leavePreparation(change:()=>void){if(preparationBusy)return;if(preparationDirty&&!(await scheduleAlert.fire({icon:'warning',title:'ออกจากขั้นเตรียมตาราง?',text:'การตั้งค่าที่ยังไม่บันทึกจะหาย และฉบับร่างจะยังไม่ถูกนำไปใช้',showCancelButton:true})).isConfirmed)return;change()}
+  async function leavePreparation(change:()=>void){if(preparationBusy)return;if(preparationDirty&&!(await scheduleAlert.fire({icon:'warning',title:'ออกจากหน้าที่กำลังแก้ไข?',text:'ข้อมูลที่ยังไม่บันทึกจะหาย และฉบับร่างจะยังไม่ถูกนำไปใช้',showCancelButton:true})).isConfirmed)return;change()}
   const [preparationRooms,setPreparationRooms]=useState<string[]|undefined>(undefined)
-  const [preparationStep,setPreparationStep]=useState(1)
-  const [workspace,setWorkspace]=useState<'class'|'teacher'|'activity'|'prepare'>('class')
+  const [preparationStep,setPreparationStep]=useState(initialStep)
+  const [workspace,setWorkspace]=useState<'class'|'teacher'|'activity'|'places'|'prepare'>(initialWorkspace)
   const isManage = mode === 'manage'
   const [picker, setPicker] = useState<{day:number;period:number} | null>(null)
   const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
@@ -113,7 +102,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   )
 
   const selectedClassroom = classrooms.find(c => c.id === selectedClass)
-  function classLines(id: string | null | undefined, note?: string | null) {
+  function classLines(id: string | null | undefined) {
     const subject = id ? subjectMap[id] : undefined
     if (!subject) return null
     const activity = isActivityLessonId(id)
@@ -126,7 +115,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
     }
   }
   function subjectBlock(id: string | null | undefined, note?: string | null) {
-    const lines = classLines(id, note)
+    const lines = classLines(id)
     if (!lines) return <span className="text-sm text-stone-400">{note || '+ เพิ่มวิชา'}</span>
     return <span className="sched-lines"><b>{lines.name}</b>{lines.code && <span className="code">{lines.code}</span>}<span className="teacher">{lines.teacher}</span>{lines.room && <span className="room">{lines.room}</span>}</span>
   }
@@ -171,7 +160,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
   const selectedYearObj = years.find(y => y.id === selectedYear)
   const copySourceClassrooms = classrooms.filter(c => c.id !== selectedClass)
 
-  async function init() {
+  const init = useCallback(async () => {
     try {
       const [data, periodData] = await Promise.all([
         fetchScheduleInit(),
@@ -187,9 +176,9 @@ export default function ClassScheduleEntry({ mode }: Props) {
     } finally {
       setLoading(false)
     }
-  }
+  },[fetchScheduleInit,fetchPeriodTimes])
 
-  async function loadClassrooms(yearId: string) {
+  const loadClassrooms = useCallback(async (yearId: string) => {
     const request = ++roomRequest.current
     ++gridRequest.current
     setSelectedClass(''); setCells({}); setSubjects([]); setQuotas(null)
@@ -199,7 +188,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
       setClassrooms(list)
       setSelectedClass(list[0]?.id || '')
     } catch (e) { setAlert({ type: 'error', title: 'โหลดห้องเรียนไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' }) }
-  }
+  },[fetchScheduleClassrooms])
 
   const loadGrid = useCallback(async () => {
     const request = ++gridRequest.current
@@ -219,14 +208,23 @@ export default function ClassScheduleEntry({ mode }: Props) {
         setAlert({ type: 'error', title: 'โหลดตารางไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
       }
     } finally { if (request === gridRequest.current) setGridLoading(false) }
-  }, [selectedClass, selectedYear, semester])
+  }, [selectedClass, selectedYear, semester,fetchClassScheduleBundle,fetchScheduleDays])
 
-  useEffect(()=>{if(!selectedYear)return;let active=true;fetchScheduleDays(selectedYear,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[selectedYear,semester])
-  useEffect(() => { void Promise.resolve().then(init) }, [])
+  async function refreshPreparation() {
+    try {
+      const [list, times] = await Promise.all([fetchScheduleClassrooms(selectedYear), fetchPeriodTimes()])
+      setClassrooms(list); setPeriodTimes(times.times)
+      if (list.some(room => room.id === selectedClass)) await loadGrid()
+      else setSelectedClass(list[0]?.id || '')
+    } catch (error) { setAlert({type:'error',title:'โหลดข้อมูลล่าสุดไม่สำเร็จ',message:error instanceof Error ? error.message : 'กรุณาลองใหม่'}) }
+  }
+
+  useEffect(()=>{if(!selectedYear)return;let active=true;fetchScheduleDays(selectedYear,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[selectedYear,semester,fetchScheduleDays])
+  useEffect(() => { void Promise.resolve().then(init) }, [init])
   useEffect(() => {
     if (!selectedYear) return
     void Promise.resolve().then(() => loadClassrooms(selectedYear))
-  }, [selectedYear])
+  }, [selectedYear,loadClassrooms])
   useEffect(() => {
     if (!selectedClass || !selectedYear) return
     void Promise.resolve().then(loadGrid)
@@ -414,9 +412,10 @@ export default function ClassScheduleEntry({ mode }: Props) {
         <div className="schedule-workspace-heading flex flex-wrap items-center justify-between gap-5 rounded-2xl border bg-white">
           <div>
             <span className="schedule-workspace-kicker">ตารางเรียนและตารางสอน</span>
-            <h1>{workspace==='prepare'?'เตรียมและจัดตาราง':workspace==='teacher'?'ตารางสอนและคาบที่ล็อก':workspace==='activity'?'กิจกรรมและครูประจำชั้น':isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
+            <h1>{workspace==='places'?'สถานที่สอน':workspace==='prepare'?'เตรียมและจัดตาราง':workspace==='teacher'?'ตารางสอนและคาบที่ล็อก':workspace==='activity'?'กิจกรรมและครูประจำชั้น':isManage ? 'จัดการตารางเรียน' : 'ตารางเรียน'}</h1>
             <p>
-              {workspace==='activity' ? 'กำหนดกิจกรรม วัน คาบ และทีมครู แล้วสร้างฉบับร่างเพื่อให้ลงในตาราง'
+              {workspace==='places' ? 'เพิ่ม แก้ไข ลบสถานที่ และกำหนดสถานที่ให้รายวิชาแต่ละห้อง'
+                : workspace==='activity' ? 'กำหนดกิจกรรม วัน คาบ และทีมครู แล้วสร้างฉบับร่างเพื่อให้ลงในตาราง'
                 : workspace==='prepare' ? 'ตรวจข้อมูลทั้ง 6 ขั้น กิจกรรมที่กำหนดไว้จะอยู่ในช่องสีเขียวของฉบับร่าง'
                 : workspace==='teacher' ? `ภาคเรียนที่ ${semester} · ปีการศึกษา ${selectedYearObj?.year_be || ''}`
                 : selectedClassroom && selectedYearObj
@@ -436,6 +435,7 @@ export default function ClassScheduleEntry({ mode }: Props) {
           <button type="button" aria-pressed={workspace==='class'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('class'))}><FiGrid aria-hidden="true"/>ตารางเรียน</button>
           <button type="button" aria-pressed={workspace==='teacher'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('teacher'))}><FiUsers aria-hidden="true"/>ตารางสอน / ล็อกคาบ</button>
           <button type="button" aria-pressed={workspace==='activity'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationStep(5);setWorkspace('activity')})}><FiCalendar aria-hidden="true"/>กิจกรรมและครู</button>
+          <button type="button" aria-pressed={workspace==='places'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('places'))}><FiMapPin aria-hidden="true"/>สถานที่</button>
           <button type="button" className="schedule-wizard-entry" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})}><FiZap aria-hidden="true"/>จัดตาราง</button>
         </nav>}
         <div className={`schedule-workspace-filters grid gap-4 border bg-white ${workspace!=='class'?'sm:grid-cols-2':'sm:grid-cols-3'}`}>
@@ -488,10 +488,11 @@ export default function ClassScheduleEntry({ mode }: Props) {
         )}
 
 
-        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} initialRooms={preparationRooms} initialStep={workspace==='activity'?5:preparationStep} onChanged={loadGrid} />}
+        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} initialRooms={preparationRooms} initialStep={workspace==='activity'?5:preparationStep} onChanged={refreshPreparation} />}
+        {workspace==='places'&&selectedYear&&isManage&&canEdit&&<SchedulePlacesEntry key={`${selectedYear}:${semester}:places`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} onChanged={()=>void loadGrid()} />}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
-        {(workspace==='activity'||workspace==='prepare')?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
+        {(workspace==='activity'||workspace==='prepare'||workspace==='places')?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">ไม่พบห้องเรียนในปีการศึกษานี้</div>
         ) : subjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">

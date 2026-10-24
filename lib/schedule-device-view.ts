@@ -1,7 +1,7 @@
 import type { Preparation } from './schedule-preparation'
 import type { DeviceDraft } from './schedule-device-build'
 import { prepareDeviceDraft } from './schedule-device-build'
-import { deviceTeacherLimitMessage, toDeviceSnapshot, type FreeWizardPlan } from './schedule-device-free'
+import { deviceTeacherLimitMessage, deviceActivityCatalog, toDeviceSnapshot, type FreeWizardPlan } from './schedule-device-free'
 import type { PlanningIssue } from './schedule-planning'
 import { isTimetableClassroom } from './schedules'
 
@@ -14,13 +14,13 @@ export function deviceDataKey(value:unknown) {
 export function devicePreparation(plan: FreeWizardPlan): Preparation {
   const snapshot = toDeviceSnapshot(plan, plan.rooms.map(room => room.id))
   return {
-    ...snapshot, blocksSupported: true,
+    ...snapshot, hash:deviceDataKey(plan), blocksSupported: true,
     classrooms: plan.rooms.filter(room=>isTimetableClassroom(room.label.split('/')[0])).map(room => {
       const [level, ...rest] = room.label.split('/')
-      return { id: room.id, level, room: Number(rest.join('/')) || 1, name: rest.join('/') || '1' }
+      return { id: room.id, level, room: plan.rooms.filter(item=>item.label.split('/')[0]===level).findIndex(item=>item.id===room.id)+1, name: rest.join('/') || '1' }
     }),
-    teachers: plan.teachers.map(teacher => ({id:teacher.id,prefix:'',full_name:teacher.name,position:'ครู'})),
-    activities: plan.activities.map(activity => ({id:activity.id,label:activity.name,short_label:activity.name,weeklyPeriods:activity.weeklyPeriods ?? (activity.cells.length || 1)})),
+    teachers: plan.teachers.map(teacher => ({id:teacher.id,prefix:teacher.prefix || '',full_name:teacher.fullName || teacher.name,position:teacher.position || ''})),
+    activities: deviceActivityCatalog(plan),
     lessons: snapshot.lessons.map(lesson => ({...lesson, name:lesson.name || '', code:lesson.code || '', subjectId:lesson.subjectId || lesson.id, activity:!!lesson.activity, teacherName:lesson.teacherName || '', roomName:lesson.roomName, pattern:lesson.pattern || Array(lesson.count).fill(1), roomId:lesson.roomId || null, morning:!!lesson.morning, spread:lesson.spread ?? true, source:'กำหนดคาบต่อสัปดาห์บนเครื่องนี้'})),
   }
 }

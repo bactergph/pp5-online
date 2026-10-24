@@ -1,3 +1,4 @@
+import OnlineScheduleProvider from '@/components/schedules/OnlineScheduleProvider'
 import { redirect } from 'next/navigation'
 import ClassScheduleEntry from '@/components/schedules/ClassScheduleEntry'
 import { verifySession } from '@/lib/dal'
@@ -8,5 +9,5 @@ export default async function ClassScheduleManagePage() {
   if (!SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])) {
     redirect('/schedules/class')
   }
-  return <ClassScheduleEntry mode="manage" />
+  return <OnlineScheduleProvider><ClassScheduleEntry mode="manage" /></OnlineScheduleProvider>
 }
