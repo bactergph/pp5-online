@@ -130,7 +130,7 @@ export function createDeviceScheduleServices({read,write,onComputing}:Options): 
   }
   function exportContext() {
     const current=plan(),document=current.document
-    return {school:{name:document?.schoolName||'โรงเรียน',logo_url:null,academic_head_name:document?.academicHeadName||'',director_name:document?.directorName||'',director_prefix:'',director_position:'ผู้อำนวยการสถานศึกษา',acting_director:null,acting_director_position:null},periodTimes:current.periods}
+    return {school:{name:document?.schoolName||'โรงเรียน',logo_url:document?.logoDataUrl||null,academic_head_name:document?.academicHeadName||'',director_name:document?.directorName||'',director_prefix:'',director_position:'ผู้อำนวยการสถานศึกษา',acting_director:null,acting_director_position:null},periodTimes:current.periods}
   }
   const services:ScheduleOperations={
     localTeachers:{

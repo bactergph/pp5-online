@@ -56,5 +56,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'สร้างพื้นที่สมาชิกไม่สำเร็จ กรุณาตรวจฐานข้อมูลสมาชิก 082 หรือลองใหม่' }, { status: 503 })
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, userId: authData.user.id })
 }

@@ -8,5 +8,5 @@ export default async function FreeScheduleLayout({children}:{children:React.Reac
   if (!session.schoolId) return <p>ใช้ได้เฉพาะสมาชิกที่เข้าสู่ระบบแล้ว</p>
   const membership = await readMembership(session.schoolId)
   const tier = membership.kind === 'school' ? 'school' : membership.plan
-  return <><FreeScheduleDesk tier={tier}/>{children}</>
+  return <><FreeScheduleDesk tier={tier} registrationOwner={session.userId}/>{children}</>
 }

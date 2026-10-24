@@ -2,6 +2,33 @@ const DB_NAME = 'pp5-schedule-device'
 const STORE = 'snapshots'
 const FREE_KEY = 'free-plan'
 
+// Signup school details contain no login credentials and stay on this device.
+export async function writeRegistrationSchool(userId: string, data: import('./schedule-device-school').DeviceSchoolBasics) {
+  if (!userId || typeof indexedDB === 'undefined') throw Error('บันทึกข้อมูลโรงเรียนบนอุปกรณ์นี้ไม่ได้')
+  const db = await openCache()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(STORE, 'readwrite')
+      transaction.oncomplete = () => resolve()
+      transaction.onabort = () => reject(transaction.error || Error('บันทึกข้อมูลโรงเรียนไม่สำเร็จ'))
+      transaction.onerror = () => reject(transaction.error)
+      transaction.objectStore(STORE).put(data, `registration-school:${userId}`)
+    })
+  } finally { db.close() }
+}
+
+export async function readRegistrationSchool(userId?: string) {
+  if (!userId || typeof indexedDB === 'undefined') return null
+  const db = await openCache()
+  try {
+    return await new Promise<import('./schedule-device-school').DeviceSchoolBasics | null>((resolve, reject) => {
+      const request = db.transaction(STORE).objectStore(STORE).get(`registration-school:${userId}`)
+      request.onsuccess = () => resolve(request.result || null)
+      request.onerror = () => reject(request.error)
+    })
+  } finally { db.close() }
+}
+
 function openCache() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1)

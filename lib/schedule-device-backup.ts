@@ -1,6 +1,7 @@
 import { deviceTeacherLimitMessage, normalizePlan, type FreeWizardPlan } from './schedule-device-free'
 import type {LocalScheduleBundle} from './schedule-device-years'
 import type { FreeSubstituteEntry } from '../components/schedules/FreeSubstituteDesk'
+import { validDeviceLogo } from './schedule-device-school'
 type Plan = FreeWizardPlan & { substitutes:Record<string,FreeSubstituteEntry[]> }
 export type DeviceBundle=LocalScheduleBundle
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value)
@@ -37,6 +38,7 @@ export function readDeviceBackup(raw:unknown,teacherLimit?:number):DeviceBundle 
     if(plan.substitutes!==undefined&&(!record(plan.substitutes)||Object.values(plan.substitutes).some(items=>!Array.isArray(items)||items.some(item=>!record(item)||!text(item.id)||!text(item.absentTeacherId)||!text(item.roomId)||!text(item.subjectId)||!integer(item.period)))))return invalid()
     if(rows('subjects').some(row=>(row.timePreference!==undefined&&!['any','morning','afternoon'].includes(String(row.timePreference)))||(row.spread!==undefined&&typeof row.spread!=='boolean')||(row.subjectGroup!==undefined&&!text(row.subjectGroup))))return invalid()
     if(plan.document!==undefined&&(!record(plan.document)||['schoolName','academicYear','printDate','academicHeadName','directorName'].some(key=>!text((plan.document as Record<string,unknown>)[key]))))return invalid()
+    if(record(plan.document)&&plan.document.logoDataUrl!==undefined&&!validDeviceLogo(plan.document.logoDataUrl))return invalid()
     if(plan.reduceGaps!==undefined&&typeof plan.reduceGaps!=='boolean'||plan.maxContinuous!==undefined&&(!integer(plan.maxContinuous)||Number(plan.maxContinuous)<0||Number(plan.maxContinuous)>8))return invalid()
     const normalized=normalizePlan(plan as Partial<FreeWizardPlan>)
     plans.push({...normalized,substitutes:(plan.substitutes||{}) as Record<string,FreeSubstituteEntry[]>})

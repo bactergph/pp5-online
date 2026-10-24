@@ -41,6 +41,15 @@ shell, own profile, password/logout flows and local scheduling. Likewise,
 `verifySession(true)` is reserved for the shell/local timetable. Membership is
 read from the database on every request and is never granted from JWT claims.
 
+Free registration also collects school name, an optional logo, director and
+academic head, and academic year. Those details stay in IndexedDB, keyed to the
+new account ID, and initialize an empty local scheduler after login. Existing
+local timetables are never replaced by registration defaults. No logo or school
+settings are uploaded by Free registration. **ตั้งค่าเบื้องต้น**, to the right of
+**จัดตาราง**, edits the current local school's metadata; opening another academic
+year archives the previous timetable. The logo and signatories are included in
+the local backup and PDF export. Failed local writes remain visibly unsaved.
+
 Validation: `npm run test:membership`, `npm run test:schedules`,
 `node scripts/test-schedule-preparation.cjs`, `node scripts/test-school-member.cjs`,
 and `node scripts/test-device-schedule-services.cjs`.

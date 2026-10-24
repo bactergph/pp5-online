@@ -18,7 +18,7 @@ import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
 import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 import SchedulePreparation from './SchedulePreparation'
 import SchedulePlacesEntry from './SchedulePlacesEntry'
-import { FiZap, FiGrid, FiUsers, FiCalendar, FiDownload, FiMapPin } from 'react-icons/fi'
+import { FiZap, FiGrid, FiUsers, FiCalendar, FiDownload, FiMapPin, FiSettings } from 'react-icons/fi'
 import './schedule-workspace.css'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
@@ -43,6 +43,8 @@ type Props = {
   mode: 'view' | 'manage'
   initialWorkspace?: 'class' | 'prepare'
   initialStep?: number
+  onSchoolSettings?: () => void
+  schoolSettingsDisabled?: boolean
 }
 
 const scheduleAlert = Swal.mixin({confirmButtonColor:'#245bdb',cancelButtonColor:'#64748b',confirmButtonText:'ตกลง',cancelButtonText:'ยกเลิก',reverseButtons:true})
@@ -50,7 +52,7 @@ function setAlert(alert: {type:'success'|'error';title:string;message?:string}) 
   void scheduleAlert.fire({icon:alert.type,title:alert.title,text:alert.message})
 }
 
-export default function ClassScheduleEntry({ mode, initialWorkspace='class', initialStep=1 }: Props) {
+export default function ClassScheduleEntry({ mode, initialWorkspace='class', initialStep=1, onSchoolSettings, schoolSettingsDisabled }: Props) {
   const { fetchScheduleDays, fetchClassScheduleBundle, fetchSchedulePdfGrids, fetchScheduleExportContext, fetchScheduleClassrooms, fetchScheduleInit, saveClassScheduleCell, moveClassScheduleCell, clearScheduleScope, copyClassSchedule, fetchPeriodTimes, fetchScheduleQuotas, getTeacherConflictAt, toggleScheduleCellLock } = useScheduleOperations()
 
   const [dragLesson,setDragLesson] = useState<{id:string;from?:{day:number;period:number};context:string}|null>(null)
@@ -437,6 +439,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
           <button type="button" aria-pressed={workspace==='activity'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationStep(5);setWorkspace('activity')})}><FiCalendar aria-hidden="true"/>กิจกรรมและครู</button>
           <button type="button" aria-pressed={workspace==='places'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('places'))}><FiMapPin aria-hidden="true"/>สถานที่</button>
           <button type="button" className="schedule-wizard-entry" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})}><FiZap aria-hidden="true"/>จัดตาราง</button>
+          {onSchoolSettings && <button type="button" className="device-school-settings-button" disabled={schoolSettingsDisabled||!!savingKey||!!busyAction||preparationBusy||preparationDirty} onClick={onSchoolSettings}><FiSettings aria-hidden="true" />ตั้งค่าเบื้องต้น</button>}
         </nav>}
         <div className={`schedule-workspace-filters grid gap-4 border bg-white ${workspace!=='class'?'sm:grid-cols-2':'sm:grid-cols-3'}`}>
           <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">

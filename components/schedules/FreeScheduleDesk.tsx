@@ -2,10 +2,10 @@
 import {useCallback,useEffect,useRef,useState} from 'react'
 import {usePathname} from 'next/navigation'
 import Swal from 'sweetalert2'
-import {readFreePlan,writeFreePlan} from '@/lib/schedule-device-cache'
+import {readFreePlan,writeFreePlan,readRegistrationSchool} from '@/lib/schedule-device-cache'
 import {readDeviceBackup} from '@/lib/schedule-device-backup'
 import {normalizePlan,deviceActivityCatalog,FREE_SCHEDULE_TEACHER_LIMIT,type FreeWizardPlan} from '@/lib/schedule-device-free'
-import {deviceYear,deviceSchoolYear,switchDeviceYear,type LocalScheduleBundle} from '@/lib/schedule-device-years'
+import {deviceYear,deviceSchoolYear,type LocalScheduleBundle} from '@/lib/schedule-device-years'
 import {deviceScheduleView} from '@/lib/schedule-device-navigation'
 import {createDeviceScheduleServices} from '@/lib/schedule-device-services'
 import type {FreeSubstituteEntry} from './FreeSubstituteDesk'
@@ -17,6 +17,8 @@ import SubstituteScheduleEntry from './SubstituteScheduleEntry'
 import PeriodTimesEntry from './PeriodTimesEntry'
 import ScheduleWorkloadEntry from './ScheduleWorkloadEntry'
 import ScheduleExportEntry from './ScheduleExportEntry'
+import DeviceSchoolSettings from './DeviceSchoolSettings'
+import {applyDeviceSchoolBasics} from '@/lib/schedule-device-school'
 import './free-schedule.css'
 import './schedule-workspace.css'
 export type LiveFreeAd={title:string;href:string;imageUrl:string}
@@ -46,12 +48,11 @@ function asBundle(raw?: Partial<FreeBundle> & Partial<FreePlan>): FreeBundle {
 }
 
 
-export default function FreeScheduleDesk({ad=null}:{tier:DeskTier;ad?:LiveFreeAd|null}) {
+export default function FreeScheduleDesk({ad=null,registrationOwner}:{tier:DeskTier;ad?:LiveFreeAd|null;registrationOwner?:string}) {
   const pathname=usePathname(),[bundle,setBundle]=useState<FreeBundle>(()=>asBundle()),[ready,setReady]=useState(false)
   const [status,setStatus]=useState('กำลังเปิดฐานข้อมูลในเครื่อง…'),[error,setError]=useState(''),[failed,setFailed]=useState(false),[saving,setSaving]=useState(false)
-  const [revision,setRevision]=useState(0),[computing,setComputing]=useState(false),[yearDraft,setYearDraft]=useState('')
+  const [revision,setRevision]=useState(0),[computing,setComputing]=useState(false),[settingsOpen,setSettingsOpen]=useState(false)
   const [operations,setOperations]=useState<ScheduleOperations|null>(null)
-  const [schoolDraft,setSchoolDraft]=useState<NonNullable<FreeWizardPlan['document']>|null>(null)
   const [guard,setGuard]=useState({dirty:false,busy:false}),[routeStep,setRouteStep]=useState(1)
   const latest=useRef(bundle),expected=useRef(''),queue=useRef(Promise.resolve(true)),failure=useRef(false),pending=useRef(0),controller=useRef<AbortController|null>(null),previousPath=useRef(pathname)
   const [visiblePath,setVisiblePath]=useState(pathname)
@@ -65,12 +66,14 @@ export default function FreeScheduleDesk({ad=null}:{tier:DeskTier;ad?:LiveFreeAd
     }).finally(()=>{pending.current--;if(!pending.current)setSaving(false)})
     queue.current=result;return result
   },[])
-  useEffect(()=>{let active=true;readFreePlan<FreeBundle&FreePlan>().then(row=>{
+  useEffect(()=>{let active=true;Promise.all([readFreePlan<FreeBundle&FreePlan>(),readRegistrationSchool(registrationOwner)]).then(async([row,school])=>{
     if(!active)return
-    const next=asBundle(row?.data);latest.current=next;expected.current=row?.savedAt||'';setBundle(next)
+    let next=asBundle(row?.data);expected.current=row?.savedAt||''
+    if(!row&&school){next=applyDeviceSchoolBasics({...next,year:school.academicYear},school);await write(next);if(!active)return}
+    latest.current=next;setBundle(next)
     setOperations(createDeviceScheduleServices({read:()=>latest.current,write,onComputing:abort=>{controller.current=abort;setComputing(!!abort)}}))
-    setReady(true);setStatus(row?'เปิดข้อมูลจากเครื่องแล้ว':'พร้อมบันทึกข้อมูลบนเครื่องนี้')
-  }).catch(error=>{if(active)setError(error instanceof Error?error.message:'เปิดฐานข้อมูลในเครื่องไม่ได้')});return()=>{active=false}},[write])
+    setReady(true);if(!failure.current)setStatus(row?'เปิดข้อมูลจากเครื่องแล้ว':school?'บันทึกข้อมูลโรงเรียนบนเครื่องแล้ว':'พร้อมบันทึกข้อมูลบนเครื่องนี้')
+  }).catch(error=>{if(active)setError(error instanceof Error?error.message:'เปิดฐานข้อมูลในเครื่องไม่ได้')});return()=>{active=false}},[write,registrationOwner])
 
   useEffect(()=>{const unload=(event:BeforeUnloadEvent)=>{if(saving||computing||guard.dirty||guard.busy){event.preventDefault();event.returnValue=''}};window.addEventListener('beforeunload',unload);return()=>window.removeEventListener('beforeunload',unload)},[saving,computing,guard])
   useEffect(()=>{
@@ -98,24 +101,19 @@ export default function FreeScheduleDesk({ad=null}:{tier:DeskTier;ad?:LiveFreeAd
     }catch(error){setError(error instanceof Error?error.message:'นำเข้าไฟล์ไม่สำเร็จ')}
   }
   const view=deviceScheduleView(visiblePath)
-  const schoolDocument=data.document||{schoolName:'',academicYear:deviceYear(bundle),printDate:'',academicHeadName:'',directorName:''}
+  const schoolDocument=data.document||{schoolName:'',academicYear:deviceYear(bundle),printDate:'',academicHeadName:'',directorName:'',logoDataUrl:''}
   const blocked=saving||computing||guard.busy||guard.dirty||failed
+  useEffect(()=>{if(ready)window.dispatchEvent(new CustomEvent('device-school-settings',{detail:{schoolName:schoolDocument.schoolName,logoDataUrl:schoolDocument.logoDataUrl||''}}))},[ready,schoolDocument.schoolName,schoolDocument.logoDataUrl])
   return <section className="device-schedule-workspace">
     <div className="local-storage-bar"><div role="status"><strong>จัดตารางสอนฟรี · ครูไม่เกิน 25 คน</strong><small>{status} · ข้อมูลและการประมวลผลอยู่บนอุปกรณ์นี้</small></div><div className="actions"><button type="button" disabled={!ready} onClick={backup}>ดาวน์โหลดสำเนาข้อมูล</button><label className="local-restore">นำเข้าไฟล์สำรอง<input type="file" accept=".json,application/json" disabled={!ready||blocked} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void restore(file)}}/></label></div></div>
     {computing&&<p className="prep-working" role="status">กำลังประมวลผลบนเครื่องนี้… <button type="button" onClick={()=>controller.current?.abort()}>ยกเลิกการจัดตาราง</button></p>}
     {error&&<p className="prep-error" role="alert">{error}</p>}
     {!ready||!operations?<p role="status">กำลังเปิดข้อมูลในเครื่อง…</p>:<>
       {ad&&<LiveAd ad={ad}/>}
-      <details className="device-school-settings"><summary>ข้อมูลโรงเรียนและปีการศึกษาในเครื่อง</summary><fieldset disabled={blocked}>
-        <label>ชื่อโรงเรียน<input value={(schoolDraft||schoolDocument).schoolName} onChange={event=>setSchoolDraft({...schoolDraft||schoolDocument,schoolName:event.target.value})}/></label>
-        <label>หัวหน้าวิชาการ<input value={(schoolDraft||schoolDocument).academicHeadName} onChange={event=>setSchoolDraft({...schoolDraft||schoolDocument,academicHeadName:event.target.value})}/></label>
-        <label>ผู้อำนวยการ<input value={(schoolDraft||schoolDocument).directorName} onChange={event=>setSchoolDraft({...schoolDraft||schoolDocument,directorName:event.target.value})}/></label>
-        <button type="button" disabled={!schoolDraft} onClick={()=>{if(schoolDraft)void write({...latest.current,terms:{1:{...latest.current.terms[1],document:schoolDraft},2:{...latest.current.terms[2],document:schoolDraft}}}).then(saved=>{if(saved){setSchoolDraft(null);setRevision(value=>value+1)}})}}>บันทึกข้อมูลโรงเรียน</button>
-        <form onSubmit={event=>{event.preventDefault();try{void write(switchDeviceYear(latest.current,yearDraft)).then(saved=>{if(saved){setRevision(value=>value+1);setYearDraft('')}})}catch(error){setError(error instanceof Error?error.message:'เพิ่มปีไม่สำเร็จ')}}}><label>เพิ่ม / เปิดปีการศึกษา<input aria-label="ปีการศึกษาในเครื่อง" placeholder="เช่น 2570" value={yearDraft} onChange={event=>setYearDraft(event.target.value)} inputMode="numeric" pattern="2[0-9]{3}" required/></label><button type="submit">เปิดปีการศึกษา</button></form>
-      </fieldset></details>
+      {settingsOpen&&<DeviceSchoolSettings initial={{schoolName:schoolDocument.schoolName,directorName:schoolDocument.directorName,academicHeadName:schoolDocument.academicHeadName,academicYear:deviceYear(bundle),logoDataUrl:schoolDocument.logoDataUrl||''}} onClose={()=>setSettingsOpen(false)} onSave={async settings=>{if(!await write(applyDeviceSchoolBasics(latest.current,settings)))throw Error('ยังไม่ได้บันทึกลงเครื่อง กรุณาดาวน์โหลดสำเนาและลองใหม่');setRevision(value=>value+1)}}/>}
       <ScheduleServicesProvider operations={operations} local onGuard={setGuard}>
         <fieldset className="device-shared-content" disabled={failed} key={revision+':'+view}>
-          {view==='manage'?<ClassScheduleEntry mode="manage" initialWorkspace="prepare" initialStep={routeStep}/>:view==='class'?<ClassScheduleEntry mode="view"/>:view==='teaching'?<TeachingScheduleEntry/>:view==='period-times'?<PeriodTimesEntry/>:view==='substitute'?<SubstituteScheduleEntry/>:view==='conflicts'?<ScheduleConflictsEntry/>:view==='workload'?<ScheduleWorkloadEntry/>:<ScheduleExportEntry/>}
+          {view==='manage'?<ClassScheduleEntry mode="manage" initialWorkspace="prepare" initialStep={routeStep} onSchoolSettings={()=>setSettingsOpen(true)} schoolSettingsDisabled={blocked}/>:view==='class'?<ClassScheduleEntry mode="view"/>:view==='teaching'?<TeachingScheduleEntry/>:view==='period-times'?<PeriodTimesEntry/>:view==='substitute'?<SubstituteScheduleEntry/>:view==='conflicts'?<ScheduleConflictsEntry/>:view==='workload'?<ScheduleWorkloadEntry/>:<ScheduleExportEntry/>}
         </fieldset>
       </ScheduleServicesProvider>
     </>}

@@ -77,6 +77,18 @@ function LayoutClientInner({
   const searchParams = useSearchParams()
   const [today, setToday] = useState(membershipToday)
   const [upgrade, setUpgrade] = useState('')
+  const [deviceSchool, setDeviceSchool] = useState<{schoolName:string;logoDataUrl:string}|null>(null)
+  const localSchool = pathname.includes('/schedules/device') ? deviceSchool : null
+  useEffect(() => {
+    const update = (event: Event) => {
+      const data = (event as CustomEvent).detail
+      if (typeof data?.schoolName !== 'string' || typeof data?.logoDataUrl !== 'string') return
+      if (data.logoDataUrl && (data.logoDataUrl.length > 800000 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(data.logoDataUrl))) return
+      setDeviceSchool({schoolName:data.schoolName.slice(0,200),logoDataUrl:data.logoDataUrl})
+    }
+    window.addEventListener('device-school-settings',update)
+    return()=>window.removeEventListener('device-school-settings',update)
+  },[])
   const packageName = membership?.subscribedPackage || (membership ? membershipPackage(membership) : null)
   const effectiveMembership = membership && packageName ? membershipFromRow({membership_kind:packageName==='school'?'school':'individual',member_plan:packageName==='school'?null:packageName,membership_started_on:membership.startsOn,membership_expires_on:membership.expiresOn},today) : null
   const freeAccess = !!effectiveMembership && isFreeMembership(effectiveMembership)
@@ -148,9 +160,9 @@ function LayoutClientInner({
         isHomeroom={isHomeroom}
         isActingDirector={isActingDirector}
         schoolCode={schoolCode}
-        schoolLogoUrl={schoolLogoUrl}
-        schoolProgramName={schoolProgramName}
-        schoolName={schoolName}
+        schoolLogoUrl={localSchool?localSchool.logoDataUrl:schoolLogoUrl}
+        schoolProgramName={localSchool?.schoolName?null:schoolProgramName}
+        schoolName={localSchool?.schoolName||schoolName}
         membership={effectiveMembership}
         membershipAd={effectiveMembership&&isFreeMembership(effectiveMembership)&&pathname.includes('/schedules/device')?membershipAd:null}
       />
@@ -167,7 +179,7 @@ function LayoutClientInner({
         userRole={userRole}
         userFullName={userFullName}
         schoolCode={schoolCode}
-        schoolName={schoolName}
+        schoolName={localSchool?.schoolName||schoolName}
         sidebarOpen={sidebarOpen}
         onMenuClick={() => setSidebarOpen(true)}
       />

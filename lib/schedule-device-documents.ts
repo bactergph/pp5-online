@@ -5,7 +5,7 @@ import {devicePreparation} from './schedule-device-view'
 import {summarizeScheduleWorkload} from './schedule-workload'
 import {teacherTimetableName,activityTimetableTeacherLabel} from './schedule-helpers'
 
-export type DeviceDocumentSettings={schoolName:string;academicYear:string;printDate:string;academicHeadName:string;directorName:string}
+export type DeviceDocumentSettings={schoolName:string;academicYear:string;printDate:string;academicHeadName:string;directorName:string;logoDataUrl?:string}
 export function deviceWorkload(plan:FreeWizardPlan){
   const data=devicePreparation(plan)
   return summarizeScheduleWorkload({...data,activityGroups:data.plan.activityGroups},data.teachers)
