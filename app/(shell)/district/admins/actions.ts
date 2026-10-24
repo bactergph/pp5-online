@@ -10,15 +10,6 @@ export async function approveAdmins(ids: string[]) {
   return approveSelectedAdmins(ids)
 }
 
-type AdminRow = {
-  id: string
-  email: string
-  prefix: string
-  full_name: string
-  position: string | null
-  is_active: boolean
-  school_id: string | null
-}
 type SchoolRow = {
   id: string
   name: string
@@ -61,90 +52,20 @@ export async function searchSchoolsForAdminAssign(q: string) {
   return (data || []) as SchoolRow[]
 }
 
-// Super Admin: เห็น admin ทุกคน ทุกโรงเรียน (ไม่ scope เขต) + นับ นร./ครู/วิชา ของแต่ละโรงเรียน
 export async function fetchAdminsAndSchools() {
   await requireDistrict()
-  const db = createServerClient()
+  const {loadMemberDirectory}=await import('@/lib/member-admin-store')
+  return loadMemberDirectory(createServerClient())
+}
 
-  // ไม่โหลด schools ทั้งประเทศ (~หลายหมื่นแถว / ติด limit 1000 ของ Supabase)
-  // ดึงเฉพาะโรงเรียนที่ผูกกับ admin อยู่แล้ว สำหรับแสดงในตาราง
-  const adminsRes = await db.from('users')
-    .select('id, email, prefix, full_name, position, is_active, school_id')
-    .eq('role', 'admin')
-    .order('is_active', { ascending: true })
-    .order('full_name')
-  const admins = (adminsRes.data || []) as AdminRow[]
-
-  const schoolMap: Record<string, SchoolRow> = {}
-  const schools: SchoolRow[] = []
-  const linkedSchoolIds = [...new Set(admins.map(a => a.school_id).filter(Boolean))] as string[]
-  for (let i = 0; i < linkedSchoolIds.length; i += 200) {
-    const chunk = linkedSchoolIds.slice(i, i + 200)
-    const linked = await db.from('schools')
-      .select('id, name, district, province, member_code, membership_kind, member_plan, membership_started_on, membership_expires_on, membership_version')
-      .in('id', chunk)
-    const linkedSchools = linked.error && (String(linked.error.message || '').includes('member_code') || String(linked.error.message || '').includes('membership_kind') || String(linked.error.message || '').includes('member_plan'))
-      ? (await db.from('schools').select('id, name, district, province').in('id', chunk)).data
-      : linked.data
-    for (const school of (linkedSchools || []) as SchoolRow[]) {
-      schoolMap[school.id] = school
-      schools.push(school)
-    }
-  }
-
-  // สถิติต่อโรงเรียน (เฉพาะโรงเรียนที่มี admin)
-  type Stat = { students: number; principal: number; academic_head: number; homeroom: number; teacher_only: number; totalUsers: number }
-  const sids = [...new Set(admins.filter(a => a.school_id).map(a => a.school_id))] as string[]
-  const stat: Record<string, Stat> = {}
-  sids.forEach(id => { stat[id] = { students: 0, principal: 0, academic_head: 0, homeroom: 0, teacher_only: 0, totalUsers: 0 } })
-
-  if (sids.length > 0) {
-    const [classroomsR, usersR] = await Promise.all([
-      db.from('classrooms').select('id, school_id').in('school_id', sids),
-      db.from('users').select('role, is_homeroom, school_id').in('school_id', sids),
-    ])
-    for (const u of (usersR.data || [])) {
-      const st = stat[u.school_id]; if (!st) continue
-      if (u.role !== 'district') st.totalUsers++
-      if (u.role === 'principal') st.principal++
-      else if (u.role === 'academic_head') st.academic_head++
-      else if (u.role === 'teacher') { if (u.is_homeroom) st.homeroom++; else st.teacher_only++ }
-    }
-    const classrooms = classroomsR.data || []
-    const bySchool: Record<string, string[]> = {}
-    for (const c of classrooms as { id: string; school_id: string }[]) {
-      ;(bySchool[c.school_id] ||= []).push(c.id)
-    }
-    await Promise.all(sids.map(async (sid) => {
-      const classIds = bySchool[sid] || []
-      if (!classIds.length) return
-      const { count } = await db.from('students').select('id', { count: 'exact', head: true }).in('classroom_id', classIds)
-      if (stat[sid]) stat[sid].students = count || 0
-    }))
-  }
-
-  // โควต้าต่อ admin — ดึงแบบขนานทีละชุด (ผลลัพธ์เหมือนเดิม ค่าเริ่มต้น 15)
-  const quotaMap: Record<string, number> = {}
-  const CHUNK = 12
-  for (let i = 0; i < admins.length; i += CHUNK) {
-    const chunk = admins.slice(i, i + CHUNK)
-    await Promise.all(chunk.map(async (u) => {
-      try {
-        const { data } = await db.auth.admin.getUserById(u.id)
-        quotaMap[u.id] = Number(data?.user?.app_metadata?.user_quota ?? 15)
-      } catch {
-        quotaMap[u.id] = 15
-      }
-    }))
-  }
-
-  const adminsOut = admins.map((u) => ({
-    ...u,
-    school: u.school_id ? (schoolMap[u.school_id] ?? { id: u.school_id, name: 'โรงเรียนที่ผูกไว้' }) : null,
-    stat: u.school_id ? (stat[u.school_id] ?? null) : null,
-    quota: quotaMap[u.id] ?? 15,
-  }))
-  return { admins: adminsOut, schools }
+export async function fetchAdminAccountDetails(id:string) {
+  await requireDistrict()
+  const db=createServerClient()
+  const target=await db.from('users').select('id').eq('id',id).eq('role','admin').maybeSingle()
+  if(target.error||!target.data)throw Error('ไม่พบสมาชิก')
+  const result=await db.auth.admin.getUserById(id)
+  if(result.error||!result.data.user)throw Error('โหลดรายละเอียดบัญชีไม่สำเร็จ')
+  return {quota:Number(result.data.user.app_metadata?.user_quota??15),lastSignIn:result.data.user.last_sign_in_at||null}
 }
 
 /** ตั้งชนิดสมาชิกของโรงเรียนที่ผูกกับผู้ดูแลแล้ว */
@@ -194,8 +115,10 @@ export async function updateAdmin(id: string, payload: {
   const db = createServerClient()
 
   const nextPayload = { ...payload }
+  const {data:current,error:currentError}=await db.from('users').select('id,school_id').eq('id',id).eq('role','admin').maybeSingle()
+  if(currentError||!current)return {error:'ไม่พบสมาชิก'}
   let memberMeta: { memberCode?: string | null; catalogId?: string } = {}
-  if (payload.school_id) {
+  if (payload.school_id && payload.school_id!==current.school_id) {
     try {
       const { resolveMemberSchoolId } = await import('@/lib/school-member')
       const member = await resolveMemberSchoolId(payload.school_id)
@@ -206,7 +129,7 @@ export async function updateAdmin(id: string, payload: {
     }
   }
 
-  const { error } = await db.from('users').update(nextPayload).eq('id', id)
+  const { error } = await db.from('users').update(nextPayload).eq('id', id).eq('role','admin')
   if (!error) {
     if (nextPayload.school_id) {
       const { data: admin } = await db.from('users').select('is_active, role').eq('id', id).maybeSingle()
@@ -232,8 +155,10 @@ export async function updateAdmin(id: string, payload: {
 export async function toggleAdminActive(id: string, isActive: boolean) {
   const session = await requireDistrict()
   const db = createServerClient()
-  const { data: target } = await db.from('users').select('full_name, school_id').eq('id', id).maybeSingle()
-  const { error } = await db.from('users').update({ is_active: isActive }).eq('id', id)
+  if(typeof isActive!=='boolean')return {error:'สถานะไม่ถูกต้อง'}
+  const { data: target,error:targetError } = await db.from('users').select('full_name, school_id').eq('id', id).eq('role','admin').maybeSingle()
+  if(targetError||!target)return {error:'ไม่พบสมาชิก'}
+  const { error } = await db.from('users').update({ is_active: isActive }).eq('id', id).eq('role','admin')
   if (!error) {
     if (isActive && target?.school_id) {
       const { data: admin } = await db.from('users').select('role').eq('id', id).maybeSingle()
@@ -252,27 +177,39 @@ export async function toggleAdminActive(id: string, isActive: boolean) {
       description: `${isActive ? 'เปิดใช้งาน' : 'ระงับ'}ผู้ดูแลโรงเรียน ${target?.full_name || ''}`.trim(),
     })
   }
+  return {error:error?.message}
 }
 
 export async function deleteAdmins(ids: string[]) {
   const session = await requireDistrict()
-  if (ids.length === 0) return { error: undefined }
+  if (!Array.isArray(ids)||!ids.length||ids.length>200||ids.some(id=>typeof id!=='string')) return { error:'เลือกสมาชิกได้ครั้งละ 1–200 บัญชี' }
+  ids=[...new Set(ids)]
   const db = createServerClient()
-  const { data: targets } = await db.from('users').select('id, full_name, school_id').in('id', ids)
-  await Promise.all(ids.map(id => db.auth.admin.deleteUser(id)))
-  const { error } = await db.from('users').delete().in('id', ids)
-  if (!error) {
+  const { data: targets,error:readError } = await db.from('users').select('id, full_name, school_id').in('id', ids).eq('role','admin')
+  if(readError)return {error:readError.message}
+  if(targets?.length!==ids.length)return {error:'ไม่พบสมาชิกบางบัญชี กรุณาโหลดข้อมูลใหม่'}
+  const removed:string[]=[],failed:string[]=[]
+  for(const target of targets){
+    const auth=await db.auth.admin.deleteUser(target.id)
+    if(auth.error){failed.push(`${target.full_name}: ${auth.error.message}`);continue}
+    const result=await db.from('users').delete().eq('id',target.id).eq('role','admin')
+    if(result.error)failed.push(`${target.full_name}: ${result.error.message}`)
+    else removed.push(target.id)
+  }
+  if (removed.length) {
+    try {
     await logActivity({
       actor: session,
       schoolId: null,
       action: 'delete',
       module: 'district_admins',
       targetType: 'user',
-      description: `ลบผู้ดูแลโรงเรียน ${ids.length} คน`,
-      metadata: { count: ids.length, names: (targets || []).map(t => t.full_name) },
+      description: `ลบสมาชิก ${removed.length} บัญชี`,
+      metadata: { count: removed.length, names: targets.filter(target=>removed.includes(target.id)).map(target=>target.full_name) },
     })
+    } catch { /* Account deletion succeeded; do not misreport an audit failure. */ }
   }
-  return { error: error?.message }
+  return { error:failed.length?`ลบสำเร็จ ${removed.length} บัญชี · ไม่สำเร็จ ${failed.join('; ')}`:undefined }
 }
 
 export async function resetAdminPassword(userId: string, newPassword: string) {

@@ -27,7 +27,7 @@ bucket. It does not remove existing users, classrooms, schedules or documents.
 - Expiration changes effective access to Free without deleting stored data.
   Legacy school accounts with no dates keep existing access until Super Admin
   explicitly sets an annual term; this release does not silently expire schools.
-- Super Admin uses **สมาชิกโรงเรียน → ตั้งแพ็กเกจ** to grant/change/renew a term.
+- Super Admin uses **จัดการสมาชิก → แพ็กเกจ** to grant/change/renew a term.
   Every change uses an optimistic version check and writes an audit history in
   the same database transaction. Normal school settings cannot change packages.
 - **โฆษณาตารางฟรี** manages image upload, title, target link, enabled state and
@@ -53,3 +53,27 @@ the local backup and PDF export. Failed local writes remain visibly unsaved.
 Validation: `npm run test:membership`, `npm run test:schedules`,
 `node scripts/test-schedule-preparation.cjs`, `node scripts/test-school-member.cjs`,
 and `node scripts/test-device-schedule-services.cjs`.
+
+## Member directory
+
+`/district/admins` lists membership owner/admin accounts, not staff personnel.
+Public registration is automatically active Free; it does not await manual
+approval. Account enable/disable and paid package validity are separate states.
+Paid subscriptions still require an explicit Super Admin change.
+
+The directory shows the profile's actual `users.created_at` in Asia/Bangkok,
+newest first, with search, account/package/expiry filters, 25-row pagination,
+desktop rows and mobile cards. Missing dates remain explicitly unspecified.
+Expired Pro/School rows retain their purchased package label and explain that
+their effective access is Free. Upcoming expirations use a 30-day window.
+
+The initial list reads paginated profiles and batches linked schools; it does
+not query Auth, students or personnel per member. Auth metadata (last login,
+school account quota) loads only when opening details. Failures remain visible
+with retry instead of silently reporting an empty directory.
+
+Package changes/renewals retain the existing version check and audit history.
+Editing a profile without changing its school must retain the exact school ID,
+including legacy catalog-linked accounts. Account activation and deletion must
+surface database/Auth failures; never remove a profile after Auth deletion fails.
+No additional database migration is required for this directory redesign.
