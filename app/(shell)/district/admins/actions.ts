@@ -5,6 +5,7 @@ import { logActivity } from '@/lib/audit'
 import { seedEvaluationSettingsForSchool } from '@/lib/evaluation-settings-seed'
 import { approveSelectedAdmins } from '@/lib/approve-admins'
 import { validMembershipDate } from '@/lib/membership'
+import {validFreeTeacherLimit} from '@/lib/free-schedule-entitlement'
 
 export async function approveAdmins(ids: string[]) {
   return approveSelectedAdmins(ids)
@@ -66,6 +67,14 @@ export async function fetchAdminAccountDetails(id:string) {
   const result=await db.auth.admin.getUserById(id)
   if(result.error||!result.data.user)throw Error('โหลดรายละเอียดบัญชีไม่สำเร็จ')
   return {quota:Number(result.data.user.app_metadata?.user_quota??15),lastSignIn:result.data.user.last_sign_in_at||null}
+}
+
+export async function setFreeScheduleTeacherLimit(schoolId:string,version:number,limit:number) {
+  const session=await requireDistrict()
+  if(!schoolId||!Number.isInteger(version)||version<0||!validFreeTeacherLimit(limit))return {error:'ระบุจำนวนครูเป็นจำนวนเต็ม ตั้งแต่ 25 คนขึ้นไป'}
+  const result=await createServerClient().rpc('set_free_teacher_limit',{p_actor:session.userId,p_school:schoolId,p_version:version,p_limit:limit})
+  if(result.error)return {error:result.error.code==='PGRST202'?'กรุณารันฐานข้อมูล 084_free_teacher_allowance.sql ก่อนปรับจำนวนครู':result.error.message}
+  return {error:undefined}
 }
 
 /** ตั้งชนิดสมาชิกของโรงเรียนที่ผูกกับผู้ดูแลแล้ว */

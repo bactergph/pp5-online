@@ -1,9 +1,10 @@
 'use client'
 import { useEffect, useRef } from 'react'
 import { FiAward, FiExternalLink, FiLock, FiX } from 'react-icons/fi'
+import {freeTeacherLimit} from '@/lib/free-schedule-entitlement'
 import { MEMBERSHIP_CONTACT_URL, membershipDateLabel, membershipLabel, membershipPackage, type Membership } from '@/lib/membership'
 export function MembershipBadge({ membership }: { membership: Membership }) {
-  return <div className="membership-status"><span className={`membership-badge is-${membershipPackage(membership)}`}><FiAward aria-hidden="true" />{membershipLabel(membership)}</span>{membership.expiresOn && <small>{membership.expired ? 'หมดอายุ' : membership.scheduled ? 'เริ่ม ' + membershipDateLabel(membership.startsOn) + ' · ถึง' : 'ถึง'} {membershipDateLabel(membership.expiresOn)}</small>}</div>
+  return <div className="membership-status"><span className={`membership-badge is-${membershipPackage(membership)}`}><FiAward aria-hidden="true" />{membershipLabel(membership)}</span>{membership.kind==='individual'&&membership.plan==='free'&&<small>ครูสูงสุด {freeTeacherLimit(membership.freeTeacherLimit)} คน</small>}{membership.expiresOn && <small>{membership.expired ? 'หมดอายุ' : membership.scheduled ? 'เริ่ม ' + membershipDateLabel(membership.startsOn) + ' · ถึง' : 'ถึง'} {membershipDateLabel(membership.expiresOn)}</small>}</div>
 }
 export function MembershipUpgradeDialog({ open, feature, onClose, membership }: { open: boolean; feature: string; onClose: () => void; membership: Membership | null }) {
   const dialog = useRef<HTMLDialogElement>(null)

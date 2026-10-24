@@ -4,7 +4,8 @@ import {usePathname} from 'next/navigation'
 import Swal from 'sweetalert2'
 import {readFreePlan,writeFreePlan,readRegistrationSchool} from '@/lib/schedule-device-cache'
 import {readDeviceBackup} from '@/lib/schedule-device-backup'
-import {normalizePlan,deviceActivityCatalog,FREE_SCHEDULE_TEACHER_LIMIT,type FreeWizardPlan} from '@/lib/schedule-device-free'
+import {normalizePlan,deviceActivityCatalog,type FreeWizardPlan} from '@/lib/schedule-device-free'
+import {freeTeacherLimit} from '@/lib/free-schedule-entitlement'
 import {deviceYear,deviceSchoolYear,type LocalScheduleBundle} from '@/lib/schedule-device-years'
 import {deviceScheduleView} from '@/lib/schedule-device-navigation'
 import {createDeviceScheduleServices} from '@/lib/schedule-device-services'
@@ -48,7 +49,9 @@ function asBundle(raw?: Partial<FreeBundle> & Partial<FreePlan>): FreeBundle {
 }
 
 
-export default function FreeScheduleDesk({ad=null,registrationOwner}:{tier:DeskTier;ad?:LiveFreeAd|null;registrationOwner?:string}) {
+export default function FreeScheduleDesk({ad=null,registrationOwner,teacherLimit}:{tier:DeskTier;ad?:LiveFreeAd|null;registrationOwner?:string;teacherLimit?:number}) {
+  const limit=freeTeacherLimit(teacherLimit),limitRef=useRef(limit)
+  useEffect(()=>{limitRef.current=limit},[limit])
   const pathname=usePathname(),[bundle,setBundle]=useState<FreeBundle>(()=>asBundle()),[ready,setReady]=useState(false)
   const [status,setStatus]=useState('กำลังเปิดฐานข้อมูลในเครื่อง…'),[error,setError]=useState(''),[failed,setFailed]=useState(false),[saving,setSaving]=useState(false)
   const [revision,setRevision]=useState(0),[computing,setComputing]=useState(false),[settingsOpen,setSettingsOpen]=useState(false)
@@ -71,7 +74,7 @@ export default function FreeScheduleDesk({ad=null,registrationOwner}:{tier:DeskT
     let next=asBundle(row?.data);expected.current=row?.savedAt||''
     if(!row&&school){next=applyDeviceSchoolBasics({...next,year:school.academicYear},school);await write(next);if(!active)return}
     latest.current=next;setBundle(next)
-    setOperations(createDeviceScheduleServices({read:()=>latest.current,write,onComputing:abort=>{controller.current=abort;setComputing(!!abort)}}))
+    setOperations(createDeviceScheduleServices({read:()=>latest.current,write,teacherLimit:()=>limitRef.current,onComputing:abort=>{controller.current=abort;setComputing(!!abort)}}))
     setReady(true);if(!failure.current)setStatus(row?'เปิดข้อมูลจากเครื่องแล้ว':school?'บันทึกข้อมูลโรงเรียนบนเครื่องแล้ว':'พร้อมบันทึกข้อมูลบนเครื่องนี้')
   }).catch(error=>{if(active)setError(error instanceof Error?error.message:'เปิดฐานข้อมูลในเครื่องไม่ได้')});return()=>{active=false}},[write,registrationOwner])
 
@@ -95,7 +98,7 @@ export default function FreeScheduleDesk({ad=null,registrationOwner}:{tier:DeskT
   function backup(){const blob=new Blob([JSON.stringify({format:'jarnsek-device-schedule',version:1,data:latest.current},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),anchor=document.createElement('a');anchor.href=url;anchor.download='jarnsek-device-schedule.json';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}
   async function restore(file:File){
     try{
-      const next=asBundle(readDeviceBackup(JSON.parse(await file.text()),FREE_SCHEDULE_TEACHER_LIMIT))
+      const next=asBundle(readDeviceBackup(JSON.parse(await file.text()),limit))
       if(!(await Swal.fire({icon:'warning',title:'แทนที่ข้อมูลในเครื่องด้วยไฟล์สำรอง?',showCancelButton:true,confirmButtonText:'นำเข้า',cancelButtonText:'ยกเลิก'})).isConfirmed)return
       if(await write(next)){setRevision(value=>value+1);setGuard({dirty:false,busy:false})}
     }catch(error){setError(error instanceof Error?error.message:'นำเข้าไฟล์ไม่สำเร็จ')}
@@ -105,7 +108,7 @@ export default function FreeScheduleDesk({ad=null,registrationOwner}:{tier:DeskT
   const blocked=saving||computing||guard.busy||guard.dirty||failed
   useEffect(()=>{if(ready)window.dispatchEvent(new CustomEvent('device-school-settings',{detail:{schoolName:schoolDocument.schoolName,logoDataUrl:schoolDocument.logoDataUrl||''}}))},[ready,schoolDocument.schoolName,schoolDocument.logoDataUrl])
   return <section className="device-schedule-workspace">
-    <div className="local-storage-bar"><div role="status"><strong>จัดตารางสอนฟรี · ครูไม่เกิน 25 คน</strong><small>{status} · ข้อมูลและการประมวลผลอยู่บนอุปกรณ์นี้</small></div><div className="actions"><button type="button" disabled={!ready} onClick={backup}>ดาวน์โหลดสำเนาข้อมูล</button><label className="local-restore">นำเข้าไฟล์สำรอง<input type="file" accept=".json,application/json" disabled={!ready||blocked} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void restore(file)}}/></label></div></div>
+    <div className="local-storage-bar"><div role="status"><strong>จัดตารางสอนฟรี · ครูไม่เกิน {limit} คน</strong><small>{status} · ข้อมูลและการประมวลผลอยู่บนอุปกรณ์นี้</small></div><div className="actions"><button type="button" disabled={!ready} onClick={backup}>ดาวน์โหลดสำเนาข้อมูล</button><label className="local-restore">นำเข้าไฟล์สำรอง<input type="file" accept=".json,application/json" disabled={!ready||blocked} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void restore(file)}}/></label></div></div>
     {computing&&<p className="prep-working" role="status">กำลังประมวลผลบนเครื่องนี้… <button type="button" onClick={()=>controller.current?.abort()}>ยกเลิกการจัดตาราง</button></p>}
     {error&&<p className="prep-error" role="alert">{error}</p>}
     {!ready||!operations?<p role="status">กำลังเปิดข้อมูลในเครื่อง…</p>:<>

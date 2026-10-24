@@ -3,7 +3,7 @@ import { membershipFromRow, membershipPackage, membershipToday, validMembershipD
 export type MemberSchool = {
   id:string; name:string; member_code?:string|null; district?:string|null; province?:string|null;
   membership_kind?:string|null; member_plan?:string|null; membership_started_on?:string|null;
-  membership_expires_on?:string|null; membership_version?:number;
+  membership_expires_on?:string|null; membership_version?:number; free_schedule_teacher_limit?:number;
 }
 export type ManagedMember = {
   id:string; email:string; prefix:string; full_name:string; position:string|null;

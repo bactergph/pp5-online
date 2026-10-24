@@ -1,0 +1,36 @@
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),ts=require('typescript'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite')
+const cache={}
+function load(file){const abs=path.resolve(file);if(cache[abs])return cache[abs];const exports={};cache[abs]=exports;vm.runInNewContext(ts.transpileModule(fs.readFileSync(abs,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,Intl,crypto,structuredClone,AbortController,console,require(name){if(name==='./schedule-device-run')return {solveScheduleOnDevice:async(...args)=>load('lib/schedule-device-build.ts').buildDeviceDraft(...args)};if(name==='server-only')return {};if(name.startsWith('@/'))return load(name.slice(2)+'.ts');if(name.startsWith('.'))return load(path.resolve(path.dirname(abs),name+'.ts'));throw Error('Unexpected dependency '+name)}});return exports}
+const id=n=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`
+;(async()=>{
+ const policy=load('lib/free-schedule-entitlement.ts'),membership=load('lib/membership.ts'),free=load('lib/schedule-device-free.ts'),backup=load('lib/schedule-device-backup.ts'),{createDeviceScheduleServices}=load('lib/schedule-device-services.ts')
+ assert.equal(policy.freeTeacherLimit(),25);assert.equal(policy.freeTeacherLimit(120),120);for(const value of [0,24,30.5,NaN,Infinity,'120'])assert.equal(policy.validFreeTeacherLimit(value),false)
+ const entitlement=membership.membershipFromRow({membership_kind:'individual',member_plan:'free',free_schedule_teacher_limit:120});assert.equal(entitlement.plan,'free');assert.equal(entitlement.freeTeacherLimit,120);assert.equal(membership.membershipAllows('/students',entitlement),false)
+ const expired=membership.membershipFromRow({membership_kind:'individual',member_plan:'pro',membership_expires_on:'2020-01-01',free_schedule_teacher_limit:70});assert.equal(expired.plan,'free');assert.equal(expired.freeTeacherLimit,70)
+ const base={...free.normalizePlan({rooms:[{id:id(1),label:'ม.1/1'}]}),substitutes:{}}
+ let bundle={year:'2569',semester:2,terms:{1:structuredClone(base),2:structuredClone(base)}},limit=25,writes=0
+ const services=createDeviceScheduleServices({read:()=>bundle,write:async next=>{bundle=next;writes++;return true},teacherLimit:()=>limit})
+ const rows=Array.from({length:35},(_,i)=>({key:'teacher-'+i,prefix:'นาย',name:'ตัวอย่าง '+i,position:'ครู'}))
+ let result=await services.saveScheduleInputTeachers('2569',2,rows);assert.match(result.error,/25/);assert.equal(bundle.terms[2].teachers.length,0);assert.equal(writes,0)
+ limit=50;result=await services.saveScheduleInputTeachers('2569',2,rows);assert.equal(result.error,null);assert.equal(bundle.terms[2].teachers.length,35);assert.equal(bundle.terms[1].teachers.length,35)
+ const before=JSON.stringify(bundle);result=await services.saveScheduleInputTeachers('2569',2,Array.from({length:16},(_,i)=>({key:'more-'+i,prefix:'นาง',name:'เพิ่ม '+i,position:'ครู'})));assert.match(result.error,/50/);assert.equal(JSON.stringify(bundle),before)
+ bundle.terms[2].subjects=[{id:id(800),roomId:id(1),code:'ท21101',name:'ภาษาไทย',teacherId:bundle.terms[2].teachers[0].id,periods:1,pattern:[1],placeId:null}]
+ const raw={format:'jarnsek-device-schedule',version:1,data:bundle}
+ assert.equal(backup.readDeviceBackup(raw,50).terms[2].teachers.length,35);assert.throws(()=>backup.readDeviceBackup(raw,25),/25/)
+ const draft=await services.createScheduleDraft('2569',2,[id(1)],true);assert.equal(draft.error,null);assert.equal(draft.data.status,'complete',JSON.stringify(draft))
+ limit=25;assert.match((await services.confirmScheduleDraft(draft.data.id)).error,/25/);assert.equal(bundle.terms[2].timetable.length,0);assert.equal(bundle.terms[2].teachers.length,35)
+ const check=await services.checkPreparation('2569',2,[id(1)],true);assert.ok(check.data.some(issue=>issue.severity==='error'&&issue.message.includes('25')))
+ limit=50;assert.equal((await services.confirmScheduleDraft(draft.data.id)).error,null);assert.equal(bundle.terms[2].timetable.length,1)
+ const db=new PGlite();await db.exec(`create role anon;create role authenticated;create role service_role;create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create function get_my_role() returns text language sql as 'select ''district''::text';create table schools(id uuid primary key default gen_random_uuid(),name text,is_catalog boolean default false,member_code text unique,membership_kind text,member_plan text);create table users(id uuid primary key,email text,full_name text,prefix text,position text,role text,is_homeroom boolean,school_id uuid,is_active boolean);create table classrooms(id uuid primary key default gen_random_uuid(),school_id uuid,academic_year_id uuid,level text,room int);create table free_schedule_ads(id text primary key);insert into users(id,role,is_active)values('${id(10)}','district',true);`)
+ await db.exec(fs.readFileSync('supabase/migrations/082_annual_memberships.sql','utf8'));const sql=fs.readFileSync('supabase/migrations/084_free_teacher_allowance.sql','utf8');await db.exec(sql);await db.exec(sql)
+ const query=(sql,args=[])=>db.query(sql,args),workspace=(await query('select register_free_member($1,$2,$3,$4,$5) id',[id(20),'free@example.test','สมาชิก','นาย','ครู'])).rows[0].id
+ const other=(await query("insert into schools(name)values('other') returning id")).rows[0].id
+ const set=(actor,school,version,count)=>query('select set_free_teacher_limit($1,$2,$3,$4) result',[actor,school,version,count])
+ assert.equal((await query('select free_schedule_teacher_limit from schools where id=$1',[workspace])).rows[0].free_schedule_teacher_limit,25)
+ await assert.rejects(set(id(20),workspace,0,120),/สิทธิ์/);await assert.rejects(set(id(10),workspace,0,24),/25/);await assert.rejects(query('update schools set free_schedule_teacher_limit=120 where id=$1',[workspace]),/Super Admin/);await assert.rejects(query("insert into schools(name,free_schedule_teacher_limit)values('forged',120)"),/Super Admin/)
+ await set(id(10),workspace,0,120);let row=(await query('select * from schools where id=$1',[workspace])).rows[0];assert.equal(row.free_schedule_teacher_limit,120);assert.equal(row.member_plan,'free');assert.equal(row.membership_kind,'individual');assert.equal(row.membership_expires_on,null)
+ assert.equal((await query('select free_schedule_teacher_limit from schools where id=$1',[other])).rows[0].free_schedule_teacher_limit,25);await assert.rejects(set(id(10),workspace,0,50),/เปลี่ยนแล้ว/)
+ await set(id(10),workspace,1,25);assert.equal((await query('select count(*)::int n from membership_history where school_id=$1',[workspace])).rows[0].n,2)
+ assert.equal((await query("select has_function_privilege('authenticated','set_free_teacher_limit(uuid,uuid,integer,integer)','execute') allowed")).rows[0].allowed,false)
+ await db.close();console.log('PASS: per-school Free allowance, atomic 25/50 imports, backup limit, worker draft above 25, downgrade preservation/commit guard, Free-only access, protected admin RPC/CAS/history and independent school quotas')
+})().catch(error=>{console.error(error);process.exitCode=1})

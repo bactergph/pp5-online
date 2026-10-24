@@ -5,8 +5,9 @@ import { emptyPlan } from './schedule-planning'
 import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
 import type { DeviceSnapshot } from './schedule-device-build'
 import { isTimetableClassroom } from './schedules'
+import {DEFAULT_FREE_TEACHER_LIMIT} from './free-schedule-entitlement'
 
-export const FREE_SCHEDULE_TEACHER_LIMIT = 25
+export const FREE_SCHEDULE_TEACHER_LIMIT = DEFAULT_FREE_TEACHER_LIMIT
 export function deviceTeacherLimitMessage(count:number, limit?:number) {
   return limit !== undefined && count > limit ? `จัดตารางฟรีรองรับครูสูงสุด ${limit} คน (มี ${count} คน) กรุณาลดรายชื่อครูก่อนจัดตาราง` : ''
 }

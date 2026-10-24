@@ -3,7 +3,8 @@ import { activityTeachers, activityWeeklyPeriods, lessonTeachers, validateActivi
 import { validateSubjectInputs } from './schedule-input'
 import { validatePeriodTimes } from './schedule-helpers'
 import { validatePlan } from './schedule-planning'
-import { FREE_SCHEDULE_TEACHER_LIMIT, freeActivityGroup, freeActivityTeachers, newId, toDeviceSnapshot, type FreeActivity, type FreeWizardPlan } from './schedule-device-free'
+import { freeActivityGroup, freeActivityTeachers, newId, toDeviceSnapshot, type FreeActivity, type FreeWizardPlan } from './schedule-device-free'
+import {freeTeacherLimit as resolveTeacherLimit} from './free-schedule-entitlement'
 import { deviceDataKey, deviceDraftView, devicePreparation, devicePreflight, localDraftCells } from './schedule-device-view'
 import { deviceDocumentPages, deviceWorkload } from './schedule-device-documents'
 import { deviceYear, type LocalScheduleBundle } from './schedule-device-years'
@@ -16,14 +17,15 @@ import { SCHEDULE_DAYS } from './schedules'
 import { verifyCompleteSchedule } from './schedule-verification'
 import { applySchedulePlaceChange } from './schedule-places'
 
-type Options = { read:()=>LocalScheduleBundle; write:(bundle:LocalScheduleBundle)=>Promise<boolean>; onComputing?:(controller:AbortController|null)=>void }
+type Options = { read:()=>LocalScheduleBundle; write:(bundle:LocalScheduleBundle)=>Promise<boolean>; onComputing?:(controller:AbortController|null)=>void; teacherLimit?:number|(()=>number) }
 type Plan = LocalScheduleBundle['terms'][1]
 const failure = (error:unknown)=>({error:error instanceof Error?error.message:'บันทึกลงเครื่องไม่สำเร็จ',data:null})
 const outcome = async<T,>(work:()=>Promise<T>)=>{try{return {data:await work(),error:null}}catch(error){return failure(error)}}
 
 /** The online screens depend on this interface, never on a database implementation.
  * Every mutation here is serialized, verified, and acknowledged only after IndexedDB commits. */
-export function createDeviceScheduleServices({read,write,onComputing}:Options): ScheduleOperations {
+export function createDeviceScheduleServices({read,write,onComputing,teacherLimit}:Options): ScheduleOperations {
+  const currentTeacherLimit=()=>resolveTeacherLimit(typeof teacherLimit==='function'?teacherLimit():teacherLimit)
   let queue=Promise.resolve<unknown>(null)
   let selectedYear='', selectedTerm=1
   const drafts=new Map<string,{year:string;term:number;base:string;draft:DeviceDraft;rooms:string[]}>()
@@ -40,7 +42,7 @@ export function createDeviceScheduleServices({read,write,onComputing}:Options): 
     const current=read(),workspace=year===deviceYear(current)?current:current.archives?.[year]
     if(!workspace)throw Error('ไม่พบปีการศึกษา')
     const other=term===1?2:1,old=workspace.terms[term as 1|2],sibling=workspace.terms[other]
-    if(next.teachers.length>FREE_SCHEDULE_TEACHER_LIMIT&&next.teachers.length>=old.teachers.length)throw Error(`จัดตารางฟรีรองรับครูสูงสุด ${FREE_SCHEDULE_TEACHER_LIMIT} คน`)
+    if(next.teachers.length>currentTeacherLimit()&&next.teachers.length>old.teachers.length)throw Error(`จัดตารางฟรีรองรับครูสูงสุด ${currentTeacherLimit()} คน`)
     const removedRooms=old.rooms.filter(room=>!next.rooms.some(item=>item.id===room.id)).map(room=>room.id)
     for(const target of [next,sibling]) {
       if(target.subjects.some(subject=>removedRooms.includes(subject.roomId))||target.activities.some(activity=>activity.roomIds.some(id=>removedRooms.includes(id)))||target.timetable.some(cell=>removedRooms.includes(cell.classroomId))||Object.values(target.substitutes||{}).flat().some(row=>removedRooms.includes(row.roomId)))throw Error('ห้องที่ลบยังมีรายวิชา กิจกรรม ตาราง หรือรายการสอนแทนอยู่')
@@ -174,8 +176,8 @@ export function createDeviceScheduleServices({read,write,onComputing}:Options): 
         if(!teacher){teacher={id:newId(),name,prefix:row.prefix.trim(),fullName:row.name.trim(),position:row.position.trim()};teachers.push(teacher)}
         results.push({key:row.key,id:teacher.id})
       }
-      // Reject an oversized import atomically; never save just the first 25 names.
-      if(teachers.length>FREE_SCHEDULE_TEACHER_LIMIT)throw Error(`จัดตารางฟรีรองรับครูสูงสุด ${FREE_SCHEDULE_TEACHER_LIMIT} คน (ชุดนี้รวม ${teachers.length} คน)`)
+      // Reject an oversized import atomically; never truncate the submitted names.
+      if(teachers.length>currentTeacherLimit())throw Error(`จัดตารางฟรีรองรับครูสูงสุด ${currentTeacherLimit()} คน (ชุดนี้รวม ${teachers.length} คน)`)
       await put(year,term,{...current,teachers});return {results,reused:rows.length-(teachers.length-current.teachers.length)}
     })),
     saveScheduleInputSubjects:(year,term,hash,rows)=>outcome(()=>mutate(year,term,async current=>{
@@ -231,10 +233,10 @@ export function createDeviceScheduleServices({read,write,onComputing}:Options): 
     })),
     previewScheduleActivityTeam:async(year,term,hash,group,remove)=>outcome(async()=>activityImpact(plan(year,term),hash,group,remove)),
     saveScheduleActivityTeam:(...args)=>outcome(()=>saveActivity(...args)),
-    checkPreparation:async(year,term,rooms,clear)=>outcome(async()=>devicePreflight(plan(year,term),rooms,clear,FREE_SCHEDULE_TEACHER_LIMIT)),
+    checkPreparation:async(year,term,rooms,clear)=>outcome(async()=>devicePreflight(plan(year,term),rooms,clear,currentTeacherLimit())),
     createScheduleDraft:async(year,term,rooms,clear)=>outcome(async()=>{
       await queue
-      const current=structuredClone(plan(year,term)),base=deviceDataKey(current),issues=devicePreflight(current,rooms,clear,FREE_SCHEDULE_TEACHER_LIMIT)
+      const current=structuredClone(plan(year,term)),base=deviceDataKey(current),issues=devicePreflight(current,rooms,clear,currentTeacherLimit())
       if(issues.some(issue=>issue.severity==='error'))return {status:'invalid' as const,issues,id:null,rows:[],assigned:0,locked:0}
       const controller=new AbortController();onComputing?.(controller)
       try {
@@ -247,6 +249,7 @@ export function createDeviceScheduleServices({read,write,onComputing}:Options): 
     confirmScheduleDraft:(id,unlock=false)=>outcome(async()=>{
       const stored=drafts.get(id);if(!stored)throw Error('ฉบับร่างนี้ถูกยกเลิกหรือบันทึกแล้ว')
       return mutate(stored.year,stored.term,async current=>{
+        if(current.teachers.length>currentTeacherLimit())throw Error(`จัดตารางฟรีรองรับครูสูงสุด ${currentTeacherLimit()} คน กรุณาลดจำนวนครูก่อนบันทึกตาราง`)
         stale(current,stored.base);if(stored.draft.locked&&!unlock)throw Error('ยืนยันแทนที่คาบล็อกก่อน')
         // Recheck the full returned assignment independently before making it durable.
         const verified=verifyCompleteSchedule(stored.draft.lessons||[],stored.draft.rows.map(row=>({classroomId:row.classroom_id,lessonId:row.activity_id?`activity:${row.activity_id}`:row.class_subject_id,day:row.day_of_week,period:row.period})),current.days,current.periods,toDeviceSnapshot(current,stored.rooms).blocks)

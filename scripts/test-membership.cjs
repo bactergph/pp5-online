@@ -1,6 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite')
 function moduleFrom(file,deps={}){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,Date,Intl,URL,Error,TextEncoder,File,Buffer,process:{env:{SESSION_SECRET:'test-only'}},require:n=>deps[n]||{}});return exports}
-const m=moduleFrom('lib/membership.ts'),ads=moduleFrom('lib/free-schedule-ad-window.ts'),id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`
+const m=moduleFrom('lib/membership.ts',{'./free-schedule-entitlement':moduleFrom('lib/free-schedule-entitlement.ts')}),ads=moduleFrom('lib/free-schedule-ad-window.ts'),id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`
 async function run(){
  assert.equal(m.annualMembershipEnd('2026-10-24'),'2027-10-23');assert.equal(m.annualMembershipEnd('2024-02-29'),'2025-02-28');assert.throws(()=>m.annualMembershipEnd('2026-02-30'))
  const pro={membership_kind:'individual',member_plan:'pro',membership_started_on:'2026-10-24',membership_expires_on:'2027-10-23'}

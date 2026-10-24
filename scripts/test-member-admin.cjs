@@ -1,6 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
 function load(file,deps={}){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,Intl,console,require:name=>deps[name]||{}});return exports}
-const membership=load('lib/membership.ts'),helpers=load('lib/member-admin.ts',{'./membership':membership}),store=load('lib/member-admin-store.ts')
+const membership=load('lib/membership.ts',{'./free-schedule-entitlement':load('lib/free-schedule-entitlement.ts')}),helpers=load('lib/member-admin.ts',{'./membership':membership}),store=load('lib/member-admin-store.ts')
 const today='2026-10-24',schools=Array.from({length:601},(_,i)=>({id:'school-'+i,name:'โรงเรียน '+i,member_code:'MS-'+i,membership_kind:'individual',member_plan:'free'}))
 const members=Array.from({length:1201},(_,i)=>({id:'member-'+i,full_name:'สมาชิก '+i,prefix:'นาย',email:`member${i}@example.test`,is_active:i%2===0,position:null,school_id:schools[i%601].id,created_at:'2026-10-23T18:30:00Z'}))
 let failTable='',ranges=[],schoolReads=0,authCalls=0

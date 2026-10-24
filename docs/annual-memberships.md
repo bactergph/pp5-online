@@ -77,3 +77,26 @@ Editing a profile without changing its school must retain the exact school ID,
 including legacy catalog-linked accounts. Account activation and deletion must
 surface database/Auth failures; never remove a profile after Auth deletion fails.
 No additional database migration is required for this directory redesign.
+
+## Free teacher allowance per member school
+
+Apply `084_free_teacher_allowance.sql` before deploying this addition. Every
+school starts at 25 teachers. Super Admin can open **จัดการสมาชิก → ครูฟรี … คน ·
+ปรับ**, or **รายละเอียด → ปรับจำนวนครูตัวฟรี**, enter a whole number of at least
+25, and save. The default can be restored by selecting 25. The allowance belongs
+to that school/member code, including accounts sharing the same workspace.
+Changing it never changes the package, subscription dates, Pro room limit or
+other schools' allowances. A protected, district-only RPC serializes changes
+with package updates, checks the membership version and records history atomically.
+
+Members refresh the website online to receive the new allowance; after that,
+their local database and computation continue on the device, including offline.
+The sidebar and local desk display the effective allowance. All local teacher
+imports, preflight, draft confirmation and backup restoration use the same
+server-supplied limit. Backups cannot grant themselves a larger allowance.
+Reducing the allowance preserves existing data and permits deleting teachers;
+generation/confirmation is blocked while the teacher count exceeds the new limit.
+
+`scripts/test-free-teacher-allowance.cjs` covers 25/50 limits, atomic imports,
+backup validation, worker generation above 25, reduction during a draft,
+protected SQL writes, same-school scope, independent schools and Free access.

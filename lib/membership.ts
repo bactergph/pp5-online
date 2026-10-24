@@ -1,7 +1,8 @@
+import {freeTeacherLimit} from './free-schedule-entitlement'
 export const INDIVIDUAL_PRO_ROOM_LIMIT = 10
 export const MEMBERSHIP_CONTACT_URL = 'https://www.facebook.com/share/1Dn81diqEv/?mibextid=wwXIfr'
 export type MemberPackage = 'free' | 'pro' | 'school'
-type Dates = { startsOn?: string | null; expiresOn?: string | null; expired?: boolean; scheduled?: boolean; subscribedPackage?: MemberPackage; version?: number }
+type Dates = { startsOn?: string | null; expiresOn?: string | null; expired?: boolean; scheduled?: boolean; subscribedPackage?: MemberPackage; version?: number; freeTeacherLimit?:number }
 export type Membership = ({ kind: 'school' } | { kind: 'individual'; plan: 'free' | 'pro' }) & Dates
 export function membershipToday(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
@@ -16,9 +17,9 @@ export function annualMembershipEnd(start: string) {
   const [year, month, day] = start.split('-').map(Number)
   return new Date(Date.UTC(year + 1, month - 1, day) - 86400000).toISOString().slice(0, 10)
 }
-export function membershipFromRow(row: { membership_kind?: string | null; member_plan?: string | null; membership_started_on?: string | null; membership_expires_on?: string | null; membership_version?: number | null }, today = membershipToday()): Membership {
+export function membershipFromRow(row: { membership_kind?: string | null; member_plan?: string | null; membership_started_on?: string | null; membership_expires_on?: string | null; membership_version?: number | null; free_schedule_teacher_limit?:number|null }, today = membershipToday()): Membership {
   const subscribedPackage: MemberPackage = row.membership_kind === 'individual' ? row.member_plan === 'pro' ? 'pro' : 'free' : 'school'
-  const dates: Dates = { startsOn: row.membership_started_on, expiresOn: row.membership_expires_on, subscribedPackage, version: row.membership_version || 0 }
+  const dates: Dates = { startsOn: row.membership_started_on, expiresOn: row.membership_expires_on, subscribedPackage, version: row.membership_version || 0,freeTeacherLimit:freeTeacherLimit(row.free_schedule_teacher_limit) }
   const expired = subscribedPackage !== 'free' && !!dates.expiresOn && dates.expiresOn < today
   const scheduled = subscribedPackage !== 'free' && !!dates.startsOn && dates.startsOn > today
   if (expired || scheduled) return { kind: 'individual', plan: 'free', ...dates, expired, scheduled }
