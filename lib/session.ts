@@ -5,6 +5,8 @@ import { cache } from 'react'
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@/lib/supabase'
+import { readMembership } from './member-plan'
+import { isFreeMembership } from './membership'
 
 // ข้อมูลที่เก็บใน session
 export type SessionPayload = {
@@ -76,7 +78,9 @@ export async function deleteSession() {
 }
 
 // อ่าน session จาก cookie (cache ใน 1 request — layout + server actions ซ้ำได้โดยไม่ decrypt ซ้ำ)
-export const getSession = cache(async (): Promise<SessionPayload | null> => {
+// Online data operations require a paid plan. Shell/auth/local/profile callers
+// explicitly request identityOnly; subscription state is never trusted from JWT.
+export const getSession = cache(async (identityOnly = false): Promise<SessionPayload | null> => {
   const cookieStore = await cookies()
   const cookie = cookieStore.get('session')?.value
   const session = await decrypt(cookie)
@@ -89,5 +93,6 @@ export const getSession = cache(async (): Promise<SessionPayload | null> => {
     error = fallback.error
   }
   if (error || !profile || profile.is_active !== true) return null
+  if (!identityOnly && profile.role !== 'district' && profile.school_id && isFreeMembership(await readMembership(profile.school_id))) return null
   return {...session,role:profile.role,schoolId:profile.role==='district'?session.schoolId:profile.school_id,email:profile.email || session.email,fullName:profile.full_name,isHomeroom:Boolean(profile.is_homeroom),mustChangePassword:Boolean(profile.must_change_password)}
 })

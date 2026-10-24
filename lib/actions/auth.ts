@@ -3,6 +3,8 @@
 import { redirect } from 'next/navigation'
 import { supabase, createServerClient } from '@/lib/supabase'
 import { createSession, deleteSession, getSession } from '@/lib/session'
+import { readMembership } from '@/lib/member-plan'
+import { isFreeMembership, membershipHome } from '@/lib/membership'
 
 // ============================================================
 // Login - รับ email/password, ตรวจสอบกับ Supabase Auth
@@ -73,6 +75,8 @@ export async function login(
 
   if (mustChangePassword) {
     redirectTo = '/auth/change-password'
+  } else if (effectiveSchoolId && userProfile.role !== 'district' && isFreeMembership(await readMembership(effectiveSchoolId))) {
+    redirectTo = membershipHome(await readMembership(effectiveSchoolId))
   } else if (userProfile.role === 'admin') {
     const { getAdminOnboardingGate, onboardingUrl } = await import('@/lib/onboarding-complete')
     const gate = await getAdminOnboardingGate(effectiveSchoolId)
@@ -127,7 +131,7 @@ export async function logout() {
   let redirectTo = '/login'
 
   try {
-    const session = await getSession()
+    const session = await getSession(true)
     if (session?.schoolId && session.role !== 'district') {
       const db = createServerClient()
       const { data } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()

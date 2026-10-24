@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 
-// สมัครใช้งานเอง (public) — สร้างบัญชี admin สถานะ "รออนุมัติ" (is_active=false, ยังไม่มีโรงเรียน)
+// Every self-service registration starts as an isolated, active Free account.
 export async function POST(req: NextRequest) {
-  const { email, password, prefix, full_name, position } = await req.json()
+  let input
+  try { input = await req.json() } catch { return NextResponse.json({ error: 'ข้อมูลไม่ถูกต้อง' }, { status: 400 }) }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return NextResponse.json({ error: 'ข้อมูลไม่ถูกต้อง' }, { status: 400 })
+  const { password, prefix, position } = input
+  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : ''
+  const full_name = typeof input.full_name === 'string' ? input.full_name.trim() : ''
 
-  if (!email || !password || !full_name) {
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || typeof password !== 'string' || !full_name || full_name.length > 200) {
     return NextResponse.json({ error: 'กรุณากรอกอีเมล รหัสผ่าน และชื่อ-นามสกุล' }, { status: 400 })
   }
   if (String(password).length < 8) {
@@ -26,7 +31,8 @@ export async function POST(req: NextRequest) {
   const db = createServerClient()
 
   // กันอีเมลซ้ำ
-  const { data: dup } = await db.from('users').select('id').eq('email', email).maybeSingle()
+  const { data: dup, error: lookupError } = await db.from('users').select('id').eq('email', email).maybeSingle()
+  if (lookupError) return NextResponse.json({ error: 'ตรวจบัญชีไม่สำเร็จ กรุณาลองใหม่' }, { status: 503 })
   if (dup) {
     return NextResponse.json({ error: 'อีเมลนี้ถูกใช้สมัครแล้ว' }, { status: 400 })
   }
@@ -41,20 +47,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authError?.message || 'สมัครไม่สำเร็จ' }, { status: 400 })
   }
 
-  const { error: profileError } = await db.from('users').upsert({
-    id: authData.user.id,
-    email,
-    full_name,
-    prefix: resolvedPrefix,
-    position: resolvedPosition,
-    role: 'admin',
-    is_homeroom: false,
-    school_id: null,
-    is_active: false,   // รออนุมัติ
+  const { error: profileError } = await db.rpc('register_free_member', {
+    p_user: authData.user.id, p_email: email, p_name: full_name,
+    p_prefix: resolvedPrefix, p_position: resolvedPosition,
   })
   if (profileError) {
     await db.auth.admin.deleteUser(authData.user.id)
-    return NextResponse.json({ error: profileError.message }, { status: 400 })
+    return NextResponse.json({ error: 'สร้างพื้นที่สมาชิกไม่สำเร็จ กรุณาตรวจฐานข้อมูลสมาชิก 082 หรือลองใหม่' }, { status: 503 })
   }
 
   return NextResponse.json({ success: true })

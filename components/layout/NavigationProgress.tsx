@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { membershipAllows } from '@/lib/membership'
 
 function NavigationProgressInner() {
   const pathname = usePathname()
@@ -9,7 +10,7 @@ function NavigationProgressInner() {
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
-    setPending(false)
+    void Promise.resolve().then(() => setPending(false))
     document.body.removeAttribute('data-nav-pending')
   }, [pathname, searchParams])
 
@@ -35,6 +36,12 @@ function NavigationProgressInner() {
         return
       }
       if (url.origin !== window.location.origin) return
+      const freeShell = a.closest<HTMLElement>('[data-membership-free="true"]')
+      if (freeShell) {
+        const code = freeShell.dataset.membershipSchoolCode
+        const route = code && url.pathname.startsWith(`/${code}/`) ? url.pathname.slice(code.length + 1) : url.pathname
+        if (!membershipAllows(route, { kind: 'individual', plan: 'free' })) return
+      }
 
       const next = `${url.pathname}${url.search}`
       const current = `${window.location.pathname}${window.location.search}`

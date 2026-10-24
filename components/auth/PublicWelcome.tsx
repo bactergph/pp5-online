@@ -71,7 +71,7 @@ export default function PublicWelcome() {
         </div>
         <nav id="mobile-menu" className="jsk-mobile-nav jsk-container" aria-label="เมนูมือถือ" hidden={!menuOpen}>
           {navigation.map(([id, label]) => <a key={id} href={'#' + id} onClick={() => setMenuOpen(false)}>{label}</a>)}
-          <Link href="/login">เข้าสู่ระบบ</Link><Link href="/register">สมัครใช้งานสำหรับโรงเรียน</Link>
+          <Link href="/login">เข้าสู่ระบบ</Link><Link href="/register">สมัครสมาชิกฟรี</Link>
         </nav>
       </header>
 
@@ -84,8 +84,8 @@ export default function PublicWelcome() {
               <h1>จัดการงานวิชาการ<br />ให้คล่องตัว<span>ตั้งแต่คะแนนถึงรายงาน</span></h1>
               <p className="jsk-lead">บันทึกคะแนน เวลาเรียน และจัดทำ ปพ.5 / ปพ.6 พร้อมเครื่องมือสำหรับงานวิชาการของโรงเรียน ผ่านจารย์เสก</p>
               <p className="jsk-hero-benefits"><FiCheck aria-hidden /> ใช้ผ่านเบราว์เซอร์ <span>·</span> แบ่งงานตามสิทธิ์</p>
-              <div className="jsk-actions"><Link className="jsk-button jsk-primary" href="/register">สมัครใช้งานสำหรับโรงเรียน<FiArrowRight aria-hidden /></Link><a className="jsk-text-link" href="#examples">ดูตัวอย่างโปรแกรม<FiArrowRight aria-hidden /></a></div>
-              <p className="jsk-hint">บัญชีผู้ดูแลโรงเรียนใหม่ต้องรออนุมัติก่อนใช้งาน</p>
+              <div className="jsk-actions"><Link className="jsk-button jsk-primary" href="/register">สมัครสมาชิกฟรี<FiArrowRight aria-hidden /></Link><a className="jsk-text-link" href="#examples">ดูตัวอย่างโปรแกรม<FiArrowRight aria-hidden /></a></div>
+              <p className="jsk-hint">บัญชีผู้ดูแลโรงเรียนใหม่เริ่มใช้ฟรีได้ทันที</p>
               <p className="jsk-existing">มีบัญชีจากโรงเรียนแล้ว? <Link href="/login">เข้าสู่ระบบ</Link></p>
             </div>
             <div className="jsk-hero-stage">
@@ -119,14 +119,14 @@ export default function PublicWelcome() {
         </section>
 
         <section id="how-it-works" className="jsk-section jsk-container">
-          <div className="jsk-start-grid"><div className="jsk-section-heading"><p className="jsk-eyebrow">เริ่มใช้งานสำหรับโรงเรียน</p><h2>เริ่มต้นให้โรงเรียน<br />แล้วให้ครูทำงานต่อร่วมกัน</h2><p>สมัครในนามผู้ดูแลโรงเรียน เมื่อได้รับอนุมัติแล้วจึงตั้งค่าข้อมูลและจัดสิทธิ์ให้บุคลากร</p><Link className="jsk-button jsk-primary" href="/register">สมัครใช้งานสำหรับโรงเรียน<FiArrowRight aria-hidden /></Link><p className="jsk-hint">ต้องรออนุมัติบัญชีก่อนเริ่มตั้งค่าโรงเรียน</p></div>
-            <ol className="jsk-start-steps">{[['สมัครและรออนุมัติ', 'กรอกข้อมูลผู้ดูแลเพื่อขอใช้งาน บัญชีใหม่ต้องได้รับอนุมัติก่อน'], ['ตั้งค่าโรงเรียน', 'เลือกโรงเรียน ประเภทโรงเรียน และปีการศึกษา เตรียมครู นักเรียน และรายวิชา'], ['เริ่มงานตามสิทธิ์', 'ครูใช้บัญชีที่ได้รับ บันทึกข้อมูล ตรวจผล และจัดทำรายงานในส่วนที่รับผิดชอบ']].map(([title, text], i) => <li key={title}><span className="jsk-step">0{i + 1}</span><div><h3>{title}</h3><p>{text}</p></div></li>)}</ol>
+          <div className="jsk-start-grid"><div className="jsk-section-heading"><p className="jsk-eyebrow">เริ่มใช้งานสำหรับโรงเรียน</p><h2>เริ่มต้นให้โรงเรียน<br />แล้วให้ครูทำงานต่อร่วมกัน</h2><p>เริ่มจากบัญชีบุคคลแบบฟรี แล้วติดต่อสมัครโปรรายปีหรือสมาชิกโรงเรียนเมื่อต้องการใช้ทุกฟังก์ชัน</p><Link className="jsk-button jsk-primary" href="/register">สมัครสมาชิกฟรี<FiArrowRight aria-hidden /></Link><p className="jsk-hint">สมาชิกฟรีจัดตารางบนอุปกรณ์ ครูสูงสุด 25 คน</p></div>
+            <ol className="jsk-start-steps">{[['สมัครสมาชิกฟรี', 'สร้างบัญชีบุคคลด้วยอีเมล แล้วเข้าใช้งานฟรีได้ทันที'], ['ตั้งค่าโรงเรียน', 'เลือกโรงเรียน ประเภทโรงเรียน และปีการศึกษา เตรียมครู นักเรียน และรายวิชา'], ['เริ่มงานตามสิทธิ์', 'ครูใช้บัญชีที่ได้รับ บันทึกข้อมูล ตรวจผล และจัดทำรายงานในส่วนที่รับผิดชอบ']].map(([title, text], i) => <li key={title}><span className="jsk-step">0{i + 1}</span><div><h3>{title}</h3><p>{text}</p></div></li>)}</ol>
           </div>
           <aside className="jsk-member-note"><div><strong>มีบัญชีจากโรงเรียนแล้ว?</strong><p>ใช้บัญชีเดิมได้เลย หากใช้ชื่อผู้ใช้ ให้เข้าผ่านลิงก์ของโรงเรียน สอบถามเรื่องบัญชีและสิทธิ์จากผู้ดูแลโรงเรียนของคุณ</p></div><Link className="jsk-button jsk-secondary" href="/login">เข้าสู่ระบบ<FiArrowRight aria-hidden /></Link></aside>
         </section>
 
         <section id="questions" className="jsk-section jsk-tint"><div className="jsk-container jsk-faq"><div className="jsk-section-heading"><p className="jsk-eyebrow">ข้อมูลก่อนเริ่มต้น</p><h2>คำถามก่อนเริ่ม<br />ใช้จารย์เสก</h2><p>ประเภทโรงเรียน การสมัคร และการเตรียมข้อมูล</p></div><div>{questions.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div></div></section>
-        <section className="jsk-final"><div className="jsk-container"><p className="jsk-eyebrow">จารย์เสก · งานวิชาการของโรงเรียน</p><h2>เริ่มจัดการงานวิชาการ<br />ให้เป็นระบบไปด้วยกัน</h2><p>เตรียมโรงเรียนให้พร้อม แล้วให้ครูทำงานต่อในส่วนที่รับผิดชอบ</p><div className="jsk-actions"><Link href="/register" className="jsk-button jsk-primary">สมัครใช้งานสำหรับโรงเรียน<FiArrowRight aria-hidden /></Link><Link href="/login" className="jsk-button jsk-secondary">เข้าสู่ระบบ</Link></div><p className="jsk-hint">บัญชีใหม่ต้องรออนุมัติ · ครูที่มีบัญชีแล้วใช้บัญชีเดิมได้</p></div></section>
+        <section className="jsk-final"><div className="jsk-container"><p className="jsk-eyebrow">จารย์เสก · งานวิชาการของโรงเรียน</p><h2>เริ่มจัดการงานวิชาการ<br />ให้เป็นระบบไปด้วยกัน</h2><p>เตรียมโรงเรียนให้พร้อม แล้วให้ครูทำงานต่อในส่วนที่รับผิดชอบ</p><div className="jsk-actions"><Link href="/register" className="jsk-button jsk-primary">สมัครสมาชิกฟรี<FiArrowRight aria-hidden /></Link><Link href="/login" className="jsk-button jsk-secondary">เข้าสู่ระบบ</Link></div><p className="jsk-hint">สมัครใหม่ใช้ฟรีได้ทันที · ครูที่มีบัญชีแล้วใช้บัญชีเดิมได้</p></div></section>
       </main>
 
       <footer className="jsk-footer jsk-container"><div className="jsk-brand"><Image src="/brand/jarnsek-logo.png" alt="" width={42} height={42} /><span><strong>จารย์เสก</strong><small>ระบบบริหารงานวิชาการโรงเรียน</small></span></div><nav aria-label="เมนูท้ายหน้า"><a href="#school-types">ประเภทโรงเรียน</a><a href="#questions">คำถามที่พบบ่อย</a><Link href="/login">เข้าสู่ระบบ</Link><Link href="/register">สมัครใช้งาน</Link></nav></footer>

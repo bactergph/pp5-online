@@ -3,10 +3,12 @@ import 'server-only'
 import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { getSession } from './session'
+import { readMembership } from './member-plan'
+import { isFreeMembership } from './membership'
 
 // ตรวจสอบ session และ return user info (cache ตลอด 1 render pass)
-export const verifySession = cache(async () => {
-  const session = await getSession()
+export const verifySession = cache(async (allowFree = false) => {
+  const session = await getSession(true)
 
   if (!session?.userId) {
     redirect('/login')
@@ -16,6 +18,7 @@ export const verifySession = cache(async () => {
     redirect('/auth/change-password')
   }
 
+  if (!allowFree && session.role !== 'district' && session.schoolId && isFreeMembership(await readMembership(session.schoolId))) redirect('/schedules/device/manage?upgrade=1')
   return {
     isAuth: true,
     userId: session.userId,

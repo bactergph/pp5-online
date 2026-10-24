@@ -13,7 +13,7 @@ const getDistrictAreaOffice = cache(async (userId: string) => {
 // ไม่พึ่ง session JWT เพื่อให้ตรงกับ settings เสมอ
 export async function requireDistrict() {
   const session = await getSession()
-  if (!session || session.role !== 'district') throw new Error('ไม่มีสิทธิ์')
+  if (!session || session.role !== 'district' || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
 
   const areaOffice = await getDistrictAreaOffice(session.userId)
   return { ...session, areaOffice }

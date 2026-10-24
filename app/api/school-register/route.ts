@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { schoolMemberEmail } from '@/lib/schoolAuth'
 import { logActivity } from '@/lib/audit'
+import { readMembership } from '@/lib/member-plan'
 
 // สมัครสมาชิกผ่านหน้า login ของโรงเรียน (public) — username ล้วน, สถานะรออนุมัติ
 export async function POST(req: NextRequest) {
@@ -34,6 +35,8 @@ export async function POST(req: NextRequest) {
   // ตรวจว่าโรงเรียนมีจริง
   const { data: school } = await db.from('schools').select('id').eq('id', schoolId).maybeSingle()
   if (!school) return NextResponse.json({ error: 'ไม่พบโรงเรียน' }, { status: 404 })
+  const membership = await readMembership(schoolId)
+  if (membership.kind !== 'school') return NextResponse.json({ error: 'การสมัครหลายบัญชีเปิดให้สมาชิกโรงเรียนที่ยังไม่หมดอายุเท่านั้น' }, { status: 403 })
 
   // กัน username ซ้ำในโรงเรียนเดียวกัน
   const { data: dup } = await db.from('users')

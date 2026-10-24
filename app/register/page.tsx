@@ -31,8 +31,8 @@ export default function RegisterPage() {
     finally { setLoading(false) }
   }
   return <AuthScreen mode="register">
-    {done ? <div role="status"><div className="auth-success-icon"><FiCheckCircle aria-hidden /></div><h2>สมัครเรียบร้อยแล้ว</h2><p className="auth-success-copy">บัญชีของคุณอยู่ระหว่างรออนุมัติจากผู้ดูแลระบบ เมื่อได้รับอนุมัติแล้ว สามารถเข้าสู่ระบบเพื่อเลือกโรงเรียนและตั้งค่าเริ่มต้นได้</p><Link href="/login" className="welcome-button welcome-button-primary">ไปหน้าเข้าสู่ระบบ<FiArrowRight aria-hidden /></Link><div className="welcome-login-bottom"><Link href="/">กลับหน้าแนะนำระบบ</Link></div></div> : <>
-      <h2>สมัครใช้งาน</h2><p>สร้างบัญชีผู้ดูแลสำหรับโรงเรียนใหม่</p>
+    {done ? <div role="status"><div className="auth-success-icon"><FiCheckCircle aria-hidden /></div><h2>สมัครเรียบร้อยแล้ว</h2><p className="auth-success-copy">บัญชีสมาชิกฟรีพร้อมใช้งานแล้ว เข้าสู่ระบบเพื่อจัดตารางเรียนและตารางสอนบนอุปกรณ์ของคุณได้ทันที</p><Link href="/login" className="welcome-button welcome-button-primary">เข้าสู่ระบบและเริ่มใช้ฟรี<FiArrowRight aria-hidden /></Link><div className="welcome-login-bottom"><Link href="/">กลับหน้าแนะนำระบบ</Link></div></div> : <>
+      <h2>สมัครใช้งานฟรี</h2><p>สมาชิกบุคคล 1 บัญชี เริ่มจัดตารางเรียนและตารางสอนได้ทันที</p>
       <form onSubmit={handleSubmit} className="welcome-login-form" aria-busy={loading}>
         {error && <div ref={errorRef} tabIndex={-1} className="welcome-login-error" role="alert">{error}</div>}
         <fieldset className="auth-form-section" disabled={loading}><legend>01 · ข้อมูลผู้สมัคร</legend>
@@ -41,7 +41,7 @@ export default function RegisterPage() {
           <div><label htmlFor="position">ตำแหน่ง <span className="auth-field-hint">(ไม่บังคับ)</span></label><input id="position" name="position" maxLength={80} placeholder="เช่น ครู / หัวหน้าวิชาการ" autoComplete="organization-title" /></div>
         </fieldset>
         <fieldset className="auth-form-section" disabled={loading}><legend>02 · บัญชีเข้าใช้งาน</legend><div><label htmlFor="email">อีเมล *</label><input id="email" name="email" type="email" required placeholder="you@email.com" autoComplete="email" /><p className="auth-field-hint">ใช้อีเมลนี้สำหรับเข้าสู่ระบบ</p></div><div className="auth-field-grid"><div><label htmlFor="password">รหัสผ่าน *</label><PasswordInput id="password" name="password" placeholder="อย่างน้อย 8 ตัวอักษร" autoComplete="new-password" minLength={8} /></div><div><label htmlFor="password2">ยืนยันรหัสผ่าน *</label><PasswordInput id="password2" name="password2" placeholder="กรอกอีกครั้ง" autoComplete="new-password" minLength={8} /></div></div></fieldset>
-        <p className="auth-form-notice">บัญชีใหม่ต้องรออนุมัติก่อนใช้งาน จากนั้นจึงเลือกโรงเรียนและตั้งค่าเริ่มต้นได้</p>
+        <p className="auth-form-notice">เริ่มเป็นสมาชิกฟรี ไม่ต้องรออนุมัติ ข้อมูลตารางและการประมวลผลอยู่ในอุปกรณ์ รองรับครูสูงสุด 25 คน</p>
         <button type="submit" className="welcome-button welcome-button-primary" disabled={loading}>{loading ? <><span className="welcome-spinner" aria-hidden />กำลังสมัคร...</> : <>สร้างบัญชี<FiArrowRight aria-hidden /></>}</button>
       </form><div className="welcome-login-bottom">มีบัญชีแล้ว? <Link href="/login">เข้าสู่ระบบ</Link></div>
     </>}

@@ -29,7 +29,7 @@ export type ActivityLogFilters = {
 
 export async function logActivity(input: ActivityLogInput) {
   try {
-    const actor = input.actor ?? await getSession()
+    const actor = input.actor ?? await getSession(true)
     const schoolId = input.schoolId ?? actor?.schoolId ?? null
     const db = createServerClient()
 

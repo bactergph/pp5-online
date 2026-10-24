@@ -1,4 +1,5 @@
 export type FreeScheduleAd = {
+  enabled?: boolean
   title: string
   href: string
   imageUrl: string
@@ -23,5 +24,5 @@ export function safeHttpUrl(value: string) {
 
 export function freeAdIsLive(ad: FreeScheduleAd, today = bangkokToday()) {
   const ready = Boolean(ad.title.trim() || safeHttpUrl(ad.href) || safeHttpUrl(ad.imageUrl))
-  return ready && Boolean(ad.start) && Boolean(ad.end) && ad.start <= ad.end && today >= ad.start && today <= ad.end
+  return ad.enabled !== false && ready && (!ad.start || today >= ad.start) && (!ad.end || today <= ad.end) && (!ad.start || !ad.end || ad.start <= ad.end)
 }

@@ -6,7 +6,7 @@ import ChangePasswordForm from './ChangePasswordForm'
 export const dynamic = 'force-dynamic'
 
 export default async function ForceChangePasswordPage() {
-  const session = await getSession()
+  const session = await getSession(true)
   if (!session?.userId) {
     redirect('/login')
   }

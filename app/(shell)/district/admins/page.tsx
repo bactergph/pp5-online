@@ -3,7 +3,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import LoadingButton from '@/components/LoadingButton'
-import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, setSchoolPackage, searchSchoolsForAdminAssign, resetSchoolMemberSettings, approveAdmins } from './actions'
+import { fetchAdminsAndSchools, updateAdmin, toggleAdminActive, resetAdminPassword, deleteAdmins, setAdminQuota, setSchoolPackage, searchSchoolsForAdminAssign, resetSchoolMemberSettings, approveAdmins, fetchMembershipHistory } from './actions'
+import { annualMembershipEnd, membershipDateLabel, membershipToday } from '@/lib/membership'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { schoolMemberIdHint } from '@/lib/school-identity'
 
@@ -15,11 +16,14 @@ type School = {
   member_code?: string | null
   membership_kind?: string | null
   member_plan?: string | null
+  membership_started_on?: string | null
+  membership_expires_on?: string | null
+  membership_version?: number
 }
 type Stat = { students: number; principal: number; academic_head: number; homeroom: number; teacher_only: number; totalUsers: number }
 type Admin = {
   id: string; email: string; prefix: string; full_name: string
-  position: string; is_active: boolean; school_id: string | null; school?: School
+  position: string | null; is_active: boolean; school_id: string | null; school?: School | null
   stat?: Stat | null; quota?: number
 }
 const PREFIXES = ['นาย', 'นาง', 'นางสาว']
@@ -51,7 +55,9 @@ export default function DistrictAdminsPage() {
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   // quota modal
-  const [packageTarget, setPackageTarget] = useState<{ schoolId: string; name: string; packageName: 'school' | 'free' | 'pro' } | null>(null)
+  const [packageTarget, setPackageTarget] = useState<{ schoolId: string; name: string; packageName: 'school' | 'free' | 'pro'; version:number; startDate:string; expiresOn:string|null; renew:boolean; note:string } | null>(null)
+  const [packageHistory,setPackageHistory]=useState<Awaited<ReturnType<typeof fetchMembershipHistory>>['data']>([])
+  const packageRequest=useRef(0)
   const [packageSaving, setPackageSaving] = useState(false)
   const [quotaTarget, setQuotaTarget] = useState<{ id: string; name: string } | null>(null)
   const [quotaVal, setQuotaVal] = useState('')
@@ -218,7 +224,8 @@ export default function DistrictAdminsPage() {
   async function handleSetPackage() {
     if (!packageTarget) return
     setPackageSaving(true)
-    const { error } = await setSchoolPackage(packageTarget.schoolId, packageTarget.packageName)
+    try {
+    const { error } = await setSchoolPackage(packageTarget.schoolId, packageTarget.packageName, {version:packageTarget.version,startDate:packageTarget.startDate,renew:packageTarget.renew,note:packageTarget.note})
     setPackageSaving(false)
     if (error) notify('error', error)
     else {
@@ -226,6 +233,8 @@ export default function DistrictAdminsPage() {
       setPackageTarget(null)
       loadData()
     }
+    } catch { notify('error','เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่') }
+    finally { setPackageSaving(false) }
   }
 
   function packageOf(school?: School | null): 'school' | 'free' | 'pro' {
@@ -326,7 +335,7 @@ export default function DistrictAdminsPage() {
                 )}
                 <div style={{ gridColumn: editAdmin?.id ? '2' : '1 / -1' }}>
                   <label className="form-label">ตำแหน่ง</label>
-                  <input name="position" defaultValue={editAdmin?.position} className="form-input" placeholder="ผู้อำนวยการ..." />
+                  <input name="position" defaultValue={editAdmin?.position || ''} className="form-input" placeholder="ผู้อำนวยการ..." />
                 </div>
 
                 {formError && <div className="alert-error" style={{ gridColumn: '1 / -1' }}>{formError}</div>}
@@ -493,7 +502,8 @@ export default function DistrictAdminsPage() {
                 color: '#182b49',
                 action: () => {
                   const school = admin.school || schoolMap[admin.school_id!]
-                  setPackageTarget({ schoolId: admin.school_id!, name: school?.name || schoolName, packageName: packageOf(school) })
+                  setPackageTarget({ schoolId: admin.school_id!, name: school?.name || schoolName, packageName: packageOf(school),version:school?.membership_version||0,startDate:membershipToday(),expiresOn:school?.membership_expires_on||null,renew:false,note:'' })
+                  setPackageHistory([]);const request=++packageRequest.current;void fetchMembershipHistory(admin.school_id!).then(r=>{if(packageRequest.current===request)setPackageHistory(r.data)})
                   setOpenMenuId(null)
                 },
               }] : []),
@@ -525,17 +535,25 @@ export default function DistrictAdminsPage() {
             <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '4px' }}>ตั้งแพ็กเกจ</h3>
             <p style={{ fontSize: '13px', color: 'var(--text-3)', marginBottom: '16px' }}>{packageTarget.name}</p>
             {([
-              ['school', 'สมาชิกรายโรงเรียน', 'ใช้ระบบเดิมได้ทั้งก้อน'],
+              ['school', 'สมาชิกโรงเรียนรายปี', 'ทุกฟังก์ชัน หลายบัญชีตามบทบาท ไม่จำกัดห้อง'],
               ['free', 'สมาชิกเดี่ยวฟรี', 'จัดตารางบนเครื่อง และมีโฆษณา'],
-              ['pro', 'สมาชิกเดี่ยวโปร', 'ตารางบนเครื่อง สำรองได้ และธุรการกับ ปพ.5/6 ไม่เกิน 3 ห้อง'],
+              ['pro', 'สมาชิกโปรรายปี', 'ทุกฟังก์ชัน 1 บัญชี โควตารวม 10 ห้อง ไม่เพิ่มตามปีการศึกษา'],
             ] as const).map(([value, label, detail]) => (
               <label key={value} style={{ display: 'grid', gridTemplateColumns: '20px 1fr', gap: 8, marginBottom: 10, cursor: 'pointer' }}>
-                <input type="radio" name="package" checked={packageTarget.packageName === value} onChange={() => setPackageTarget({ ...packageTarget, packageName: value })} />
+                <input type="radio" name="package" disabled={packageSaving} checked={packageTarget.packageName === value} onChange={() => setPackageTarget({ ...packageTarget, packageName: value,renew:false })} />
                 <span><strong style={{ display: 'block', fontSize: 13 }}>{label}</strong><span style={{ fontSize: 12, color: 'var(--text-3)' }}>{detail}</span></span>
               </label>
             ))}
+            <div className="membership-term-form">
+              {packageTarget.expiresOn&&<p>วันหมดอายุเดิม: {membershipDateLabel(packageTarget.expiresOn)}</p>}
+              {packageTarget.packageName!=='free'&&<><label>วันเริ่มสมาชิก<input className="form-input" type="date" value={packageTarget.startDate} disabled={packageTarget.renew||packageSaving} onChange={event=>setPackageTarget({...packageTarget,startDate:event.target.value})}/></label>
+                {packageTarget.expiresOn&&packageTarget.expiresOn>=membershipToday()&&packageOf(schoolMap[packageTarget.schoolId])===packageTarget.packageName&&<label className="membership-renew-label"><input type="checkbox" checked={packageTarget.renew} disabled={packageSaving} onChange={event=>setPackageTarget({...packageTarget,renew:event.target.checked})}/>ต่ออายุ 1 ปีจากวันหมดอายุเดิม</label>}
+                <div className="membership-term-summary">{packageTarget.renew&&packageTarget.expiresOn?'ต่อจากวันหมดอายุเดิมอีก 1 ปี':packageTarget.startDate?'หมดอายุ '+membershipDateLabel(annualMembershipEnd(packageTarget.startDate)):'ระบุวันเริ่มสมาชิก'}<br/>เมื่อหมดอายุกลับเป็นฟรี ข้อมูลเดิมคงอยู่</div></>}
+              <label>หมายเหตุ<input className="form-input" value={packageTarget.note} maxLength={500} disabled={packageSaving} onChange={event=>setPackageTarget({...packageTarget,note:event.target.value})} placeholder="เช่น ยืนยันสมัคร / ต่ออายุแล้ว"/></label>
+            </div>
+            {!!packageHistory.length&&<details className="membership-history"><summary>ประวัติเปลี่ยนสมาชิก</summary><ul>{packageHistory.map(row=><li key={row.id}>{row.previous_package} → {row.package} · {membershipDateLabel(row.created_at.slice(0,10))}{row.expires_on&&<> · ถึง {membershipDateLabel(row.expires_on)}</>}{row.note&&<div>{row.note}</div>}</li>)}</ul></details>}
             <div className="form-actions">
-              <button onClick={() => setPackageTarget(null)} className="btn btn-ghost">ยกเลิก</button>
+              <button disabled={packageSaving} onClick={() => setPackageTarget(null)} className="btn btn-ghost">ยกเลิก</button>
               <LoadingButton loading={packageSaving} onClick={handleSetPackage}>บันทึก</LoadingButton>
             </div>
           </div>
@@ -607,7 +625,7 @@ export default function DistrictAdminsPage() {
                         <div>
                           <div style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 600 }}>{school.name}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: 2 }}>
-                            {schoolMemberIdHint(school)} · {packageOf(school) === 'school' ? 'รายโรงเรียน' : packageOf(school) === 'pro' ? 'เดี่ยวโปร' : 'เดี่ยวฟรี'}
+                            {schoolMemberIdHint(school)} · {packageOf(school) === 'school' ? 'โรงเรียน' : packageOf(school) === 'pro' ? 'โปร' : 'ฟรี'}{school?.membership_expires_on&&<> · {school.membership_expires_on<membershipToday()?'หมดอายุ':'ถึง'} {membershipDateLabel(school.membership_expires_on)}</>}
                           </div>
                         </div>
                       ) : (

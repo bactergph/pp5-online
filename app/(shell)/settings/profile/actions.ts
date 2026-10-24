@@ -8,7 +8,7 @@ import { joinFullName, splitFullName } from '@/lib/profile-name'
 import { logActivity } from '@/lib/audit'
 
 async function requireSession() {
-  const session = await getSession()
+  const session = await getSession(true)
   if (!session) throw new Error('ไม่มีสิทธิ์')
   return session
 }

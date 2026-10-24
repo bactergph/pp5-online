@@ -16,12 +16,17 @@ async function requireSession() {
 // ผอ. = ดูอย่างเดียว (oversight) · จัดการได้: admin + หัวหน้าวิชาการ (กำหนดครูประจำชั้น)
 const CAN_MANAGE = ['admin', 'district', 'academic_head', 'deputy_principal']
 
-async function roomCapMessage(schoolId: string, nextCount: number) {
+async function roomCapMessage(schoolId: string, additions: { level: string; room: number }[], removals: string[] = []) {
   const limit = serverRoomLimit(await readMembership(schoolId))
-  if (limit == null || nextCount <= limit) return null
+  if (limit == null) return null
+  const { data, error } = await createServerClient().from('classrooms').select('id,level,room').eq('school_id', schoolId)
+  if (error) return 'ตรวจโควตาห้องไม่สำเร็จ กรุณาลองใหม่'
+  const keys = new Set((data || []).filter(room => !removals.includes(room.id)).map(room => `${room.level.trim()}:${room.room}`))
+  additions.forEach(room => keys.add(`${room.level.trim()}:${room.room}`))
+  if (keys.size <= limit) return null
   return limit === 0
     ? 'สมาชิกเดี่ยวฟรีจัดตารางบนเครื่อง ไม่เปิดห้องบนเซิร์ฟเวอร์'
-    : `สมาชิกเดี่ยวโปรเปิดได้ไม่เกิน ${limit} ห้อง`
+    : `สมาชิกโปรมีโควตารวมไม่เกิน ${limit} ห้องต่อบัญชี ไม่เพิ่มตามปีการศึกษา`
 }
 type ClassroomSetupResult = {
   error: string | null
@@ -129,8 +134,7 @@ export async function saveClassroom(id: string | null, payload: {
   let savedId = id
   if (id) ({ error } = await db.from('classrooms').update(row).eq('id', id).eq('school_id', session.schoolId))
   else {
-    const existing = await db.from('classrooms').select('id', { count: 'exact', head: true }).eq('school_id', session.schoolId).eq('academic_year_id', payload.academic_year_id)
-    const capped = await roomCapMessage(session.schoolId, (existing.count ?? 0) + 1)
+    const capped = await roomCapMessage(session.schoolId, [payload])
     if (capped) return { error: capped }
     const res = await db.from('classrooms').insert(row).select('id').single()
     error = res.error
@@ -233,7 +237,7 @@ export async function applyClassroomLevels(
   }
 
   if (toInsert.length > 0) {
-    const capped = await roomCapMessage(sid, existingList.length - toDelete.length + toInsert.length)
+    const capped = await roomCapMessage(sid, toInsert, toDelete)
     if (capped) return { error: capped }
     const { error } = await db.from('classrooms').insert(toInsert)
     if (error) return { error: error.message }

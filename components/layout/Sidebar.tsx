@@ -7,7 +7,8 @@ import { logout } from '@/lib/actions/auth'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { filterSchoolMenu, type SchoolEducationType } from '@/lib/school-education-type'
-import { filterMembershipItems, type Membership } from '@/lib/membership'
+import { membershipAllows, type Membership } from '@/lib/membership'
+import { MembershipAd, type MembershipAdData } from './MembershipUI'
 
 type Child = { href?: string; label: string; icon?: React.ReactNode; children?: Child[]; tone?: SidebarTone }
 type NavItem = { href: string; label: string; icon: React.ReactNode; children?: Child[] }
@@ -464,6 +465,7 @@ function renderSubmenuLink(
   child: Child,
   tone: string,
   opts: {
+    membership?: Membership | null
     mounted: boolean
     pathname: string
     scopedHref: (href: string) => string
@@ -479,7 +481,7 @@ function renderSubmenuLink(
     <Link
       key={`${child.href}::${child.label}`}
       href={childHref}
-      prefetch={child.href.startsWith('/schedules/device')?false:undefined}
+      prefetch={opts.membership&&!membershipAllows(child.href,opts.membership)||child.href.startsWith('/schedules/device')?false:undefined}
       onClick={event=>{
         if(child.href?.startsWith('/schedules/device')&&opts.pathname.includes('/schedules/device')&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();window.history.pushState(null,'',childHref)}
         opts.onClose()
@@ -488,7 +490,7 @@ function renderSubmenuLink(
       className={`sidebar-child-link sidebar-submenu-link sidebar-submenu-link--${tone} ${active ? 'is-active' : ''}`}
     >
       {icon && <span className="sidebar-child-icon">{icon}</span>}
-      <span>{child.label}</span>
+      <span>{child.label}</span>{opts.membership&&!membershipAllows(child.href,opts.membership)&&<small className="membership-lock">PRO</small>}
     </Link>
   )
 }
@@ -496,6 +498,7 @@ function renderSubmenuLink(
 function renderSubmenuChildren(
   children: Child[],
   opts: {
+    membership?: Membership | null
     mounted: boolean
     pathname: string
     scopedHref: (href: string) => string
@@ -558,6 +561,7 @@ type Props = {
   schoolProgramName?: string | null
   schoolName?: string | null
   membership?: Membership | null
+  membershipAd?: MembershipAdData | null
 }
 
 export default function Sidebar({
@@ -574,6 +578,7 @@ export default function Sidebar({
   schoolName = null,
   educationType = 'primary',
   membership = null,
+  membershipAd = null,
 }: Props) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement | null>(null)
@@ -589,7 +594,7 @@ export default function Sidebar({
 
   const sections = buildNav(navRole, isHomeroom).map(section => {
     const byEducation = filterSchoolMenu(section.items, educationType)
-    const items = membership ? filterMembershipItems(byEducation, membership) : byEducation
+    const items = byEducation
     return { ...section, items }
   }).filter(section => section.items.length > 0)
   const schoolPrefix = schoolCode && userRole !== 'district' ? `/${schoolCode}` : ''
@@ -651,6 +656,8 @@ export default function Sidebar({
   }, [isOpen, mounted, pathname, userRole, isHomeroom])
 
   function renderItem(item: NavItem) {
+    const allowed = (node: Child): boolean => node.children?.length ? node.children.some(allowed) : !node.href || !membership || membershipAllows(node.href, membership)
+    const locked = !!membership && !allowed(item)
     const href = scopedHref(item.href)
     const active = isActive(item.href) || hasActiveChild(item.children)
     const left = (
@@ -662,8 +669,8 @@ export default function Sidebar({
 
     if (!item.children) {
       return (
-        <Link key={item.href} href={href} onClick={onClose} data-sidebar-current={isCurrent(item.href) ? 'true' : undefined} className={`sidebar-link ${active ? 'is-active' : ''}`}>
-          {left}
+        <Link key={item.href} href={href} prefetch={membership&&!membershipAllows(item.href,membership)?false:undefined} onClick={onClose} data-sidebar-current={isCurrent(item.href) ? 'true' : undefined} className={`sidebar-link ${active ? 'is-active' : ''}`}>
+          {left}{membership&&!membershipAllows(item.href,membership)&&<small className="membership-lock">PRO</small>}
         </Link>
       )
     }
@@ -672,11 +679,13 @@ export default function Sidebar({
       <div key={item.href} className={`sidebar-item${open ? ' is-open' : ''}${active ? ' has-active' : ''}`}>
         <button
           type="button"
+          data-membership-locked={locked ? item.label : undefined}
           onClick={() => toggle(item)}
           aria-expanded={open}
           className={`sidebar-link sidebar-parent${active ? ' is-active' : ''}${open ? ' is-open' : ''}`}
         >
           {left}
+          {locked && <small className="membership-lock">PRO</small>}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"
             className={`sidebar-chevron${open ? ' is-expanded' : ''}`} aria-hidden="true">
             <path d="M9 18l6-6-6-6" />
@@ -685,6 +694,7 @@ export default function Sidebar({
         {open && (
           <div className="sidebar-children sidebar-submenu--cards">
             {renderSubmenuChildren(item.children ?? [], {
+              membership,
               mounted,
               pathname,
               scopedHref,
@@ -754,6 +764,7 @@ export default function Sidebar({
             {section.items.map(renderItem)}
           </div>
         ))}
+        {membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-desktop"/>}
       </nav>
 
       {/* Footer */}

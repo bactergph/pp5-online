@@ -1,65 +1,25 @@
 'use client'
-
 import { useState } from 'react'
+import { FiImage, FiSave } from 'react-icons/fi'
 import { saveFreeScheduleAd } from './actions'
-import { bangkokToday, freeAdIsLive, safeHttpUrl, type FreeScheduleAd } from '@/lib/free-schedule-ad-window'
-
+import { freeAdIsLive, safeHttpUrl, type FreeScheduleAd } from '@/lib/free-schedule-ad-window'
+import { MembershipAd } from '@/components/layout/MembershipUI'
 export default function FreeAdEditor({ initial, loadError }: { initial: FreeScheduleAd; loadError?: string }) {
-  const [draft, setDraft] = useState(initial)
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState(loadError || '')
-  const [error, setError] = useState(Boolean(loadError))
-  const href = safeHttpUrl(draft.href)
-  const image = safeHttpUrl(draft.imageUrl)
-  const live = freeAdIsLive(draft)
-
-  async function save(next: FreeScheduleAd) {
-    setSaving(true)
-    setMessage('')
-    const result = await saveFreeScheduleAd(next)
-    setSaving(false)
-    if (result.error) {
-      setError(true)
-      setMessage(result.error)
-      return
-    }
-    setDraft(next)
-    setError(false)
-    setMessage('บันทึกโฆษณาแล้ว สมาชิกจะเห็นบนหน้าจัดตารางฟรีเมื่อวันนี้ตรงกับช่วงที่กำหนด')
-  }
-
-  return (
-    <section className="data-card" style={{ display: 'grid', gap: 16, padding: 20 }}>
-      <div>
-        <h1 style={{ margin: 0, fontSize: 22 }}>โฆษณาตารางฟรี</h1>
-        <p style={{ margin: '6px 0 0', color: 'var(--text-3)' }}>ตั้งชื่อ ลิงก์ รูป และช่วงวันที่ สมาชิกเห็นโฆษณานี้บนหน้าจัดตารางฟรีเฉพาะวันที่อยู่ในช่วง</p>
-      </div>
-      {live ? (
-        href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, border: '1px solid var(--border)', borderRadius: 12, color: 'inherit', textDecoration: 'none' }}>
-            {image && <img src={image} alt={draft.title || 'โฆษณา'} style={{ width: 120, height: 68, objectFit: 'cover', borderRadius: 8 }} />}
-            <span><small style={{ display: 'block', color: 'var(--text-3)' }}>กำลังแสดงวันนี้</small><strong>{draft.title || href}</strong></span>
-          </a>
-        ) : (
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 12, border: '1px solid var(--border)', borderRadius: 12 }}>
-            {image && <img src={image} alt={draft.title || 'โฆษณา'} style={{ width: 120, height: 68, objectFit: 'cover', borderRadius: 8 }} />}
-            <span><small style={{ display: 'block', color: 'var(--text-3)' }}>กำลังแสดงวันนี้</small><strong>{draft.title || 'โฆษณา'}</strong></span>
-          </div>
-        )
-      ) : <p style={{ margin: 0, color: 'var(--text-3)' }}>วันนี้ {bangkokToday()} ยังไม่อยู่ในช่วงแสดง ช่องบนหน้าจัดตารางฟรีจึงว่าง</p>}
-      <form
-        onSubmit={event => { event.preventDefault(); void save(draft) }}
-        style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}
-      >
-        <input className="form-input" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="ชื่อโฆษณา" aria-label="ชื่อโฆษณา" />
-        <input className="form-input" value={draft.href} onChange={event => setDraft({ ...draft, href: event.target.value })} placeholder="https://ลิงก์โฆษณา" aria-label="ลิงก์โฆษณา" />
-        <input className="form-input" value={draft.imageUrl} onChange={event => setDraft({ ...draft, imageUrl: event.target.value })} placeholder="https://ลิงก์รูป" aria-label="ลิงก์รูปโฆษณา" />
-        <input className="form-input" type="date" value={draft.start} onChange={event => setDraft({ ...draft, start: event.target.value })} aria-label="วันเริ่มแสดงโฆษณา" />
-        <input className="form-input" type="date" value={draft.end} onChange={event => setDraft({ ...draft, end: event.target.value })} aria-label="วันสิ้นสุดโฆษณา" />
-        <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'กำลังบันทึก...' : 'บันทึกโฆษณา'}</button>
-        <button className="btn" type="button" disabled={saving} onClick={() => void save({ title: '', href: '', imageUrl: '', start: '', end: '' })}>ล้างโฆษณา</button>
-      </form>
-      {message && <p role="status" style={{ margin: 0, fontWeight: 700, color: error ? '#be123c' : '#246344' }}>{message}</p>}
-    </section>
-  )
+  const [draft,setDraft]=useState({...initial,enabled:initial.enabled!==false}),[saving,setSaving]=useState(false),[uploading,setUploading]=useState(false),[message,setMessage]=useState(loadError||''),[error,setError]=useState(!!loadError)
+  const busy=saving||uploading
+  async function upload(file:File|undefined){if(!file||busy)return;setError(false);setMessage('');setUploading(true);try{const body=new FormData();body.set('file',file);const response=await fetch('/api/upload/membership-ad',{method:'POST',body});const result=await response.json();if(!response.ok||!result.url)throw Error(result.error||'อัปโหลดไม่สำเร็จ');setDraft(current=>({...current,imageUrl:result.url}));setMessage('อัปโหลดรูปแล้ว กดบันทึกโฆษณาเพื่อเริ่มใช้งาน')}catch(e){setError(true);setMessage(e instanceof Error?e.message:'อัปโหลดไม่สำเร็จ')}finally{setUploading(false)}}
+  async function save(){if(busy)return;setSaving(true);setMessage('');try{const result=await saveFreeScheduleAd(draft);if(result.error)throw Error(result.error);setError(false);setMessage(draft.enabled?'บันทึกโฆษณาแล้ว จะแสดงเฉพาะสมาชิกฟรีตามช่วงที่กำหนด':'ปิดแสดงโฆษณาแล้ว')}catch(e){setError(true);setMessage(e instanceof Error?e.message:'บันทึกไม่สำเร็จ')}finally{setSaving(false)}}
+  return <section className="data-card membership-admin"><header><h1>จัดการโฆษณาตารางฟรี</h1><p>แสดงใต้เมนูซ้ายบนคอมพิวเตอร์ และใต้พื้นที่ทำงานบนมือถือ เฉพาะสมาชิกฟรี</p></header><form className="membership-admin-form" onSubmit={event=>{event.preventDefault();void save()}}>
+    <fieldset className="membership-admin-fields" disabled={busy} style={{border:0,padding:0,margin:0}}>
+      <label className="membership-admin-check"><input type="checkbox" checked={draft.enabled} onChange={event=>setDraft({...draft,enabled:event.target.checked})}/>เปิดแสดงโฆษณา</label>
+      <label>ชื่อโฆษณา<input className="form-input" value={draft.title} maxLength={120} onChange={event=>setDraft({...draft,title:event.target.value})} placeholder="เช่น สื่อและบริการสำหรับคุณครู"/></label>
+      <label><span><FiImage aria-hidden="true"/> รูปโฆษณา · PNG, JPG, WebP ไม่เกิน 3 MB</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={event=>{void upload(event.target.files?.[0]);event.target.value=''}}/></label>
+      {draft.imageUrl&&<button className="btn" type="button" onClick={()=>setDraft({...draft,imageUrl:''})}>นำรูปออกจากโฆษณา</button>}
+      <label>ลิงก์รูปภาพ (หรือใช้ปุ่มอัปโหลด)<input className="form-input" type="url" value={draft.imageUrl} onChange={event=>setDraft({...draft,imageUrl:event.target.value})} placeholder="https://..."/></label>
+      <label>ลิงก์เมื่อกดโฆษณา<input className="form-input" type="url" value={draft.href} onChange={event=>setDraft({...draft,href:event.target.value})} placeholder="https://..."/></label>
+      <div className="membership-admin-dates"><label>เริ่มแสดง (ไม่บังคับ)<input className="form-input" type="date" value={draft.start} onChange={event=>setDraft({...draft,start:event.target.value})}/></label><label>สิ้นสุด (ไม่บังคับ)<input className="form-input" type="date" min={draft.start||undefined} value={draft.end} onChange={event=>setDraft({...draft,end:event.target.value})}/></label></div>
+      <button className="btn btn-primary" type="submit"><FiSave aria-hidden="true"/>{uploading?'กำลังอัปโหลด…':saving?'กำลังบันทึก…':'บันทึกโฆษณา'}</button>
+      {message&&<p className={error?'membership-admin-error':'membership-admin-success'} role={error?'alert':'status'}>{message}</p>}
+    </fieldset><aside className="membership-admin-preview"><h2>ตัวอย่างโฆษณา</h2><MembershipAd ad={{title:draft.title,href:safeHttpUrl(draft.href),imageUrl:safeHttpUrl(draft.imageUrl)}}/><p>{freeAdIsLive(draft)?'อยู่ในช่วงแสดงวันนี้':'ยังไม่แสดงวันนี้'}</p><p>แนะนำภาพแนวนอน 16:9 ลิงก์เปิดในแท็บใหม่</p></aside>
+  </form></section>
 }

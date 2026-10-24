@@ -6,7 +6,9 @@ import Sidebar from './Sidebar'
 import Navbar from './Navbar'
 import NavigationProgress from './NavigationProgress'
 import type { SchoolEducationType } from '@/lib/school-education-type'
-import type { Membership } from '@/lib/membership'
+import { isFreeMembership, membershipAllows, membershipFromRow, membershipPackage, membershipToday, type Membership } from '@/lib/membership'
+import { MembershipAd, MembershipUpgradeDialog, type MembershipAdData } from './MembershipUI'
+import './membership.css'
 
 /** Navbar titles — same labels as the old per-section layouts */
 const TITLE_BY_PREFIX: { prefix: string; title: string }[] = [
@@ -51,6 +53,7 @@ type Props = {
   hasSchool?: boolean
   isActingDirector?: boolean
   membership?: Membership | null
+  membershipAd?: MembershipAdData | null
 }
 
 function LayoutClientInner({
@@ -68,9 +71,17 @@ function LayoutClientInner({
   isActingDirector = false,
   educationType = 'primary',
   membership = null,
+  membershipAd = null,
 }: Props) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const [today, setToday] = useState(membershipToday)
+  const [upgrade, setUpgrade] = useState('')
+  const packageName = membership?.subscribedPackage || (membership ? membershipPackage(membership) : null)
+  const effectiveMembership = membership && packageName ? membershipFromRow({membership_kind:packageName==='school'?'school':'individual',member_plan:packageName==='school'?null:packageName,membership_started_on:membership.startsOn,membership_expires_on:membership.expiresOn},today) : null
+  const freeAccess = !!effectiveMembership && isFreeMembership(effectiveMembership)
+  useEffect(()=>{const timer=window.setInterval(()=>setToday(membershipToday()),60000);return()=>window.clearInterval(timer)},[])
+  useEffect(()=>{if(freeAccess && searchParams.get('upgrade')==='1')void Promise.resolve().then(()=>setUpgrade('ฟังก์ชันที่เลือก'))},[freeAccess,searchParams])
   const pageTitle = titleFromPath(pathname, title)
   // onboarding wizard: ไม่โชว์ sidebar/navbar — โหลดเต็มจอเลยหลังเลือกโรงเรียน
   const onSchoolSettings = pathname === '/settings/school' || pathname.endsWith('/settings/school')
@@ -100,7 +111,14 @@ function LayoutClientInner({
   }
 
   return (
-    <div className="app-shell workspace-theme" onKeyDown={e => { if (e.key === 'Escape' && sidebarOpen) { setSidebarOpen(false); document.querySelector<HTMLButtonElement>('.navbar-menu-button')?.focus() } }}>
+    <div className="app-shell workspace-theme" data-membership-free={freeAccess?'true':undefined} data-membership-school-code={schoolCode||undefined} onClickCapture={event=>{
+      if(!effectiveMembership || !isFreeMembership(effectiveMembership) || !(event.target instanceof Element))return
+      const locked=event.target.closest<HTMLElement>('[data-membership-locked]');if(locked){event.preventDefault();event.stopPropagation();setUpgrade(locked.dataset.membershipLocked||'ฟังก์ชันนี้');return}
+      const link=event.target.closest<HTMLAnchorElement>('a[href]');if(!link)return
+      const url=new URL(link.href,window.location.href);if(url.origin!==window.location.origin)return
+      const path=schoolCode&&url.pathname.startsWith(`/${schoolCode}/`)?url.pathname.slice(schoolCode.length+1):url.pathname
+      if(!membershipAllows(path,effectiveMembership)){event.preventDefault();event.stopPropagation();setUpgrade(link.textContent?.replace(/PRO/g,'').trim()||'ฟังก์ชันนี้')}
+    }} onKeyDown={e => { if (e.key === 'Escape' && sidebarOpen) { setSidebarOpen(false); document.querySelector<HTMLButtonElement>('.navbar-menu-button')?.focus() } }}>
       <a href="#workspace-main" className="workspace-skip">ข้ามไปยังเนื้อหา</a>
       <NavigationProgress />
       <Sidebar
@@ -116,7 +134,8 @@ function LayoutClientInner({
         schoolLogoUrl={schoolLogoUrl}
         schoolProgramName={schoolProgramName}
         schoolName={schoolName}
-        membership={membership}
+        membership={effectiveMembership}
+        membershipAd={effectiveMembership&&isFreeMembership(effectiveMembership)&&pathname.includes('/schedules/device')?membershipAd:null}
       />
 
       {sidebarOpen && (
@@ -127,6 +146,7 @@ function LayoutClientInner({
       )}
 
       <Navbar
+        membership={effectiveMembership}
         title={pageTitle}
         userRole={userRole}
         userFullName={userFullName}
@@ -139,8 +159,10 @@ function LayoutClientInner({
       <main id="workspace-main" tabIndex={-1} className="main-content">
         <div className="content-shell">
           {children}
+          {effectiveMembership&&isFreeMembership(effectiveMembership)&&pathname.includes('/schedules/device')&&membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-mobile"/>}
         </div>
       </main>
+      <MembershipUpgradeDialog open={!!upgrade} feature={upgrade} membership={effectiveMembership} onClose={()=>setUpgrade('')}/>
     </div>
   )
 }

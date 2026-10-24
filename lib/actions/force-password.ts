@@ -10,7 +10,7 @@ export async function completeForcedPasswordChange(
   _prev: { error?: string } | undefined,
   formData: FormData,
 ): Promise<{ error?: string }> {
-  const session = await getSession()
+  const session = await getSession(true)
   if (!session?.userId) {
     return { error: 'กรุณาเข้าสู่ระบบก่อน' }
   }

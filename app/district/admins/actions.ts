@@ -1,2 +1,2 @@
-﻿export * from '../(shell)/district/admins/actions'
+﻿export * from '../../(shell)/district/admins/actions'
 

@@ -7,6 +7,8 @@ import { readMembership } from '@/lib/member-plan'
 import { membershipAllows, membershipHome, type Membership } from '@/lib/membership'
 import LayoutClient from './LayoutClient'
 import { resolveSchoolEducationType, type SchoolEducationType } from '@/lib/school-education-type'
+import { readLiveFreeScheduleAd } from '@/lib/free-schedule-ad'
+import { isFreeMembership } from '@/lib/membership'
 
 type Props = {
   children: React.ReactNode
@@ -16,7 +18,7 @@ type Props = {
 }
 
 export default async function AppLayout({ children, title, requireRole }: Props) {
-  const session = await verifySession()
+  const session = await verifySession(true)
 
   let schoolCode: string | null = null
   let schoolLogoUrl: string | null = null
@@ -45,7 +47,7 @@ export default async function AppLayout({ children, title, requireRole }: Props)
   if (session.role !== 'district' && session.schoolId) {
     membership = await readMembership(session.schoolId)
     const appPath = (await headers()).get('x-app-path') || ''
-    if (appPath && !membershipAllows(appPath, membership)) redirect(membershipHome(membership))
+    if (appPath && !membershipAllows(appPath, membership)) redirect(membershipHome(membership) + '?upgrade=1')
   }
 
   if (requireRole && !hasRoleInList(accessRole, requireRole)) {
@@ -67,6 +69,7 @@ export default async function AppLayout({ children, title, requireRole }: Props)
       hasSchool={Boolean(session.schoolId)}
       isActingDirector={isActingDirector}
       membership={membership}
+      membershipAd={membership&&isFreeMembership(membership)?await readLiveFreeScheduleAd():null}
     >
       {children}
     </LayoutClient>

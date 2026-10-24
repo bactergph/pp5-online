@@ -50,7 +50,7 @@ async function insertMemberSchool(db:ReturnType<typeof createServerClient>,src:C
     // leaders, branding and Drive connections are never copied from the catalog.
     const payload={name:src.name,department:src.department??null,area_office:src.area_office??null,
       district:src.district??null,province:src.province??null,address:src.address??null,
-      phone:src.phone??null,document_prefix:src.document_prefix??null,is_catalog:false,member_code:memberCode}
+      phone:src.phone??null,document_prefix:src.document_prefix??null,is_catalog:false,member_code:memberCode,membership_kind:'individual',member_plan:'free'}
     const {data,error}=await db.from('schools').insert(payload).select('id, name, member_code').single()
     if (!error && data) return {id:data.id as string,name:data.name as string,member_code:(data.member_code as string)||memberCode}
     if(error?.code==='23505' && error.message.includes('member_code')) continue

@@ -5,7 +5,7 @@ import { logActivity } from '@/lib/audit'
 import { staffAccessError } from '@/lib/staff-permissions'
 
 export async function POST(req: NextRequest) {
-  const session = await getSession()
+  const session = await getSession(true)
   if (!session || session.mustChangePassword) {
     return NextResponse.json({ error: 'ไม่มีสิทธิ์' }, { status: 403 })
   }
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   const isSelf = userId === session.userId
+  if (!isSelf && !await getSession()) return NextResponse.json({ error: 'ไม่มีสิทธิ์' }, { status: 403 })
   if (!isSelf && !['admin', 'district'].includes(session.role)) {
     return NextResponse.json({ error: 'ไม่มีสิทธิ์' }, { status: 403 })
   }
