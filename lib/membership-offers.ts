@@ -1,7 +1,7 @@
 import type {MemberPackage} from './membership'
 export const MEMBERSHIP_PRICES={free:0,pro:499,pro_plus:799} as const
 export const SCHOOL_PRICE_PER_STUDENT=10
-export const SCHOOL_MINIMUM_PRICE=2990
+export const SCHOOL_MINIMUM_PRICE=990
 export const MAX_BILLING_STUDENTS=1000000
 export function schoolAnnualQuote(count:number){
   return Number.isInteger(count)&&count>=1&&count<=MAX_BILLING_STUDENTS?{students:count,annualPrice:Math.max(SCHOOL_MINIMUM_PRICE,count*SCHOOL_PRICE_PER_STUDENT)}:null

@@ -6,7 +6,7 @@ const id=n=>`20000000-0000-4000-8000-${String(n).padStart(12,'0')}`
 ;(async()=>{
  const m=load('lib/membership.ts'),pricing=load('lib/membership-offers.ts'),members=load('lib/member-admin.ts')
  assert.equal(pricing.membershipAnnualPrice('pro'),499);assert.equal(pricing.membershipAnnualPrice('pro_plus'),799)
- for(const [count,price]of [[1,2990],[120,2990],[299,2990],[300,3000],[600,6000],[2100,21000],[1000000,10000000]])assert.equal(pricing.schoolAnnualQuote(count).annualPrice,price)
+ for(const [count,price]of [[1,990],[50,990],[99,990],[100,1000],[120,1200],[299,2990],[300,3000],[600,6000],[2100,21000],[1000000,10000000]])assert.equal(pricing.schoolAnnualQuote(count).annualPrice,price)
  for(const count of [0,-1,1.5,NaN,Infinity,1000001,'300'])assert.equal(pricing.schoolAnnualQuote(count),null)
  assert.equal(m.serverRoomLimit({kind:'individual',plan:'pro_plus'}),50)
  const plus={membership_kind:'individual',member_plan:'pro_plus',membership_started_on:'2026-01-01',membership_expires_on:'2027-01-01',free_schedule_teacher_limit:80}
@@ -45,6 +45,15 @@ const id=n=>`20000000-0000-4000-8000-${String(n).padStart(12,'0')}`
  await assert.rejects(query("insert into classrooms(school_id,level,room)values($1,'ม.2',1)",[workspace]),/20 ห้อง/)
  await assert.rejects(grant('school',3),/นักเรียน/)
  term=await grant('school',3,120);assert.equal(term.annualPrice,2990);assert.equal(term.studentCount,120)
+ // 085's existing agreed price survives the minimum-price migration.
+ await db.exec(fs.readFileSync('supabase/migrations/086_school_minimum_990.sql','utf8'))
+ await db.exec(fs.readFileSync('supabase/migrations/086_school_minimum_990.sql','utf8'))
+ assert.equal((await query('select membership_annual_price from schools where id=$1',[workspace])).rows[0].membership_annual_price,2990)
+ const newWorkspace=(await query('select register_free_member($1,$2,$3,$4,$5)id',[id(80),'new-minimum@example.test','ราคาใหม่','นาย','ครู'])).rows[0].id
+ for(const [version,count,price]of [[0,50,990],[1,99,990],[2,100,1000],[3,120,1200]]){
+  const granted=(await query('select set_annual_membership_v2($1,$2,$3,$4,$5,false,$6,$7)result',[id(10),newWorkspace,version,'school',today,'ราคาใหม่',count])).rows[0].result
+  assert.equal(granted.annualPrice,price)
+ }
  const renewalStart=new Date(Date.parse(term.expiresOn+'T00:00:00Z')+86400000).toISOString().slice(0,10)
  term=await grant('school',4,2100,today,true);assert.equal(term.annualPrice,21000);assert.equal(term.expiresOn,m.annualMembershipEnd(renewalStart))
  await assert.rejects(grant('school',4,300),/เปลี่ยนแล้ว/)
