@@ -755,6 +755,8 @@ export default function Sidebar({
         </div>
       </div>
 
+      {membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-sidebar"/>}
+
       {/* Nav (sectioned) */}
       <nav ref={navRef} className="sidebar-nav">
         {sections.map((section, si) => (
@@ -767,7 +769,6 @@ export default function Sidebar({
             {section.items.map(renderItem)}
           </div>
         ))}
-        {membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-desktop"/>}
       </nav>
 
       {/* Footer */}

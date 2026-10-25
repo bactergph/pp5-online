@@ -7,7 +7,7 @@ import Navbar from './Navbar'
 import NavigationProgress from './NavigationProgress'
 import type { SchoolEducationType } from '@/lib/school-education-type'
 import { isFreeMembership, membershipAllows, membershipFromRow, membershipPackage, membershipToday, type Membership } from '@/lib/membership'
-import { MembershipAd, MembershipUpgradeDialog, type MembershipAdData } from './MembershipUI'
+import { MembershipUpgradeDialog, type MembershipAdData } from './MembershipUI'
 import './membership.css'
 
 /** Navbar titles — same labels as the old per-section layouts */
@@ -93,13 +93,14 @@ function LayoutClientInner({
   const effectiveMembership = membership && packageName ? membershipFromRow({membership_kind:packageName==='school'?'school':'individual',member_plan:packageName==='school'?null:packageName,membership_started_on:membership.startsOn,membership_expires_on:membership.expiresOn,free_schedule_teacher_limit:membership.freeTeacherLimit,membership_student_count:membership.studentCount,membership_annual_price:membership.annualPrice},today) : null
   const freeAccess = !!effectiveMembership && isFreeMembership(effectiveMembership)
   const upgradeRequested = searchParams.get('upgrade') === '1'
+  const welcomeRequested = searchParams.get('welcome') === '1' && freeAccess
   useEffect(()=>{const timer=window.setInterval(()=>setToday(membershipToday()),60000);return()=>window.clearInterval(timer)},[])
   useEffect(() => {
-    if (!packageName || !upgradeRequested) return
+    if (!packageName || (!upgradeRequested && !welcomeRequested)) return
     let active = true
-    void Promise.resolve().then(() => { if (active) setUpgrade('ฟังก์ชันที่เลือก') })
+    void Promise.resolve().then(() => { if (active) setUpgrade(welcomeRequested ? 'แพ็กเกจสมาชิก' : 'ฟังก์ชันที่เลือก') })
     return () => { active = false }
-  }, [upgradeRequested, packageName])
+  }, [upgradeRequested, welcomeRequested, packageName])
   const pageTitle = titleFromPath(pathname, title)
   // onboarding wizard: ไม่โชว์ sidebar/navbar — โหลดเต็มจอเลยหลังเลือกโรงเรียน
   const onSchoolSettings = pathname === '/settings/school' || pathname.endsWith('/settings/school')
@@ -114,8 +115,10 @@ function LayoutClientInner({
   function closeUpgrade() {
     // Consume the redirect prompt so refreshes and later renders stay in Free.
     const url = new URL(window.location.href)
-    if (url.searchParams.get('upgrade') === '1') {
-      url.searchParams.delete('upgrade')
+    if (url.searchParams.get('upgrade') === '1' || url.searchParams.get('welcome') === '1') {
+      for (const key of ['upgrade', 'welcome']) {
+        if (url.searchParams.get(key) === '1') url.searchParams.delete(key)
+      }
       window.history.replaceState(null, '', url.pathname + url.search + url.hash)
     }
     setUpgrade('')
@@ -188,7 +191,6 @@ function LayoutClientInner({
       <main id="workspace-main" tabIndex={-1} className="main-content">
         <div className="content-shell">
           {children}
-          {effectiveMembership&&isFreeMembership(effectiveMembership)&&pathname.includes('/schedules/device')&&membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-mobile"/>}
         </div>
       </main>
       <MembershipUpgradeDialog open={!!upgrade} feature={upgrade} membership={effectiveMembership} onClose={closeUpgrade}/>

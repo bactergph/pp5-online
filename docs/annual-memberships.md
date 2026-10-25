@@ -11,6 +11,12 @@ bucket. It does not remove existing users, classrooms, schedules or documents.
 - Free uses the local timetable (25 teachers), own profile and authentication.
   Locked menus open the Facebook upgrade dialog. Online data operations are
   denied even when called directly, including after expiration.
+  Each successful Free login opens the package comparison once. Continuing Free
+  consumes the welcome URL flag, so refreshing or navigating does not reopen it.
+  The local timetable keeps a backup reminder at the upper right while scrolling,
+  with a direct JSON download for all years/terms. Download feedback indicates
+  the download was started; the user should check the file in Downloads. Backup
+  also remains available after a local database write fails.
 - Pro and School grants run for one calendar year from the selected start date.
   The final date remains valid through 23:59:59 in Asia/Bangkok. Renewal of an
   active subscription in the same package adds a year after its existing end;
@@ -31,8 +37,9 @@ bucket. It does not remove existing users, classrooms, schedules or documents.
   Every change uses an optimistic version check and writes an audit history in
   the same database transaction. Normal school settings cannot change packages.
 - **โฆษณาตารางฟรี** manages image upload, title, target link, enabled state and
-  optional start/end dates. It appears below desktop navigation or below mobile
-  content, never over the timetable, and is omitted for paid members. Uploads
+  optional start/end dates. A configured, enabled, in-date ad appears directly
+  below member information in the left sidebar, including the mobile menu.
+  It has no dismiss button and is omitted when unconfigured or for paid members. Uploads
   are district-only and accept PNG/JPEG/WebP with server-side size/signature checks.
 
 `getSession()` intentionally denies Free access for online data operations.

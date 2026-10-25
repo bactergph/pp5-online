@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react'
 import {usePathname} from 'next/navigation'
 import Swal from 'sweetalert2'
+import {FiDownload,FiHardDrive} from 'react-icons/fi'
 import {readFreePlan,writeFreePlan,readRegistrationSchool} from '@/lib/schedule-device-cache'
 import {readDeviceBackup} from '@/lib/schedule-device-backup'
 import {normalizePlan,deviceActivityCatalog,type FreeWizardPlan} from '@/lib/schedule-device-free'
@@ -22,7 +23,6 @@ import DeviceSchoolSettings from './DeviceSchoolSettings'
 import {applyDeviceSchoolBasics} from '@/lib/schedule-device-school'
 import './free-schedule.css'
 import './schedule-workspace.css'
-export type LiveFreeAd={title:string;href:string;imageUrl:string}
 type DeskTier='school'|'free'|'pro'
 type FreePlan=FreeWizardPlan&{substitutes:Record<string,FreeSubstituteEntry[]>}
 type FreeBundle=LocalScheduleBundle
@@ -49,12 +49,13 @@ function asBundle(raw?: Partial<FreeBundle> & Partial<FreePlan>): FreeBundle {
 }
 
 
-export default function FreeScheduleDesk({ad=null,registrationOwner,teacherLimit}:{tier:DeskTier;ad?:LiveFreeAd|null;registrationOwner?:string;teacherLimit?:number}) {
+export default function FreeScheduleDesk({registrationOwner,teacherLimit}:{tier:DeskTier;registrationOwner?:string;teacherLimit?:number}) {
   const limit=freeTeacherLimit(teacherLimit),limitRef=useRef(limit)
   useEffect(()=>{limitRef.current=limit},[limit])
   const pathname=usePathname(),[bundle,setBundle]=useState<FreeBundle>(()=>asBundle()),[ready,setReady]=useState(false)
   const [status,setStatus]=useState('กำลังเปิดฐานข้อมูลในเครื่อง…'),[error,setError]=useState(''),[failed,setFailed]=useState(false),[saving,setSaving]=useState(false)
   const [revision,setRevision]=useState(0),[computing,setComputing]=useState(false),[settingsOpen,setSettingsOpen]=useState(false)
+  const [backupStarted,setBackupStarted]=useState('')
   const [operations,setOperations]=useState<ScheduleOperations|null>(null)
   const [guard,setGuard]=useState({dirty:false,busy:false}),[routeStep,setRouteStep]=useState(1)
   const latest=useRef(bundle),expected=useRef(''),queue=useRef(Promise.resolve(true)),failure=useRef(false),pending=useRef(0),controller=useRef<AbortController|null>(null),previousPath=useRef(pathname)
@@ -95,7 +96,15 @@ export default function FreeScheduleDesk({ad=null,registrationOwner,teacherLimit
     void route();return()=>{active=false}
   },[pathname,saving,computing,guard])
   useEffect(()=>{const route=()=>{const step=Number(new URLSearchParams(window.location.search).get('step'));if(step>=1&&step<=7){setRouteStep(step);setRevision(value=>value+1)}};window.addEventListener('device-schedule-navigate',route);return()=>window.removeEventListener('device-schedule-navigate',route)},[])
-  function backup(){const blob=new Blob([JSON.stringify({format:'jarnsek-device-schedule',version:1,data:latest.current},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),anchor=document.createElement('a');anchor.href=url;anchor.download='jarnsek-device-schedule.json';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}
+  function backup(){
+    if(!ready)return
+    try{
+      const blob=new Blob([JSON.stringify({format:'jarnsek-device-schedule',version:1,data:latest.current},null,2)],{type:'application/json'})
+      const url=URL.createObjectURL(blob),anchor=document.createElement('a')
+      try{anchor.href=url;anchor.download='jarnsek-device-schedule.json';anchor.click();setBackupStarted(new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))}
+      finally{setTimeout(()=>URL.revokeObjectURL(url),30000)}
+    }catch{setError('ดาวน์โหลดไฟล์สำรองไม่ได้ กรุณาลองอีกครั้ง')}
+  }
   async function restore(file:File){
     try{
       const next=asBundle(readDeviceBackup(JSON.parse(await file.text()),limit))
@@ -108,11 +117,15 @@ export default function FreeScheduleDesk({ad=null,registrationOwner,teacherLimit
   const blocked=saving||computing||guard.busy||guard.dirty||failed
   useEffect(()=>{if(ready)window.dispatchEvent(new CustomEvent('device-school-settings',{detail:{schoolName:schoolDocument.schoolName,logoDataUrl:schoolDocument.logoDataUrl||''}}))},[ready,schoolDocument.schoolName,schoolDocument.logoDataUrl])
   return <section className="device-schedule-workspace">
+    <aside className="device-backup-reminder" aria-label="สำรองข้อมูลในเครื่อง">
+      <FiHardDrive className="device-backup-icon" aria-hidden="true"/>
+      <div><strong>ข้อมูลอยู่ในเครื่องนี้</strong><p>สำรองก่อนเปลี่ยนเครื่อง หรือล้างข้อมูลเบราว์เซอร์</p>{backupStarted&&<small role="status">เริ่มดาวน์โหลด {backupStarted} น. · ตรวจสอบไฟล์ในดาวน์โหลด</small>}</div>
+      <button type="button" disabled={!ready} onClick={backup}><FiDownload aria-hidden="true"/>สำรองข้อมูล</button>
+    </aside>
     <div className="local-storage-bar"><div role="status"><strong>จัดตารางสอนฟรี · ครูไม่เกิน {limit} คน</strong><small>{status} · ข้อมูลและการประมวลผลอยู่บนอุปกรณ์นี้</small></div><div className="actions"><button type="button" disabled={!ready} onClick={backup}>ดาวน์โหลดสำเนาข้อมูล</button><label className="local-restore">นำเข้าไฟล์สำรอง<input type="file" accept=".json,application/json" disabled={!ready||blocked} onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void restore(file)}}/></label></div></div>
     {computing&&<p className="prep-working" role="status">กำลังประมวลผลบนเครื่องนี้… <button type="button" onClick={()=>controller.current?.abort()}>ยกเลิกการจัดตาราง</button></p>}
     {error&&<p className="prep-error" role="alert">{error}</p>}
     {!ready||!operations?<p role="status">กำลังเปิดข้อมูลในเครื่อง…</p>:<>
-      {ad&&<LiveAd ad={ad}/>}
       {settingsOpen&&<DeviceSchoolSettings initial={{schoolName:schoolDocument.schoolName,directorName:schoolDocument.directorName,academicHeadName:schoolDocument.academicHeadName,academicYear:deviceYear(bundle),logoDataUrl:schoolDocument.logoDataUrl||''}} onClose={()=>setSettingsOpen(false)} onSave={async settings=>{if(!await write(applyDeviceSchoolBasics(latest.current,settings)))throw Error('ยังไม่ได้บันทึกลงเครื่อง กรุณาดาวน์โหลดสำเนาและลองใหม่');setRevision(value=>value+1)}}/>}
       <ScheduleServicesProvider operations={operations} local onGuard={setGuard}>
         <fieldset className="device-shared-content" disabled={failed} key={revision+':'+view}>
@@ -121,12 +134,4 @@ export default function FreeScheduleDesk({ad=null,registrationOwner,teacherLimit
       </ScheduleServicesProvider>
     </>}
   </section>
-}
-function LiveAd({ad}:{ad:LiveFreeAd}){
-  const body=<>
-    {/* eslint-disable-next-line @next/next/no-img-element */}
-    {ad.imageUrl&&<img src={ad.imageUrl} alt={ad.title||'โฆษณา'}/>}
-    <span><small>โฆษณา</small><strong>{ad.title||ad.href}</strong></span>
-  </>
-  return ad.href?<a className="ad-live" href={ad.href} target="_blank" rel="noopener noreferrer">{body}</a>:<div className="ad-live">{body}</div>
 }

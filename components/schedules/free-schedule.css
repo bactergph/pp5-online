@@ -24,6 +24,10 @@
 
 /* Shared Pro screens retain their own selectors. The device shell only adds storage controls. */
 .device-schedule-workspace{display:grid;gap:18px;min-width:0;color:#182b49}
+.device-backup-reminder{position:sticky;top:calc(var(--navbar-h,0px) + env(safe-area-inset-top,0px) + 10px);z-index:25;justify-self:end;align-self:start;display:flex;align-items:center;gap:12px;width:min(100%,520px);padding:12px 14px;border:1px solid #cbdcf2;border-radius:14px;background:#f0f6ff;box-shadow:0 4px 16px #182b490c;box-sizing:border-box}
+.device-backup-reminder>div{min-width:0;flex:1}.device-backup-icon{flex:none;width:20px;height:20px;color:#176bd1}.device-backup-reminder strong{display:block;font-size:14px;line-height:1.5}.device-backup-reminder p{margin:3px 0 0;font-size:12px;line-height:1.6;color:#52647c}.device-backup-reminder small{display:block;margin-top:4px;font-size:11px;line-height:1.5;color:#245b83}.device-backup-reminder button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:42px;padding:8px 12px;border:1px solid #176bd1;border-radius:9px;background:#176bd1;color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer}.device-backup-reminder button:hover{background:#1258af}.device-backup-reminder button:disabled{opacity:.5;cursor:wait}.device-backup-reminder button:focus-visible{outline:3px solid #176bd1;outline-offset:3px}
+@media(max-width:600px){.device-backup-reminder{gap:9px;padding:10px;width:100%}.device-backup-icon{display:none}.device-backup-reminder strong{font-size:13px}.device-backup-reminder p{font-size:11px}.device-backup-reminder button{padding:8px;font-size:12px}}
+@media print{.device-backup-reminder{display:none!important}}
 .device-shared-content{border:0;margin:0;padding:0;min-width:0}
 .device-school-settings{border:1px solid #dce6f2;border-radius:14px;background:white;padding:14px 18px}
 .device-school-settings summary{cursor:pointer;font-size:14px;font-weight:600;color:#52647c}

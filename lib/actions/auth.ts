@@ -76,7 +76,7 @@ export async function login(
   if (mustChangePassword) {
     redirectTo = '/auth/change-password'
   } else if (effectiveSchoolId && userProfile.role !== 'district' && isFreeMembership(await readMembership(effectiveSchoolId))) {
-    redirectTo = membershipHome(await readMembership(effectiveSchoolId))
+    redirectTo = membershipHome(await readMembership(effectiveSchoolId)) + '?welcome=1'
   } else if (userProfile.role === 'admin') {
     const { getAdminOnboardingGate, onboardingUrl } = await import('@/lib/onboarding-complete')
     const gate = await getAdminOnboardingGate(effectiveSchoolId)
