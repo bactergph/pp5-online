@@ -4,15 +4,16 @@ export type MemberSchool = {
   id:string; name:string; member_code?:string|null; district?:string|null; province?:string|null;
   membership_kind?:string|null; member_plan?:string|null; membership_started_on?:string|null;
   membership_expires_on?:string|null; membership_version?:number; free_schedule_teacher_limit?:number;
+  membership_student_count?:number|null;membership_annual_price?:number|null;
 }
 export type ManagedMember = {
   id:string; email:string; prefix:string; full_name:string; position:string|null;
   is_active:boolean; school_id:string|null; created_at:string|null; school?:MemberSchool|null;
 }
 export type MemberFilter = {query:string; account:'all'|'active'|'inactive'; package:'all'|MemberPackage; term:'all'|'expiring'|'expired'|'scheduled'; sort:'newest'|'oldest'|'name'|'expiry'}
-export const MEMBER_PACKAGES = {free:'Free',pro:'Pro',school:'School'} as const
+export const MEMBER_PACKAGES = {free:'Free',pro:'Pro',pro_plus:'Pro Plus',school:'School'} as const
 export function subscribedPackage(school?:MemberSchool|null):MemberPackage {
-  return school?.membership_kind==='individual' ? school.member_plan==='pro'?'pro':'free' : 'school'
+  return school?.membership_kind==='individual' ? school.member_plan==='pro_plus'?'pro_plus':school.member_plan==='pro'?'pro':'free' : 'school'
 }
 export function memberTerm(school?:MemberSchool|null, today=membershipToday()) {
   if(!school)return 'unassigned'

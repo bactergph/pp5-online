@@ -4,7 +4,8 @@ import { requireDistrict } from '@/lib/district'
 import { logActivity } from '@/lib/audit'
 import { seedEvaluationSettingsForSchool } from '@/lib/evaluation-settings-seed'
 import { approveSelectedAdmins } from '@/lib/approve-admins'
-import { validMembershipDate } from '@/lib/membership'
+import { validMembershipDate,type MemberPackage } from '@/lib/membership'
+import {schoolAnnualQuote} from '@/lib/membership-offers'
 import {validFreeTeacherLimit} from '@/lib/free-schedule-entitlement'
 
 export async function approveAdmins(ids: string[]) {
@@ -78,18 +79,19 @@ export async function setFreeScheduleTeacherLimit(schoolId:string,version:number
 }
 
 /** ตั้งชนิดสมาชิกของโรงเรียนที่ผูกกับผู้ดูแลแล้ว */
-export async function setSchoolPackage(schoolId: string, packageName: 'school' | 'free' | 'pro', input: {version:number;startDate:string;renew:boolean;note:string}) {
+export async function setSchoolPackage(schoolId: string, packageName: MemberPackage, input: {version:number;startDate:string;renew:boolean;note:string;studentCount?:number|null}) {
   const session = await requireDistrict()
-  if (!['school', 'free', 'pro'].includes(packageName) || !input || !Number.isInteger(input.version) || typeof input.note!=='string' || input.note.length>500) return { error: 'แพ็กเกจหรือข้อมูลสมาชิกไม่ถูกต้อง' }
+  if (!['school', 'free', 'pro','pro_plus'].includes(packageName) || !input || !Number.isInteger(input.version) || typeof input.note!=='string' || input.note.length>500) return { error: 'แพ็กเกจหรือข้อมูลสมาชิกไม่ถูกต้อง' }
   if(packageName!=='free'&&!validMembershipDate(input.startDate))return {error:'กรุณาระบุวันเริ่มสมาชิก'}
-  const result=await createServerClient().rpc('set_annual_membership',{p_actor:session.userId,p_school:schoolId,p_version:input.version,p_package:packageName,p_start:packageName==='free'?null:input.startDate,p_renew:!!input.renew,p_note:input.note.trim()})
-  if(result.error)return {error:['PGRST202','PGRST204','42703','42P01'].includes(result.error.code)?'กรุณารัน migration 082_annual_memberships.sql ก่อนจัดการสมาชิก':result.error.message}
+  if(packageName==='school'&&!schoolAnnualQuote(input.studentCount??0))return {error:'กรุณาระบุจำนวนนักเรียนเพื่อคำนวณราคา School'}
+  const result=await createServerClient().rpc('set_annual_membership_v2',{p_actor:session.userId,p_school:schoolId,p_version:input.version,p_package:packageName,p_start:packageName==='free'?null:input.startDate,p_renew:!!input.renew,p_note:input.note.trim(),p_student_count:packageName==='school'?input.studentCount:null})
+  if(result.error)return {error:['PGRST202','PGRST204','42703','42P01'].includes(result.error.code)?'กรุณารัน migration 085_membership_packages_pricing.sql ก่อนจัดการสมาชิก':result.error.message}
   return {error:undefined}
 }
 
 export async function fetchMembershipHistory(schoolId:string){
   await requireDistrict()
-  const result=await createServerClient().from('membership_history').select('id,previous_package,package,starts_on,expires_on,note,created_at').eq('school_id',schoolId).order('created_at',{ascending:false}).limit(12)
+  const result=await createServerClient().from('membership_history').select('id,previous_package,package,starts_on,expires_on,note,created_at,student_count,annual_price').eq('school_id',schoolId).order('created_at',{ascending:false}).limit(12)
   if(result.error)return {data:[],error:'โหลดประวัติสมาชิกไม่สำเร็จ กรุณาตรวจ migration 082'}
   return {data:result.data||[],error:null}
 }

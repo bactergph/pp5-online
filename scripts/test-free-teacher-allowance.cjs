@@ -4,15 +4,21 @@ function load(file){const abs=path.resolve(file);if(cache[abs])return cache[abs]
 const id=n=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`
 ;(async()=>{
  const policy=load('lib/free-schedule-entitlement.ts'),membership=load('lib/membership.ts'),free=load('lib/schedule-device-free.ts'),backup=load('lib/schedule-device-backup.ts'),{createDeviceScheduleServices}=load('lib/schedule-device-services.ts')
+ const {teacherImportCapacity}=load('lib/schedule-teacher-capacity.ts')
+ let capacity=teacherImportCapacity(['นาย เดิม'],[['นาย','เดิม','ครู'],['นาง','ใหม่','ครู'],['นาง','ใหม่','ครู'],['นาย','','']],25)
+ assert.equal(capacity.current,1);assert.equal(capacity.added,1);assert.equal(capacity.reused,2);assert.equal(capacity.total,2);assert.equal(capacity.remaining,24);assert.equal(capacity.over,0)
+ capacity=teacherImportCapacity(Array.from({length:25},(_,i)=>'ครู '+i),[['นาย','คนใหม่','ครู']],25);assert.equal(capacity.over,1);assert.equal(capacity.remaining,0)
+ capacity=teacherImportCapacity(Array.from({length:35},(_,i)=>'ครู '+i),[['นาย','คนใหม่','ครู']],50);assert.equal(capacity.total,36);assert.equal(capacity.remaining,15);assert.equal(capacity.over,0)
  assert.equal(policy.freeTeacherLimit(),25);assert.equal(policy.freeTeacherLimit(120),120);for(const value of [0,24,30.5,NaN,Infinity,'120'])assert.equal(policy.validFreeTeacherLimit(value),false)
  const entitlement=membership.membershipFromRow({membership_kind:'individual',member_plan:'free',free_schedule_teacher_limit:120});assert.equal(entitlement.plan,'free');assert.equal(entitlement.freeTeacherLimit,120);assert.equal(membership.membershipAllows('/students',entitlement),false)
  const expired=membership.membershipFromRow({membership_kind:'individual',member_plan:'pro',membership_expires_on:'2020-01-01',free_schedule_teacher_limit:70});assert.equal(expired.plan,'free');assert.equal(expired.freeTeacherLimit,70)
  const base={...free.normalizePlan({rooms:[{id:id(1),label:'ม.1/1'}]}),substitutes:{}}
  let bundle={year:'2569',semester:2,terms:{1:structuredClone(base),2:structuredClone(base)}},limit=25,writes=0
  const services=createDeviceScheduleServices({read:()=>bundle,write:async next=>{bundle=next;writes++;return true},teacherLimit:()=>limit})
+ assert.equal(services.localTeachers.limit,25)
  const rows=Array.from({length:35},(_,i)=>({key:'teacher-'+i,prefix:'นาย',name:'ตัวอย่าง '+i,position:'ครู'}))
  let result=await services.saveScheduleInputTeachers('2569',2,rows);assert.match(result.error,/25/);assert.equal(bundle.terms[2].teachers.length,0);assert.equal(writes,0)
- limit=50;result=await services.saveScheduleInputTeachers('2569',2,rows);assert.equal(result.error,null);assert.equal(bundle.terms[2].teachers.length,35);assert.equal(bundle.terms[1].teachers.length,35)
+ limit=50;assert.equal(services.localTeachers.limit,50);result=await services.saveScheduleInputTeachers('2569',2,rows);assert.equal(result.error,null);assert.equal(bundle.terms[2].teachers.length,35);assert.equal(bundle.terms[1].teachers.length,35)
  const before=JSON.stringify(bundle);result=await services.saveScheduleInputTeachers('2569',2,Array.from({length:16},(_,i)=>({key:'more-'+i,prefix:'นาง',name:'เพิ่ม '+i,position:'ครู'})));assert.match(result.error,/50/);assert.equal(JSON.stringify(bundle),before)
  bundle.terms[2].subjects=[{id:id(800),roomId:id(1),code:'ท21101',name:'ภาษาไทย',teacherId:bundle.terms[2].teachers[0].id,periods:1,pattern:[1],placeId:null}]
  const raw={format:'jarnsek-device-schedule',version:1,data:bundle}

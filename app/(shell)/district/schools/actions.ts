@@ -103,7 +103,7 @@ export async function fetchSchoolCatalog(opts?: {
       query = query.not('id', 'in', `(${adminIds.join(',')})`)
     }
 
-    if (includePlan && filterPlan === 'pro') query = query.eq('member_plan', 'pro')
+    if (includePlan && filterPlan === 'pro') query = query.in('member_plan', ['pro','pro_plus'])
 
     return query.order('name').range(from, from + pageSize - 1)
   }
@@ -120,7 +120,7 @@ export async function fetchSchoolCatalog(opts?: {
     ...s,
     admin_name: adminMap[s.id] ?? null,
     layout_tuner_enabled: s.layout_tuner_enabled !== false,
-    member_plan: s.member_plan === 'pro' || s.member_plan === 'free' ? s.member_plan : null,
+    member_plan: s.member_plan === 'pro' || s.member_plan === 'pro_plus' || s.member_plan === 'free' ? s.member_plan : null,
   }))
 
   return { rows, total: listed.count ?? 0, page, pageSize, planReady }

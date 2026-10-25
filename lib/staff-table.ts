@@ -6,6 +6,8 @@ import { schoolMemberEmail } from '@/lib/schoolAuth'
 import { syncUserRoleToSchoolLeaders } from '@/lib/school-leaders'
 import { logActivity } from '@/lib/audit'
 import { staffAccessError } from '@/lib/staff-permissions'
+import { readMembership } from '@/lib/member-plan'
+import { isFreeMembership } from '@/lib/membership'
 
 const roles = ['teacher', 'academic_head', 'deputy_principal', 'principal', 'admin']
 export type StaffTableRow = { key: string; id?: string; prefix: string; full_name: string; position: string; role: string; username: string; password: string; is_homeroom: boolean }
@@ -22,6 +24,8 @@ export async function saveStaffRows(rows: StaffTableRow[]) {
   const session = await getSession()
   if (!session?.schoolId || staffAccessError(session)) throw Error('ไม่มีสิทธิ์จัดการบุคลากร')
   if (!Array.isArray(rows) || !rows.length || rows.length > 50) throw Error('บันทึกได้ครั้งละ 1–50 รายการ')
+  const membership=session.role==='district'?null:await readMembership(session.schoolId)
+  if(membership&&isFreeMembership(membership))throw Error('สมาชิกฟรีใช้ได้เฉพาะจัดตารางบนอุปกรณ์')
   const db = createServerClient()
   const results: {key:string;id?:string;error?:string}[] = []
   for (const row of rows) {
@@ -49,16 +53,11 @@ export async function saveStaffRows(rows: StaffTableRow[]) {
       const role = row.role || old?.role || 'teacher'
       const email = username && username !== old?.username ? schoolMemberEmail(username,session.schoolId) : old?.email || schoolMemberEmail(`pending-${randomUUID()}`,session.schoolId)
       const profile = {prefix:row.prefix || '',full_name:row.full_name.trim(),position:row.position || '',role,is_homeroom:Boolean(row.is_homeroom),username,email,is_active:old ? (draft ? Boolean(username && row.role) : old.is_active) : Boolean(username && row.role)}
+      if(membership?.kind==='individual'&&profile.is_active&&row.id!==session.userId)throw Error('Pro / Pro Plus ใช้ได้ 1 บัญชี เพิ่มรายชื่อครูได้โดยเว้นชื่อผู้ใช้และรหัสผ่าน หากต้องการหลายบัญชีให้ใช้ School')
       let id = row.id
       if (!id) {
-        if (session.role === 'admin') {
-          const {data:actor,error:actorError} = await db.auth.admin.getUserById(session.userId)
-          if (actorError) throw Error(actorError.message)
-          const quota = Number(actor.user?.app_metadata?.user_quota ?? 15)
-          const {count,error} = await db.from('users').select('id',{count:'exact',head:true}).eq('school_id',session.schoolId).neq('role','district')
-          if (error) throw Error(error.message)
-          if ((count ?? 0) >= quota) throw Error(`เกินโควต้าบุคลากร (${quota} คน)`)
-        }
+        // Paid plans have no personnel count cap; individual login limits are
+        // checked above and enforced atomically by the membership SQL trigger.
         const {data,error} = await db.auth.admin.createUser({email,password:row.password || randomUUID()+randomUUID(),email_confirm:true,user_metadata:{full_name:profile.full_name},app_metadata:{staff_role_pending:!row.role}})
         if (error || !data.user) throw Error(error?.message || 'สร้างบัญชีไม่สำเร็จ')
         id = createdId = data.user.id

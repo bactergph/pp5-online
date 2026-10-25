@@ -15,10 +15,10 @@ bucket. It does not remove existing users, classrooms, schedules or documents.
   The final date remains valid through 23:59:59 in Asia/Bangkok. Renewal of an
   active subscription in the same package adds a year after its existing end;
   renewing an expired subscription starts a new year on the selected date.
-- Pro has ten room identities for the entire workspace, shared across years
+- Pro has 20 room identities and Pro Plus has 50 for the entire workspace, shared across years
   and semesters. The identity is the existing level + room number; copying a
   historical snapshot of the same room does not consume another seat. A new
-  year cannot create ten additional identities. Database advisory locks and
+  year cannot create another quota of room identities. Database advisory locks and
   triggers enforce the cap for direct writes, imports and bulk creation too.
 - Personal workspaces have one real login account. Inactive personnel records
   with generated `pending-` emails may be used for teaching assignments, but
@@ -112,3 +112,16 @@ generation/confirmation is blocked while the teacher count exceeds the new limit
 `scripts/test-free-teacher-allowance.cjs` covers 25/50 limits, atomic imports,
 backup validation, worker generation above 25, reduction during a draft,
 protected SQL writes, same-school scope, independent schools and Free access.
+
+## Package comparison and pricing (085)
+
+Run `085_membership_packages_pricing.sql` after 084 before deploying the new member UI. It expands Pro to 20 distinct room identities, adds Pro Plus with 50, and adds protected billing fields plus a service-role-only `set_annual_membership_v2` RPC. Existing subscriptions and classroom data are preserved; no existing member is billed, expired, upgraded or downgraded by the migration. The old RPC is retained for compatibility during deployment.
+
+- Pro: 499 THB/year, one real login, 20 rooms. Pro Plus: 799 THB/year, one real login, 50 rooms. Both allow unlimited inactive teaching personnel and all paid features according to the account role. The database still prevents a second real login for a personal workspace.
+- School: max(2,990 THB, agreed student count × 10 THB) per calendar-year term. Super Admin supplies a positive integer student count and confirms activation manually. This is the current-year count for billing, not a count of archived student rows or a new automatic deletion/student cap. School personnel accounts no longer inherit the obsolete default Auth metadata quota of 15.
+- The accepted annual price and student count are stored on the school and in the same atomic membership history record. They do not initiate a payment, charge a card, or automatically reprice an active subscription. Existing members have no inferred retroactive bill. Renewal can use an updated agreed student count.
+- The comparison dialog has personal and School tabs, current-package badges, annual prices, a live School calculator, full feature descriptions and a mobile layout. The member badge opens it for paid members too. Free can dismiss it without being trapped by a redirect.
+- SGS is presented as an experimental helper using the separately installed Chrome extension. Live SGS persistence validation is still outstanding and is disclosed in the dialog.
+- Signup/public descriptions and Super Admin filters/forms include Pro Plus and the same prices. Free teacher allowances continue to use each member's configured value.
+
+Validation: `npm run test:membership`; the new package tests execute the actual 085 SQL in PGlite, including direct/bulk room writes, expiry/CAS/renewal/history, protected quote writes and legacy preservation. UI tests use synthetic accounts only.

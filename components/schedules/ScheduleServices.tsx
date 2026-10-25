@@ -55,6 +55,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
 >, 'createScheduleDraft'> & {
   createScheduleDraft:(...args:Parameters<Actions['createScheduleDraft']>)=>Promise<{data:import('./ScheduleReviewStep').ScheduleDraftView|null;error:string|null}>
   localTeachers?: {
+    readonly limit:number
     save:(id:string,prefix:string,name:string,position:string)=>Promise<{error:string|null}>
     remove:(ids:string[])=>Promise<{error:string|null}>
   }

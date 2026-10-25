@@ -136,6 +136,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
   }
   const services:ScheduleOperations={
     localTeachers:{
+      get limit(){return currentTeacherLimit()},
       save:(id,prefix,name,position)=>outcome(()=>mutate(selectedYear,selectedTerm,async current=>{
         if(!name.trim()||name.length>200||prefix.length>30||position.length>100||!current.teachers.some(teacher=>teacher.id===id))throw Error('ตรวจชื่อครู คำนำหน้า และตำแหน่ง')
         const label=`${prefix.trim()} ${name.trim()}`.trim()
@@ -177,7 +178,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
         results.push({key:row.key,id:teacher.id})
       }
       // Reject an oversized import atomically; never truncate the submitted names.
-      if(teachers.length>currentTeacherLimit())throw Error(`จัดตารางฟรีรองรับครูสูงสุด ${currentTeacherLimit()} คน (ชุดนี้รวม ${teachers.length} คน)`)
+      if(teachers.length>currentTeacherLimit())throw Error(`จัดตารางฟรีรองรับครูสูงสุด ${currentTeacherLimit()} คน (ชุดนี้รวม ${teachers.length} คน เกิน ${teachers.length-currentTeacherLimit()} คน) กรุณาลดรายชื่อก่อนบันทึก`)
       await put(year,term,{...current,teachers});return {results,reused:rows.length-(teachers.length-current.teachers.length)}
     })),
     saveScheduleInputSubjects:(year,term,hash,rows)=>outcome(()=>mutate(year,term,async current=>{

@@ -6,7 +6,7 @@ async function run(){
  const pro={membership_kind:'individual',member_plan:'pro',membership_started_on:'2026-10-24',membership_expires_on:'2027-10-23'}
  assert.equal(m.membershipFromRow(pro,'2027-10-23').plan,'pro');assert.equal(m.membershipFromRow(pro,'2027-10-24').plan,'free');assert.ok(m.membershipFromRow(pro,'2026-10-23').scheduled)
  for(const url of ['/schedules/class/manage','/settings/users','/documents/sign','/classroom-admin/sign','/attendance/hourly']){assert.equal(m.membershipAllows(url,m.membershipFromRow(pro,'2026-10-24')),true);assert.equal(m.membershipAllows(url,{kind:'individual',plan:'free'}),false)}
- assert.equal(m.serverRoomLimit({kind:'individual',plan:'pro'}),10);assert.equal(m.membershipAllows('/district/admins',{kind:'individual',plan:'pro'}),false)
+ assert.equal(m.serverRoomLimit({kind:'individual',plan:'pro'}),20);assert.equal(m.membershipAllows('/district/admins',{kind:'individual',plan:'pro'}),false)
  assert.equal(ads.freeAdIsLive({title:'test',href:'',imageUrl:'',start:'',end:'',enabled:true}),true);assert.equal(ads.freeAdIsLive({title:'test',href:'',imageUrl:'',start:'',end:'',enabled:false}),false)
  let profile={id:id(1),role:'admin',school_id:id(2),is_active:true,full_name:'test'},currentMembership={kind:'individual',plan:'free'},membershipError=false
  const session=moduleFrom('lib/session.ts',{'react':{cache:f=>f},'jose':{jwtVerify:async()=>({payload:{userId:id(1)}})},'next/headers':{cookies:async()=>({get:()=>({value:'test'})})},'@/lib/supabase':{createServerClient:()=>({from:()=>{const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:profile,error:null})};return q}})},'./member-plan':{readMembership:async()=>{if(membershipError)throw Error('offline');return currentMembership}},'./membership':m})

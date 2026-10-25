@@ -7,6 +7,7 @@ import { SUBJECT_GROUPS, SUBJECT_IMPORT_COLUMNS, SUBJECT_ROW_LIMIT, matchClassro
 import type { Preparation } from '@/lib/schedule-preparation'
 import ScheduleInputGrid from './ScheduleInputGrid'
 import LocalScheduleTeachers from './LocalScheduleTeachers'
+import { teacherImportCapacity } from '@/lib/schedule-teacher-capacity'
 
 export default function ScheduleDataInput({ kind, data, year, term, onSaved, onDirty, locked, onBusy, onRoster }: {
   kind: 'teachers' | 'subjects'; data: Preparation; year: string; term: number
@@ -35,6 +36,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
   }
   function change(next: string[][]) { setRows(next); setStatuses({}); setError(''); setMessage(''); onDirty(next.some(r => r.some(Boolean))) }
   const filled = rows.map((r, i) => ({ r, i })).filter(x => x.r.some(Boolean))
+  const capacity=kind==='teachers'&&localTeachers?teacherImportCapacity(teachers.map(teacher=>teacher.name),rows,localTeachers.limit):null
   function resolveSubjects(): SubjectInputRow[] {
     return filled.map(({ r, i }) => {
       const room = matchClassroomLabel(r[0], rooms)
@@ -49,6 +51,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
   }
   async function save(alreadyConfirmed = false) {
     if (saving.current || locked) return
+    if(capacity?.over){setError(`เกินสิทธิ์ ${capacity.over} คน — เพิ่มครูได้สูงสุด ${capacity.limit} คน กรุณาลดรายชื่อใหม่อย่างน้อย ${capacity.over} คนก่อนบันทึก`);return}
     saving.current = true; setBusy(true); onBusy(true)
     setError(''); setMessage('')
     try {
@@ -133,6 +136,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
       <div className="prep-teacher-title">
         <h2>เลือกครูที่จะนำมาจัดตาราง</h2>
         <p>เลือกแล้ว {selectedTeachers.length} จาก {teachers.length} คน</p>
+        {capacity&&<p className="prep-teacher-limit-hint">โหมดฟรี · มีครู {capacity.current} / {capacity.limit} คน · เพิ่มได้อีก {capacity.remaining} คน</p>}
       </div>
       <div className="prep-teacher-tools">
         <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหาชื่อหรือตำแหน่ง" aria-label="ค้นหาครู" />
@@ -154,6 +158,13 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
         <button type="button" disabled={busy} aria-label="ปิด" onClick={closeAdd}>ปิด</button>
       </header>
       <div className="prep-team-dialog-body">
+        {capacity&&<div className={`prep-teacher-capacity${capacity.over?' is-over':''}`} aria-label="สิทธิ์เพิ่มครูโหมดฟรี" aria-live="polite">
+          <strong>โหมดฟรี เพิ่มครูได้สูงสุด {capacity.limit} คน</strong>
+          <p>มีแล้ว {capacity.current} คน · เพิ่มได้อีก {capacity.remaining} คน · ใช้รายชื่อร่วมกันทั้งสองภาคเรียน</p>
+          <p>รายการนี้เพิ่มครูใหม่ {capacity.added} คน · รวม {capacity.total} / {capacity.limit} คน{capacity.reused>0?` · ใช้รายชื่อเดิม ${capacity.reused} รายการ`:''}</p>
+          {capacity.over>0&&<p className="prep-error" role="alert">เกินสิทธิ์ {capacity.over} คน กรุณาลดรายชื่อใหม่อย่างน้อย {capacity.over} คนก่อนบันทึก</p>}
+          {!capacity.over&&capacity.remaining===0&&<p>ครบจำนวนที่อนุญาตแล้ว ใช้รายชื่อเดิมได้ หรือลบครูที่ไม่ใช้ก่อนเพิ่มคนใหม่</p>}
+        </div>}
         <fieldset disabled={busy}>
           <ScheduleInputGrid label="ตารางนำเข้าครู" rows={rows} onChange={change} statuses={statuses} columns={[{ label: 'คำนำหน้า', hint: 'เช่น นาย' }, { label: 'ชื่อ-นามสกุล', hint: 'ชื่อครู' }, { label: 'ตำแหน่ง', hint: 'เช่น ครู' }]} />
         </fieldset>
@@ -162,10 +173,10 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
         {busy && <div role="status" className="prep-import-progress"><progress aria-label="สถานะบันทึกข้อมูล" max={filled.length || 1} value={progress} /><span>ตรวจและบันทึกแล้ว {progress} / {filled.length} รายการ</span></div>}
       </div>
       <footer>
-        <span>{locked ? 'บันทึกการตั้งค่าด้านบนก่อนนำเข้าข้อมูล' : `${filled.length} แถวพร้อมบันทึก`}</span>
+        <span>{locked ? 'บันทึกการตั้งค่าด้านบนก่อนนำเข้าข้อมูล' : capacity?.over ? `เกินสิทธิ์ ${capacity.over} คน · ยังบันทึกไม่ได้` : `${filled.length} แถวพร้อมบันทึก`}</span>
         {localTeachers ? <LocalScheduleTeachers data={data} onSaved={onSaved} onBusy={onBusy}/> : <Link href="/settings/users">หน้าบุคลากร</Link>}
         <button type="button" disabled={busy} onClick={closeAdd}>ยกเลิก</button>
-        <button type="button" className="prep-primary" disabled={busy || locked || !filled.length} onClick={() => void save(true)}>{busy ? 'กำลังบันทึก…' : `บันทึก ${filled.length} รายการ`}</button>
+        <button type="button" className="prep-primary" disabled={busy || locked || !filled.length || !!capacity?.over} onClick={() => void save(true)}>{busy ? 'กำลังบันทึก…' : `บันทึก ${filled.length} รายการ`}</button>
       </footer>
     </dialog>
   </section>

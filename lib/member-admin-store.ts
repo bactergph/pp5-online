@@ -14,7 +14,7 @@ export async function loadMemberDirectory(db:ReturnType<typeof createServerClien
   }
   const ids=[...new Set(admins.map(member=>member.school_id).filter((id):id is string=>!!id))]
   for(let offset=0;offset<ids.length;offset+=200){
-    const result=await db.from('schools').select('id,name,district,province,member_code,membership_kind,member_plan,membership_started_on,membership_expires_on,membership_version,free_schedule_teacher_limit').in('id',ids.slice(offset,offset+200))
+    const result=await db.from('schools').select('id,name,district,province,member_code,membership_kind,member_plan,membership_started_on,membership_expires_on,membership_version,free_schedule_teacher_limit,membership_student_count,membership_annual_price').in('id',ids.slice(offset,offset+200))
     if(result.error)throw Error('โหลดแพ็กเกจสมาชิกไม่สำเร็จ: '+result.error.message)
     schools.push(...result.data)
   }

@@ -6,6 +6,7 @@ import { schoolMemberEmail } from '@/lib/schoolAuth'
 import { logActivity } from '@/lib/audit'
 import { saveStaffRows } from '@/lib/staff-table'
 import { staffAccessError } from '@/lib/staff-permissions'
+import { readMembership } from '@/lib/member-plan'
 
 export async function POST(req: NextRequest) {
   // ตรวจสอบว่าผู้ขอเป็น admin
@@ -55,17 +56,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'กรุณากรอก username หรือ email' }, { status: 400 })
   }
 
-  // บังคับโควต้า — admin สร้าง user ในโรงเรียนได้ไม่เกินโควต้า (super admin/district ไม่จำกัด)
-  if (session.role === 'admin' && session.schoolId) {
-    const { data: au } = await adminClient.auth.admin.getUserById(session.userId)
-    const quota = Number(au?.user?.app_metadata?.user_quota ?? 15)
-    const { count } = await adminClient.from('users')
-      .select('id', { count: 'exact', head: true })
-      .eq('school_id', session.schoolId).neq('role', 'district')
-    if ((count ?? 0) >= quota) {
-      return NextResponse.json({ error: `เกินโควต้าผู้ใช้ของโรงเรียน (${count}/${quota} คน) — ติดต่อผู้ดูแลระบบเพื่อขอเพิ่มโควต้า` }, { status: 400 })
-    }
-  }
+  if(session.role!=='district'&&session.schoolId&&(await readMembership(session.schoolId)).kind==='individual')return NextResponse.json({error:'Pro / Pro Plus ใช้ได้ 1 บัญชี เพิ่มรายชื่อครูได้โดยเว้นชื่อผู้ใช้และรหัสผ่าน หากต้องการหลายบัญชีให้ใช้ School'},{status:400})
 
   // สร้าง Auth user
   const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
@@ -99,6 +90,7 @@ export async function POST(req: NextRequest) {
     })
 
   if (profileError) {
+    await adminClient.auth.admin.deleteUser(authData.user.id)
     return NextResponse.json({ error: profileError.message }, { status: 400 })
   }
 

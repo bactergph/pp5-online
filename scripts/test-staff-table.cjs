@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const vm = require('node:vm')
 const ts = require('typescript')
-let users=[],authUsers=new Map(),session={userId:'admin',schoolId:'school',role:'admin'},quota=15,failProfile=false,failAuth=false
+let users=[],authUsers=new Map(),session={userId:'admin',schoolId:'school',role:'admin'},membership={kind:'school'},quota=15,failProfile=false,failAuth=false
 function query() {
   const filters=[];let patch=null,countOnly=false
   const q={
@@ -27,7 +27,7 @@ const db={from:()=>query(),auth:{admin:{
 }}}
 const exportsObject={}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/staff-table.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>({
-  'server-only':{},crypto:require('node:crypto'),'@/lib/supabase':{createServerClient:()=>db},'@/lib/session':{getSession:async()=>session},'@/lib/staff-permissions':{staffAccessError:actor=>!actor.schoolId||!['admin','district'].includes(actor.role)||actor.mustChangePassword?'denied':null},'@/lib/schoolAuth':{schoolMemberEmail:(u,s)=>`${u}@${s}.pp5.local`},'@/lib/school-leaders':{syncUserRoleToSchoolLeaders:async()=>{}},'@/lib/audit':{logActivity:async()=>{}},
+  'server-only':{},crypto:require('node:crypto'),'@/lib/supabase':{createServerClient:()=>db},'@/lib/session':{getSession:async()=>session},'@/lib/member-plan':{readMembership:async()=>membership},'@/lib/membership':{isFreeMembership:membership=>membership.kind==='individual'&&membership.plan==='free'},'@/lib/staff-permissions':{staffAccessError:actor=>!actor.schoolId||!['admin','district'].includes(actor.role)||actor.mustChangePassword?'denied':null},'@/lib/schoolAuth':{schoolMemberEmail:(u,s)=>`${u}@${s}.pp5.local`},'@/lib/school-leaders':{syncUserRoleToSchoolLeaders:async()=>{}},'@/lib/audit':{logActivity:async()=>{}},
 })[name]})
 const row=(overrides={})=>({key:'r',prefix:'นาย',full_name:'สมชาย ใจดี',position:'ครู',role:'',username:'',password:'',is_homeroom:false,...overrides})
 async function run(){
@@ -41,7 +41,10 @@ async function run(){
   const [elevate]=await exportsObject.saveStaffRows([row({role:'district'})]);assert.match(elevate.error,/บทบาท/)
   failAuth=true;const [failed]=await exportsObject.saveStaffRows([row({id:draft.id,username:'newname',role:'teacher',password:'changed123'})]);assert.match(failed.error,/auth failure/);assert.equal(users[0].username,'somchai');assert.equal(users[0].role,'academic_head');failAuth=false
   failProfile=true;const before=authUsers.size;const [rollback]=await exportsObject.saveStaffRows([row()]);assert.match(rollback.error,/profile failure/);assert.equal(authUsers.size,before);failProfile=false
-  quota=1;const [over]=await exportsObject.saveStaffRows([row()]);assert.match(over.error,/โควต้า/)
+  quota=1;const [over]=await exportsObject.saveStaffRows([row()]);assert.ok(over.id,'School ignores the obsolete personnel cap')
+  membership={kind:'individual',plan:'pro_plus'};const [personalDraft]=await exportsObject.saveStaffRows([row()]);assert.ok(personalDraft.id)
+  const [personalLogin]=await exportsObject.saveStaffRows([row({id:personalDraft.id,username:'newlogin',password:'secret123',role:'teacher'})]);assert.match(personalLogin.error,/1 บัญชี/);assert.equal(users.find(user=>user.id===personalDraft.id).is_active,false)
+  membership={kind:'individual',plan:'free'};await assert.rejects(exportsObject.saveStaffRows([row()]),/สมาชิกฟรี/)
   session.role='teacher';await assert.rejects(exportsObject.saveStaffRows([row()]),/สิทธิ์/)
   console.log('PASS: deferred credentials, activation, batch profile editing, unchanged password, partial failures, duplicate prevention, school/role authorization, quota and compensation')
 }

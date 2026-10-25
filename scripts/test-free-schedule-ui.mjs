@@ -70,12 +70,21 @@ try{
  await page.waitForSelector('.prep-steps');assert.equal(await page.$$eval('.prep-steps li',els=>els.length),7)
  console.log('Shared Pro wizard mounted; importing teachers with the real paste grid')
  await step(3);await click('.prep-teacher-tools button','เพิ่มครู');await page.waitForSelector('.prep-teacher-dialog[open]')
- await paste('dialog[open] input[data-row="0"][data-col="0"]',Array.from({length:17},(_,i)=>'นางสาว\tครูเพิ่ม '+(i+9)+'\tครู').join('\n'))
+ assert.match(await page.$eval('dialog[open] .prep-teacher-capacity',el=>el.textContent),/มีแล้ว 8 คน · เพิ่มได้อีก 17 คน/)
+ await paste('dialog[open] input[data-row="0"][data-col="0"]',Array.from({length:18},(_,i)=>'นางสาว\tครูเพิ่ม '+(i+9)+'\tครู').join('\n'))
+ await page.waitForFunction(()=>document.querySelector('dialog[open] .prep-teacher-capacity [role="alert"]')?.textContent.includes('เกินสิทธิ์ 1 คน'))
+ assert.equal(await page.$eval('dialog[open] footer .prep-primary',el=>el.disabled),true,'Oversized paste is blocked before any save')
+ assert.equal((await loadPlan(page)).data.terms[2].teachers.length,8)
+ await page.$eval('dialog[open] button[aria-label="นำแถว 18 ออกจากรายการนำเข้า"]',el=>el.click())
+ assert.equal(await page.$eval('dialog[open] footer .prep-primary',el=>el.disabled),false,'Removing excess rows clears the quota error immediately')
  await click('dialog[open] footer button','บันทึก 17');await page.waitForFunction(()=>!document.querySelector('dialog[open]'));await idle()
  assert.equal((await loadPlan(page)).data.terms[2].teachers.length,25)
  assert.equal((await loadPlan(page)).data.terms[2].teachers[8].prefix,'นางสาว')
- await click('.prep-teacher-tools button','เพิ่มครู');await paste('dialog[open] input[data-row="0"][data-col="0"]','นาย\tคนที่26\tครู');await click('dialog[open] footer button','บันทึก 1')
- await page.waitForFunction(()=>document.querySelector('dialog[open] .prep-error')?.textContent.includes('25'));assert.equal((await loadPlan(page)).data.terms[2].teachers.length,25)
+ await click('.prep-teacher-tools button','เพิ่มครู');await paste('dialog[open] input[data-row="0"][data-col="0"]','นาย\tคนที่26\tครู')
+ await page.waitForFunction(()=>document.querySelector('dialog[open] .prep-error')?.textContent.includes('เกินสิทธิ์ 1 คน'));assert.equal((await loadPlan(page)).data.terms[2].teachers.length,25)
+ assert.equal(await page.$eval('dialog[open] footer .prep-primary',el=>el.disabled),true)
+ for(const width of [360,390,768,1440]){await page.setViewport({width,height:1000});assert.equal(await page.$eval('dialog[open]',el=>el.scrollWidth>el.clientWidth+1),false,'Teacher quota dialog overflow '+width)}
+ await page.screenshot({path:path.join(out,'free-teacher-over-limit.png'),fullPage:false})
  await click('dialog[open] footer button','ยกเลิก')
  // Unsaved input persists when moving among wizard steps; clear it before arranging.
  await step(4);await click('.prep-subject-tools button','เพิ่มรายวิชา');await page.waitForSelector('.prep-subject-dialog[open]')
@@ -158,7 +167,10 @@ try{
  await metadata(page,'ยังไม่บันทึก');await page.waitForFunction(()=>document.querySelector('.local-storage-bar')?.textContent.includes('ยังไม่บันทึก'));await page.evaluate(()=>IDBDatabase.prototype.transaction=window.originalDeviceTransaction)
  assert.equal((await loadPlan(page)).savedAt,canonical.savedAt);report.crossTabGuard=true;report.storageFailure=true
  // A server-granted allowance changes the live desk, not the downloaded backup.
- page=await browser.newPage();page.on('pageerror',error=>errors.push(String(error)));await page.goto(origin+'/schedules/device/manage?limit=40',{waitUntil:'domcontentloaded'});await page.waitForSelector('.prep-steps');assert.ok((await page.$eval('.local-storage-bar',el=>el.textContent)).includes('40 คน'));await step(3);await click('.prep-teacher-tools button','เพิ่มครู');await paste('dialog[open] input[data-row="0"][data-col="0"]','นาย\tคนที่26ตามสิทธิ์พิเศษ\tครู');await click('dialog[open] footer button','บันทึก 1');await page.waitForFunction(()=>!document.querySelector('dialog[open]'));await idle();assert.equal((await loadPlan(page)).data.terms[2].teachers.length,26);await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('.prep-steps');assert.ok((await page.$eval('.local-storage-bar',el=>el.textContent)).includes('40 คน'));assert.equal((await loadPlan(page)).data.terms[2].teachers.length,26);await page.screenshot({path:path.join(out,'free-custom-teacher-limit.png'),fullPage:false});console.log('PASS: server-granted Free allowance permits teacher 26, persists across reload and displays the actual allowance')
+ page=await browser.newPage();page.on('pageerror',error=>errors.push(String(error)));await page.goto(origin+'/schedules/device/manage?limit=40',{waitUntil:'domcontentloaded'});await page.waitForSelector('.prep-steps');assert.ok((await page.$eval('.local-storage-bar',el=>el.textContent)).includes('40 คน'));await step(3);await click('.prep-teacher-tools button','เพิ่มครู')
+ assert.match(await page.$eval('dialog[open] .prep-teacher-capacity',el=>el.textContent),/สูงสุด 40 คน.*มีแล้ว 25 คน · เพิ่มได้อีก 15 คน/)
+ await click('dialog[open] footer button','หน้าบุคลากร');await page.waitForSelector('dialog[open][aria-labelledby="local-personnel-title"]');assert.match(await page.$eval('dialog[open][aria-labelledby="local-personnel-title"] header',el=>el.textContent),/25 \/ 40 คน/);await click('dialog[open][aria-labelledby="local-personnel-title"] header button','ปิด')
+ await paste('dialog[open] input[data-row="0"][data-col="0"]','นาย\tคนที่26ตามสิทธิ์พิเศษ\tครู');await click('dialog[open] footer button','บันทึก 1');await page.waitForFunction(()=>!document.querySelector('dialog[open]'));await idle();assert.equal((await loadPlan(page)).data.terms[2].teachers.length,26);await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('.prep-steps');assert.ok((await page.$eval('.local-storage-bar',el=>el.textContent)).includes('40 คน'));assert.equal((await loadPlan(page)).data.terms[2].teachers.length,26);await page.screenshot({path:path.join(out,'free-custom-teacher-limit.png'),fullPage:false});console.log('PASS: server-granted Free allowance permits teacher 26, persists across reload and displays the actual allowance')
  assert.equal(errors.length,0,errors.join('\n'));assert.equal(requests.filter(request=>request.method!=='GET'&&request.url!==origin+'/api/register').length,0)
  assert.equal(requests.filter(request=>/^https?:/.test(request.url)&&!request.url.startsWith(origin)).length,0)
  report.workerCount=workers.length;report.networkWrites=0;report.sharedScreens=8;report.teacherLimit=25;report.xlsxImport=true;report.offlineWorker=true;report.errors=errors

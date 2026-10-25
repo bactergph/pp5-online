@@ -238,6 +238,7 @@
 .schedule-prep .prep-teacher-empty{margin:0;padding:28px 16px;border:1px dashed #cad8e8;border-radius:12px;text-align:center;color:#52647c}
 .schedule-prep .prep-teacher-dialog{width:min(960px,calc(100vw - 32px))}
 .schedule-prep .prep-teacher-dialog h2{margin:0;font-size:20px}
+.schedule-prep .prep-teacher-limit-hint{color:#155ca4;font-weight:600}.schedule-prep .prep-teacher-capacity{padding:14px 16px;margin-bottom:16px;border:1px solid #bad7f4;border-radius:12px;background:#edf6ff;color:#194c80;line-height:1.6;overflow-wrap:anywhere}.schedule-prep .prep-teacher-capacity p{margin:4px 0;font-size:14px}.schedule-prep .prep-teacher-capacity.is-over{border-color:#edabb6;background:#fff1f3;color:#9a2241}.schedule-prep .prep-teacher-capacity .prep-error{padding:0;margin-top:8px;background:transparent;border:0;font-weight:700}
 .schedule-prep .prep-teacher-dialog .prep-scroll{max-height:min(42vh,420px)}
 .schedule-prep .prep-teacher-dialog footer span{flex:1;min-width:180px;color:#52647c;font-size:13px;line-height:1.5}
 .schedule-prep .prep-teacher-dialog footer a{padding:0;text-decoration:none;font-weight:700}

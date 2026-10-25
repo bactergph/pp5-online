@@ -90,16 +90,16 @@ function LayoutClientInner({
     return()=>window.removeEventListener('device-school-settings',update)
   },[])
   const packageName = membership?.subscribedPackage || (membership ? membershipPackage(membership) : null)
-  const effectiveMembership = membership && packageName ? membershipFromRow({membership_kind:packageName==='school'?'school':'individual',member_plan:packageName==='school'?null:packageName,membership_started_on:membership.startsOn,membership_expires_on:membership.expiresOn},today) : null
+  const effectiveMembership = membership && packageName ? membershipFromRow({membership_kind:packageName==='school'?'school':'individual',member_plan:packageName==='school'?null:packageName,membership_started_on:membership.startsOn,membership_expires_on:membership.expiresOn,free_schedule_teacher_limit:membership.freeTeacherLimit,membership_student_count:membership.studentCount,membership_annual_price:membership.annualPrice},today) : null
   const freeAccess = !!effectiveMembership && isFreeMembership(effectiveMembership)
   const upgradeRequested = searchParams.get('upgrade') === '1'
   useEffect(()=>{const timer=window.setInterval(()=>setToday(membershipToday()),60000);return()=>window.clearInterval(timer)},[])
   useEffect(() => {
-    if (!freeAccess || !upgradeRequested) return
+    if (!packageName || !upgradeRequested) return
     let active = true
     void Promise.resolve().then(() => { if (active) setUpgrade('ฟังก์ชันที่เลือก') })
     return () => { active = false }
-  }, [freeAccess, upgradeRequested])
+  }, [upgradeRequested, packageName])
   const pageTitle = titleFromPath(pathname, title)
   // onboarding wizard: ไม่โชว์ sidebar/navbar — โหลดเต็มจอเลยหลังเลือกโรงเรียน
   const onSchoolSettings = pathname === '/settings/school' || pathname.endsWith('/settings/school')
@@ -164,6 +164,7 @@ function LayoutClientInner({
         schoolProgramName={localSchool?.schoolName?null:schoolProgramName}
         schoolName={localSchool?.schoolName||schoolName}
         membership={effectiveMembership}
+        onMembershipUpgrade={()=>setUpgrade('แพ็กเกจสมาชิก')}
         membershipAd={effectiveMembership&&isFreeMembership(effectiveMembership)&&pathname.includes('/schedules/device')?membershipAd:null}
       />
 

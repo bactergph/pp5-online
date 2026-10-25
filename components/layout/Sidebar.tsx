@@ -562,6 +562,7 @@ type Props = {
   schoolName?: string | null
   membership?: Membership | null
   membershipAd?: MembershipAdData | null
+  onMembershipUpgrade?:()=>void
 }
 
 export default function Sidebar({
@@ -579,6 +580,7 @@ export default function Sidebar({
   educationType = 'primary',
   membership = null,
   membershipAd = null,
+  onMembershipUpgrade,
 }: Props) {
   const pathname = usePathname()
   const navRef = useRef<HTMLElement | null>(null)
@@ -749,7 +751,7 @@ export default function Sidebar({
           <div className="sidebar-user-role">
             {getRoleLabel(userRole, isActingDirector)}{isHomeroom ? ' · ครูประจำชั้น' : ''}
           </div>
-          {membership && <MembershipBadge membership={membership} />}
+          {membership && <MembershipBadge membership={membership} onChoose={onMembershipUpgrade} />}
         </div>
       </div>
 
