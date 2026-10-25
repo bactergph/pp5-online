@@ -186,6 +186,7 @@ function LayoutClientInner({
         schoolName={localSchool?.schoolName||schoolName}
         sidebarOpen={sidebarOpen}
         onMenuClick={() => setSidebarOpen(true)}
+        onMembershipUpgrade={effectiveMembership?()=>setUpgrade('แพ็กเกจสมาชิก'):undefined}
       />
 
       <main id="workspace-main" tabIndex={-1} className="main-content">

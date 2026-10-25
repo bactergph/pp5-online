@@ -13,6 +13,7 @@ type Props = {
   sidebarOpen?: boolean
   schoolCode?: string | null
   onMenuClick: () => void
+  onMembershipUpgrade?: () => void
 }
 
 function LogoutButton() {
@@ -27,7 +28,7 @@ function LogoutButton() {
   )
 }
 
-export default function Navbar({ title, userFullName, userRole, schoolCode, schoolName, sidebarOpen, onMenuClick }: Props) {
+export default function Navbar({ title, userFullName, userRole, schoolCode, schoolName, sidebarOpen, onMenuClick, onMembershipUpgrade }: Props) {
   const userButton = useRef<HTMLButtonElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const profileHref = schoolCode && userRole !== 'district'
@@ -55,6 +56,7 @@ export default function Navbar({ title, userFullName, userRole, schoolCode, scho
 
       {/* User */}
       <div className="navbar-user">
+        {onMembershipUpgrade&&<button type="button" className="navbar-package-button" aria-haspopup="dialog" onClick={onMembershipUpgrade}>แพ็กเกจ</button>}
         <button
           ref={userButton}
           onClick={() => setMenuOpen(!menuOpen)}

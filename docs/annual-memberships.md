@@ -13,6 +13,10 @@ bucket. It does not remove existing users, classrooms, schedules or documents.
   denied even when called directly, including after expiration.
   Each successful Free login opens the package comparison once. Continuing Free
   consumes the welcome URL flag, so refreshing or navigating does not reopen it.
+  Mobile also has a **แพ็กเกจ** button in the top bar. Pricing opens full-screen
+  with a Free / Pro / Pro Plus selector, Pro shown first for Free members, and a
+  persistent price/signup action. The School tab uses the same live quote as
+  desktop. Continuing Free or closing the dialog never changes membership.
   The local timetable keeps a backup reminder at the upper right while scrolling,
   with a direct JSON download for all years/terms. Download feedback indicates
   the download was started; the user should check the file in Downloads. Backup

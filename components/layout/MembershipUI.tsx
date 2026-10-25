@@ -10,25 +10,34 @@ export function MembershipBadge({ membership,onChoose }: { membership: Membershi
 }
 export function MembershipUpgradeDialog({ open, feature, onClose, membership }: { open: boolean; feature: string; onClose: () => void; membership: Membership | null }) {
   const dialog = useRef<HTMLDialogElement>(null)
+  const body = useRef<HTMLDivElement>(null)
   const [tab,setTab]=useState<'personal'|'school'>(membership?.kind==='school'?'school':'personal')
+  const [mobilePlan,setMobilePlan]=useState<'free'|'pro'|'pro_plus'>(()=>membership&&membershipPackage(membership)==='pro_plus'?'pro_plus':'pro')
   const [students,setStudents]=useState(membership?.studentCount?String(membership.studentCount):'')
   const limit=freeTeacherLimit(membership?.freeTeacherLimit),current=membership?membershipPackage(membership):null
   const quote=schoolAnnualQuote(students.trim()?Number(students):0)
   const money=(value:number)=>value.toLocaleString('th-TH')
+  const offers=personalMembershipOffers(limit)
+  const selectedOffer=offers.find(offer=>offer.id===mobilePlan)!
+  const selectedName=tab==='school'?'School':selectedOffer.name
+  const selectedIsCurrent=current===(tab==='school'?'school':mobilePlan)
+  const mobileFree=tab==='personal'&&mobilePlan==='free'
+  function chooseTab(next:'personal'|'school'){setTab(next);body.current?.scrollTo({top:0})}
   useEffect(() => { if (open && !dialog.current?.open) dialog.current?.showModal(); else if (!open) dialog.current?.close() }, [open])
   function tabKey(event:React.KeyboardEvent<HTMLButtonElement>){
     if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return
-    event.preventDefault();const next=event.key==='Home'?'personal':event.key==='End'?'school':tab==='personal'?'school':'personal';setTab(next);dialog.current?.querySelector<HTMLButtonElement>(`#membership-tab-${next}`)?.focus()
+    event.preventDefault();const next=event.key==='Home'?'personal':event.key==='End'?'school':tab==='personal'?'school':'personal';chooseTab(next);dialog.current?.querySelector<HTMLButtonElement>(`#membership-tab-${next}`)?.focus()
   }
-  return <dialog ref={dialog} className="membership-upgrade membership-offers" onCancel={event => { event.preventDefault(); onClose() }} aria-labelledby="membership-upgrade-title">
-    <header className="membership-offers-header"><div><span className="membership-offers-eyebrow">จารย์เสก · ตัวช่วยงานครูและวิชาการ</span><h2 id="membership-upgrade-title">{membership?.expired?'ต่ออายุสมาชิกเพื่อใช้งานต่อ':'เลือกแพ็กเกจที่เหมาะกับคุณ'}</h2><p>{feature&&feature!=='แพ็กเกจสมาชิก'?`${feature} · `:''}เลือกตามจำนวนห้องหรือใช้งานร่วมกันทั้งโรงเรียน</p></div><button type="button" onClick={onClose} aria-label="ปิด"><FiX /></button></header>
-    <div className="membership-offer-body">
+  return <dialog ref={dialog} className="membership-upgrade membership-offers" data-mobile-free={mobileFree} onCancel={event => { event.preventDefault(); onClose() }} aria-labelledby="membership-upgrade-title">
+    <header className="membership-offers-header"><div><span className="membership-offers-eyebrow">จารย์เสก · ตัวช่วยงานครูและวิชาการ</span><h2 id="membership-upgrade-title"><span className="membership-title-desktop">{membership?.expired?'ต่ออายุสมาชิกเพื่อใช้งานต่อ':'เลือกแพ็กเกจที่เหมาะกับคุณ'}</span><span className="membership-title-mobile">{membership?.expired?'ต่ออายุสมาชิก':'เลือกแพ็กเกจ'}</span></h2><p>{feature&&feature!=='แพ็กเกจสมาชิก'?`${feature} · `:''}เลือกตามจำนวนห้องหรือใช้งานร่วมกันทั้งโรงเรียน</p></div><button type="button" onClick={onClose} aria-label="ปิด"><FiX /></button></header>
+    <div className="membership-offer-body" ref={body}>
       {membership&&<div className="membership-current"><span>ปัจจุบัน: <strong>{membershipLabel(membership)}</strong></span>{membership.expiresOn&&<span>{membership.expired?'หมดอายุ':'ถึง'} {membershipDateLabel(membership.expiresOn)}</span>}</div>}
-      <div className="membership-offer-tabs" role="tablist" aria-label="ประเภทแพ็กเกจ">{(['personal','school'] as const).map(value=><button key={value} id={`membership-tab-${value}`} role="tab" aria-selected={tab===value} aria-controls={`membership-panel-${value}`} tabIndex={tab===value?0:-1} onKeyDown={tabKey} onClick={()=>setTab(value)}>{value==='personal'?'ส่วนบุคคล':'สำหรับโรงเรียน'}</button>)}</div>
+      <div className="membership-offer-tabs" role="tablist" aria-label="ประเภทแพ็กเกจ">{(['personal','school'] as const).map(value=><button key={value} id={`membership-tab-${value}`} role="tab" aria-selected={tab===value} aria-controls={`membership-panel-${value}`} tabIndex={tab===value?0:-1} onKeyDown={tabKey} onClick={()=>chooseTab(value)}>{value==='personal'?'ส่วนบุคคล':'สำหรับโรงเรียน'}</button>)}</div>
       <div id="membership-panel-personal" role="tabpanel" aria-labelledby="membership-tab-personal" hidden={tab!=='personal'}>
-        <div className="membership-offer-grid">{personalMembershipOffers(limit).map(offer=>{
+        <div className="membership-mobile-plans" role="group" aria-label="เลือกแพ็กเกจส่วนบุคคล">{offers.map(offer=><button type="button" key={offer.id} aria-pressed={mobilePlan===offer.id} aria-controls={`membership-offer-${offer.id}`} onClick={()=>{setMobilePlan(offer.id);body.current?.scrollTo({top:0})}}><strong>{offer.name}</strong><small>{offer.id==='free'?`ครู ${limit} คน`:offer.id==='pro'?'20 ห้อง · 499/ปี':'50 ห้อง · 799/ปี'}</small></button>)}</div>
+        <div className="membership-offer-grid">{offers.map(offer=>{
           const isCurrent=current===offer.id,isRenewal=membership?.expired&&membership.subscribedPackage===offer.id
-          return <article key={offer.id} className={`membership-offer-card is-${offer.id}${offer.id==='pro_plus'?' is-recommended':''}`} aria-label={`แพ็กเกจ ${offer.name}`}>
+          return <article key={offer.id} id={`membership-offer-${offer.id}`} data-mobile-selected={mobilePlan===offer.id} className={`membership-offer-card is-${offer.id}${offer.id==='pro_plus'?' is-recommended':''}`} aria-label={`แพ็กเกจ ${offer.name}`}>
             <div className="membership-offer-card-top"><h3>{offer.name}</h3>{isCurrent?<span className="membership-offer-chip">แพ็กเกจปัจจุบัน</span>:offer.id==='pro_plus'?<span className="membership-offer-chip">แนะนำ · 50 ห้อง</span>:null}</div>
             <h4>{offer.tagline}</h4><p className="membership-offer-description">{offer.description}</p><div className="membership-offer-price">{offer.price===0?<strong>ฟรี</strong>:<><strong>฿{money(offer.price)}</strong><span>/ ปี</span></>}<small>{offer.price===0?'ไม่มีวันหมดอายุ':'ชำระรายปี · อายุสมาชิก 12 เดือน'}</small></div>
             {offer.id==='free'?<button type="button" className="membership-offer-cta" onClick={onClose}>{isCurrent?'ใช้แพ็กเกจปัจจุบันต่อ':'กลับไปใช้งาน'}</button>:<a className="membership-offer-cta" href={MEMBERSHIP_CONTACT_URL} target="_blank" rel="noopener noreferrer">{isCurrent||isRenewal?`ติดต่อเพื่อต่ออายุ ${offer.name}`:`สมัคร ${offer.name}`}<FiExternalLink aria-hidden="true"/></a>}
@@ -45,7 +54,10 @@ export function MembershipUpgradeDialog({ open, feature, onClose, membership }: 
       <p className="membership-sgs-note"><strong>SGS · ทดลองใช้งาน</strong> เตรียมคะแนนและเติมทั้งชุดด้วยส่วนขยาย Chrome บนคอมพิวเตอร์ จากนั้นบันทึกใน SGS และตรวจคะแนนหลังโหลดหน้าใหม่ ตัวเชื่อมยังอยู่ระหว่างยืนยันการบันทึกกับ SGS จริง</p>
       <p className="membership-offer-note">Pro / Pro Plus ใช้ทุกฟังก์ชันตามบทบาท ต่างกันที่จำนวนห้องรวมของบัญชี ไม่เพิ่มโควตาเมื่อเปลี่ยนปีการศึกษา · ธุรการและรูปแบบเอกสารขึ้นกับประเภทโรงเรียน · หมดอายุแล้วกลับเป็น Free โดยไม่ลบข้อมูล</p>
     </div>
-    <footer><span>ติดต่อผู้ดูแลเพื่อสมัครหรือต่ออายุ ข้อมูลเดิมของคุณยังคงอยู่</span><button type="button" onClick={onClose}>{current==='free'?'ใช้แบบฟรีต่อ':'กลับไปใช้งาน'}</button><a href={MEMBERSHIP_CONTACT_URL} target="_blank" rel="noopener noreferrer">ติดต่อสมัครผ่าน Facebook <FiExternalLink aria-hidden="true" /></a></footer>
+    <footer>
+      <div className="membership-mobile-action"><div><strong>{selectedName}</strong><small>{mobileFree?'ใช้ฟรี ไม่มีวันหมดอายุ':tab==='school'?quote?`฿${money(quote.annualPrice)} / ปี`:`เริ่มต้น ฿${money(SCHOOL_MINIMUM_PRICE)} / ปี`:`฿${money(selectedOffer.price)} / ปี`}</small></div>{mobileFree?<button type="button" onClick={onClose}>{current==='free'?'ใช้แบบฟรีต่อ':'กลับไปใช้งาน'}</button>:<a href={MEMBERSHIP_CONTACT_URL} target="_blank" rel="noopener noreferrer">{selectedIsCurrent||membership?.expired?`ต่ออายุ ${selectedName}`:`สมัคร ${selectedName}`}<FiExternalLink aria-hidden="true"/></a>}</div>
+      <span>ติดต่อผู้ดูแลเพื่อสมัครหรือต่ออายุ ข้อมูลเดิมของคุณยังคงอยู่</span><button type="button" className="membership-continue" onClick={onClose}>{current==='free'?'ใช้แบบฟรีต่อ':'กลับไปใช้งาน'}</button><a className="membership-desktop-contact" href={MEMBERSHIP_CONTACT_URL} target="_blank" rel="noopener noreferrer">ติดต่อสมัครผ่าน Facebook <FiExternalLink aria-hidden="true" /></a>
+    </footer>
   </dialog>
 }
 export type MembershipAdData = { title: string; href: string; imageUrl: string }
