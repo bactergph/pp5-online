@@ -148,7 +148,7 @@ export async function updateAdmin(id: string, payload: {
     }
     await logActivity({
       actor: session,
-      schoolId: nextPayload.school_id ?? null,
+      schoolId: nextPayload.school_id ?? current.school_id ?? null,
       action: 'update',
       module: 'district_admins',
       targetType: 'user',

@@ -78,6 +78,18 @@ including legacy catalog-linked accounts. Account activation and deletion must
 surface database/Auth failures; never remove a profile after Auth deletion fails.
 No additional database migration is required for this directory redesign.
 
+Common account actions are available directly in each directory row: **แก้ไข**
+and **ลบ**. Selecting rows exposes **ลบที่เลือก**, with one confirmation showing
+the exact selected accounts. Package, Free teacher allowance and details remain
+available alongside those actions.
+
+Super Admin can add a Free account with name, email and password without catalog
+search. An optional typed school name creates its own workspace; catalog selection
+remains optional. Auth creation runs before workspace creation so duplicate
+emails do not leave new schools behind. Failed profile creation compensates the
+new Auth account and newly created manual workspace. Editing profile fields keeps
+the school unchanged by default and does not repeat school initialization.
+
 ## Free teacher allowance per member school
 
 Apply `084_free_teacher_allowance.sql` before deploying this addition. Every

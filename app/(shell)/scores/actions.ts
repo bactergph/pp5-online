@@ -106,7 +106,7 @@ export async function fetchScoreEntryData(classroomId: string, classSubjectId: s
   if (!period.classroomId) throw new Error(period.error)
   const db = createServerClient()
   const [studentsR, configR] = await Promise.all([
-    db.from('students').select('id, student_number, prefix, first_name, last_name, status')
+    db.from('students').select('id, student_number, student_code, prefix, first_name, last_name, status')
       .eq('classroom_id', classroomId).order('student_number'),
     db.from('score_configs').select('*').eq('class_subject_id', classSubjectId).eq('term', term).maybeSingle(),
   ])

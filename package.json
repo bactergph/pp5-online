@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev --webpack",
     "create-demo": "node scripts/create-school-demo.mjs",
-    "build": "next build",
+    "build": "node scripts/build-sgs-extension.cjs && next build",
+    "build:sgs-extension": "node scripts/build-sgs-extension.cjs",
+    "test:sgs": "node scripts/build-sgs-extension.cjs && node scripts/test-sgs-transfer.cjs && node scripts/test-score-transfer.cjs && node scripts/test-sgs-extension-ui.mjs",
     "start": "next start",
     "lint": "eslint",
     "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs && node scripts/test-substitute-availability.cjs && node scripts/test-substitute-services.cjs && node scripts/test-schedule-workload.mjs",
@@ -14,7 +16,7 @@
     "test:activity-assignment-ui": "node scripts/test-activity-assignment-ui.mjs",
     "test:workload-autosave-ui": "node scripts/test-workload-autosave-ui.mjs",
     "test:schedule-places": "node scripts/test-schedule-places.cjs && node scripts/test-schedule-places-ui.mjs",
-    "test:membership": "node scripts/test-membership.cjs && node scripts/test-member-admin.cjs && node scripts/test-free-teacher-allowance.cjs && node scripts/test-membership-ui.mjs",
+    "test:membership": "node scripts/test-membership.cjs && node scripts/test-member-admin.cjs && node scripts/test-managed-member-create.cjs && node scripts/test-free-teacher-allowance.cjs && node scripts/test-membership-ui.mjs",
     "test:free-schedule": "node scripts/test-free-schedule-gaps.cjs && node scripts/test-device-schedule-operations.cjs && node scripts/test-device-schedule-services.cjs && node scripts/test-device-school.cjs && node scripts/test-free-schedule-ui.mjs",
     "test:schedule-planning": "node scripts/test-schedule-input.cjs && node scripts/test-schedule-planning.cjs && node scripts/test-schedule-preparation.cjs && node scripts/test-schedule-planning-db.cjs && node scripts/test-schedule-planning-scale.cjs && node scripts/test-free-schedule-gaps.cjs && node scripts/test-flexible-activities.mjs && node scripts/test-schedule-review.mjs && node scripts/test-schedule-morning.mjs && node scripts/test-schedule-dense-school.mjs && node scripts/test-schedule-block-repair.mjs",
     "test:subject-settings": "node scripts/test-subject-semester.mjs && node scripts/test-class-subject-copy.mjs"
