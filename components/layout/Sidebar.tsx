@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import {searchWorkspaceMenu} from '@/lib/workspace-navigation'
 import { useFormStatus } from 'react-dom'
 import { ROLE_LABELS } from '@/lib/roles'
 import { defaultSidebarIcon, normalizeSidebarTone, type SidebarTone } from '@/lib/sidebar-tones'
@@ -583,6 +584,9 @@ export default function Sidebar({
   onMembershipUpgrade,
 }: Props) {
   const pathname = usePathname()
+  const asideRef=useRef<HTMLElement|null>(null),searchRef=useRef<HTMLInputElement|null>(null)
+  const [search,setSearch]=useState({path:pathname,query:''})
+  const query=search.path===pathname?search.query:''
   const navRef = useRef<HTMLElement | null>(null)
   const [expansion, setExpansion] = useState<{ path: string; items: string[] } | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -599,6 +603,9 @@ export default function Sidebar({
     const items = byEducation
     return { ...section, items }
   }).filter(section => section.items.length > 0)
+  const results=searchWorkspaceMenu(sections,query)
+  const searching=query.trim().length>0
+  useEffect(()=>{if(!isOpen||window.matchMedia('(min-width:1024px)').matches)return;const frame=requestAnimationFrame(()=>asideRef.current?.querySelector<HTMLButtonElement>('.sidebar-close')?.focus({preventScroll:true}));return()=>cancelAnimationFrame(frame)},[isOpen])
   const schoolPrefix = schoolCode && userRole !== 'district' ? `/${schoolCode}` : ''
   const scopedHref = (href: string) => {
     if (!schoolPrefix || !href.startsWith('/') || href.startsWith('/district')) return href
@@ -710,7 +717,12 @@ export default function Sidebar({
   }
 
   return (
-    <aside id="workspace-navigation" aria-label="เมนูงานโรงเรียน" className={`sidebar ${isOpen ? 'sidebar-open' : ''}`}>
+    <aside ref={asideRef} onKeyDown={event=>{
+      if(event.key!=='Tab'||!isOpen||window.matchMedia('(min-width:1024px)').matches)return
+      const controls=[...event.currentTarget.querySelectorAll<HTMLElement>('a[href],button:not(:disabled),input:not(:disabled),[tabindex="0"]')].filter(element=>element.getClientRects().length&&getComputedStyle(element).visibility!=='hidden')
+      const first=controls[0],last=controls.at(-1)
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}
+    }} id="workspace-navigation" aria-label="เมนูงานโรงเรียน" className={`sidebar ${isOpen ? 'sidebar-open' : ''}`}>
       {/* Logo — โรงเรียน: โลโก้ + ชื่อโปรแกรม / Super Admin: จารย์เสก */}
       <div className="sidebar-brand">
         <div className="sidebar-brand-main">
@@ -757,9 +769,10 @@ export default function Sidebar({
 
       {membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-sidebar"/>}
 
+      <div className="sidebar-search"><label htmlFor="workspace-menu-search"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input ref={searchRef} id="workspace-menu-search" type="search" value={query} maxLength={120} placeholder="ค้นหาเมนู…" aria-label="ค้นหาเมนู" aria-controls={searching?'workspace-menu-results':undefined} onChange={event=>setSearch({path:pathname,query:event.target.value})} onKeyDown={event=>{if(event.key==='Escape'&&query){event.preventDefault();event.stopPropagation();setSearch({path:pathname,query:''})}}}/></label>{searching&&<button type="button" aria-label="ล้างการค้นหาเมนู" onClick={()=>{setSearch({path:pathname,query:''});searchRef.current?.focus()}}>×</button>}</div>
       {/* Nav (sectioned) */}
-      <nav ref={navRef} className="sidebar-nav">
-        {sections.map((section, si) => (
+      <nav ref={navRef} className="sidebar-nav" aria-label="เมนูหลัก">
+        {searching?<div id="workspace-menu-results" className="sidebar-search-results"><p role="status" aria-live="polite">พบ {results.length} เมนู</p>{results.length?results.map(result=><Link key={result.href} href={scopedHref(result.href)} prefetch={false} className="sidebar-search-result" aria-current={isCurrent(result.href)?'page':undefined} onClick={onClose}><span className="sidebar-search-result-icon" aria-hidden="true">{leafIcon(result)}</span><span><strong>{result.label}</strong><small>{result.trail}</small></span>{membership&&!membershipAllows(result.href,membership)&&<small className="membership-lock">PRO</small>}</Link>):<div className="sidebar-search-empty">ไม่พบเมนูที่ค้นหา<small>ลองใช้คำ เช่น คะแนน ตาราง หรือครู</small></div>}</div>:sections.map((section, si) => (
           <div key={si} className={section.label ? 'sidebar-section' : 'sidebar-section sidebar-section-first'}>
             {section.label && (
               <div className="sidebar-section-label">

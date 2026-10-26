@@ -6,6 +6,7 @@ import './globals.css'
 import './glass-login.css'
 import './report-fonts.css'
 import './workspace-theme.css'
+import './workspace-controls.css'
 import './public-brand.css'
 
 export const metadata: Metadata = {

@@ -7,6 +7,7 @@ import { withSchoolPrefix } from '@/lib/school-path'
 
 type Props = {
   title: string
+  section?:string
   userFullName: string
   userRole: string
   schoolName?: string | null
@@ -28,15 +29,16 @@ function LogoutButton() {
   )
 }
 
-export default function Navbar({ title, userFullName, userRole, schoolCode, schoolName, sidebarOpen, onMenuClick, onMembershipUpgrade }: Props) {
+export default function Navbar({ title, section, userFullName, userRole, schoolCode, schoolName, sidebarOpen, onMenuClick, onMembershipUpgrade }: Props) {
   const userButton = useRef<HTMLButtonElement>(null)
+  const userMenu=useRef<HTMLDivElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const profileHref = schoolCode && userRole !== 'district'
     ? withSchoolPrefix(schoolCode, '/settings/profile')
     : '/settings/profile'
 
   return (
-    <header className="navbar" onKeyDown={e => { if (e.key === 'Escape') { setMenuOpen(false); userButton.current?.focus() } }}>
+    <header className="navbar" onKeyDown={e => { if (e.key === 'Escape'&&menuOpen) { e.stopPropagation();setMenuOpen(false); userButton.current?.focus() } }}>
       <div className="navbar-title-group">
         {/* Hamburger — mobile only */}
         <button
@@ -51,15 +53,19 @@ export default function Navbar({ title, userFullName, userRole, schoolCode, scho
           </svg>
         </button>
 
-        <div className="navbar-context">{schoolName && <span className="navbar-school">{schoolName}</span>}<div className="navbar-title">{title}</div></div>
+        <div className="navbar-context"><div className="navbar-context-meta">{schoolName && <span className="navbar-school" title={schoolName}>{schoolName}</span>}{section&&section!==title&&<span className="navbar-section">{section}</span>}</div><div className="navbar-title" title={title}>{title}</div></div>
       </div>
 
       {/* User */}
-      <div className="navbar-user">
+      <div ref={userMenu} className="navbar-user" onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setMenuOpen(false)}}>
         {onMembershipUpgrade&&<button type="button" className="navbar-package-button" aria-haspopup="dialog" onClick={onMembershipUpgrade}>แพ็กเกจ</button>}
         <button
           ref={userButton}
           onClick={() => setMenuOpen(!menuOpen)}
+          onKeyDown={event=>{if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();setMenuOpen(true);requestAnimationFrame(()=>{const items=userMenu.current?.querySelectorAll<HTMLElement>('.navbar-dropdown a,.navbar-dropdown button');(event.key==='ArrowUp'?items?.[items.length-1]:items?.[0])?.focus()})}}}
+          aria-label={'เมนูผู้ใช้ '+userFullName}
+          aria-haspopup="true"
+          aria-controls={menuOpen?'workspace-user-menu':undefined}
           className={`navbar-user-button ${menuOpen ? 'is-open' : ''}`}
           aria-expanded={menuOpen}
         >
@@ -78,7 +84,7 @@ export default function Navbar({ title, userFullName, userRole, schoolCode, scho
         {menuOpen && (
           <>
             <div className="navbar-menu-backdrop" onClick={() => setMenuOpen(false)} />
-            <div className="navbar-dropdown">
+            <div id="workspace-user-menu" className="navbar-dropdown" aria-label="เมนูผู้ใช้">
               <div className="navbar-dropdown-head">
                 <div className="navbar-dropdown-profile">
                   <div className="navbar-avatar navbar-avatar-lg">

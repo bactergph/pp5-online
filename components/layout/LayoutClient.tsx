@@ -1,5 +1,6 @@
 'use client'
 
+import {workspacePageContext} from '@/lib/workspace-navigation'
 import { Suspense, useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Sidebar from './Sidebar'
@@ -101,7 +102,8 @@ function LayoutClientInner({
     void Promise.resolve().then(() => { if (active) setUpgrade(welcomeRequested ? 'แพ็กเกจสมาชิก' : 'ฟังก์ชันที่เลือก') })
     return () => { active = false }
   }, [upgradeRequested, welcomeRequested, packageName])
-  const pageTitle = titleFromPath(pathname, title)
+  const pageContext=workspacePageContext(pathname,schoolCode,titleFromPath(pathname,title))
+  const pageTitle=pageContext.title
   // onboarding wizard: ไม่โชว์ sidebar/navbar — โหลดเต็มจอเลยหลังเลือกโรงเรียน
   const onSchoolSettings = pathname === '/settings/school' || pathname.endsWith('/settings/school')
   const chromeless =
@@ -111,6 +113,8 @@ function LayoutClientInner({
     || searchParams.get('onboarding') === '1'
     || (onSchoolSettings && userRole === 'admin' && !hasSchool)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  function closeSidebar(){setSidebarOpen(false);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.navbar-menu-button')?.focus({preventScroll:true}))}
 
   function closeUpgrade() {
     // Consume the redirect prompt so refreshes and later renders stay in Free.
@@ -156,7 +160,7 @@ function LayoutClientInner({
       <Sidebar
         educationType={educationType}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={closeSidebar}
         userRole={userRole}
         navRole={navRole}
         userName={userFullName}
@@ -174,12 +178,13 @@ function LayoutClientInner({
       {sidebarOpen && (
         <div
           className="sidebar-overlay lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+          onClick={closeSidebar}
         />
       )}
 
       <Navbar
         title={pageTitle}
+        section={pageContext.section}
         userRole={userRole}
         userFullName={userFullName}
         schoolCode={schoolCode}

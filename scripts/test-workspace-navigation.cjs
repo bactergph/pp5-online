@@ -1,0 +1,24 @@
+const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
+function load(file,extra=''){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText+extra,{exports,require:name=>name==='react/jsx-runtime'?require(name):{}});return exports}
+const {searchWorkspaceMenu:search,workspacePageContext:context}=load('lib/workspace-navigation.ts')
+const {build}=load('components/layout/Sidebar.tsx',';exports.build=buildNav;')
+for(const role of ['admin','teacher','principal','academic_head','district']){
+  const sections=build(role,false),results=search(sections,'ตาราง')
+  assert.equal(new Set(results.map(result=>result.href)).size,results.length,'Repeated destinations must not multiply search results')
+  if(role!=='district')assert.ok(!results.some(result=>result.href.startsWith('/district')))
+  if(role==='teacher')assert.ok(!search(sections,'บุคลากร').some(result=>result.href==='/settings/users'))
+}
+const admin=build('admin',false)
+assert.ok(search(admin,'ปพ5').length,'Punctuation-free Thai terms must match ปพ.5')
+assert.ok(search(admin,'ตาราง พิมพ์').length,'Search matches a child and its parent together')
+assert.ok(search(admin,'ครู').some(result=>result.trail),'Nested leaves keep their context')
+assert.equal(search(admin,' ' ).length,0);assert.equal(search(admin,'...').length,0);assert.equal(search(admin,'ไม่พบคำนี้123').length,0)
+const filtered=[{label:'งานครู',items:[{label:'คะแนน',href:'/scores'}]}]
+assert.equal(search(filtered,'บุคลากร').length,0,'Search cannot invent destinations outside the filtered role menu')
+assert.equal(context('/seka/settings/subjects','seka','ตั้งค่า').title,'รายวิชาและกลุ่มสาระ')
+assert.equal(context('/schedules/device/manage',null,'ตาราง').section,'จัดตารางสอนฟรี')
+assert.equal(context('/classroom-admin/sign/document',null,'ธุรการ').title,'ธุรการเสนอเซ็น')
+assert.equal(context('/settings/subjects-other',null,'ตั้งค่า').title,'ตั้งค่า')
+assert.equal(context('/not-seka/settings/subjects','seka','เดิม').title,'เดิม')
+assert.equal(context('/unknown/route',null,'เดิม').title,'เดิม')
+console.log('PASS: role-filtered menu search, Thai punctuation/multiple terms, unique nested destinations and context, no invented permissions, school prefixes and most-specific page titles')

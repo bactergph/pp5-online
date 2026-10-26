@@ -1,0 +1,105 @@
+/* Shared interface controls. Paper/document styles stay outside this layer. */
+@media screen {
+  .workspace-theme { --control-shadow:0 2px 3px #18365b06,0 9px 22px #18365b09; }
+  .workspace-theme .sidebar-search { position:relative; flex:none; margin:0 12px 10px; }
+  .workspace-theme .sidebar-search label { display:flex; align-items:center; gap:8px; min-height:42px; padding:0 11px; border:1px solid #d8e3f2; border-radius:12px; background:#f4f7fc; color:#6380a4; }
+  .workspace-theme .sidebar-search:focus-within label { background:white; border-color:#769fe2; box-shadow:0 0 0 3px #235bc810; }
+  .workspace-theme .sidebar-search input { width:100%; min-width:0; padding:10px 24px 10px 0; border:0; outline:0; background:transparent; font:inherit; font-size:13px; color:#233e61; }
+  .workspace-theme .sidebar-search input::placeholder { color:#647d9c; }
+  .workspace-theme .sidebar-search input::-webkit-search-cancel-button { display:none; }
+  .workspace-theme .sidebar-search input:focus-visible { outline:none; }
+  .workspace-theme .sidebar-search>button { position:absolute; inset:3px 3px 3px auto; width:34px; border:0; border-radius:9px; font-size:21px; background:transparent; color:#5c7290; cursor:pointer; }
+  .workspace-theme .sidebar-search-results>p { margin:6px 9px 12px; color:#64748b; font-size:12px; }
+  .workspace-theme .sidebar-search-result { display:flex; align-items:flex-start; gap:10px; min-height:58px; margin:5px 0; padding:11px 9px; border:1px solid transparent; border-radius:12px; color:#254162; text-decoration:none; }
+  .workspace-theme .sidebar-search-result:hover,.workspace-theme .sidebar-search-result[aria-current=page] { background:#edf4ff; border-color:#d6e4fa; }
+  .workspace-theme .sidebar-search-result-icon { display:grid; place-items:center; flex:none; width:32px; height:32px; border:1px solid #dce7f6; border-radius:10px; background:#f1f6ff; color:#3065b5; }
+  .workspace-theme .sidebar-search-result>span:nth-child(2) { min-width:0; flex:1; }
+  .workspace-theme .sidebar-search-result strong { display:block; font-size:14px; font-weight:600; line-height:1.6; overflow-wrap:anywhere; }
+  .workspace-theme .sidebar-search-result span small { display:block; font-size:12px; line-height:1.6; color:#667b95; margin-top:3px; }
+  .workspace-theme .sidebar-search-empty { border:1px dashed #d5e1f0; border-radius:12px; padding:18px 12px; font-size:14px; color:#425e80; text-align:center; }
+  .workspace-theme .sidebar-search-empty small { display:block; margin-top:6px; line-height:1.7; color:#6b7e95; font-size:12px; }
+  .workspace-theme .sidebar-nav { min-height:0; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#cfdaea transparent; }
+  .workspace-theme .sidebar-brand,.workspace-theme .sidebar-user-chip,.workspace-theme .sidebar-footer { flex-shrink:0; }
+  /* Older dark-navigation rules force these colours; give the light sidebar
+     readable values for both selected and unselected nested menu labels. */
+  .workspace-theme .sidebar .sidebar-child-group { --sb-tone-label:#4b6382; --sb-tone-badge-bg:#e9f0fa; --sb-tone-badge-fg:#45658e; --sb-tone-active-border:#bfd3ef; --sb-tone-active-fg:#17469f; --sb-tone-active-bg:#eaf2ff; --sb-tone-rail:#d5e1f1; }
+  .workspace-theme .sidebar .sidebar-child-group--amber { --sb-tone-label:#856022; --sb-tone-badge-bg:#fbf2df; --sb-tone-badge-fg:#896322; }
+  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-submenu-link { color:#465b78 !important; font-size:13px !important; line-height:1.5; }
+  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-submenu-link:hover { color:#17469f !important; }
+  .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-child-group-label { font-size:12px !important; letter-spacing:0; }
+  .workspace-theme .navbar-context-meta { display:flex; align-items:center; gap:8px; min-width:0; }
+  .workspace-theme .navbar-context-meta .navbar-school { max-width:min(34vw,420px); flex:0 1 auto; }
+  .workspace-theme .navbar-section { color:#7b612e; border:1px solid #e9dec6; background:#fffbf2; border-radius:6px; padding:1px 6px; font-size:10px; white-space:nowrap; }
+  .workspace-theme .navbar-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .workspace-theme .navbar-dropdown { padding:6px; }
+  .workspace-theme .navbar-dropdown-head { padding:12px; border-radius:12px; background:linear-gradient(120deg,#f1f6ff,#fffdf7); border-bottom:0; margin-bottom:5px; }
+  .workspace-theme .navbar-dropdown-link,.workspace-theme .navbar-logout { min-height:44px; border-radius:10px; }
+  .workspace-theme .navbar-dropdown-link:hover { background:#edf4ff; color:#17469f; }
+
+  .workspace-theme .section-title { display:flex; align-items:center; gap:9px; font-size:14px; letter-spacing:0; }
+  .workspace-theme .section-title::before { content:''; flex:none; width:4px; height:17px; border-radius:4px; background:linear-gradient(#3d78d5,#c49c51); }
+  .workspace-theme .filter-bar.control-card { padding:18px; background:linear-gradient(130deg,#fff,#f8fbff); border:1px solid #dbe5f2; box-shadow:var(--control-shadow); border-radius:16px; }
+  .workspace-theme .form-label { font-weight:600; color:#3d5575; line-height:1.7; }
+  .workspace-theme :is(.form-input,.input):hover:not(:focus):not(:disabled) { border-color:#9db6d7; }
+  .workspace-theme :is(.form-input,.input):disabled { color:#66758a; background:#eef2f7; box-shadow:none; }
+  .workspace-theme :is(.subject-chip,.subject-view-chip) { border-radius:10px; }
+  .workspace-theme .subject-chip-row :is(button,a)[aria-selected=true] { color:#17469f; background:#eaf2ff; border-color:#bdd4f6; box-shadow:inset 0 1px #fff,0 2px 5px #235bc80a; }
+  .workspace-theme .thai-table .subject-group-row td { color:#355d8f; background:#edf4fd; border-left:3px solid #8bb0e7; }
+  .workspace-theme :is(.table,.thai-table,.eval-table) { font-variant-numeric:tabular-nums; }
+
+  .workspace-theme .schedule-prep { padding:20px; background:#f7f9fd; border-color:#dbe5f1; border-radius:20px; box-shadow:var(--control-shadow); }
+  .workspace-theme .schedule-prep .prep-heading { padding:20px; border:1px solid #dce7f5; border-radius:17px; background:linear-gradient(115deg,#fff,#eef5ff); box-shadow:inset 0 1px #fff; }
+  .workspace-theme .schedule-prep .prep-heading h2 { color:#1e395e; font-weight:600; font-family:var(--font-kanit),'Sarabun',sans-serif; font-size:clamp(22px,2.5vw,28px); }
+  .workspace-theme .schedule-prep .prep-eyebrow { color:#8b681f; }
+  .workspace-theme .schedule-prep .prep-steps button { background:#fff; border:1px solid #dce5f2; box-shadow:0 2px 6px #18365b04; color:#3e5879; }
+  .workspace-theme .schedule-prep .prep-steps button:hover { background:#f0f6ff; border-color:#bdcff0; }
+  .workspace-theme .schedule-prep .prep-steps [aria-current=step] { background:linear-gradient(130deg,#2d70d9,#235bc8); color:white; border-color:#235bc8; box-shadow:inset 0 1px #ffffff26,0 6px 14px #235bc825; }
+  .workspace-theme .schedule-prep .prep-steps [aria-current=step] b { color:#fff; background:#ffffff26; border:1px solid #ffffff4d; }
+  .workspace-theme .schedule-prep .prep-steps [aria-current=step] small { color:#e7f0ff; }
+  .workspace-theme .schedule-prep .prep-input-panel { padding:18px; border:1px solid #dce5f2; border-radius:16px; background:white; box-shadow:0 3px 10px #18365b04; }
+  .workspace-theme .schedule-prep .prep-view-switch { padding:5px; gap:5px; border:1px solid #dce6f4; border-radius:13px; background:#edf2fa; }
+  .workspace-theme .schedule-prep .prep-view-switch button { border-radius:9px; border-color:transparent; background:transparent; color:#56708f; }
+  .workspace-theme .schedule-prep .prep-view-switch [aria-pressed=true] { color:#17469f; border-color:#d4e2f6; background:white; box-shadow:0 2px 6px #17365b0b; }
+  .workspace-theme .schedule-prep .prep-primary { background:linear-gradient(125deg,#2e70da,#235bc8); border-color:#235bc8; box-shadow:inset 0 1px #ffffff26,0 3px 8px #235bc81a; }
+  .workspace-theme .schedule-prep .prep-activity-block { border-color:#dce6f4; box-shadow:0 2px 6px #18365b03; }
+  .workspace-theme .schedule-prep .prep-period-budget { border-color:#d8e4f3; box-shadow:var(--shadow-sm); }
+  .workspace-theme .schedule-prep .prep-period-budget>header { background:linear-gradient(110deg,#f3f7ff,#fff); border-bottom:1px solid #e3ebf7; }
+  .workspace-theme .schedule-prep .prep-wizard-footer { border-top-color:#dce6f4; padding-top:18px; }
+  .workspace-theme .schedule-prep .prep-wizard-footer>span { color:#60738e; }
+  .workspace-theme :is(.prep-team-dialog,.prep-code-options-dialog,.prep-code-place-dialog,.prep-joint-dialog) { border-color:#cfdef1; border-radius:20px; box-shadow:0 12px 28px #16335c29,0 36px 80px #16335c20; }
+  .workspace-theme :is(.prep-team-dialog,.prep-code-options-dialog,.prep-code-place-dialog,.prep-joint-dialog)>header { border-top:3px solid #3b76d0; background:linear-gradient(110deg,#fff,#f3f7ff); }
+  .workspace-theme :is(.prep-team-dialog,.prep-code-options-dialog,.prep-code-place-dialog,.prep-joint-dialog)>footer { background:#fff; border-top-color:#dce6f4; box-shadow:0 -4px 12px #18365b04; }
+
+  body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) { padding-bottom:22px; max-height:calc(100dvh - 24px); overflow:auto; color:#233e61; font-family:var(--font-sarabun),'Sarabun',sans-serif; }
+  body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-title { padding:16px 22px 0; color:#203b5f; font-family:var(--font-kanit),'Sarabun',sans-serif; font-size:23px; font-weight:600; line-height:1.5; }
+  body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-html-container { margin:14px 24px 0; color:#536a88; font-size:16px; line-height:1.8; }
+  body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-icon:is(.swal2-warning,.swal2-info,.swal2-question) { width:3.4em; height:3.4em; margin:24px auto 0; }
+  body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-icon-content { font-size:2.6em; }
+  body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-actions { gap:8px; padding:0 16px; margin-top:22px; }
+  body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-styled { min-height:44px; margin:0; padding:10px 16px; border-radius:10px; font-size:15px; font-weight:600; }
+  body:has(.workspace-theme) .swal2-confirm { background:#235bc8; box-shadow:0 3px 8px #235bc81f; }
+  body:has(.workspace-theme) .swal2-cancel { color:#415a7b; background:#edf2f9; }
+
+  @media(min-width:1280px) { .workspace-theme .schedule-prep .prep-steps { grid-template-columns:repeat(7,minmax(0,1fr)); } }
+  @media(max-width:1023px) {
+    .workspace-theme .sidebar { z-index:110; width:min(320px,calc(100vw - 48px)); padding-top:env(safe-area-inset-top,0px); }
+    .workspace-theme .sidebar:not(.sidebar-open) { visibility:hidden; pointer-events:none; }
+    .workspace-theme .sidebar-overlay { z-index:100; background:#11284366; backdrop-filter:blur(3px); }
+    .workspace-theme .sidebar-close { width:40px; height:40px; min-width:40px; }
+    .workspace-theme .sidebar-brand { padding:14px 16px; }
+    .workspace-theme .sidebar-search label { min-height:46px; }
+    .workspace-theme .sidebar-link { min-height:46px; }
+  }
+  @media(max-width:640px) {
+    .workspace-theme .navbar-section { display:none; }
+    .workspace-theme .navbar-context-meta .navbar-school { max-width:100%; }
+    .workspace-theme .schedule-prep { padding:12px; border-radius:16px; }
+    .workspace-theme .schedule-prep .prep-heading { padding:16px; gap:12px; }
+    .workspace-theme .schedule-prep .prep-input-panel { padding:12px; }
+    .workspace-theme .schedule-prep .prep-steps { gap:8px; }
+    .workspace-theme .schedule-prep .prep-steps li:last-child { grid-column:1/-1; }
+    body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-title { font-size:21px; }
+    body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-html-container { margin-inline:18px; font-size:15px; }
+    body:has(.workspace-theme) .swal2-popup:not(.swal2-toast) .swal2-actions { display:flex; flex-wrap:wrap; }
+  }
+}
