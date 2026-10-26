@@ -1,4 +1,5 @@
 'use server'
+import {jointTeachingSubjectLabel} from '@/lib/schedule-joint-teaching'
 
 import { activityTeachers, applyActivityDisplay, lessonTeachers, roomActivityDisplay } from '@/lib/schedule-activity-teams'
 import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
@@ -193,9 +194,9 @@ function teachingCells(data: ScheduleData, teacherId: string) {
     const room=rooms.get(row.classroom_id)
     if (!room) continue
     const roomLine=room.level+'/'+room.room
-    const subjectLine=[(lesson.code+' '+lesson.name).trim(),lesson.roomName].filter(Boolean).join(' · ')
+    const subjectLine=[jointTeachingSubjectLabel(lesson,data.lessons),lesson.roomName].filter(Boolean).join(' · ')
     const key=row.day_of_week+'-'+row.period
-    cells[key]={label:[cells[key]?.label,roomLine+'\n'+subjectLine].filter(Boolean).join('\n'),subject_line:subjectLine,room_line:roomLine}
+    cells[key]={label:[cells[key]?.label,roomLine+'\n'+subjectLine].filter(Boolean).join('\n'),subject_line:[...new Set([cells[key]?.subject_line,subjectLine].filter(Boolean))].join(' / '),room_line:[cells[key]?.room_line,roomLine].filter(Boolean).join(' + ')}
   }
   const activityCells: Record<string, { rooms: string[]; subjectLine: string }> = {}
   for (const group of data.activityGroups || []) {

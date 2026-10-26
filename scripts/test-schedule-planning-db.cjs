@@ -284,6 +284,41 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   assert.equal((await confirm(validReview)).rows[0].done,true);
   assert.equal((await confirm(validReview)).rows[0].done,false);
   console.log('PASS: 081 repeatable; substitute changes invalidate drafts in their term only; subject/substitute collision rolls back the whole commit; valid review confirms idempotently');
+
+  const jointSql=fs.readFileSync('supabase/migrations/088_schedule_joint_teaching.sql','utf8');await db.exec(jointSql);await db.exec(jointSql);
+  await db.exec(`insert into academic_years values('${id(9010)}','${id(1)}');
+  insert into classrooms(id,school_id,academic_year_id) values('${id(9020)}','${id(1)}','${id(9010)}'),('${id(9021)}','${id(1)}','${id(9010)}');
+  insert into users(id,school_id) values('${id(9030)}','${id(1)}'),('${id(9031)}','${id(1)}');
+  insert into subjects(id,school_id) values('${id(9040)}','${id(1)}'),('${id(9041)}','${id(1)}');
+  insert into class_subjects(id,classroom_id,academic_year_id,subject_id,teacher_id) values('${id(9050)}','${id(9020)}','${id(9010)}','${id(9040)}','${id(9030)}'),('${id(9051)}','${id(9021)}','${id(9010)}','${id(9041)}','${id(9030)}');`);
+  const jointConfig={days:[1,2,3,4,5],rooms:[{id:id(9090),name:'ห้องสอนรวม'}],rules:Object.fromEntries([9050,9051].map(n=>[id(n),{count:2,pattern:[2],roomId:id(9090),morning:false,timePreference:'any',spread:true}])),reduceGaps:false,maxContinuous:0,teachingGroups:[{id:id(9080),lessonIds:[id(9050),id(9051)]}]};
+  const jointHash=async()=>(await db.query('select schedule_snapshot($1,$2,1) h',[id(1),id(9010)])).rows[0].h;
+  const saveJointConfig=async(config,h)=>db.query('select save_schedule_plan($1,$2,1,$3,$4::jsonb)',[id(1),id(9010),h??await jointHash(),JSON.stringify(config)]);
+  await saveJointConfig(jointConfig);
+  const jointRows=[9020,9021].flatMap((room,i)=>[1,2].map(period=>({...slot(room,9050+i,period),academic_year_id:id(9010),day_of_week:2})));
+  const saveJointRows=(before,after)=>db.query('select save_school_schedule_term($1,$2,$3::jsonb,$4::jsonb,false,1)',[id(1),id(9010),JSON.stringify(before),JSON.stringify(after)]);
+  await saveJointRows([],jointRows);
+  assert.equal((await db.query('select count(distinct event_id)::int n from activity_team_teaching($1,$2,1,$3::jsonb)',[id(1),id(9010),JSON.stringify(jointRows)])).rows[0].n,1);
+  await assert.rejects(saveJointRows(jointRows,jointRows.slice(1)),/สอนรวม/);
+  await assert.rejects(saveJointConfig({...jointConfig,teachingGroups:[]}),/ชน/);
+  await assert.rejects(saveJointConfig({...jointConfig,rules:{...jointConfig.rules,[id(9051)]:{...jointConfig.rules[id(9051)],timePreference:'afternoon'}}}),/สอนรวม/);
+  await assert.rejects(saveJointConfig({...jointConfig,teachingGroups:[{id:id(9080),lessonIds:[id(9050),id(50)]}]}),/โรงเรียน|ปีการศึกษา/);
+  await assert.rejects(saveJointConfig(jointConfig,'stale'),/เปลี่ยน/);
+  assert.equal((await db.query('select count(*)::int n from class_schedule_slots where academic_year_id=$1',[id(9010)])).rows[0].n,4);
+
+  await assert.rejects(db.query('select set_schedule_teacher_block($1,$2,1,$3,2,1,true)',[id(1),id(9010),id(9030)]),/สอน|คาบ/);
+  await assert.rejects(saveJointRows(jointRows,jointRows.map(row=>({...row,locked:true}))).then(()=>saveJointRows(jointRows.map(row=>({...row,locked:true})),[])),/ล็อก/);
+  await db.query('select save_school_schedule_term($1,$2,$3::jsonb,$4::jsonb,true,1)',[id(1),id(9010),JSON.stringify(jointRows.map(row=>({...row,locked:true}))),JSON.stringify(jointRows)]);
+  await saveJointRows(jointRows,[]);
+  await assert.rejects(db.exec(`update class_subjects set teacher_id='${id(9031)}' where id='${id(9051)}'`),/สอนรวม/);
+  await saveJointConfig({...jointConfig,teachingGroups:[]});
+  assert.equal((await db.query(`select has_function_privilege('anon','joint_teaching_event(uuid,uuid,int,uuid)','execute') allowed`)).rows[0].allowed,false);
+
+  await db.exec(`insert into schedule_substitute_days(id,school_id,academic_year_id,day_of_week,date,semester) values('${id(9085)}','${id(1)}','${id(9010)}',2,'2026-10-27',1);
+  insert into schedule_substitute_entries(substitute_day_id,absent_teacher_id,substitute_teacher_id,period,classroom_id) values('${id(9085)}','${id(9031)}','${id(9030)}',1,'${id(9020)}');`);
+  await assert.rejects(saveJointRows([],[jointRows[0]]),/สอนแทน/);
+  console.log('PASS: 088 repeatable; different offerings jointly saved, shared teacher/venue counted once; partial edits, unsafe ungrouping, incompatible rules, foreign year, stale snapshots and teacher reassignment rejected atomically; safe whole-group clearing; private SQL helpers');
+
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

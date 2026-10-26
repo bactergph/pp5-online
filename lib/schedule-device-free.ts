@@ -1,6 +1,7 @@
 import type {FreeSubstituteEntry} from '../components/schedules/FreeSubstituteDesk'
 import type {DeviceDocumentSettings} from './schedule-device-documents'
 import type { ActivityTeam } from './schedule-activity-teams'
+import {withJointTeachingGroups,type JointTeachingGroup} from './schedule-joint-teaching'
 import { emptyPlan } from './schedule-planning'
 import { DEFAULT_PERIOD_TIMES, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
 import type { DeviceSnapshot } from './schedule-device-build'
@@ -46,6 +47,7 @@ export type FreeSubject = {
 export type FreePlace = { id: string; name: string }
 
 export type FreeWizardPlan = {
+  teachingGroups?:JointTeachingGroup[]
   substitutes?:Record<string,FreeSubstituteEntry[]>
   document?: DeviceDocumentSettings
   reduceGaps?:boolean
@@ -125,6 +127,7 @@ export function roomNeed(plan: FreeWizardPlan, roomId: string) {
 export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
   const periods = raw?.periods?.length ? raw.periods : DEFAULT_PERIOD_TIMES
   return {
+    teachingGroups:raw?.teachingGroups,
     substitutes:raw?.substitutes,
     document: raw?.document,
     reduceGaps:raw?.reduceGaps ?? false,
@@ -226,6 +229,7 @@ export function importSubjectTable(text: string, plan: FreeWizardPlan, teacherLi
 export function copyTermSubjects(source: FreeWizardPlan, target: FreeWizardPlan): FreeWizardPlan {
   return {
     ...target,
+    teachingGroups: source.teachingGroups?.map(group=>({...group,lessonIds:[...group.lessonIds]})),
     subjects: source.subjects.map(subject => ({ ...subject, pattern: [...(subject.pattern || [])], placeId: subject.placeId || null })),
     activities: source.activities.map(activity => ({
       ...activity,
@@ -299,11 +303,12 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
       rooms: plan.places.map(place => ({ id: place.id, name: place.name })),
       rules: Object.fromEntries(lessons.map(lesson => [lesson.id, { count: lesson.count, pattern: lesson.pattern || [1], roomId: lesson.roomId || null, morning: lesson.timePreference==='morning', timePreference: lesson.timePreference, spread: lesson.spread }])),
       activityGroups: groups,
+      teachingGroups:plan.teachingGroups,
     },
     periods: plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES,
     timesConfigured: !validatePeriodTimes(plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES),
     classrooms: plan.rooms.filter(room => isTimetableClassroom(room.label.split('/')[0])).map(room => ({ id: room.id, level: room.label, room: 0 })),
-    lessons: [...lessons, ...activityLessons],
+    lessons: withJointTeachingGroups([...lessons, ...activityLessons],plan),
     slots: plan.timetable.map(cell => ({ classroom_id: cell.classroomId, academic_year_id: 'local', day_of_week: cell.day, period: cell.period, class_subject_id: cell.subjectId || null, activity_id: cell.activityId ? `${cell.activityId}:${cell.classroomId}` : null, note: null, locked: !!cell.locked })),
     blocks: [...plan.blocks,...Object.entries(plan.substitutes||{}).flatMap(([date,entries])=>{
       const day=new Date(date+'T12:00:00+07:00').getUTCDay()||7

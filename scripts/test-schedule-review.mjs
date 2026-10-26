@@ -50,7 +50,7 @@ const preview=html({draft:ready})
 assert.ok(preview.includes('บันทึกใช้ตารางนี้'))
 assert.ok(preview.includes('คณิต'))
 assert.ok(!preview.includes('prep-slot-activity')) // Never invent a missing activity from its config cell.
-assert.ok(preview.includes('กิจกรรมร่วม')) // Cross-scope changes are available for review.
+assert.ok(preview.includes('เรียนร่วม')) // Cross-scope changes are available for review.
 const currentPreview={lessons:[{id:'math',name:'วิทยาศาสตร์ล่าสุด',code:'ว11101',teacherName:'นางสาว ใหม่ ล่าสุด',roomName:'ห้องทดลองใหม่'}],days:[1,3],periods:[{...periods[0],start_time:'07:30'}],classrooms:[{...data.classrooms[0],name:'ห้องใหม่'}]}
 const fresh=html({draft:{...ready,preview:currentPreview}})
 assert.ok(fresh.includes('วิทยาศาสตร์ล่าสุด'));assert.ok(fresh.includes('ล่าสุด'));assert.ok(fresh.includes('ห้องทดลองใหม่'));assert.ok(fresh.includes('ห้องใหม่'))

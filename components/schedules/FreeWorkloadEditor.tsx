@@ -3,12 +3,17 @@ import { useEffect,useRef } from 'react'
 import WorkloadEditor, {type WorkloadChange,type WorkloadOperations} from './WorkloadEditor'
 import {devicePreparation,devicePreflight} from '@/lib/schedule-device-view'
 import {changeDeviceCell,lockDeviceCell,blockDeviceTeacher} from '@/lib/schedule-device-operations'
+import {validateJointTeachingGroups,jointTeachingSlotErrors} from '@/lib/schedule-joint-teaching'
 import type {FreeWizardPlan} from '@/lib/schedule-device-free'
 
 export default function FreeWorkloadEditor({plan,onPlan,busy}:{plan:FreeWizardPlan;onPlan:(plan:FreeWizardPlan)=>void|boolean|Promise<void|boolean>;busy:boolean}){
   const latest=useRef(plan);useEffect(()=>{latest.current=plan},[plan])
   const data=devicePreparation(plan)
   async function save(next:FreeWizardPlan){
+    const data=devicePreparation(next)
+    validateJointTeachingGroups(next.teachingGroups,data.lessons)
+    const errors=jointTeachingSlotErrors(data.lessons,next.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period})))
+    if(errors.length)throw Error(errors[0])
     const result=await onPlan(next)
     if(result===false)throw Error('บันทึกลงเครื่องไม่สำเร็จ กรุณาลองใหม่หรือดาวน์โหลดสำเนา')
     latest.current=next
@@ -33,5 +38,5 @@ export default function FreeWorkloadEditor({plan,onPlan,busy}:{plan:FreeWizardPl
   }
   const teaching=data.lessons.filter(lesson=>!lesson.activity)
   const ready=teaching.length>0&&teaching.every(lesson=>plan.teachers.some(teacher=>teacher.id===lesson.teacherId)&&lesson.count>0&&lesson.pattern?.reduce((sum,size)=>sum+size,0)===lesson.count)
-  return <WorkloadEditor classrooms={data.classrooms} lessons={teaching} teachers={data.teachers} rules={data.plan.rules} teacherAssignments={{}} slots={data.slots} places={data.plan.rooms} blocks={data.blocks} days={data.plan.days} periods={data.periods} year="local" term={1} busy={busy} ready={ready} onCommit={commit} onRefresh={async()=>{}} operations={operations}/>
+  return <WorkloadEditor teachingGroups={plan.teachingGroups||[]} onTeachingGroupsChange={groups=>save({...latest.current,teachingGroups:groups})} classrooms={data.classrooms} lessons={teaching} teachers={data.teachers} rules={data.plan.rules} teacherAssignments={{}} slots={data.slots} places={data.plan.rooms} blocks={data.blocks} days={data.plan.days} periods={data.periods} year="local" term={1} busy={busy} ready={ready} onCommit={commit} onRefresh={async()=>{}} operations={operations}/>
 }

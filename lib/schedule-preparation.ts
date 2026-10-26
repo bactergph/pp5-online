@@ -1,4 +1,5 @@
 import 'server-only'
+import {withJointTeachingGroups,validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingScope} from './schedule-joint-teaching'
 import { activityTeachers, activityWeeklyPeriods, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { randomUUID } from 'node:crypto'
 import { getSession } from './session'
@@ -27,11 +28,11 @@ export async function preparation(year:string,term:number){
  const periods=normalizePeriodTimes((times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[])
  const classrooms=data.classrooms.filter(c=>isTimetableClassroom(c.level)).map(c=>({...c,name:classroomShortName(c,plan.roomLabels)}))
  const roomTitle=new Map(classrooms.map(c=>[c.id,`${c.level}/${c.name}`]))
- const lessons=data.lessons.map(l=>{
+ const lessons=withJointTeachingGroups(data.lessons.map(l=>{
   const title=roomTitle.get(l.classroomId)
   const label=title&&l.label.includes(' · ')?`${title} · ${l.label.split(' · ').slice(1).join(' · ')}`:l.label
   return {...l,label,...plan.rules[l.id],spread:plan.rules[l.id]?.spread??true,roomName:plan.rules[l.id]?(plan.rooms.find(r=>r.id===plan.rules[l.id].roomId)?.name||''):l.roomName,source:plan.rules[l.id]?'กำหนดภาระสอนสำหรับภาคเรียนนี้':`${l.sourceHours||0} ชั่วโมงเทียบรายปี ÷ 40 สัปดาห์`}
- })
+ }),plan)
  // Keep all existing slots/lessons for outside-scope teacher and venue conflicts,
  // but only offer non-kindergarten classrooms for import, activities and generation.
  return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
@@ -113,9 +114,10 @@ export async function savePlan(year:string,term:number,hash:string,plan:Schedule
  const s=await actor(),current=await preparation(year,term);validatePlan(plan,current.lessons.filter(l=>!l.activity).map(l=>l.id))
  if(JSON.stringify(plan.activityGroups||[])!==JSON.stringify(current.plan.activityGroups||[]))throw Error('แก้ทีมครูผ่านเมนูกิจกรรมและครูผู้รับผิดชอบ')
  if(plan.teacherIds?.some(id=>!current.teachers.some(t=>t.id===id)))throw Error('ครูที่เลือกไม่ได้อยู่ในโรงเรียนนี้')
- const lessons=current.lessons.map(l=>({...l,...plan.rules[l.id],count:l.activity?current.slots.filter(r=>lessonKey(r)===l.id).length:(plan.rules[l.id]?.count??l.count)}))
+ const lessons=withJointTeachingGroups(current.lessons.map(l=>({...l,...plan.rules[l.id],count:l.activity?current.slots.filter(r=>lessonKey(r)===l.id).length:(plan.rules[l.id]?.count??l.count)})),plan,true)
  // Saving preparation may be incremental. Only conflicts with existing timetable
  // cells block it; subject names (e.g. “ชุมชน”) must never classify an issue.
+ const syncErrors=jointTeachingSlotErrors(lessons,current.slots.map(toPlanned));if(syncErrors.length)throw Error(syncErrors[0])
  const issues=checkPlanning(lessons,current.slots.map(toPlanned),plan.days,current.periods,current.blocks).filter(i=>i.code?.startsWith('fixed_'))
  if(issues.length)throw Error(issues.map(i=>i.message).join('\n'))
  const r=await createServerClient().rpc('save_schedule_plan',{p_school:s.schoolId,p_year:year,p_term:term,p_hash:hash,p_config:plan});fail(r.error)
@@ -154,6 +156,8 @@ function activityPlacement(data:Preparation,year:string){
 }
 function input(data:Preparation,scope:string[],clear:boolean,year:string){
  if(!Array.isArray(scope)||!scope.length||new Set(scope).size!==scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id))||typeof clear!=='boolean')throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล และห้ามเลือกห้องซ้ำ')
+ validateJointTeachingGroups(data.plan.teachingGroups,data.lessons,data.plan.rules)
+ scope=jointTeachingScope(scope,data.lessons,data.plan.teachingGroups)
  const placed=activityPlacement(data,year),cellKey=(s:{classroom_id:string;day_of_week:number;period:number})=>`${s.classroom_id}:${s.day_of_week}:${s.period}`,pinned=new Set(placed.slots.map(cellKey))
  const allLessons=[...data.lessons,...placed.extra],byId=new Map(allLessons.map(l=>[l.id,l]))
  const autoIds=new Set<string>()

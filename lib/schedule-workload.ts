@@ -23,8 +23,9 @@ export function summarizeScheduleWorkload(
     return row
   }
   const quota = (value: number) => Number.isFinite(value) && value > 0 ? value : 0
+  const counted=new Set<string>()
   for (const lesson of data.lessons.filter(lesson => !lesson.activity))
-    for (const id of lessonTeachers(lesson)) get(id).subjects += quota(lesson.count)
+    for (const id of lessonTeachers(lesson)) {const key=id+':'+(lesson.activityGroupId||lesson.id);if(!counted.has(key)){counted.add(key);get(id).subjects += quota(lesson.count)}}
 
   const cellKey = (room: string, day: number, period: number) => `${room}:${day}:${period}`
   const cells = new Map<string, { day: number; period: number; teachers: string[] }>()

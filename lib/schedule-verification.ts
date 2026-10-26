@@ -30,7 +30,7 @@ export function verifyCompleteSchedule(lessons: PlannedLesson[], rows: PlannedSl
   for (const lesson of lessons.filter(lesson => lesson.activityGroupId)) {
     const cells = rows.filter(row => row.lessonId === lesson.id).map(row => `${row.day}:${row.period}`).sort().join(',')
     const previous = groups.get(lesson.activityGroupId!)
-    if (previous !== undefined && previous !== cells) add(`${lesson.label} กิจกรรมรวมกลุ่มไม่ได้จัดพร้อมกันทุกห้อง`)
+    if (previous !== undefined && previous !== cells) add(`${lesson.label} ${lesson.activity?'กิจกรรมรวมกลุ่ม':'วิชาสอนรวม'}ไม่ได้จัดพร้อมกันทุกห้อง`)
     groups.set(lesson.activityGroupId!, cells)
   }
   return issues

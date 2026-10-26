@@ -2,6 +2,7 @@ import type { ScheduleOperations } from '../components/schedules/ScheduleService
 import { activityTeachers, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { validateSubjectInputs } from './schedule-input'
 import { validatePeriodTimes } from './schedule-helpers'
+import {validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingSubjectLabel} from './schedule-joint-teaching'
 import { validatePlan } from './schedule-planning'
 import { freeActivityGroup, freeActivityTeachers, newId, toDeviceSnapshot, type FreeActivity, type FreeWizardPlan } from './schedule-device-free'
 import {freeTeacherLimit as resolveTeacherLimit} from './free-schedule-entitlement'
@@ -39,6 +40,10 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
   function stale(current:FreeWizardPlan,hash:string){if(hash!==deviceDataKey(current))throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')}
   function fixed(next:FreeWizardPlan){const issue=devicePreflight(next,next.rooms.map(room=>room.id),false).find(issue=>issue.severity==='error'&&issue.code?.startsWith('fixed_'));if(issue)throw Error(issue.message)}
   async function put(year:string,term:number,next:FreeWizardPlan) {
+    const snapshot=toDeviceSnapshot(next,[])
+    validateJointTeachingGroups(next.teachingGroups,snapshot.lessons)
+    const syncErrors=jointTeachingSlotErrors(snapshot.lessons,next.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period})))
+    if(syncErrors.length)throw Error(syncErrors[0])
     const current=read(),workspace=year===deviceYear(current)?current:current.archives?.[year]
     if(!workspace)throw Error('ไม่พบปีการศึกษา')
     const other=term===1?2:1,old=workspace.terms[term as 1|2],sibling=workspace.terms[other]
@@ -211,7 +216,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       stale(current,hash);validatePlan(config,current.subjects.map(subject=>subject.id))
       if(deviceDataKey(config.activityGroups||[])!==deviceDataKey(current.activities.map(freeActivityGroup)))throw Error('แก้ทีมครูผ่านเมนูกิจกรรม')
       if(config.teacherIds?.some(id=>!current.teachers.some(teacher=>teacher.id===id)))throw Error('ไม่พบครูที่เลือก')
-      const next={...current,days:config.days,teacherIds:config.teacherIds,places:config.rooms,reduceGaps:config.reduceGaps,maxContinuous:config.maxContinuous,subjects:current.subjects.map(subject=>{const rule=config.rules[subject.id];return rule?{...subject,periods:rule.count,pattern:rule.pattern,placeId:rule.roomId,spread:rule.spread,timePreference:rule.timePreference||(rule.morning?'morning' as const:'any' as const)}:subject})}
+      const next={...current,teachingGroups:config.teachingGroups,days:config.days,teacherIds:config.teacherIds,places:config.rooms,reduceGaps:config.reduceGaps,maxContinuous:config.maxContinuous,subjects:current.subjects.map(subject=>{const rule=config.rules[subject.id];return rule?{...subject,periods:rule.count,pattern:rule.pattern,placeId:rule.roomId,spread:rule.spread,timePreference:rule.timePreference||(rule.morning?'morning' as const:'any' as const)}:subject})}
       fixed(next);return put(year,term,next)
     })),
     saveScheduleTeachingAssignments:(year,term,hash,rows)=>outcome(()=>mutate(year,term,async current=>{
@@ -307,7 +312,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       for(const cell of busyCells(current).filter(cell=>cell.teacherId===teacher)){
         const lesson=data.lessons.find(lesson=>lesson.id===cell.lessonId)!,key=`${cell.day}-${cell.period}`,room=current.rooms.find(room=>room.id===cell.classroomId)?.label||''
         const previous=grid[key]
-        grid[key]={label:lesson.name,subject_line:[`${lesson.code} ${lesson.name}`.trim(),lesson.roomName].filter(Boolean).join(' · '),room_line:previous?`${previous.room_line}, ${room}`:room}
+        grid[key]={label:lesson.name,subject_line:[jointTeachingSubjectLabel(lesson,data.lessons),lesson.roomName].filter(Boolean).join(' · '),room_line:previous?`${previous.room_line}, ${room}`:room}
       }
       return grid
     },

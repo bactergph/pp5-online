@@ -1,4 +1,5 @@
-import { deviceTeacherLimitMessage, normalizePlan, type FreeWizardPlan } from './schedule-device-free'
+import {validateJointTeachingGroups,jointTeachingSlotErrors} from './schedule-joint-teaching'
+import { deviceTeacherLimitMessage, toDeviceSnapshot, normalizePlan, type FreeWizardPlan } from './schedule-device-free'
 import type {LocalScheduleBundle} from './schedule-device-years'
 import type { FreeSubstituteEntry } from '../components/schedules/FreeSubstituteDesk'
 import { validDeviceLogo } from './schedule-device-school'
@@ -41,6 +42,9 @@ export function readDeviceBackup(raw:unknown,teacherLimit?:number):DeviceBundle 
     if(record(plan.document)&&plan.document.logoDataUrl!==undefined&&!validDeviceLogo(plan.document.logoDataUrl))return invalid()
     if(plan.reduceGaps!==undefined&&typeof plan.reduceGaps!=='boolean'||plan.maxContinuous!==undefined&&(!integer(plan.maxContinuous)||Number(plan.maxContinuous)<0||Number(plan.maxContinuous)>8))return invalid()
     const normalized=normalizePlan(plan as Partial<FreeWizardPlan>)
+    const snapshot=toDeviceSnapshot(normalized,[])
+    validateJointTeachingGroups(normalized.teachingGroups,snapshot.lessons)
+    if(jointTeachingSlotErrors(snapshot.lessons,normalized.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period}))).length)return invalid()
     plans.push({...normalized,substitutes:(plan.substitutes||{}) as Record<string,FreeSubstituteEntry[]>})
   }
   const merge=<T extends {id:string}>(a:T[],b:T[])=>[...new Map([...b,...a].map(item=>[item.id,item])).values()]

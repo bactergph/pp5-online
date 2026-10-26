@@ -1,4 +1,5 @@
 import 'server-only'
+import {withJointTeachingGroups,type JointTeachingGroup} from './schedule-joint-teaching'
 import { activityTeachers, type ActivityTeam } from './schedule-activity-teams'
 import { createServerClient } from '@/lib/supabase'
 import { weeklyHoursFromYear } from '@/lib/schedule-helpers'
@@ -109,7 +110,7 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   }
   const planResult = await db.from('schedule_plans').select('config').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',semester).maybeSingle()
   if (planResult.error && !['42P01','PGRST205'].includes(planResult.error.code)) throw new Error(planResult.error.message)
-  const plan = planResult.data?.config as {rules?:Record<string,{count:number;roomId:string|null}>;rooms?:{id:string;name:string}[];activityGroups?:ActivityTeam[]} | undefined
+  const plan = planResult.data?.config as {rules?:Record<string,import('./schedule-planning').LessonRule>;rooms?:{id:string;name:string}[];activityGroups?:ActivityTeam[];teachingGroups?:JointTeachingGroup[]} | undefined
   for (const lesson of lessons) {
     const group=lesson.activity?plan?.activityGroups?.find(g=>g.settingId===lesson.subjectId&&g.roomIds.includes(lesson.classroomId)):undefined
     if(group){lesson.teacherIds=activityTeachers(group,lesson.classroomId);lesson.teacherId=null;lesson.teacherName=lesson.teacherIds.map(id=>names.get(id)||'').join(', ');lesson.activityGroupId=group.mode==='joint'?group.id:undefined;lesson.count=group.weeklyPeriods;lesson.selectable=false}
@@ -122,7 +123,7 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   const otherRules = new Set(Object.keys((otherPlan.data?.config as {rules?:Record<string,unknown>} | undefined)?.rules || {}))
   const thisRules = new Set(Object.keys(plan?.rules || {}))
   const visible = lessons.filter(lesson => lesson.activity || !(otherRules.has(lesson.id) && !thisRules.has(lesson.id)))
-  return { classrooms, lessons: visible, slots: (slots.data || []) as ScheduleSlot[], activityGroups: plan?.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
+  return { classrooms, lessons: withJointTeachingGroups(visible,plan||{}), slots: (slots.data || []) as ScheduleSlot[], activityGroups: plan?.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
 }
 
 export async function persistSchedule(schoolId: string | null, yearId: string, before: ScheduleSlot[], after: ScheduleSlot[], allowUnlock = false, semester = 1) {

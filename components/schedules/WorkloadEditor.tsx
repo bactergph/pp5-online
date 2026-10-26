@@ -9,6 +9,8 @@ import type { PeriodTimeRow } from '@/lib/schedule-helpers'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import LessonPatternPicker from './LessonPatternPicker'
 import WorkloadPlacePicker from './WorkloadPlacePicker'
+import JointTeachingEditor from './JointTeachingEditor'
+import type {JointTeachingGroup} from '@/lib/schedule-joint-teaching'
 import WorkloadSaveFeedback from './WorkloadSaveFeedback'
 
 type Classroom = Preparation['classrooms'][number]
@@ -48,7 +50,9 @@ function numberRange(values: number[]) {
   return min === max ? number(min) : `${number(min)}–${number(max)}`
 }
 
-export default function WorkloadEditor({ classrooms, lessons, teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh, operations }: {
+export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange, classrooms, lessons, teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh, operations }: {
+  teachingGroups:JointTeachingGroup[]
+  onTeachingGroupsChange:(groups:JointTeachingGroup[])=>Promise<void>
   classrooms: Classroom[]
   lessons: ScheduleLesson[]
   teachers: Teacher[]
@@ -354,6 +358,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
   const rowProps = { busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit: openLesson, hasLessons: lessons.length > 0 }
   return <section className="prep-input-panel prep-teacher-panel prep-workload">
     <WorkloadSaveFeedback status={saveStatus} />
+    <div className="prep-load-toolbar"><span>ครูสอนพร้อมกันหลายห้อง</span><JointTeachingEditor groups={teachingGroups} lessons={lessons.map(lesson=>({...lesson,...rules[lesson.id],teacherId:teacherAssignments[lesson.id]??lesson.teacherId}))} teachers={teachers} classrooms={classrooms} busy={busy} onSave={onTeachingGroupsChange}/></div>
     <div className="prep-teacher-bar">
       <div className="prep-teacher-title"><h2>กำหนดภาระสอน</h2><p>{view === 'room' ? `${activeLevel}/${levelRooms.find(room => room.id === activeRoom)?.room || ''} · ${visible.length} วิชา` : view === 'teacher' ? (teacherId ? `${teacherName(teacherId)} · จากครู ${teachers.length} คน` : `ครูในชุดนี้ ${teachers.length} คน`) : view === 'lock' ? (lockMode === 'room' ? 'เลือกห้อง แล้วแตะคาบเพื่อกำหนดวิชาและล็อกคาบเรียน' : `เลือกจากครู ${teachers.length} คน แล้วแตะคาบเพื่อกำหนดวิชาหรือล็อกคาบว่าง`) : 'แตะการ์ดวิชา แล้วเลือกหลายห้องเพื่อกำหนดครู'}</p></div>
       <div className="prep-teacher-tools prep-subject-tools">
@@ -375,7 +380,7 @@ export default function WorkloadEditor({ classrooms, lessons, teachers, rules, t
     </>}
     {view === 'teacher' && <>
       <div className="prep-activity-teachers"><div>{shownTeachers.map(teacher => <button type="button" key={teacher.id} aria-pressed={teacher.id === teacherId} onClick={() => setTeacherId(teacher.id)}><strong>{`${teacher.prefix || ''} ${teacher.full_name}`.trim()}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'}</small></button>)}</div></div>
-      {teacherId && <div className="prep-load-toolbar"><span>{teacherLessons.length} วิชา · {teacherLessons.reduce((sum, lesson) => sum + ruleOf(lesson).count, 0)} คาบ/สัปดาห์</span><button type="button" disabled={busy} onClick={() => { setPicked([]); setQuery(''); addDialog.current?.showModal() }}>เพิ่มวิชา</button></div>}
+      {teacherId && <div className="prep-load-toolbar"><span>{teacherLessons.length} วิชา · {[...new Map(teacherLessons.map(lesson=>[lesson.activityGroupId||lesson.id,ruleOf(lesson).count])).values()].reduce((sum,count)=>sum+count,0)} คาบ/สัปดาห์</span><button type="button" disabled={busy} onClick={() => { setPicked([]); setQuery(''); addDialog.current?.showModal() }}>เพิ่มวิชา</button></div>}
       {teacherId ? (teacherLessons.length ? <WorkloadRows items={teacherLessons} showRoom onRemove={removeFromTeacher} {...rowProps}/> : <p className="prep-teacher-empty">ครูคนนี้ยังไม่มีวิชา</p>) : <p className="prep-teacher-empty">ค้นหาแล้วแตะการ์ดครู</p>}
     </>}
     {view === 'lock' && <>
@@ -515,6 +520,6 @@ function WorkloadRows({ items, showRoom, busy, ruleOf, teacherOf, teacherName, r
   if (!items.length) return <p className="prep-teacher-empty">{hasLessons ? 'ไม่พบรายวิชาที่ค้นหา' : 'ยังไม่มีรายวิชา เพิ่มในขั้นรายวิชาก่อน'}</p>
   return <ul className="prep-load-list">{items.map(lesson => {
     const current = ruleOf(lesson), name = teacherName(teacherOf(lesson))
-    return <li key={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}{showRoom && <small>{roomLabel(lesson.classroomId)}</small>}</span><span className={name ? undefined : 'prep-load-missing'}>{name || 'ยังไม่กำหนดครู'}</span><span>{current.count} คาบ<small>{patternText(current.pattern)}</small></span><small>{venueOf(lesson)}</small><span className="prep-row-actions"><button type="button" className="prep-row-edit" disabled={busy} onClick={() => onEdit(lesson.id)}>แก้ไข</button>{onRemove && <button type="button" className="prep-row-delete" disabled={busy} onClick={() => void onRemove(lesson)}>ลบ</button>}</span></li>
+    return <li key={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}{showRoom && <small>{roomLabel(lesson.classroomId)}</small>}{lesson.activityGroupId?.startsWith('teaching:')&&<small>สอนรวมหลายห้อง</small>}</span><span className={name ? undefined : 'prep-load-missing'}>{name || 'ยังไม่กำหนดครู'}</span><span>{current.count} คาบ<small>{patternText(current.pattern)}</small></span><small>{venueOf(lesson)}</small><span className="prep-row-actions"><button type="button" className="prep-row-edit" disabled={busy} onClick={() => onEdit(lesson.id)}>แก้ไข</button>{onRemove && <button type="button" className="prep-row-delete" disabled={busy} onClick={() => void onRemove(lesson)}>ลบ</button>}</span></li>
   })}</ul>
 }

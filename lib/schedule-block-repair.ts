@@ -58,6 +58,11 @@ export function solveBlockRepair(
     }
     domains.set(length, choices)
   }
+  // Partial joint retention must be completed against every member together.
+  for(const key of new Set(lessons.filter(l=>!l.activity&&l.activityGroupId).map(l=>l.activityGroupId))){
+    const members=lessons.filter(l=>l.activityGroupId===key&&!l.fixedOnly)
+    if(members.some(l=>retained.has(l.id))&&!members.every(l=>(retained.get(l.id)||0)===l.count))return null
+  }
   const tasks: Task[] = [], groups = new Map<string, PlannedLesson[]>()
   const add = (members: PlannedLesson[], length: number) => {
     tasks.push({ members, length, resources: [...new Set(members.flatMap(lesson => lessonResources.get(lesson.id)!))],
@@ -68,7 +73,7 @@ export function solveBlockRepair(
     // A completely retained offering is already satisfied. In particular, a
     // fully locked double is not a partial block that needs reconstruction.
     if ((retained.get(lesson.id) || 0) === lesson.count) continue
-    if (lesson.activity) { const id = lesson.activityGroupId || lesson.id; groups.set(id, [...groups.get(id) || [], lesson]); continue }
+    if (lesson.activity || lesson.activityGroupId) { const id = lesson.activityGroupId || lesson.id; groups.set(id, [...groups.get(id) || [], lesson]); continue }
     const pattern = lesson.pattern || Array(lesson.count).fill(1), kept = retained.get(lesson.id) || 0
     // Completing a partially locked double needs the exact block-cover search.
     // Leave that case to the existing solver rather than silently splitting it.
@@ -77,7 +82,8 @@ export function solveBlockRepair(
   }
   for (const members of groups.values()) {
     if (members.some(lesson => retained.has(lesson.id) || lesson.count !== members[0].count)) return null
-    for (let i = 0; i < members[0].count; i++) add(members, 1)
+    const pattern=members[0].activity?Array(members[0].count).fill(1):members[0].pattern||Array(members[0].count).fill(1)
+    for (const length of pattern) add(members, length)
   }
   for (const task of tasks) {
     task.options = (domains.get(task.length) || []).flatMap(block => {

@@ -1,3 +1,4 @@
+import {jointTeachingScope,validateJointTeachingGroups} from './schedule-joint-teaching'
 import { verifyCompleteSchedule } from './schedule-verification'
 import { activityTeachers } from './schedule-activity-teams'
 import { validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
@@ -121,6 +122,8 @@ function activityPlacement(data: DeviceSnapshot, year: string, reserved?: Device
 
 export function prepareDeviceDraft(data: DeviceSnapshot, year: string, scope: string[], clear: boolean, reserved?: DeviceOffering[]) {
   if (!scope.length || scope.some(id => !data.classrooms.some(room => room.id === id))) throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล')
+  validateJointTeachingGroups(data.plan.teachingGroups,data.lessons,data.plan.rules)
+  scope=jointTeachingScope(scope,data.lessons,data.plan.teachingGroups)
   const placed = activityPlacement(data, year, reserved)
   const cellKey = (slot: { classroom_id: string; day_of_week: number; period: number }) => `${slot.classroom_id}:${slot.day_of_week}:${slot.period}`
   const pinned = new Set(placed.slots.map(cellKey))
