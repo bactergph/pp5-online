@@ -37,7 +37,7 @@ export type ScheduleSlot = {
 }
 export type ScheduleLesson = {
   id: string; classroomId: string; teacherId: string | null; count: number; label: string
-  sourceHours?: number; subjectId: string; code: string; name: string; fullName?: string; subjectGroup?: string; subjectType?: string; teacherName: string; roomName?: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean; teacherIds?:string[]; activityGroupId?:string
+  sourceHours?: number; subjectId: string; code: string; name: string; fullName?: string; subjectGroup?: string; subjectType?: string; teacherName: string; roomName?: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean; teacherIds?:string[]; activityGroupId?:string;jointTeachingCells?:Record<string,string>
 }
 export const slotFields = 'classroom_id,academic_year_id,day_of_week,period,class_subject_id,activity_id,note,locked'
 export const lessonKey = (row: ScheduleSlot) => row.activity_id ? `activity:${row.activity_id}` : row.class_subject_id

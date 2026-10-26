@@ -27,6 +27,11 @@ assert.ok(!preview.rows.some(row=>row[0].startsWith('ม.')||row[1]==='ท21101'
 assert.equal(api.prepareCentralSubjects(catalog,rooms,[],catalog.map(s=>s.code),[],[]).rows.length,0)
 assert.equal(api.prepareCentralSubjects([thai,thai],rooms,['p1a'],[thai.code],[],[]).rows.length,1)
 assert.equal(api.prepareCentralSubjects([thai],rooms,['p1a'],[thai.code],[],Array.from({length:2000},()=>['ป.2/1','ค12101','คณิต','4','คณิตศาสตร์','พื้นฐาน'])).overLimit,true)
+const sixGrades=Array.from({length:6},(_,i)=>({...thai,code:`ท1${i+1}101`,hours_per_year:(i+1)*40}))
+const twelveRooms=Array.from({length:6},(_,i)=>[1,2].map(room=>({id:`g${i+1}r${room}`,level:`ป.${i+1}`,name:String(room),room}))).flat()
+const wholePrimary=api.prepareCentralSubjects(sixGrades,twelveRooms,twelveRooms.map(room=>room.id),sixGrades.map(subject=>subject.code),[],[])
+assert.equal(wholePrimary.rows.length,12)
+for(const row of wholePrimary.rows){assert.equal(row[0].slice(2,3),row[1].slice(2,3));assert.equal(row[3],row[0].slice(2,3))}
 
 async function run(){
   let session=null,created=0,identityFlag=false,fail=false,offsets=[]

@@ -1,7 +1,8 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
+const jointApi={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-joint-teaching.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:jointApi,require:()=>({})});
 const exportsObject={},repair={}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-block-repair.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:repair,require:()=>({})})
-vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-block-repair'?repair:{}})
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-block-repair'?repair:name==='./schedule-joint-teaching'?jointApi:{}})
 const {solvePlannedSchedule,emptyPlan}=exportsObject
 const days=[1,2,3,4,5]
 const times=[

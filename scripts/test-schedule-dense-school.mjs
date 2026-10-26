@@ -5,7 +5,7 @@ import ts from 'typescript'
 
 function load(file,deps={}){
   const exports={}
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:name=>deps[name]||{}})
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:name=>deps[name]||(name==='./schedule-joint-teaching'?load('lib/schedule-joint-teaching.ts'):{})})
   return exports
 }
 const solver=load('lib/schedule-solver.ts'),planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':load('lib/schedule-block-repair.ts')})

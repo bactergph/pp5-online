@@ -332,6 +332,24 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   await saveJointLock(await jointHash(),jointManualRows,[],true);
   assert.equal((await db.query(`select has_function_privilege('authenticated','save_schedule_joint_lock(uuid,uuid,int,text,jsonb,jsonb,boolean)','execute') allowed`)).rows[0].allowed,false);
   console.log('PASS: 089 repeatable; atomic joint locks, synchronized classrooms, stale snapshots and implicit unlock rejection, explicit unlock/clear, service-only RPC');
+
+  const sessionsSql=fs.readFileSync('supabase/migrations/090_schedule_joint_sessions.sql','utf8');await db.exec(sessionsSql);await db.exec(sessionsSql);
+  const reservation={...jointRows[0],class_subject_id:null,day_of_week:5,period:6,locked:true,note:'keep reservation'};
+  await saveJointRows([],[reservation]);
+  const sessionConfig={...jointConfig,rules:{...jointConfig.rules,[id(9051)]:{...jointConfig.rules[id(9051)],count:3,pattern:[1,1,1]}},teachingGroups:[{id:id(9080),lessonIds:[id(9050),id(9051)],cells:[{day:4,period:1},{day:4,period:2}]}]};
+  const sessionRows=[reservation,...jointRows.map(row=>({...row,day_of_week:4,locked:true})),{...jointRows.find(row=>row.class_subject_id===id(9051)),day_of_week:5,period:1,locked:false}];
+  const saveSession=(hash,before,after,config,replace=false)=>db.query('select save_schedule_joint_session($1,$2,1,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8::uuid[])',[id(1),id(9010),hash,JSON.stringify(before),JSON.stringify(after),JSON.stringify(config),replace,[id(9050),id(9051)]]);
+  const sessionHash=await jointHash();await saveSession(sessionHash,[reservation],sessionRows,sessionConfig);assert.equal((await db.query('select count(*)::int n from class_schedule_slots where academic_year_id=$1',[id(9010)])).rows[0].n,6);
+  assert.notEqual((await db.query('select joint_teaching_event($1,$2,1,$3,5,1) e',[id(1),id(9010),id(9050)])).rows[0].e,(await db.query('select joint_teaching_event($1,$2,1,$3,5,1) e',[id(1),id(9010),id(9051)])).rows[0].e,'Unshared periods remain independent');
+  await assert.rejects(saveSession(sessionHash,[reservation],sessionRows,sessionConfig),/เปลี่ยน/);
+  const stableSession=await jointHash();await assert.rejects(saveSession(stableSession,sessionRows,sessionRows.filter(row=>!(row.class_subject_id===id(9050)&&row.period===1)),sessionConfig,true),/ครบทุกห้อง/);assert.equal(await jointHash(),stableSession);
+  await assert.rejects(saveSession(stableSession,sessionRows,sessionRows.map(row=>row.note==='keep reservation'?{...row,note:'changed'}:row),sessionConfig),/คาบหรือกิจกรรมอื่น/);assert.equal(await jointHash(),stableSession);
+  const clashConfig={...sessionConfig,rules:{...sessionConfig.rules,[id(9050)]:{...sessionConfig.rules[id(9050)],count:3,pattern:[2,1]}}};
+  await assert.rejects(saveSession(stableSession,sessionRows,[...sessionRows,{...sessionRows.find(row=>row.class_subject_id===id(9050)),day_of_week:5,period:1,locked:false}],clashConfig),/ชนกัน/);assert.equal(await jointHash(),stableSession);
+  await saveSession(stableSession,sessionRows,[reservation],{...sessionConfig,teachingGroups:[]},true);assert.equal((await db.query('select count(*)::int n from class_schedule_slots where academic_year_id=$1',[id(9010)])).rows[0].n,1);
+  assert.equal((await db.query("select has_function_privilege('authenticated','save_schedule_joint_session(uuid,uuid,int,text,jsonb,jsonb,jsonb,boolean,uuid[])','execute') allowed")).rows[0].allowed,false);
+  console.log('PASS: 090 repeatable; partial shared sessions with unequal quotas, independent residual periods, atomic plan/cell save/removal, rollback, stale/foreign-change guards and service-only RPC');
+
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

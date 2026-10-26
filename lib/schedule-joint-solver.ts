@@ -1,3 +1,4 @@
+import {teachingEventAt} from './schedule-joint-teaching'
 import type {PlannedLesson, PlannedSlot, PlannedScheduleResult, SchedulePlan} from './schedule-planning'
 import type {PeriodTimeRow} from './schedule-helpers'
 import {solveBlockRepair} from './schedule-block-repair'
@@ -25,8 +26,8 @@ export function solveJointTeachingSchedule(lessons:PlannedLesson[],fixed:Planned
     if(!lesson)continue
     const keys=fixedByLesson.get(lesson.id)||new Set<string>();keys.add(`${row.day}:${row.period}`);fixedByLesson.set(lesson.id,keys)
     if(lesson.fixedOnly)covered.add(cell(row.classroomId,row.day,row.period))
-    for(const teacher of teachers(lesson))busy.set(cell(teacher,row.day,row.period),owner(lesson))
-    if(lesson.roomId)venues.set(cell(lesson.roomId,row.day,row.period),owner(lesson))
+    for(const teacher of teachers(lesson))busy.set(cell(teacher,row.day,row.period),teachingEventAt(lesson,row.day,row.period))
+    if(lesson.roomId)venues.set(cell(lesson.roomId,row.day,row.period),teachingEventAt(lesson,row.day,row.period))
   }
   for(const block of unavailable)busy.set(cell(block.teacherId,block.day,block.period),'unavailable')
   const groups=new Map<string,PlannedLesson[]>()
@@ -49,9 +50,9 @@ export function solveJointTeachingSchedule(lessons:PlannedLesson[],fixed:Planned
     return (domains.get(task.length)||[]).filter(block=>(last===undefined||block.ordinal>last)&&task.unit.members.every(lesson=>block.periods.every(period=>{
       const key=cell(lesson.classroomId,block.day,period),existing=occupied.get(key)
       if(covered.has(key)||existing&&existing!==lesson.id)return false
-      if(teachers(lesson).some(teacher=>{const held=busy.get(cell(teacher,block.day,period));return held&&held!==task.unit.id}))return false
+      if(teachers(lesson).some(teacher=>{const held=busy.get(cell(teacher,block.day,period));return held&&held!==teachingEventAt(lesson,block.day,period)}))return false
       const held=lesson.roomId?venues.get(cell(lesson.roomId,block.day,period)):undefined
-      return !held||held===task.unit.id
+      return !held||held===teachingEventAt(lesson,block.day,period)
     })))
   }
   const breakAt=times.findIndex(time=>time.is_break)
@@ -93,7 +94,7 @@ export function solveJointTeachingSchedule(lessons:PlannedLesson[],fixed:Planned
         for(const period of block.periods){
           const position=cell(lesson.classroomId,block.day,period);covered.add(position);positions.push(position)
           if(!occupied.has(position)){occupied.set(position,lesson.id);changes.push({map:occupied,key:position});result.push({classroomId:lesson.classroomId,lessonId:lesson.id,day:block.day,period})}
-          for(const [map,id]of [...teachers(lesson).map(id=>[busy,id]as const),[venues,lesson.roomId]as const])if(id){const k=cell(id,block.day,period);if(!map.has(k)){map.set(k,task.unit.id);changes.push({map,key:k})}}
+          for(const [map,id]of [...teachers(lesson).map(id=>[busy,id]as const),[venues,lesson.roomId]as const])if(id){const k=cell(id,block.day,period);if(!map.has(k)){map.set(k,teachingEventAt(lesson,block.day,period));changes.push({map,key:k})}}
         }
         const dayKey=`${lesson.id}:${block.day}`;dayUse.set(dayKey,(dayUse.get(dayKey)||0)+1)
       }

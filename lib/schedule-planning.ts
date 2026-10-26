@@ -1,3 +1,4 @@
+import {teachingEventAt,teachingQuotaParts,jointTeachingSlotErrors} from './schedule-joint-teaching'
 import type { ActivityTeam } from './schedule-activity-teams'
 import { solveSchoolSchedule } from './schedule-solver'
 import { solveBlockRepair } from './schedule-block-repair'
@@ -8,7 +9,7 @@ import type { PeriodTimeRow } from './schedule-helpers'
 export type TimePreference = 'any' | 'morning' | 'afternoon'
 export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean; timePreference?: TimePreference }
 export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[]; teachingGroups?:JointTeachingGroup[]; roomLabels?: Record<string, string> }
-export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; timePreference?: TimePreference; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; subjectGroup?: string; fullName?: string; name?: string; teacherName?: string }
+export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; timePreference?: TimePreference; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; jointTeachingCells?:Record<string,string>; subjectGroup?: string; fullName?: string; name?: string; teacherName?: string }
 export function lessonPrefersMorning(lesson: { subjectGroup?: string; fullName?: string; name?: string; label?: string }) {
   return /ภาษาไทย|คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา|สังคมศึกษา|ภาษาอังกฤษ|ภาษาต่างประเทศ/.test(`${lesson.subjectGroup || ''} ${lesson.fullName || ''} ${lesson.name || ''}`)
 }
@@ -29,7 +30,7 @@ function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
   return index >= 0 && index < breakAt
 }
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
-export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota'
+export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota' | 'fixed_joint_mismatch'
 export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; manageStep?:number; code?: FixedScheduleIssueCode; details?: string[] }
 export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking'|'block_repair';elapsedMs?:number;timeLimitMs?:number}
 export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
@@ -70,8 +71,8 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
     if(occupied.has(slot.classroomId+':'+key))fixedError('fixed_classroom_collision','มีคาบนักเรียนซ้ำ');occupied.add(slot.classroomId+':'+key);slotOwners.set(slot.classroomId+':'+key,slot.lessonId||'locked-empty')
     if(slot.lessonId&&!l)fixedError('fixed_unknown_lesson','คาบเดิมอ้างถึงรายวิชาที่ไม่พบ',3)
     if(l&&l.classroomId!==slot.classroomId)fixedError('fixed_classroom_mismatch',l.label+' ถูกลงในห้องนักเรียนที่ไม่ตรงกับรายวิชา',3)
-    if(l)for(const id of lessonTeachers(l)){const owner=l.activityGroupId||l.id,busy=teachers.get(id+':'+key);if((busy&&busy!==owner)||unavailable.some(b=>b.teacherId===id&&b.day===slot.day&&b.period===slot.period))fixedError('fixed_teacher_conflict',l.label+' ครูชนหรือไม่ว่าง',4);teachers.set(id+':'+key,owner)}
-    if(l?.roomId){const owner=l.activityGroupId||l.id,held=places.get(l.roomId+':'+key);if(held&&held!==owner)fixedError('fixed_venue_conflict',l.label+' ห้องสถานที่ชน',5);places.set(l.roomId+':'+key,owner)}
+    if(l)for(const id of lessonTeachers(l)){const owner=teachingEventAt(l,slot.day,slot.period),busy=teachers.get(id+':'+key);if((busy&&busy!==owner)||unavailable.some(b=>b.teacherId===id&&b.day===slot.day&&b.period===slot.period))fixedError('fixed_teacher_conflict',l.label+' ครูชนหรือไม่ว่าง',4);teachers.set(id+':'+key,owner)}
+    if(l?.roomId){const owner=teachingEventAt(l,slot.day,slot.period),held=places.get(l.roomId+':'+key);if(held&&held!==owner)fixedError('fixed_venue_conflict',l.label+' ห้องสถานที่ชน',5);places.set(l.roomId+':'+key,owner)}
   }
   for(const l of lessons){
     if(!lessonTeachers(l).length&&!l.teacherOptional&&l.count>0)err(l.label+' ยังไม่มีครู',5)
@@ -82,7 +83,7 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
       for(const length of new Set(l.pattern)){
         const choices=blocksFor(length,days,times).filter(block=>block.periods.every(period=>{
           const key=`${block.day}:${period}`,roomOwner=slotOwners.get(`${l.classroomId}:${key}`),venueOwner=l.roomId?places.get(`${l.roomId}:${key}`):undefined
-          return (!roomOwner||roomOwner===l.id)&&(!venueOwner||venueOwner===(l.activityGroupId||l.id))&&lessonTeachers(l).every(id=>{const owner=teachers.get(`${id}:${key}`);return !blocked.has(`${id}:${key}`)&&(!owner||owner===(l.activityGroupId||l.id))})
+          return (!roomOwner||roomOwner===l.id)&&(!venueOwner||venueOwner===teachingEventAt(l,block.day,period))&&lessonTeachers(l).every(id=>{const owner=teachers.get(`${id}:${key}`);return !blocked.has(`${id}:${key}`)&&(!owner||owner===teachingEventAt(l,block.day,period))})
         }))
         if(!choices.length)impossible=true
         for(const block of choices)for(const period of block.periods)available.add(`${block.day}:${period}`)
@@ -95,9 +96,9 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
   for(const room of new Set(lessons.map(l=>l.classroomId))){const need=lessons.filter(l=>l.classroomId===room).reduce((n,l)=>n+l.count,0)+fixed.filter(s=>s.classroomId===room&&!s.lessonId).length;if(need>capacity)err(`${lessons.find(l=>l.classroomId===room)?.label.split(' · ')[0]} ต้องการ ${need} คาบ แต่มี ${capacity} ช่อง`,5)}
   for(const teacher of new Set(lessons.flatMap(l=>lessonTeachers(l)))) {
     const taught=lessons.filter(l=>lessonTeachers(l).includes(teacher)),load=new Map<string,{count:number;activity:boolean;labels:Set<string>}>()
-    for(const l of taught) {
-      const key=l.activityGroupId||l.id,entry=load.get(key)||{count:0,activity:!!l.activity,labels:new Set<string>()}
-      entry.count=Math.max(entry.count,l.count);entry.labels.add(l.label);load.set(key,entry)
+    for(const l of taught) for(const part of teachingQuotaParts(l)) {
+      const key=part.id,entry=load.get(key)||{count:0,activity:!!l.activity,labels:new Set<string>()}
+      entry.count=Math.max(entry.count,part.count);entry.labels.add(l.label);load.set(key,entry)
     }
     const entries=[...load.values()],need=entries.reduce((n,v)=>n+v.count,0)
     const blockedCount=new Set(unavailable.filter(b=>b.teacherId===teacher&&days.includes(b.day)&&periods.includes(b.period)).map(b=>`${b.day}:${b.period}`)).size,free=capacity-blockedCount
@@ -111,8 +112,9 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
     issues.push({severity:'error',step:4,message:`${name||`ครูรหัส ${teacher}`} ต้องสอน ${need} คาบ แต่มีเวลาว่าง ${free} คาบ (รายวิชา ${subjects} · กิจกรรม ${activities} · คาบไม่ว่าง ${blockedCount})`,
       details:entries.filter(e=>e.count>0).map(e=>`${[...e.labels].join(' / ')}: ${e.count} คาบ/สัปดาห์${e.labels.size>1?' (รวมกลุ่ม นับครั้งเดียว)':''}`)})
   }
-  for(const venue of new Set(lessons.flatMap(l=>l.roomId?[l.roomId]:[]))){const uses=lessons.filter(l=>l.roomId===venue),events=new Map<string,number>();for(const l of uses)events.set(l.activityGroupId||l.id,Math.max(events.get(l.activityGroupId||l.id)||0,l.count));const need=[...events.values()].reduce((a,b)=>a+b,0);if(need>capacity)err(`สถานที่ของ ${uses[0]?.label} ต้องใช้ ${need} คาบ แต่มี ${capacity} ช่อง`,5)}
+  for(const venue of new Set(lessons.flatMap(l=>l.roomId?[l.roomId]:[]))){const uses=lessons.filter(l=>l.roomId===venue),events=new Map<string,number>();for(const l of uses)for(const part of teachingQuotaParts(l))events.set(part.id,Math.max(events.get(part.id)||0,part.count));const need=[...events.values()].reduce((a,b)=>a+b,0);if(need>capacity)err(`สถานที่ของ ${uses[0]?.label} ต้องใช้ ${need} คาบ แต่มี ${capacity} ช่อง`,5)}
 
+  for(const message of jointTeachingSlotErrors(lessons.map(lesson=>({...lesson,activityGroupId:undefined})),fixed))issues.push({severity:'error',message,step:6,code:'fixed_joint_mismatch'})
   return issues
 }
 /** Improve a complete answer; never move retained cells, activities or multi-period blocks. */
@@ -123,7 +125,7 @@ export function improveMorningAssignments(lessons:PlannedLesson[],fixed:PlannedS
   const retained=new Set(fixed.map(row=>cell(row.classroomId,row.day,row.period))),occupied=new Map<string,PlannedSlot>()
   const teachers=new Map<string,Set<PlannedSlot>>(),venues=new Map<string,Set<PlannedSlot>>(),dayCount=new Map<string,number>()
   const blocked=new Set(unavailable.map(block=>cell(block.teacherId,block.day,block.period)))
-  const single=(lesson:PlannedLesson|undefined)=>!!lesson&&!lesson.activity&&!lesson.activityGroupId&&!lesson.fixedOnly&&(!lesson.pattern||lesson.pattern.every(size=>size===1))
+  const single=(lesson:PlannedLesson|undefined)=>!!lesson&&!lesson.activity&&!lesson.activityGroupId&&!Object.keys(lesson.jointTeachingCells||{}).length&&!lesson.fixedOnly&&(!lesson.pattern||lesson.pattern.every(size=>size===1))
   const register=(row:PlannedSlot,add:boolean)=>{
     const lesson=row.lessonId?byId.get(row.lessonId):undefined,key=cell(row.classroomId,row.day,row.period)
     if(add)occupied.set(key,row);else occupied.delete(key)
@@ -513,7 +515,7 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
     nodes:result.nodes+repairNodes,elapsedMs:Date.now()-started,timeLimitMs:requestedTimeLimitMs})
   const issues=checkPlanning(lessons,fixed,plan.days,times,unavailable)
   if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,assignments:[] as PlannedSlot[],issues,nodes:0}
-  if(lessons.some(lesson=>!lesson.activity&&lesson.activityGroupId))return finish({...solveJointTeachingSchedule(lessons,fixed,plan,times,unavailable,blocksFor,lessonMorningPriority,maxNodes,timeLimitMs),issues})
+  if(lessons.some(lesson=>!lesson.activity&&(lesson.activityGroupId||Object.keys(lesson.jointTeachingCells||{}).length)))return finish({...solveJointTeachingSchedule(lessons,fixed,plan,times,unavailable,blocksFor,lessonMorningPriority,maxNodes,timeLimitMs),issues})
   if(!plan.reduceGaps&&plan.maxContinuous===0&&lessons.length>=50&&lessons.some(l=>!l.fixedOnly&&(l.activity||l.pattern?.some(length=>length>1)))&&maxNodes>0&&timeLimitMs>0){
     const repairStarted=Date.now(),repair=solveBlockRepair(lessons,fixed,plan,times,unavailable,lessonMorningPriority,Math.min(maxNodes,120_000),Math.min(timeLimitMs,6000))
     if(repair?.status==='complete')return finish({...repair,issues,solver:'block_repair',timeLimitMs})

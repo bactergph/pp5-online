@@ -5,8 +5,11 @@
 .schedule-prep .prep-subject-dialog .central-subject-panel h3{margin:0;font-size:17px;color:#1b2d4b}
 .schedule-prep .prep-subject-dialog .central-subject-panel p{margin:5px 0 0;font-size:13px;line-height:1.7;color:#60728c}
 .schedule-prep .prep-subject-dialog .central-subject-panel button:not(.prep-primary){min-height:38px;padding:8px 12px;border:1px solid #cad8ec;border-radius:10px;background:#fff;color:#244264;font:inherit;font-size:12px;cursor:pointer}
-.schedule-prep .prep-subject-dialog .central-subject-grade{display:grid;gap:7px;max-width:240px;font-size:13px;color:#465b78}
-.schedule-prep .prep-subject-dialog .central-subject-grade select{min-height:44px;width:100%;padding:9px 12px;border:1px solid #cad8ec;border-radius:10px;background:#fff;color:#1b2d4b;font:inherit;font-size:16px}
+.schedule-prep .prep-subject-dialog .central-subject-grades{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.schedule-prep .prep-subject-dialog .central-subject-grades>label{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;min-width:0;padding:11px;border:1px solid #d5e3f6;border-radius:11px;background:#fff;color:#244264;font-size:14px;cursor:pointer}
+.schedule-prep .prep-subject-dialog .central-subject-grades>label:has(input:checked){border-color:#8db3ed;background:#eaf2ff}
+.schedule-prep .prep-subject-dialog .central-subject-grades small{font-size:11px;margin-top:3px;color:#60728c}
+.schedule-prep .prep-subject-dialog .central-subject-grade-tag{display:inline-block;padding:1px 5px;border-radius:5px;background:#e3edff;color:#17469f;font-size:11px;font-weight:600}
 .schedule-prep .prep-subject-dialog .central-subject-panel fieldset{display:block;min-width:0;margin:0;padding:0;border:0}
 .schedule-prep .prep-subject-dialog .central-subject-panel legend{margin-bottom:8px;font-size:14px;font-weight:600;color:#244264}
 .schedule-prep .prep-subject-dialog .central-subject-choice-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
@@ -27,7 +30,9 @@
 .schedule-prep .prep-subject-dialog .central-subject-panel .is-unavailable{background:#f8f9fc;cursor:default}
 .schedule-prep .prep-subject-dialog .central-subject-panel button:disabled{opacity:.5;cursor:not-allowed}
 .schedule-prep .prep-subject-dialog .central-subject-room-notice{padding:13px;border:1px solid #ead4a1;border-radius:12px;background:#fffaf0;color:#805c1d;font-size:13px;line-height:1.7}
+.schedule-prep .prep-subject-dialog .central-subject-rooms+.central-subject-room-notice{margin-top:12px}
 .schedule-prep .prep-subject-dialog .central-subject-room-notice strong{display:block;font-size:14px}
 .schedule-prep .prep-subject-dialog .central-subject-room-notice p{color:#6c5c40;overflow-wrap:anywhere}
 .schedule-prep .prep-subject-dialog .central-subject-panel :is(input,select,button):focus-visible{outline:3px solid #a9c8ff;outline-offset:2px}
 @media(max-width:767px){.schedule-prep .prep-subject-dialog .central-subject-panel{padding:13px;gap:14px}.schedule-prep .prep-subject-dialog .central-subject-options{grid-template-columns:minmax(0,1fr)}.schedule-prep .prep-subject-dialog .central-subject-panel>header{flex-wrap:wrap}.schedule-prep .prep-subject-dialog .central-subject-stage{align-items:stretch;flex-direction:column}.schedule-prep .prep-subject-dialog .central-subject-stage button{width:100%}.schedule-prep .prep-subject-dialog .central-subject-options em{max-width:115px}.schedule-prep .prep-subject-dialog .central-subject-toggle{width:100%}}
+@media(max-width:767px){.schedule-prep .prep-subject-dialog .central-subject-grades{grid-template-columns:repeat(3,minmax(0,1fr))}.schedule-prep .prep-subject-dialog .central-subject-grades>label{padding:9px}}

@@ -2,7 +2,14 @@ import type {LessonRule, PlannedLesson} from './schedule-planning'
 
 /** A whole weekly offering taught to several distinct classrooms at once.
  * Subject IDs/codes and student records remain separate. */
-export type JointTeachingGroup = {id: string; lessonIds: string[]}
+export type JointTeachingGroup = {id: string; lessonIds: string[]; cells?:{day:number;period:number}[]}
+export type JointCellLesson = {id:string;activityGroupId?:string;jointTeachingCells?:Record<string,string>}
+/** A fixed shared session shares teacher/venue resources only at its own time. */
+export function teachingEventAt(lesson:JointCellLesson,day:number,period:number){return lesson.jointTeachingCells?.[`${day}:${period}`]||lesson.activityGroupId||lesson.id}
+export function teachingQuotaParts(lesson:JointCellLesson&{count:number}):{id:string;count:number;cell?:string}[]{
+  const cells=Object.entries(lesson.jointTeachingCells||{})
+  return [...(lesson.count>cells.length||!cells.length?[{id:lesson.activityGroupId||lesson.id,count:lesson.count-cells.length}]:[]),...cells.map(([cell,id])=>({id:id+':'+cell,count:1,cell}))]
+}
 type Lesson = Pick<PlannedLesson, 'id'|'classroomId'|'teacherId'|'count'|'activity'> & Partial<PlannedLesson>
 type Config = {teachingGroups?: JointTeachingGroup[]; rules?: Record<string, LessonRule>}
 const signature=(lesson:Lesson, rule?:LessonRule)=>{
@@ -25,7 +32,10 @@ export function validateJointTeachingGroups(groups:JointTeachingGroup[]|undefine
     if(new Set(members.map(lesson=>lesson.classroomId)).size!==members.length)throw Error('กลุ่มสอนรวมต้องเลือกวิชาจากคนละห้อง')
     const teacher=members[0].teacherId
     if(!teacher||members.some(lesson=>lesson.teacherId!==teacher))throw Error('กลุ่มสอนรวมต้องมีครูคนเดียวกันครบทุกห้อง')
-    if(members.some(lesson=>signature(lesson,rules[lesson.id])!==signature(members[0],rules[members[0].id])))throw Error('กลุ่มสอนรวมต้องมีจำนวนคาบ รูปแบบคาบ สถานที่ และช่วงเวลาตรงกัน กรุณาแก้ภาระสอนก่อนรวม')
+    if(group.cells!==undefined){
+      if(!Array.isArray(group.cells)||!group.cells.length||group.cells.length>40||new Set(group.cells.map(cell=>`${cell.day}:${cell.period}`)).size!==group.cells.length||group.cells.some(cell=>!Number.isInteger(cell.day)||cell.day<1||cell.day>5||!Number.isInteger(cell.period)||cell.period<1||cell.period>8))throw Error('วันและคาบของการสอนรวมไม่ถูกต้อง')
+      for(const lesson of members){signature(lesson,rules[lesson.id]);if(group.cells.length>(rules[lesson.id]?.count??lesson.count))throw Error('คาบสอนรวมเกินภาระสอนของ '+lesson.label)}
+    }else if(members.some(lesson=>signature(lesson,rules[lesson.id])!==signature(members[0],rules[members[0].id])))throw Error('กลุ่มสอนรวมต้องมีจำนวนคาบ รูปแบบคาบ สถานที่ และช่วงเวลาตรงกัน กรุณาแก้ภาระสอนก่อนรวม')
     if((rules[members[0].id]?.count??members[0].count)<1)throw Error('กำหนดภาระสอนก่อนสร้างกลุ่มสอนรวม')
   }
 }
@@ -34,8 +44,8 @@ export function validateJointTeachingGroups(groups:JointTeachingGroup[]|undefine
  * namespace. activity stays false, so scores/reports/workload remain subjects. */
 export function withJointTeachingGroups<T extends Lesson>(lessons:T[],config:Config,strict=false):T[] {
   if(strict)validateJointTeachingGroups(config.teachingGroups,lessons,config.rules)
-  const groups=new Map((config.teachingGroups||[]).flatMap(group=>group.lessonIds.map(id=>[id,`teaching:${group.id}`] as const)))
-  return lessons.map(lesson=>lesson.activity?lesson:{...lesson,activityGroupId:groups.get(lesson.id)})
+  const groups=new Map((config.teachingGroups||[]).filter(group=>!group.cells).flatMap(group=>group.lessonIds.map(id=>[id,`teaching:${group.id}`] as const)))
+  return lessons.map(lesson=>lesson.activity?lesson:{...lesson,activityGroupId:groups.get(lesson.id),jointTeachingCells:Object.fromEntries((config.teachingGroups||[]).filter(group=>group.cells&&group.lessonIds.includes(lesson.id)).flatMap(group=>group.cells!.map(cell=>[`${cell.day}:${cell.period}`,`teaching-cell:${group.id}`])))})
 }
 
 /** Selecting one room for automatic rebuilding includes every room in each
@@ -46,18 +56,23 @@ export function jointTeachingScope(roomIds:string[],lessons:Pick<Lesson,'id'|'cl
   return [...rooms]
 }
 
-export function jointTeachingSlotErrors(lessons:Lesson[],rows:{classroomId:string;lessonId:string|null;day:number;period:number}[]){
+export function jointTeachingSlotErrors(lessons:Lesson[],rows:{classroomId:string;lessonId:string|null;day:number;period:number;locked?:boolean}[]){
   const result:string[]=[],groups=new Map<string,Lesson[]>()
   for(const lesson of lessons)if(!lesson.activity&&lesson.activityGroupId)groups.set(lesson.activityGroupId,[...groups.get(lesson.activityGroupId)||[],lesson])
   for(const members of groups.values()){
     const cells=(id:string)=>rows.filter(row=>row.lessonId===id).map(row=>`${row.day}:${row.period}`).sort().join(',')
     if(members.some(lesson=>cells(lesson.id)!==cells(members[0].id)))result.push('วิชาสอนรวมต้องอยู่วันและคาบเดียวกันครบทุกห้อง กรุณาจัดตารางกลุ่มนี้ใหม่พร้อมกัน')
   }
+  for(const lesson of lessons)for(const key of Object.keys(lesson.jointTeachingCells||{})){
+    const [day,period]=key.split(':').map(Number)
+    if(!rows.some(row=>row.lessonId===lesson.id&&row.classroomId===lesson.classroomId&&row.day===day&&row.period===period&&row.locked!==false))result.push(`${lesson.label} ต้องคงคาบสอนรวมวันที่ ${day} คาบ ${period} ให้ครบทุกห้อง`)
+  }
   return result
 }
 
 /** Teacher views show every course code, while class views keep their own code. */
-export function jointTeachingSubjectLabel<T extends {id:string;activityGroupId?:string;code?:string;name?:string}>(lesson:T,lessons:T[]){
-  const members=lesson.activityGroupId?.startsWith('teaching:')?lessons.filter(member=>member.activityGroupId===lesson.activityGroupId):[lesson]
+export function jointTeachingSubjectLabel<T extends JointCellLesson&{code?:string;name?:string}>(lesson:T,lessons:T[],day?:number,period?:number){
+  const event=day!==undefined&&period!==undefined?teachingEventAt(lesson,day,period):lesson.activityGroupId
+  const members=event?.startsWith('teaching')?lessons.filter(member=>day!==undefined&&period!==undefined?teachingEventAt(member,day,period)===event:member.activityGroupId===event):[lesson]
   return [[...new Set(members.map(member=>member.code).filter(Boolean))].join('/'),[...new Set(members.map(member=>member.name).filter(Boolean))].join(' / ')].filter(Boolean).join(' ')
 }

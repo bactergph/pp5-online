@@ -1,5 +1,6 @@
 import type { Preparation } from './schedule-preparation'
 import type { LessonRule, SchedulePlan } from './schedule-planning'
+import {teachingEventAt} from './schedule-joint-teaching'
 
 export type SchedulePlace = { id: string; name: string }
 export type SchedulePlaceChange =
@@ -77,7 +78,7 @@ export function applySchedulePlaceChange(data: Preparation, change: SchedulePlac
     if (!venue) continue
     const key = `${venue}:${slot.day_of_week}:${slot.period}`, peers = occupied.get(key) || []
     for (const peer of peers) {
-      if (peer.lesson.classroomId === lesson.classroomId || (lesson.activityGroupId && peer.lesson.activityGroupId === lesson.activityGroupId)) continue
+      if (peer.lesson.classroomId === lesson.classroomId || teachingEventAt(lesson,slot.day_of_week,slot.period)===teachingEventAt(peer.lesson,slot.day_of_week,slot.period)) continue
       if (!(changed.has(id) || changed.has(peer.lesson.id)) || oldVenue === venue && peer.oldVenue === venue) continue
       const day = ['', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'][slot.day_of_week] || String(slot.day_of_week)
       throw Error(`${plan.rooms.find(place => place.id === venue)?.name || 'สถานที่'} ชนวัน${day} คาบ ${slot.period}\n${peer.lesson.label} กับ ${lesson.label}\nกรุณาเลือกสถานที่อื่น หรือย้ายคาบที่ชนก่อน`)

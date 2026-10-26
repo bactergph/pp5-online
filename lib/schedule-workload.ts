@@ -1,6 +1,7 @@
 import { activityTeachers, lessonTeachers, type ActivityTeam } from './schedule-activity-teams'
 import type { ScheduleLesson, ScheduleSlot } from './schedule-store'
 import { workloadStatus, workloadLabel } from './schedule-helpers'
+import {teachingQuotaParts} from './schedule-joint-teaching'
 
 export type ScheduleWorkloadRow = {
   id: string; name: string; position: string | null; note?: string
@@ -25,7 +26,7 @@ export function summarizeScheduleWorkload(
   const quota = (value: number) => Number.isFinite(value) && value > 0 ? value : 0
   const counted=new Set<string>()
   for (const lesson of data.lessons.filter(lesson => !lesson.activity))
-    for (const id of lessonTeachers(lesson)) {const key=id+':'+(lesson.activityGroupId||lesson.id);if(!counted.has(key)){counted.add(key);get(id).subjects += quota(lesson.count)}}
+    for (const id of lessonTeachers(lesson)) for(const part of teachingQuotaParts(lesson)){const key=id+':'+part.id;if(!counted.has(key)){counted.add(key);get(id).subjects += quota(part.count)}}
 
   const cellKey = (room: string, day: number, period: number) => `${room}:${day}:${period}`
   const cells = new Map<string, { day: number; period: number; teachers: string[] }>()

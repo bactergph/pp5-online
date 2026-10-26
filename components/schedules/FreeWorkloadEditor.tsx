@@ -1,5 +1,5 @@
 'use client'
-import {applyJointTeachingLock} from '@/lib/schedule-joint-lock'
+import {applyJointTeachingLock,prepareJointTeachingSession} from '@/lib/schedule-joint-lock'
 import {localDraftCells} from '@/lib/schedule-device-view'
 import { useEffect,useRef } from 'react'
 import WorkloadEditor, {type WorkloadChange,type WorkloadOperations} from './WorkloadEditor'
@@ -14,7 +14,7 @@ export default function FreeWorkloadEditor({plan,onPlan,busy}:{plan:FreeWizardPl
   async function save(next:FreeWizardPlan){
     const data=devicePreparation(next)
     validateJointTeachingGroups(next.teachingGroups,data.lessons)
-    const errors=jointTeachingSlotErrors(data.lessons,next.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period})))
+    const errors=jointTeachingSlotErrors(data.lessons,next.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period,locked:!!cell.locked})))
     if(errors.length)throw Error(errors[0])
     const result=await onPlan(next)
     if(result===false)throw Error('บันทึกลงเครื่องไม่สำเร็จ กรุณาลองใหม่หรือดาวน์โหลดสำเนา')
@@ -29,7 +29,7 @@ export default function FreeWorkloadEditor({plan,onPlan,busy}:{plan:FreeWizardPl
   }
   const attempt=async(work:()=>Promise<void>)=>{try{await work();return {error:null}}catch(error){return {error:error instanceof Error?error.message:'บันทึกไม่สำเร็จ'}}}
   const operations:WorkloadOperations={
-    setJointTeachingScheduleCell:(_year,_term,request)=>attempt(async()=>{const rows=applyJointTeachingLock(devicePreparation(latest.current),request,_year);await save({...latest.current,timetable:localDraftCells({status:'complete',issues:[],rows,offerings:[],unlock:[],assigned:0,locked:0})})}),
+    setJointTeachingScheduleCell:(_year,_term,request)=>attempt(async()=>{const changed=request.lessonIds?prepareJointTeachingSession(devicePreparation(latest.current),request,_year):null;const rows=changed?.rows||applyJointTeachingLock(devicePreparation(latest.current),request,_year);await save({...latest.current,teachingGroups:changed?.plan.teachingGroups||latest.current.teachingGroups,timetable:localDraftCells({status:'complete',issues:[],rows,offerings:[],unlock:[],assigned:0,locked:0})})}),
     saveClassScheduleCell:(room,_year,day,period,lesson,_note,_term,expected)=>attempt(()=>save(changeDeviceCell(latest.current,room,day,period,lesson,expected))),
     toggleScheduleCellLock:(room,_year,day,period)=>attempt(()=>save(lockDeviceCell(latest.current,room,day,period))),
     setTeacherAvailabilityBlock:(_year,_term,teacher,day,period,blocked)=>attempt(()=>save(blockDeviceTeacher(latest.current,teacher,day,period,blocked))),
@@ -41,5 +41,5 @@ export default function FreeWorkloadEditor({plan,onPlan,busy}:{plan:FreeWizardPl
   }
   const teaching=data.lessons.filter(lesson=>!lesson.activity)
   const ready=teaching.length>0&&teaching.every(lesson=>plan.teachers.some(teacher=>teacher.id===lesson.teacherId)&&lesson.count>0&&lesson.pattern?.reduce((sum,size)=>sum+size,0)===lesson.count)
-  return <WorkloadEditor teachingGroups={plan.teachingGroups||[]} onTeachingGroupsChange={groups=>save({...latest.current,teachingGroups:groups})} classrooms={data.classrooms} lessons={teaching} teachers={data.teachers} rules={data.plan.rules} teacherAssignments={{}} slots={data.slots} places={data.plan.rooms} blocks={data.blocks} days={data.plan.days} periods={data.periods} year="local" term={1} busy={busy} ready={ready} onCommit={commit} onRefresh={async()=>{}} operations={operations}/>
+  return <WorkloadEditor snapshotHash={data.hash} teachingGroups={plan.teachingGroups||[]} onTeachingGroupsChange={groups=>save({...latest.current,teachingGroups:groups})} classrooms={data.classrooms} lessons={teaching} teachers={data.teachers} rules={data.plan.rules} teacherAssignments={{}} slots={data.slots} places={data.plan.rooms} blocks={data.blocks} days={data.plan.days} periods={data.periods} year="local" term={1} busy={busy} ready={ready} onCommit={commit} onRefresh={async()=>{}} operations={operations}/>
 }

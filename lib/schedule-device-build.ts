@@ -32,7 +32,7 @@ export type DeviceLesson = {
   subjectGroup?: string
   teacherName?: string
   teacherIds?: string[]
-  activityGroupId?: string
+  activityGroupId?: string; jointTeachingCells?:Record<string,string>
   code?: string
   spread?: boolean
   selectable?: boolean
@@ -85,7 +85,7 @@ function activityPlacement(data: DeviceSnapshot, year: string, reserved?: Device
   const extra: DeviceLesson[] = []
   const unlock: DeviceSlot[] = []
   const seen = new Set<string>()
-  const patch = new Map<string, { teacherIds: string[]; teacherId: null; activityGroupId?: string; name: string; teacherName: string }>()
+  const patch = new Map<string, { teacherIds: string[]; teacherId: null; activityGroupId?: string; jointTeachingCells?:Record<string,string>; name: string; teacherName: string }>()
   const flexible = new Map<string, { count: number; roomIds: string[]; joint: boolean }>()
   for (const group of data.plan.activityGroups || []) {
     const label = data.activities.find(a => a.id === group.settingId)?.label || 'กิจกรรม'

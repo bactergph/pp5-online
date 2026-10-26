@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm'),ts=require('typescript'),assert=require('assert/strict');
-function moduleFrom(path,deps){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:n=>deps[n]||{}});return exports}
+function moduleFrom(path,deps){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:n=>deps[n]||(n==='./schedule-joint-teaching'?moduleFrom('lib/schedule-joint-teaching.ts',{}):{})});return exports}
 const schedules=moduleFrom('lib/schedules.ts',{});
 const teams=moduleFrom('lib/schedule-activity-teams.ts',{'./schedule-helpers':{}});
 for(const level of ['อ.2','อ.3','อ2','อนุบาล 2'])assert.equal(schedules.isTimetableClassroom(level),false);

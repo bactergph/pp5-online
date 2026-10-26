@@ -6,7 +6,7 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createRequire } from 'node:module'
 const require=createRequire(import.meta.url)
-function load(file,deps={}){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,{exports,console,require:name=>deps[name]||(['react','react/jsx-runtime','react-icons/fi'].includes(name)?require(name):{})});return exports}
+function load(file,deps={}){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,{exports,console,require:name=>deps[name]||(name==='./schedule-joint-teaching'?load('lib/schedule-joint-teaching.ts'):['react','react/jsx-runtime','react-icons/fi'].includes(name)?require(name):{})});return exports}
 const solver=load('lib/schedule-solver.ts'),planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':load('lib/schedule-block-repair.ts')})
 const {verifyCompleteSchedule}=load('lib/schedule-verification.ts',{'./schedule-planning':planning})
 const periods=[{period:1,start_time:'08:00',end_time:'09:00',is_break:false},{period:2,start_time:'09:00',end_time:'10:00',is_break:false},{period:0,start_time:'10:00',end_time:'11:00',is_break:true},{period:3,start_time:'11:00',end_time:'12:00',is_break:false}]

@@ -1,9 +1,9 @@
-import {applyJointTeachingLock} from './schedule-joint-lock'
+import {applyJointTeachingLock,prepareJointTeachingSession} from './schedule-joint-lock'
 import type { ScheduleOperations } from '../components/schedules/ScheduleServices'
 import { activityTeachers, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { validateSubjectInputs } from './schedule-input'
 import { validatePeriodTimes } from './schedule-helpers'
-import {validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingSubjectLabel} from './schedule-joint-teaching'
+import {validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingSubjectLabel,teachingEventAt,teachingQuotaParts} from './schedule-joint-teaching'
 import { validatePlan } from './schedule-planning'
 import { freeActivityGroup, freeActivityTeachers, newId, toDeviceSnapshot, type FreeActivity, type FreeWizardPlan } from './schedule-device-free'
 import {freeTeacherLimit as resolveTeacherLimit} from './free-schedule-entitlement'
@@ -43,7 +43,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
   async function put(year:string,term:number,next:FreeWizardPlan) {
     const snapshot=toDeviceSnapshot(next,[])
     validateJointTeachingGroups(next.teachingGroups,snapshot.lessons)
-    const syncErrors=jointTeachingSlotErrors(snapshot.lessons,next.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period})))
+    const syncErrors=jointTeachingSlotErrors(snapshot.lessons,next.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period,locked:!!cell.locked})))
     if(syncErrors.length)throw Error(syncErrors[0])
     const current=read(),workspace=year===deviceYear(current)?current:current.archives?.[year]
     if(!workspace)throw Error('ไม่พบปีการศึกษา')
@@ -90,14 +90,14 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       const lesson=data.lessons.find(item=>item.id===cell.class_subject_id)
       if(!lesson)continue
       const [day,period]=position.split('-').map(Number)
-      const conflicts=busyCells(current).filter(other=>other.day===day&&other.period===period&&other.classroomId!==room&&lessonTeachers(lesson).includes(other.teacherId)&&!(lesson.activityGroupId&&other.group===lesson.activityGroupId))
+      const conflicts=busyCells(current).filter(other=>other.day===day&&other.period===period&&other.classroomId!==room&&lessonTeachers(lesson).includes(other.teacherId)&&other.group!==teachingEventAt(lesson,day,period))
       if(conflicts.length)warnings[position]=[...new Set(conflicts.map(other=>current.rooms.find(item=>item.id===other.classroomId)?.label||''))]
     }
     return {grid,subjects,warnings,quotas:{items,filled:items.reduce((sum,item)=>sum+item.used,0),totalTarget:items.reduce((sum,item)=>sum+item.target,0)}}
   }
   function busyCells(current:FreeWizardPlan) {
     const data=devicePreparation(current)
-    return allCells(current).flatMap(cell=>{const lesson=data.lessons.find(item=>item.id===lessonId(cell));return lesson?lessonTeachers(lesson).map(teacherId=>({teacherId,day:cell.day,period:cell.period,label:[lesson.label,lesson.roomName].filter(Boolean).join(' · '),classroomId:cell.classroomId,lessonId:lesson.id,locked:!!cell.locked,group:lesson.activityGroupId})):[]})
+    return allCells(current).flatMap(cell=>{const lesson=data.lessons.find(item=>item.id===lessonId(cell));return lesson?lessonTeachers(lesson).map(teacherId=>({teacherId,day:cell.day,period:cell.period,label:[lesson.label,lesson.roomName].filter(Boolean).join(' · '),classroomId:cell.classroomId,lessonId:lesson.id,locked:!!cell.locked,group:teachingEventAt(lesson,cell.day,cell.period)})):[]})
   }
   function activityImpact(current:FreeWizardPlan,hash:string,group:ActivityTeam,remove=false) {
     stale(current,hash)
@@ -214,8 +214,9 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       return put(year,term,next)
     })),
     setJointTeachingScheduleCell:(year,term,request)=>outcome(()=>mutate(year,term,async current=>{
-      const rows=applyJointTeachingLock(devicePreparation(current),request,year)
-      const next={...current,timetable:localDraftCells({status:'complete',issues:[],rows,offerings:[],unlock:[],assigned:0,locked:0})}
+      const changed=request.lessonIds?prepareJointTeachingSession(devicePreparation(current),request,year):null
+      const rows=changed?.rows||applyJointTeachingLock(devicePreparation(current),request,year)
+      const next={...current,teachingGroups:changed?.plan.teachingGroups||current.teachingGroups,timetable:localDraftCells({status:'complete',issues:[],rows,offerings:[],unlock:[],assigned:0,locked:0})}
       fixed(next);await put(year,term,next);return {rooms:request.expected.length}
     })),
     savePreparation:(year,term,hash,config)=>outcome(()=>mutate(year,term,async current=>{
@@ -310,7 +311,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     })),
     fetchTeacherAvailability:async(year,term=1)=>{
       const current=plan(year,term),data=preparation(year,term),busy=busyCells(current),quotas=new Map<string,{id:string;teacherId:string;label:string;activity:boolean;target:number;used:number}>()
-      for(const lesson of data.lessons)for(const teacherId of lessonTeachers(lesson)){const id=lesson.activityGroupId||lesson.id,key=id+':'+teacherId,used=allCells(current).filter(cell=>lessonId(cell)===lesson.id).length,old=quotas.get(key);if(old){old.used=Math.max(old.used,used);old.target=Math.max(old.target,lesson.count);old.label+=' / '+lesson.label}else quotas.set(key,{id,teacherId,label:lesson.label,activity:!!lesson.activity,target:lesson.count,used})}
+      for(const lesson of data.lessons)for(const teacherId of lessonTeachers(lesson))for(const part of teachingQuotaParts(lesson)){const id=part.id,key=id+':'+teacherId,used=allCells(current).filter(cell=>lessonId(cell)===lesson.id&&(part.cell?part.cell===`${cell.day}:${cell.period}`:!lesson.jointTeachingCells?.[`${cell.day}:${cell.period}`])).length,old=quotas.get(key);if(old){old.used=Math.max(old.used,used);old.target=Math.max(old.target,part.count);old.label+=' / '+lesson.label}else quotas.set(key,{id,teacherId,label:lesson.label,activity:!!lesson.activity,target:part.count,used})}
       return {teachers:current.teachers,blocks:current.blocks,supported:true,lessons:data.lessons.filter(lesson=>!lesson.activity).map(lesson=>({id:lesson.id,teacherId:lesson.teacherId,classroomId:lesson.classroomId,label:lesson.label})),slots:allCells(current).map(cell=>({classroomId:cell.classroomId,day:cell.day,period:cell.period,lessonId:lessonId(cell),locked:!!cell.locked})),busy,quotas:[...quotas.values()]}
     },
     fetchTeachingScheduleGrid:async(teacher,year,term=1)=>{
@@ -318,7 +319,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       for(const cell of busyCells(current).filter(cell=>cell.teacherId===teacher)){
         const lesson=data.lessons.find(lesson=>lesson.id===cell.lessonId)!,key=`${cell.day}-${cell.period}`,room=current.rooms.find(room=>room.id===cell.classroomId)?.label||''
         const previous=grid[key]
-        grid[key]={label:lesson.name,subject_line:[jointTeachingSubjectLabel(lesson,data.lessons),lesson.roomName].filter(Boolean).join(' · '),room_line:previous?`${previous.room_line}, ${room}`:room}
+        grid[key]={label:lesson.name,subject_line:[jointTeachingSubjectLabel(lesson,data.lessons,cell.day,cell.period),lesson.roomName].filter(Boolean).join(' · '),room_line:previous?`${previous.room_line}, ${room}`:room}
       }
       return grid
     },

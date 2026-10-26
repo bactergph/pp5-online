@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 import assert from 'node:assert/strict'
 import ts from 'typescript'
-function load(file,deps={}){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:name=>deps[name]||{}});return exports}
+function load(file,deps={}){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:name=>deps[name]||(name==='./schedule-joint-teaching'?load('lib/schedule-joint-teaching.ts'):{})});return exports}
 const solver=load('lib/schedule-solver.ts')
 const planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':load('lib/schedule-block-repair.ts')})
 const {verifyCompleteSchedule}=load('lib/schedule-verification.ts',{'./schedule-planning':planning})

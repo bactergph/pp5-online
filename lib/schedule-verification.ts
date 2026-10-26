@@ -1,3 +1,4 @@
+import {jointTeachingSlotErrors} from './schedule-joint-teaching'
 import { blocksFor, checkPlanning, type PlannedLesson, type PlannedSlot, type PlanningIssue } from './schedule-planning'
 import type { PeriodTimeRow } from './schedule-helpers'
 
@@ -33,5 +34,6 @@ export function verifyCompleteSchedule(lessons: PlannedLesson[], rows: PlannedSl
     if (previous !== undefined && previous !== cells) add(`${lesson.label} ${lesson.activity?'กิจกรรมรวมกลุ่ม':'วิชาสอนรวม'}ไม่ได้จัดพร้อมกันทุกห้อง`)
     groups.set(lesson.activityGroupId!, cells)
   }
+  for(const message of jointTeachingSlotErrors(lessons,rows))add(message)
   return issues
 }

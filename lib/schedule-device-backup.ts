@@ -44,7 +44,7 @@ export function readDeviceBackup(raw:unknown,teacherLimit?:number):DeviceBundle 
     const normalized=normalizePlan(plan as Partial<FreeWizardPlan>)
     const snapshot=toDeviceSnapshot(normalized,[])
     validateJointTeachingGroups(normalized.teachingGroups,snapshot.lessons)
-    if(jointTeachingSlotErrors(snapshot.lessons,normalized.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period}))).length)return invalid()
+    if(jointTeachingSlotErrors(snapshot.lessons,normalized.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period,locked:!!cell.locked}))).length)return invalid()
     plans.push({...normalized,substitutes:(plan.substitutes||{}) as Record<string,FreeSubstituteEntry[]>})
   }
   const merge=<T extends {id:string}>(a:T[],b:T[])=>[...new Map([...b,...a].map(item=>[item.id,item])).values()]
