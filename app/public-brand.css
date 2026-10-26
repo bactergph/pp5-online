@@ -1,0 +1,58 @@
+/* Public introduction and authentication use the same blue/gold identity as
+   the workspace. Every selector is scoped; printed documents are untouched. */
+@media screen {
+  .welcome-page.auth-screen {
+    color: #1b2d4b;
+    background: radial-gradient(ellipse at 8% 20%, #dceaff 0, transparent 44%),
+      radial-gradient(ellipse at 95% 85%, #fff1d1 0, transparent 38%), #f5f8fd;
+  }
+  .auth-screen .auth-screen-header { border-bottom: 1px solid #dce5f180; }
+  .auth-screen .auth-screen-intro h1,
+  .auth-screen .auth-screen-card h2 { color: #1b2d4b; font-family: var(--font-kanit), 'Sarabun', sans-serif; font-weight: 600; }
+  .auth-screen .welcome-eyebrow { display: inline-flex; align-items: center; padding: 5px 12px; border: 1px solid #cddffa; border-radius: 30px; background: #f5f9ff; color: #235bc8; }
+  .auth-screen .auth-screen-card {
+    border: 1px solid #d9e4f3; border-top: 3px solid #d7b770; border-radius: 24px;
+    background: #fff; box-shadow: 0 3px 8px #17365b06, 0 20px 56px #17365b0f;
+  }
+  .auth-screen .auth-benefits li { padding: 10px 12px; border: 1px solid #dce6f3; border-radius: 12px; background: #ffffffb8; box-shadow: 0 2px 6px #17365b03; }
+  .auth-screen .auth-benefits svg { color: #235bc8; }
+  .auth-screen .auth-school-note { border-color: #d7b770; border-radius: 0 14px 14px 0; background: #fffdf8b8; }
+  .auth-screen .welcome-login-form :is(input:not([type=checkbox]), select) { border-color: #c5d2e3; background: #fbfcff; border-radius: 11px; box-shadow: inset 0 1px 2px #17365b05; }
+  .auth-screen .welcome-login-form :is(input:not([type=checkbox]), select):focus { background: #fff; border-color: #3a77d7; box-shadow: 0 0 0 4px #235bc814; }
+  .auth-screen .welcome-button-primary { border-radius: 12px; background: linear-gradient(125deg, #2e70da, #235bc8); box-shadow: inset 0 1px #ffffff30, 0 5px 12px #235bc826; }
+  .auth-screen .welcome-button-primary:hover { background: linear-gradient(125deg, #2667cf, #17469f); }
+  .auth-screen .auth-form-notice { border: 1px solid #d7e5fa; border-radius: 12px; background: #eef5ff; }
+  .auth-screen .auth-registration-steps li > span { border: 1px solid #c4d8f7; border-radius: 11px; background: linear-gradient(145deg, #f2f7ff, #dceaff); box-shadow: inset 0 1px #fff, 0 3px 6px #235bc809; }
+  .auth-screen .auth-form-section legend { color: #39506f; }
+  .auth-screen .auth-screen-footer { color: #60728c; }
+
+  .jsk { --ink: #1b2d4b; --muted: #465b78; --blue: #235bc8; --line: #dce5f1; --tint: #f3f7fd; --radius: 18px; }
+  .jsk .jsk-header { background: #ffffffed; border-color: #dce5f1; box-shadow: 0 3px 16px #17365b06; backdrop-filter: blur(12px); }
+  .jsk .jsk-hero { background: radial-gradient(ellipse at 95% 12%, #e0ecff, transparent 55%), radial-gradient(ellipse at 0 95%, #fff5dd, transparent 46%), #fff; border-bottom: 1px solid #e3eaf5; }
+  .jsk :is(h1, h2, h3, h4) { font-family: var(--font-kanit), 'Sarabun', sans-serif; font-weight: 600; }
+  .jsk .jsk-hero h1 span { color: #235bc8; }
+  .jsk .jsk-eyebrow { color: #986719; }
+  .jsk .jsk-button { border-radius: 12px; }
+  .jsk .jsk-primary { background: linear-gradient(125deg, #2e70da, #235bc8); border-color: #235bc8; box-shadow: inset 0 1px #ffffff26, 0 5px 12px #235bc826; }
+  .jsk .jsk-primary:hover { background: linear-gradient(125deg, #2667cf, #17469f); }
+  .jsk :is(.jsk-browser, .jsk-product, .jsk-example, .jsk-school-type, .jsk-core-features article) {
+    border: 1px solid #dce5f1; border-radius: 20px; background: #fff;
+    box-shadow: 0 3px 6px #17365b05, 0 14px 32px #17365b0a;
+  }
+  .jsk .jsk-browser { overflow: hidden; box-shadow: 0 6px 12px #17365b08, 0 24px 56px #17365b15; }
+  .jsk .jsk-paper-peek { box-shadow: 0 5px 10px #17365b12, 0 18px 36px #17365b16; }
+  .jsk .jsk-proof { border: 1px solid #dce5f1; border-radius: 18px; background: linear-gradient(125deg, #f7faff, #fffdf7); }
+  .jsk .jsk-feature-icon { border: 1px solid #d7e4f8; border-radius: 14px; background: linear-gradient(145deg, #f1f6ff, #deebff); color: #235bc8; box-shadow: inset 0 1px #fff; }
+  .jsk .jsk-tint { background: linear-gradient(180deg, #f3f7fd, #f8faff); }
+  .jsk .jsk-support-features article { border: 1px solid #dce5f1; border-radius: 16px; background: #fff; padding: 22px; box-shadow: 0 3px 12px #17365b05; }
+  .jsk .jsk-tabs { border: 1px solid #d6e1f0; border-radius: 14px; background: #eaf0f9; padding: 5px; }
+  .jsk .jsk-tabs button[aria-selected=true] { border-radius: 10px; box-shadow: 0 2px 7px #17365b12; }
+  .jsk :focus-visible, .auth-screen :focus-visible { outline: 3px solid #79a6ef; outline-offset: 3px; }
+  @media (max-width: 700px) {
+    .auth-screen .auth-screen-card { border-radius: 20px; }
+    .jsk .jsk-hero { background: radial-gradient(ellipse at 95% 0, #e0ecff, transparent 65%), #fff; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .jsk *, .auth-screen * { transition: none !important; scroll-behavior: auto !important; }
+  }
+}

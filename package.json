@@ -10,6 +10,7 @@
     "test:sgs": "node scripts/build-sgs-extension.cjs && node scripts/test-sgs-transfer.cjs && node scripts/test-score-transfer.cjs && node scripts/test-sgs-extension-ui.mjs",
     "start": "next start",
     "lint": "eslint",
+    "test:interface-design": "node scripts/test-dashboard-shortcuts.cjs && node scripts/test-interface-design.mjs",
     "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs && node scripts/test-substitute-availability.cjs && node scripts/test-substitute-services.cjs && node scripts/test-schedule-workload.mjs",
     "test:schedule-wizard-button": "node scripts/test-schedule-wizard-button.mjs",
     "test:schedule-print-date": "node scripts/test-schedule-print-date.mjs",

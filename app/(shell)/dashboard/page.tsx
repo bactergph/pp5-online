@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { verifySession } from '@/lib/dal'
 import { isAcademicHeadRole } from '@/lib/roles'
+import {DashboardStatCard as StatCard, DashboardQuickLink as QuickLink} from '@/components/dashboard/DashboardCards'
 
 export const dynamic = 'force-dynamic'
 
@@ -115,7 +116,7 @@ export default async function DashboardPage() {
   const showClassroomAdminCard = isActingDirector || s.role === 'principal'
 
   return (
-    <div className="page-stack">
+    <div className="page-stack dashboard-workspace">
 
       {/* Welcome */}
       <div className="hero-panel page-hero" style={{
@@ -149,7 +150,7 @@ export default async function DashboardPage() {
             {isDistrict ? ` · ${s.fullName}` : ''}
           </span>
         </div>
-        <div style={{ width: '72px', height: '72px', borderRadius: '20px', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div className="dashboard-hero-mark" style={{ width: '72px', height: '72px', borderRadius: '20px', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {isDistrict ? (
             <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
               <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11"/>
@@ -278,8 +279,10 @@ function getQuickLinks(role: string): QL[] {
   const all: Record<string, QL> = {
     schools:    { href: '/district/schools',          icon: <HomeIcon/>,  label: 'ฐานข้อมูลโรงเรียน',        desc: 'เพิ่ม แก้ไข และเตรียมข้อมูลโรงเรียนลูกค้า', color: '#8B6B45', bg: '#F5EDE3' },
     admins:     { href: '/district/admins',           icon: <UserIcon/>,  label: 'สมาชิกโรงเรียน',           desc: 'อนุมัติ ระงับ รีเซ็ตรหัสผ่าน และตั้งโควตาผู้ใช้', color: '#0891B2', bg: '#ECFEFF' },
+    schedules:  { href: '/schedules/class/manage',    icon: <GridIcon/>,  label: 'จัดตารางเรียน',           desc: 'เตรียมข้อมูลและจัดตารางอัตโนมัติ 7 ขั้นตอน', color: '#235bc8', bg: '#edf4ff' },
+    timetable:  { href: '/schedules/teaching',         icon: <ClockIcon/>, label: 'ดูตารางสอน',           desc: 'ดูคาบสอนและตารางสอนรายสัปดาห์', color: '#235bc8', bg: '#edf4ff' },
     subjects:   { href: '/district/subjects',         icon: <BookIcon/>,  label: 'โครงสร้างรายวิชากลาง',     desc: 'แม่แบบรายวิชาให้โรงเรียนนำไปใช้',           color: '#059669', bg: '#ECFDF5' },
-    d_export:   { href: '/district/reports/export',   icon: <DocIcon/>,   label: 'ส่งออกข้อมูลระบบ',         desc: 'Export ข้อมูลเพื่อบริการลูกค้าและสำรองข้อมูล', color: '#DB2777', bg: '#FDF2F8' },
+    d_export:   { href: '/district/free-ad',          icon: <DocIcon/>,   label: 'จัดการโฆษณา',             desc: 'กำหนดโฆษณาสำหรับหน้าจัดตารางสอนฟรี', color: '#DB2777', bg: '#FDF2F8' },
     school:     { href: '/settings/school',           icon: <HomeIcon/>,  label: 'ตั้งค่าโรงเรียน',        desc: 'ข้อมูลโรงเรียน ผู้บริหาร',               color: '#8B6B45', bg: '#F5EDE3' },
     users:      { href: '/settings/users',            icon: <UserIcon/>,  label: 'จัดการชื่อผู้ใช้งาน',     desc: 'เพิ่ม แก้ไข ครูและบัญชีผู้ใช้งาน',        color: '#0891B2', bg: '#ECFEFF' },
     classrooms: { href: '/classrooms',                icon: <GridIcon/>,  label: 'ชั้นเรียน',              desc: 'จัดการห้องเรียน ครูประจำชั้น',            color: '#059669', bg: '#ECFDF5' },
@@ -287,56 +290,34 @@ function getQuickLinks(role: string): QL[] {
     attendance: { href: '/attendance/hourly',         icon: <ClockIcon/>, label: 'เช็คเวลาเรียนรายวิชา',   desc: 'เช็คชื่อตามคาบสอน สำหรับ ปพ.5',          color: '#C49212', bg: '#F5F3FF' },
     admin_att:  { href: '/classroom-admin',           icon: <DocIcon/>,   label: 'ธุรการชั้นเรียน',        desc: 'เวลาเรียน น้ำหนัก/ส่วนสูง ตรวจสุขภาพ',  color: '#DB2777', bg: '#FDF2F8' },
     students:   { href: '/students',                  icon: <UserIcon/>,  label: 'ข้อมูลนักเรียน',         desc: 'ทะเบียนนักเรียนในห้องเรียน',             color: '#059669', bg: '#ECFDF5' },
-    eval_sum:   { href: '/evaluation/summary/reading',icon: <GridIcon/>,  label: 'สรุปการประเมินชั้นเรียน', desc: 'ดูสรุปอ่านคิดวิเคราะห์/กิจกรรม เลือกชั้นได้', color: '#0891B2', bg: '#ECFEFF' },
+    eval_sum:   { href: '/evaluation/reading',        icon: <GridIcon/>,  label: 'ประเมินการอ่าน คิด เขียน', desc: 'เลือกห้องและบันทึกผลการประเมินนักเรียน', color: '#0891B2', bg: '#ECFEFF' },
     sign:       { href: '/documents/sign',            icon: <EditIcon/>,  label: 'ลงนาม',                  desc: 'ตรวจและลงนาม ปพ.5 ปพ.6 ธุรการชั้นเรียน', color: '#9D174D', bg: '#FDF2F8' },
-    export_pp:  { href: '/export/pp5-all',            icon: <DocIcon/>,   label: 'Export ปพ.5 / ปพ.6',     desc: 'ออกเอกสาร ปพ.5 ทั้งเล่ม และ ปพ.6',       color: '#D97706', bg: '#FFFBEB' },
-    report_st:  { href: '/reports/status',            icon: <GridIcon/>,  label: 'สถานะการบันทึก',         desc: 'ชั้นที่บันทึกธุรการ/กรอก ปพ.5 แล้ว',      color: '#C49212', bg: '#F5F3FF' },
-    assign:     { href: '/settings/users',            icon: <UserIcon/>,  label: 'มอบหมายครู',             desc: 'กำหนดวิชาสอน และครูประจำชั้น',           color: '#0E7490', bg: '#ECFEFF' },
+    export_pp:  { href: '/reports/pp5',              icon: <DocIcon/>,   label: 'พิมพ์ ปพ.5 รายวิชา',       desc: 'ดูตัวอย่างและพิมพ์รายงานรายวิชาเป็น PDF',       color: '#D97706', bg: '#FFFBEB' },
+    report_st:  { href: '/reports/pp6',              icon: <GridIcon/>,  label: 'ปพ.6 นักเรียน',           desc: 'ดูผลการเรียนและพิมพ์รายงานนักเรียน',      color: '#C49212', bg: '#F5F3FF' },
+    assign:     { href: '/settings/class-subjects',  icon: <UserIcon/>,  label: 'มอบหมายครูผู้สอน',         desc: 'กำหนดผู้รับผิดชอบรายวิชาและห้องเรียน',           color: '#0E7490', bg: '#ECFEFF' },
     evaluation: { href: '/evaluation/character',      icon: <GridIcon/>,  label: 'การวัดและประเมินผล',     desc: 'คุณลักษณะ 8 ข้อ · อ่านคิดวิเคราะห์ · กิจกรรมพัฒนาผู้เรียน', color: '#0891B2', bg: '#ECFEFF' },
-    homeroom_pp:{ href: '/homeroom/pp5',              icon: <DocIcon/>,   label: 'ปพ.5 / ปพ.6 ห้องเรียน',  desc: 'ดูและ Export ของนักเรียนประจำชั้น',       color: '#B45309', bg: '#FFFBEB' },
-    exp_subj:   { href: '/export/pp5-subject',        icon: <DocIcon/>,   label: 'Export ปพ.5 รายวิชา',    desc: 'ส่งออก ปพ.5 ของวิชาที่สอน',              color: '#D97706', bg: '#FFFBEB' },
-    rpt_indiv:  { href: '/reports/individual',        icon: <UserIcon/>,  label: 'รายงานรายบุคคล',         desc: 'ดูพัฒนาการนักเรียนรายคน ทุกชั้น',         color: '#C49212', bg: '#F5F3FF' },
+    homeroom_pp:{ href: '/reports/pp6',              icon: <DocIcon/>,   label: 'ปพ.6 ห้องประจำชั้น',       desc: 'ดูและพิมพ์ผลการเรียนของนักเรียนประจำชั้น',       color: '#B45309', bg: '#FFFBEB' },
+    exp_subj:   { href: '/reports/pp5',              icon: <DocIcon/>,   label: 'พิมพ์ ปพ.5 รายวิชา',       desc: 'ดูตัวอย่างและพิมพ์ ปพ.5 ของวิชาที่สอน',              color: '#D97706', bg: '#FFFBEB' },
+    rpt_indiv:  { href: '/reports/pp6',              icon: <UserIcon/>,  label: 'ปพ.6 นักเรียน',           desc: 'ดูผลการเรียนและพิมพ์รายงานนักเรียน',         color: '#C49212', bg: '#F5F3FF' },
   }
 
   switch (role) {
     case 'district':
       return [all.admins, all.schools, all.subjects, all.d_export]
     case 'admin':
-      return [all.school, all.users, all.classrooms, all.eval_sum, all.report_st, all.export_pp]
+      return [all.schedules, all.school, all.users, all.classrooms, all.eval_sum, all.export_pp]
     case 'principal':
-      return [all.classrooms, all.sign, all.eval_sum, all.report_st, all.rpt_indiv]
+      return [all.classrooms, all.sign, all.eval_sum, all.timetable, all.rpt_indiv]
     case 'academic_head':
     case 'deputy_principal':
-      return [all.assign, all.sign, all.eval_sum, all.classrooms, all.rpt_indiv]
+      return [all.schedules, all.assign, all.sign, all.eval_sum, all.classrooms, all.rpt_indiv]
     case 'homeroom':
       return [all.admin_att, all.scores, all.attendance, all.evaluation, all.homeroom_pp, all.students]
     case 'teacher':
-      return [all.scores, all.attendance, all.students, all.exp_subj]
+      return [all.scores, all.attendance, all.timetable, all.students, all.exp_subj]
     default:
       return [all.attendance, all.students]
   }
-}
-
-function StatCard({ icon, label, value, color, bg }: { icon: ReactNode; label: string; value: number | string; color: string; bg: string }) {
-  return (
-    <div className="card-sm">
-      <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: bg, color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>{icon}</div>
-      <div style={{ fontSize: '24px', fontWeight: 800, color, marginBottom: '2px' }}>{value}</div>
-      <div style={{ fontSize: '13px', color: 'var(--text-3)' }}>{label}</div>
-    </div>
-  )
-}
-
-function QuickLink({ href, icon, label, desc, color, bg }: { href: string; icon: ReactNode; label: string; desc: string; color: string; bg: string }) {
-  return (
-    <a href={href} className="card-sm quick-link" style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-      <div style={{ width: '42px', height: '42px', borderRadius: '11px', background: bg, color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
-      <div>
-        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '3px' }}>{label}</div>
-        <div style={{ fontSize: '12px', color: 'var(--text-3)', lineHeight: 1.5 }}>{desc}</div>
-      </div>
-    </a>
-  )
 }
 
 function S({ d }: { d: string }) {
