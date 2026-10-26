@@ -11,7 +11,8 @@ export function primarySubjectGrade(code: string) {
   return match?Number(match[1]):null
 }
 export function primaryRoomGrade(level: string) {
-  const match=level.replace(/\s/g,'').match(/^(?:ป\.?|ประถมศึกษาปีที่)([1-6])$/u)
+  const normalized=level.normalize('NFKC').replace(/[๐-๙]/g,digit=>String(digit.charCodeAt(0)-0x0e50)).replace(/[\s\u200B-\u200D\uFEFF]/g,'').replace(/^ชั้น/,'')
+  const match=normalized.match(/^(?:ป\.?|ประถม(?:ศึกษา)?(?:ปีที่)?)([1-6])$/u)
   return match?Number(match[1]):null
 }
 export function centralSubjectPeriods(subject: CentralScheduleSubject) {

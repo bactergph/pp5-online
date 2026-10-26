@@ -16,6 +16,8 @@ const catalog=[thai,math,p2,secondary]
 for(let grade=1;grade<=6;grade++)assert.equal(api.primarySubjectGrade(`ท1${grade}101`),grade)
 for(const code of ['ท21101','ท31101','ท17101','I20201',''])assert.equal(api.primarySubjectGrade(code),null)
 assert.equal(api.primaryRoomGrade('ประถมศึกษาปีที่ 3'),3);assert.equal(api.primaryRoomGrade('ม.1'),null)
+for(const [label,grade] of [['ชั้นประถมศึกษาปีที่ ๑',1],['ประถมศึกษา 2',2],['ป.\u200b๓',3],['ประถม 4',4],['ชั้น ป.5',5],['ป 6',6]])assert.equal(api.primaryRoomGrade(label),grade)
+for(const label of ['ชั้นมัธยมศึกษาปีที่ ๑','อ.1','1','ป.7'])assert.equal(api.primaryRoomGrade(label),null)
 assert.equal(api.centralSubjectPeriods(thai),5);assert.equal(api.centralSubjectPeriods(math),4)
 assert.ok(api.centralSubjectProblem({...thai,hours_per_year:0}));assert.ok(api.centralSubjectProblem({...thai,subject_group:'กิจกรรม'}))
 const preview=api.prepareCentralSubjects(catalog,rooms,rooms.map(room=>room.id),catalog.map(s=>s.code),[{classroomId:'p1a',code:'ท11101'}],[['ป.1/IP','ค11101','ชื่อที่ครูแก้ไว้','7','คณิตศาสตร์','พื้นฐาน']])

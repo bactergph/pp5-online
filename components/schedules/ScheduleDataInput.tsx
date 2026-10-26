@@ -307,6 +307,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
         </div>
         {addOpen&&<ScheduleCentralSubjects key={activeLevel} rooms={data.classrooms} initialLevel={activeLevel} existing={timetableLessons} staged={rows} disabled={busy||locked} onAppend={incoming=>change([...rows.filter(row=>row.some(Boolean)),...incoming])}/>}
         <p className="prep-subject-hint">กรอกห้อง รหัส ชื่อ จำนวนคาบ กลุ่มสาระ และประเภท หรือวางจาก Excel ได้หลายแถว ครูผู้สอน การแบ่งคาบ และห้องสถานที่กำหนดในขั้นภาระสอน</p>
+        <p className="prep-subject-mobile-hint">เลื่อนตารางซ้าย–ขวาเพื่อกรอกข้อมูลแต่ละช่อง</p>
         <fieldset disabled={busy}>
           <ScheduleInputGrid label="ตารางนำเข้ารายวิชา" rows={rows} onChange={change} statuses={statuses} maxRows={SUBJECT_ROW_LIMIT}
             columns={[{ label: 'ห้องนักเรียน', hint: 'เช่น ม.1/1  ม.1/IP', options: rooms.map(c => c.name) }, { label: 'รหัสวิชา', hint: 'เช่น ค21101' }, { label: 'ชื่อวิชา', hint: 'ชื่อเต็มตามหลักสูตร' }, { label: 'คาบต่อสัปดาห์', hint: 'เช่น 3' }, { label: 'กลุ่มสาระ', options: SUBJECT_GROUPS }, { label: 'ประเภท', options: ['พื้นฐาน', 'เพิ่มเติม'], hint: 'พื้นฐาน' }]} />

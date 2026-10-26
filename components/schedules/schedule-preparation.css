@@ -189,6 +189,8 @@
 .schedule-prep .prep-subject-dialog .prep-sheet th:nth-child(8){width:92px}
 .schedule-prep .prep-subject-dialog .prep-sheet input:not([type=checkbox]){width:100%;min-width:0;padding:8px}
 .schedule-prep .prep-subject-dialog .prep-sheet td:last-child{min-width:0;padding:6px}
+.schedule-prep .prep-subject-mobile-hint{display:none}
+@media(max-width:767px){.schedule-prep .prep-subject-mobile-hint{display:block;margin:0;font-size:12px;color:#60728c}.schedule-prep .prep-subject-dialog .prep-sheet .prep-scroll{overflow:auto;overscroll-behavior-x:contain}.schedule-prep .prep-subject-dialog .prep-sheet table{min-width:960px;table-layout:fixed}.schedule-prep .prep-subject-dialog .prep-sheet th{white-space:nowrap}.schedule-prep .prep-subject-dialog .prep-sheet th small{white-space:normal}}
 .prep-subject-levels,.prep-subject-rooms{display:flex;align-items:center;gap:8px;overflow:auto;padding-bottom:2px}
 .prep-subject-levels>span,.prep-subject-rooms>span{flex:none;font-size:13px;font-weight:700}
 .prep-subject-levels>span{color:#1373d9}
