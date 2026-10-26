@@ -18,7 +18,7 @@ export default function ScheduleLink(props: ComponentProps<typeof NextLink>) {
   if (!local || typeof props.href !== 'string') return <NextLink {...props}/>
   const [path, query] = props.href.split('?'), view = destinations[path]
   if (!view) return <NextLink {...props}/>
-  const step = path === '/settings/users' ? 3 : path === '/settings/class-subjects' ? 4 : null
+  const step = path === '/settings/users' ? 3 : path === '/settings/class-subjects' ? 5 : null
   const href = deviceScheduleHref(pathname, view) + (step ? `?step=${step}` : query ? `?${query}` : '')
   return <NextLink {...props} href={href} onClick={event => {
     props.onClick?.(event)

@@ -40,7 +40,7 @@ export function withJointTeachingGroups<T extends Lesson>(lessons:T[],config:Con
 
 /** Selecting one room for automatic rebuilding includes every room in each
  * connected joint group, so a partial rebuild cannot leave half a group stale. */
-export function jointTeachingScope(roomIds:string[],lessons:Lesson[],groups:JointTeachingGroup[]=[]){
+export function jointTeachingScope(roomIds:string[],lessons:Pick<Lesson,'id'|'classroomId'>[],groups:JointTeachingGroup[]=[]){
   const rooms=new Set(roomIds),byId=new Map(lessons.map(lesson=>[lesson.id,lesson.classroomId]));let changed=true
   while(changed){changed=false;for(const group of groups){const members=group.lessonIds.map(id=>byId.get(id)).filter((id):id is string=>!!id);if(members.some(id=>rooms.has(id)))for(const id of members)if(!rooms.has(id)){rooms.add(id);changed=true}}}
   return [...rooms]

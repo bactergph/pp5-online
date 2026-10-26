@@ -1,3 +1,4 @@
+import {validateJointTeachingGroups} from './schedule-joint-teaching'
 import type { Preparation } from './schedule-preparation'
 import type { DeviceDraft } from './schedule-device-build'
 import { prepareDeviceDraft } from './schedule-device-build'
@@ -28,17 +29,18 @@ export function devicePreparation(plan: FreeWizardPlan): Preparation {
 export const deviceIssueSteps = (issues: PlanningIssue[]) => issues.map(issue => ({...issue,step:issue.manageStep??(({1:1,2:3,3:5,4:6,5:6,6:7} as Record<number,number>)[issue.step] || 7)}))
 
 export function devicePreflight(plan: FreeWizardPlan, rooms: string[], clear: boolean, teacherLimit?:number) {
+  if(plan.teachingGroups?.length){try{validateJointTeachingGroups(plan.teachingGroups,toDeviceSnapshot(plan,rooms).lessons)}catch(error){return [{severity:'error' as const,message:error instanceof Error?error.message:'ตรวจกลุ่มสอนรวมไม่สำเร็จ',step:6}]}}
   try {
     const issues:PlanningIssue[]=[]
     const limitError=deviceTeacherLimitMessage(plan.teachers.length,teacherLimit)
     if(limitError)return [{severity:'error' as const,message:limitError,step:3}]
-    for(const [items,step] of [[plan.rooms,2],[plan.teachers,3],[plan.subjects,4],[plan.activities,5]] as const){
+    for(const [items,step] of [[plan.rooms,2],[plan.teachers,3],[plan.subjects,5],[plan.activities,4]] as const){
       if(new Set(items.map(item=>item.id)).size!==items.length)issues.push({severity:'error',step,message:'มีรหัสรายการซ้ำ กรุณาตรวจข้อมูลนำเข้าหรือไฟล์สำรอง'})
     }
-    for(const subject of plan.subjects)if(!plan.rooms.some(room=>room.id===subject.roomId))issues.push({severity:'error',step:4,message:`${subject.name}: ไม่พบห้องเรียนที่กำหนด`})
+    for(const subject of plan.subjects)if(!plan.rooms.some(room=>room.id===subject.roomId))issues.push({severity:'error',step:5,message:`${subject.name}: ไม่พบห้องเรียนที่กำหนด`})
     return [...issues,...deviceIssueSteps(prepareDeviceDraft(toDeviceSnapshot(plan, rooms), 'local', rooms, clear).issues)]
   }
-  catch (error) { return [{severity:'error' as const,message:error instanceof Error ? error.message : 'ตรวจข้อมูลไม่สำเร็จ',step:5}] }
+  catch (error) { return [{severity:'error' as const,message:error instanceof Error ? error.message : 'ตรวจข้อมูลไม่สำเร็จ',step:4}] }
 }
 
 export function deviceDraftView(plan: FreeWizardPlan, draft: DeviceDraft | null, rooms: string[]) {
