@@ -6,54 +6,89 @@ import { DEFAULT_PERIOD_TIMES, moveLunchBreak, validatePeriodTimes, type PeriodT
 import AppAlertModal from '@/components/AppAlertModal'
 
 const STYLES = `
-  .period-workspace {max-width:1060px;margin:0 auto;}
-  .period-workspace .schedule-head {padding:24px;border-radius:18px;background:#fff;border:1px solid #dce4ef;}
-  .period-workspace .schedule-head h1 {font-size:26px;color:#1b2d4b;}
-  .period-workspace .schedule-head p {font-size:14px;line-height:1.7;font-weight:400;}
-  .period-workspace .period-summary {display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
-  .period-workspace .period-summary span {background:#f3eee5;border-radius:8px;padding:8px 12px;font-size:13px;color:#57432c;}
-  .period-workspace .period-table th {background:#ebe3d6;font-size:14px;color:#111;padding:14px;}
-  .period-workspace .period-table td {padding:14px;}
-  .period-workspace .period-table input {min-height:44px;font:inherit;font-size:14px;}
-  .period-workspace .period-actions {padding:16px 0;justify-content:space-between;}
-  .period-workspace .period-btn {min-height:42px;font-size:14px;}
-  .period-workspace button:disabled {opacity:.5;cursor:not-allowed;}
-  .period-lunch-setting {display:grid;gap:10px;padding:20px;background:#fff;border:1px solid #dce4ef;border-radius:14px;}
-  .period-lunch-setting label {font-size:16px;font-weight:700;color:#1b2d4b;}
-  .period-lunch-setting select {font:inherit;padding:12px;border:1px solid #bfb6a7;border-radius:8px;max-width:320px;background:white;}
-  .period-lunch-setting p {margin:0;font-size:14px;line-height:1.7;color:#655746;}
-  .period-workspace .period-error {color:#a32323;background:#fff1f0;padding:12px;border-radius:8px;font-size:14px;}
-  .schedule-page { display: grid; gap: 14px; }
-  .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
-  .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
-  .period-info {
-    padding: 12px 14px; border-radius: 12px; border: 1px solid #e9eef7; background: #edf4ff;
-    color: #465b78; font-size: 12.5px; font-weight: 700;
+  .period-workspace { width:100%;max-width:1060px;min-width:0;margin:0 auto;display:grid;gap:18px;color:#1b2d4b; }
+  .period-workspace .period-hero { display:block;padding:24px;border:1px solid #dce6f5;border-radius:22px;background:radial-gradient(circle at 100% 0,#dceaff88,transparent 55%),linear-gradient(120deg,#fff,#f3f7ff);box-shadow:0 4px 20px #18365b08; }
+  .period-hero-heading { display:flex;align-items:center;gap:14px; }
+  .period-hero-icon { display:grid;place-items:center;flex:none;width:48px;height:48px;border:1px solid #d2e1f8;border-radius:15px;background:#edf4ff;color:#235bc8; }
+  .period-workspace .period-hero h1 { margin:0;font-size:24px;font-weight:700;line-height:1.5;color:#1b2d4b; }
+  .period-workspace .period-hero p { margin:6px 0 0;font-size:14px;line-height:1.7;color:#60728c; }
+  .period-summary { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px; }
+  .period-summary>div { padding:12px 14px;border:1px solid #dce6f5;border-radius:13px;background:#ffffffd9; }
+  .period-summary dt { margin:0;color:#60728c;font-size:12px; }
+  .period-summary dd { margin:4px 0 0;font-size:19px;font-weight:700;color:#235bc8; }
+  .period-summary dd small { font-size:12px;font-weight:400;color:#60728c; }
+  .period-workspace .period-info { display:flex;align-items:flex-start;gap:9px;margin:0;padding:12px 15px;border:1px solid #dce6f5;border-radius:13px;background:#f1f6ff;color:#465b78;font-size:13px;line-height:1.7; }
+  .period-workspace .period-info.is-saved { border-color:#bde5d4;background:#f0fbf6;color:#176b4c; }
+  .period-lunch-setting { display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,240px);gap:14px 24px;align-items:center;padding:20px;border:1px solid #dce4ef;border-radius:18px;background:#fff;box-shadow:0 3px 12px #18365b05; }
+  .period-lunch-setting label { display:block;font-size:16px;font-weight:700;color:#1b2d4b; }
+  .period-lunch-setting p { margin:5px 0 0;font-size:13px;line-height:1.7;color:#60728c; }
+  .period-lunch-setting select { width:100%;min-width:0;min-height:46px;padding:10px 12px;border:1px solid #cad8ec;border-radius:11px;background:#f8faff;color:#244264;font:inherit;font-size:14px; }
+  .period-table-section { min-width:0; }
+  .period-table-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px; }
+  .period-table-heading h2 { margin:0;font-size:17px;font-weight:700; }
+  .period-table-heading span { font-size:12px;color:#60728c; }
+  .period-table-wrap { overflow:auto;border:1px solid #dce4ef;border-radius:18px;background:#fff;box-shadow:0 3px 14px #18365b05; }
+  .period-table { width:100%;min-width:660px;border-collapse:collapse;font-size:14px; }
+  .period-table th,.period-table td { padding:14px 16px;border-bottom:1px solid #e8eef7;text-align:left; }
+  .period-table th { background:#edf4ff;color:#465b78;font-size:12px;font-weight:700;white-space:nowrap; }
+  .period-table th:first-child { width:135px; }
+  .period-table th:nth-child(3),.period-table th:nth-child(4) { width:145px; }
+  .period-table th:last-child { width:86px; }
+  .period-table tbody tr:last-child td { border-bottom:0; }
+  .period-row-heading { white-space:nowrap; }
+  .period-number { display:inline-grid;place-items:center;min-width:30px;height:30px;margin-right:8px;border-radius:9px;background:#edf4ff;color:#235bc8;font-weight:700; }
+  .period-kind { font-size:12px;color:#60728c; }
+  .period-table input { box-sizing:border-box;width:100%;min-width:0;min-height:46px;padding:10px 12px;border:1px solid #cad8ec;border-radius:11px;background:#fff;color:#1b2d4b;font:inherit;font-size:16px;line-height:1.5; }
+  .period-table .period-time { min-width:96px;font-variant-numeric:tabular-nums;letter-spacing:.02em; }
+  .period-workspace :is(input,select,button):focus-visible { outline:3px solid #a9c8ff;outline-offset:2px; }
+  .period-table tr.is-break td { background:#fffbf1; }
+  .period-table tr.is-break .period-number { background:#fff0ce;color:#946316; }
+  .period-table tr.is-break .period-kind { color:#946316; }
+  .period-mobile-label { display:none; }
+  .period-workspace .period-actions { position:sticky;bottom:12px;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;border:1px solid #dce4ef;border-radius:17px;background:#fffffff5;box-shadow:0 4px 24px #18365b14; }
+  .period-secondary-actions { display:flex;flex-wrap:wrap;gap:8px; }
+  .period-workspace .period-btn { display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:10px 14px;border:1px solid #cad8ec;border-radius:11px;background:#fff;color:#244264;font:inherit;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer; }
+  .period-workspace .period-btn.primary { border-color:#235bc8;background:linear-gradient(120deg,#2e70da,#235bc8);color:#fff;box-shadow:0 3px 8px #235bc826; }
+  .period-workspace .period-btn.danger { border-color:#f2d3d8;color:#b32940; }
+  .period-workspace button:disabled,.period-workspace input:disabled,.period-workspace select:disabled { opacity:.55;cursor:not-allowed; }
+  .period-workspace .period-error { padding:12px 15px;border:1px solid #f2cbd2;border-radius:12px;background:#fff3f4;color:#a3233a;font-size:14px;line-height:1.7; }
+  .period-empty { padding:28px;border:1px solid #dce4ef;border-radius:18px;background:#fff;color:#60728c;text-align:center; }
+  .period-table-caption { position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap; }
+  @media(max-width:767px) {
+    .period-workspace { gap:14px; }
+    .period-workspace .period-hero { padding:18px;border-radius:18px; }
+    .period-workspace .period-hero h1 { font-size:20px; }
+    .period-hero-icon { width:40px;height:40px;border-radius:12px; }
+    .period-hero-heading { align-items:flex-start;gap:10px; }
+    .period-summary { gap:7px;margin-top:16px; }
+    .period-summary>div { padding:10px; }
+    .period-summary dd { font-size:18px; }
+    .period-summary dt,.period-summary dd small { font-size:11px; }
+    .period-lunch-setting { grid-template-columns:minmax(0,1fr);gap:12px;padding:16px; }
+    .period-table-heading { align-items:flex-start; }
+    .period-table-heading span { max-width:140px;text-align:right; }
+    .period-table-wrap { overflow:visible;border:0;border-radius:0;background:transparent;box-shadow:none; }
+    .period-table,.period-table tbody { display:block;min-width:0;width:100%; }
+    .period-table thead { position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%); }
+    .period-table tbody { display:grid;gap:12px; }
+    .period-table tr { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:16px;border:1px solid #dce4ef;border-radius:16px;background:#fff;box-shadow:0 3px 12px #18365b05; }
+    .period-table td,.period-table tbody tr:last-child td { display:block;min-width:0;padding:0;border:0;background:transparent; }
+    .period-table .period-row-heading { grid-column:1/-1;display:flex;align-items:center;gap:0;padding-bottom:11px;border-bottom:1px solid #e8eef7; }
+    .period-number { margin-right:9px; }
+    .period-kind { font-size:13px;font-weight:600; }
+    .period-name-cell { grid-column:1/-1; }
+    .period-mobile-label { display:block;margin-bottom:6px;color:#60728c;font-size:12px;font-weight:600; }
+    .period-table .period-time { min-width:0; }
+    .period-table tr.is-break { border-color:#efd9a9;background:#fffdf7; }
+    .period-table tr.is-break td { background:transparent; }
+    .period-table .period-manage-cell { grid-column:1/-1;text-align:right; }
+    .period-manage-cell:empty { display:none; }
+    .period-workspace .period-actions { bottom:8px;flex-wrap:wrap;padding:12px;padding-bottom:max(12px,env(safe-area-inset-bottom)); }
+    .period-secondary-actions { width:100%; }
+    .period-secondary-actions>.period-btn { flex:1;padding:10px 8px;font-size:12px; }
+    .period-workspace .period-actions>.primary { width:100%; }
   }
-  .period-table-wrap {
-    overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;
-  }
-  .period-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .period-table th, .period-table td {
-    padding: 10px 12px; border-bottom: 1px solid #F1F5F9; text-align: left;
-  }
-  .period-table th {
-    background: #F8FAFC; font-size: 10px; font-weight: 900; color: #64748B;
-  }
-  .period-table input {
-    width: 100%; min-height: 34px; border: 1px solid #CBD5E1; border-radius: 8px;
-    padding: 0 10px; font-size: 12px; font-weight: 700;
-  }
-  .period-table tr.is-break td { background: #FFFBEB; }
-  .period-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .period-btn {
-    min-height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid #CBD5E1;
-    background: #fff; color: #334155; font-size: 12px; font-weight: 800; cursor: pointer;
-  }
-  .period-btn.primary {
-    border-color: #C49212; background: #C49212; color: #fff;
-  }
-  .schedule-empty { padding: 28px; text-align: center; color: #64748B; font-size: 13px; font-weight: 700; }
+  @media print { .period-workspace .period-actions { position:static;box-shadow:none; } }
 `
 
 export default function PeriodTimesEntry() {
@@ -123,48 +158,56 @@ export default function PeriodTimesEntry() {
     setTimes([...DEFAULT_PERIOD_TIMES])
   }
 
-  if (loading) return <div className="schedule-empty">กำลังโหลด...</div>
+  if (loading) return <div className="period-empty" role="status">กำลังโหลดเวลาคาบเรียน…</div>
 
   return (
     <>
       <style>{STYLES}</style>
       <div className="schedule-page period-workspace">
-        <div className="schedule-head">
-          <h1>เวลาเรียนและพักเที่ยง</h1>
-          <p>กำหนดเวลาแบบ 24 ชั่วโมง เพิ่มคาบเรียนได้สูงสุด 8 คาบต่อวัน พร้อมคาบพักเที่ยง</p>
-          <div className="period-summary"><span>{times.length} คาบรวมพักเที่ยง</span><span>เรียน {teachingCount} คาบ · พัก {times.length-teachingCount} คาบ</span><span>ช่วงเช้า {morningCount} คาบ · ช่วงบ่าย {teachingCount-morningCount} คาบ</span></div>
+        <div className="period-hero">
+          <div className="period-hero-heading">
+            <span className="period-hero-icon" aria-hidden="true"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+            <div><h1>เวลาเรียนและพักเที่ยง</h1><p>ตั้งเวลาเรียนแต่ละคาบและช่วงพัก ใช้ร่วมกันทั้งตารางเรียนและตารางสอน</p></div>
+          </div>
+          <dl className="period-summary">
+            <div><dt>คาบเรียนต่อวัน</dt><dd>{teachingCount} <small>/ 8 คาบ</small></dd></div>
+            <div><dt>ช่วงเช้า</dt><dd>{morningCount} <small>คาบ</small></dd></div>
+            <div><dt>ช่วงบ่าย</dt><dd>{teachingCount-morningCount} <small>คาบ</small></dd></div>
+          </dl>
         </div>
 
-        <div className="period-info">
+        <div className={`period-info${isDefault ? '' : ' is-saved'}`}>
           {isDefault
             ? 'กำลังใช้ค่าเริ่มต้นประถม (6 คาบ) — บันทึกเพื่อกำหนดเวลาสำหรับโรงเรียน'
             : 'ใช้เวลาที่กำหนดสำหรับโรงเรียนแล้ว'}
         </div>
 
         <div className="period-lunch-setting">
-          <label htmlFor="lunch-after-period">พักเที่ยงหลังคาบ</label>
+          <div><label htmlFor="lunch-after-period">พักเที่ยงหลังคาบ</label><p>ระบบจะเรียงเวลาใหม่ โดยคงระยะเวลาของคาบเรียนและช่วงพักไว้</p></div>
           <select id="lunch-after-period" value={morningCount} disabled={saving} onChange={e=>changeLunch(Number(e.target.value))}>
             {times.map((t,index)=>!t.is_break && <option key={t.period} value={t.period}>หลังคาบที่ {index+1}</option>)}
           </select>
-          <p>เมื่อเปลี่ยนคาบก่อนพัก ระบบจะเรียงเวลาใหม่โดยคงระยะเวลาแต่ละคาบและช่วงพักไว้ สามารถปรับเวลาเริ่มและสิ้นสุดในตารางด้านล่างได้ก่อนบันทึก</p>
         </div>
+        <section className="period-table-section" aria-labelledby="period-table-title">
+        <div className="period-table-heading"><h2 id="period-table-title">เวลาของแต่ละคาบ</h2><span>รูปแบบ 24 ชั่วโมง เช่น 08:30</span></div>
         <div className="period-table-wrap">
-          <table className="period-table">
+          <table className="period-table" role="table">
+            <caption className="period-table-caption">แก้ไขชื่อคาบ เวลาเริ่ม และเวลาสิ้นสุดของแต่ละคาบเรียนและช่วงพักเที่ยง</caption>
             <thead>
               <tr>
-                <th style={{ width: 48 }}>คาบ</th>
-                <th>ชื่อ</th>
-                <th style={{ width: 120 }}>เริ่ม (24 ชม.)</th>
-                <th style={{ width: 120 }}>สิ้นสุด (24 ชม.)</th>
-                <th style={{ width: 80 }}>พัก</th>
-                <th style={{width:90}}>จัดการ</th>
+                <th scope="col">คาบ / ประเภท</th>
+                <th scope="col">ชื่อคาบ</th>
+                <th scope="col">เวลาเริ่ม</th>
+                <th scope="col">เวลาสิ้นสุด</th>
+                <th scope="col">จัดการ</th>
               </tr>
             </thead>
             <tbody>
               {times.map((row, index) => (
                 <tr key={`${row.period}-${row.sort_order}-${index}`} className={row.is_break ? 'is-break' : ''}>
-                  <td>{index + 1}{row.is_break && <span style={{display:'block',fontSize:11}}>พักเที่ยง</span>}</td>
-                  <td>
+                  <td className="period-row-heading"><span className="period-number">{index + 1}</span><span className="period-kind">{row.is_break ? 'พักเที่ยง' : 'คาบเรียน'}</span></td>
+                  <td className="period-name-cell">
+                    <span className="period-mobile-label" aria-hidden="true">ชื่อคาบ</span>
                     <input
                       value={!row.is_break && /^คาบ(?:ที่)?\s*\d+$/.test(row.label) ? `คาบที่ ${index + 1}` : row.label}
                       disabled={saving}
@@ -173,7 +216,9 @@ export default function PeriodTimesEntry() {
                     />
                   </td>
                   <td>
+                    <span className="period-mobile-label" aria-hidden="true">เวลาเริ่ม</span>
                     <input
+                      className="period-time"
                       value={row.start_time}
                       type="text" inputMode="numeric" maxLength={5} pattern="([01][0-9]|2[0-3]):[0-5][0-9]" disabled={saving} aria-label={`เวลาเริ่ม ${row.label} แบบ 24 ชั่วโมง`}
                       onChange={e => updateRow(index, 'start_time', e.target.value)}
@@ -181,30 +226,34 @@ export default function PeriodTimesEntry() {
                     />
                   </td>
                   <td>
+                    <span className="period-mobile-label" aria-hidden="true">เวลาสิ้นสุด</span>
                     <input
+                      className="period-time"
                       value={row.end_time}
                       type="text" inputMode="numeric" maxLength={5} pattern="([01][0-9]|2[0-3]):[0-5][0-9]" disabled={saving} aria-label={`เวลาสิ้นสุด ${row.label} แบบ 24 ชั่วโมง`}
                       onChange={e => updateRow(index, 'end_time', e.target.value)}
                       placeholder="09:20"
                     />
                   </td>
-                  <td>{row.is_break ? 'พัก' : 'เรียน'}</td>
-                  <td>{!row.is_break && row.period===teachingCount && teachingCount>1 && <button type="button" className="period-btn" disabled={saving} onClick={()=>setTimes(times.filter((_,i)=>i!==index))} aria-label={`ลบคาบ ${row.period}`}>ลบ</button>}</td>
+                  <td className="period-manage-cell">{!row.is_break && row.period===teachingCount && teachingCount>1 && <button type="button" className="period-btn danger" disabled={saving} onClick={()=>setTimes(times.filter((_,i)=>i!==index))} aria-label={`ลบคาบ ${row.period}`}>ลบคาบ</button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        </section>
 
         <p className="period-info">ใช้เวลาแบบ 24 ชั่วโมง เช่น 08:30 และ 13:30 · พักเที่ยงนับเป็นหนึ่งคาบในลำดับที่แสดง และไม่ใช้จัดวิชาเรียน</p>
 
         {invalid && <div className="period-error" role="alert">{invalid}</div>}
         <div className="period-actions">
+          <div className="period-secondary-actions">
           <button type="button" className="period-btn" disabled={saving || teachingCount>=8} onClick={addPeriod}>+ เพิ่มคาบเรียน ({teachingCount}/8)</button>
+          <button type="button" className="period-btn" disabled={saving} onClick={resetDefault}>คืนค่าเริ่มต้น 6 คาบ</button>
+          </div>
           <button type="button" className="period-btn primary" onClick={handleSave} disabled={saving}>
             {saving ? 'กำลังบันทึก...' : 'บันทึกเวลาคาบ'}
           </button>
-          <button type="button" className="period-btn" disabled={saving} onClick={resetDefault}>คืนค่าเริ่มต้น 6 คาบ</button>
         </div>
       </div>
 
