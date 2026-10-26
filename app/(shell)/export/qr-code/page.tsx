@@ -425,9 +425,9 @@ export default function QrCodeExportPage() {
           cursor: pointer;
         }
         .qr-kind-btn.active {
-          border-color: #8B6B45;
-          background: #F5EDE3;
-          color: #6B4F32;
+          border-color: #235BC8;
+          background: #EDF4FF;
+          color: #17469F;
         }
         .qr-export-grid {
           display: grid;

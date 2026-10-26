@@ -7,8 +7,8 @@ import AppAlertModal from '@/components/AppAlertModal'
 
 const STYLES = `
   .period-workspace {max-width:1060px;margin:0 auto;}
-  .period-workspace .schedule-head {padding:24px;border-radius:18px;background:#fff;border:1px solid #ddd5c9;}
-  .period-workspace .schedule-head h1 {font-size:26px;color:#30271d;}
+  .period-workspace .schedule-head {padding:24px;border-radius:18px;background:#fff;border:1px solid #dce4ef;}
+  .period-workspace .schedule-head h1 {font-size:26px;color:#1b2d4b;}
   .period-workspace .schedule-head p {font-size:14px;line-height:1.7;font-weight:400;}
   .period-workspace .period-summary {display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
   .period-workspace .period-summary span {background:#f3eee5;border-radius:8px;padding:8px 12px;font-size:13px;color:#57432c;}
@@ -18,8 +18,8 @@ const STYLES = `
   .period-workspace .period-actions {padding:16px 0;justify-content:space-between;}
   .period-workspace .period-btn {min-height:42px;font-size:14px;}
   .period-workspace button:disabled {opacity:.5;cursor:not-allowed;}
-  .period-lunch-setting {display:grid;gap:10px;padding:20px;background:#fff;border:1px solid #ddd5c9;border-radius:14px;}
-  .period-lunch-setting label {font-size:16px;font-weight:700;color:#30271d;}
+  .period-lunch-setting {display:grid;gap:10px;padding:20px;background:#fff;border:1px solid #dce4ef;border-radius:14px;}
+  .period-lunch-setting label {font-size:16px;font-weight:700;color:#1b2d4b;}
   .period-lunch-setting select {font:inherit;padding:12px;border:1px solid #bfb6a7;border-radius:8px;max-width:320px;background:white;}
   .period-lunch-setting p {margin:0;font-size:14px;line-height:1.7;color:#655746;}
   .period-workspace .period-error {color:#a32323;background:#fff1f0;padding:12px;border-radius:8px;font-size:14px;}
@@ -27,8 +27,8 @@ const STYLES = `
   .schedule-head h1 { margin: 0; font-size: 22px; font-weight: 900; color: #111827; }
   .schedule-head p { margin: 4px 0 0; font-size: 12.5px; font-weight: 700; color: #64748B; }
   .period-info {
-    padding: 12px 14px; border-radius: 12px; border: 1px solid #EFE6D8; background: #F5EDE3;
-    color: #5C4330; font-size: 12.5px; font-weight: 700;
+    padding: 12px 14px; border-radius: 12px; border: 1px solid #e9eef7; background: #edf4ff;
+    color: #465b78; font-size: 12.5px; font-weight: 700;
   }
   .period-table-wrap {
     overflow: auto; border: 1px solid #E5E7EB; border-radius: 14px; background: #fff;

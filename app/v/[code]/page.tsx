@@ -145,7 +145,7 @@ const eyebrowStyle: CSSProperties = {
   fontWeight: 800,
   letterSpacing: '0.04em',
   textTransform: 'uppercase',
-  color: '#8B6B45',
+  color: '#235bc8',
 }
 
 const titleStyle: CSSProperties = {
@@ -198,7 +198,7 @@ const primaryBtnStyle: CSSProperties = {
   textAlign: 'center',
   padding: '12px 16px',
   borderRadius: 12,
-  background: '#8B6B45',
+  background: '#235bc8',
   color: '#fff',
   fontWeight: 800,
   fontSize: 16,

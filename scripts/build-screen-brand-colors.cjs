@@ -1,0 +1,77 @@
+const fs=require('node:fs'),postcss=require('postcss')
+const palette={
+  '8b6b45':'235bc8','6b4f32':'17469f','b8956a':'78a8ff',
+  'f5ede3':'edf4ff','fffdf9':'ffffff','f7f1e8':'f2f5fb','efe6d8':'e9eef7',
+  '2c2419':'1b2d4b','5c4e3d':'465b78','9a8b78':'60728c','e2d5c3':'dce4ef','d0c0a8':'c5d2e3',
+  '3f2e1f':'244264','c4a46e':'6e9ee6','f8f1e8':'f3f7fd','a07a4e':'3479dc',
+  'f4ebe0':'eef4ff','e6d8c4':'dfe9f8','f0e6d7':'f3f7fd','5c4330':'465b78',
+  'ddd5c9':'dce4ef','30271d':'1b2d4b',
+  'e8d9c4':'dce4ef','8a7358':'60728c','6b5340':'465b78','c4a574':'78a8ff',
+  'f3ede4':'f2f5fb','a8947c':'60728c','f1e8dc':'e9eef7','f8f1e7':'f3f7fd',
+  '4a3b28':'244264','6b5c4a':'60728c','f2ebe3':'f2f5fb','a89878':'60728c',
+  '2a2118':'142b50','d4b896':'b8c8e2','ede4d6':'dce4ef','f0e6d6':'e9eef7',
+  'f7f0e6':'f3f7fd','6b5d45':'465b78','8b7355':'60728c','f3e8d8':'edf4ff',
+  '5c4630':'465b78','a08b72':'60728c','5c4228':'244264','7a6a55':'60728c',
+  '4a3d2e':'244264','eee4d6':'dce4ef',
+}
+const hex=new RegExp('#('+Object.keys(palette).join('|')+')([a-f0-9]{2})?(?![a-f0-9])','gi')
+const rgb=hex=>hex.match(/../g).map(n=>parseInt(n,16)).join(',')
+const rgbPalette=Object.fromEntries(Object.entries(palette).map(([a,b])=>[rgb(a),rgb(b)]))
+function recolor(value){
+  const branded=hex.test(value)||/rgba?\(\s*(139\s*,\s*107\s*,\s*69|107\s*,\s*79\s*,\s*50)/i.test(value);hex.lastIndex=0
+  let result=value.replace(hex,(_,color,alpha)=>'#'+palette[color.toLowerCase()]+(alpha||''))
+    .replace(/(rgba?)\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)([^)]*)\)/gi,(raw,fn,r,g,b,tail)=>rgbPalette[`${r},${g},${b}`]?`${fn}(${rgbPalette[`${r},${g},${b}`]}${tail})`:raw)
+  // Gold remains an accent, rather than the far end of an old brown button.
+  if(branded&&/gradient\(/i.test(result))result=result.replace(/#c49212\b/gi,'#3479dc')
+  return result
+}
+const protectedPaper=/classroom-export-(?:sheet|doc-mark|cover|month-table|simple-table)/
+function classroomExportStyles(){
+  const ts=require('typescript'),file='app/(shell)/export/classroom-admin/page.tsx'
+  const tree=ts.createSourceFile(file,fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX)
+  const fn=tree.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='ExportPageStyles')
+  let css=''
+  function visit(node){
+    // Read only this component's JSX style, never the HTML/PDF export strings.
+    if(ts.isJsxElement(node)&&node.openingElement.tagName.getText(tree)==='style'){
+      const expression=node.children.find(ts.isJsxExpression)?.expression
+      if(expression&&ts.isTemplateExpression(expression))css=expression.head.text+expression.templateSpans.map(span=>span.literal.text).join('')
+    }
+    ts.forEachChild(node,visit)
+  }
+  if(fn)visit(fn)
+  if(!css)throw new Error('Classroom export UI styles were not found')
+  return css
+}
+function generate(){
+  const root=postcss.root(),screen=postcss.atRule({name:'media',params:'screen'});root.append(screen)
+  screen.append(postcss.rule({selector:':root',nodes:Object.entries({
+    '--primary':'#235bc8','--primary-dk':'#17469f','--primary-lt':'#78a8ff','--primary-bg':'#edf4ff',
+    '--accent':'#b47b16','--accent-bg':'#fff7e5','--surface':'#ffffff','--bg':'#f2f5fb','--bg-2':'#e9eef7',
+    '--text':'#1b2d4b','--text-2':'#465b78','--text-3':'#60728c','--border':'#dce4ef','--border-2':'#c5d2e3',
+  }).map(([prop,value])=>postcss.decl({prop,value}))}))
+  let count=0
+  const sources=['app/globals.css','app/glass-login.css'].map(file=>({css:fs.readFileSync(file,'utf8'),embedded:false}))
+  sources.push({css:classroomExportStyles(),embedded:true})
+  for(const source of sources){
+    postcss.parse(source.css).walkRules(rule=>{
+      if(rule.selector.includes(':root'))return
+      const selectors=rule.selectors.filter(selector=>!protectedPaper.test(selector));if(!selectors.length)return
+      const ancestors=[];let parent=rule.parent
+      while(parent&&parent.type!=='root'){if(parent.type==='atrule'){if(/keyframes/i.test(parent.name)||parent.name==='media'&&/print/i.test(parent.params))return;ancestors.unshift(parent)}parent=parent.parent}
+      const nodes=(rule.nodes||[]).filter(node=>node.type==='decl'&&recolor(node.value)!==node.value).map(node=>{
+        // Pale blue works on borders and gradients; text needs a darker blue.
+        const value=node.prop==='color'?recolor(node.value).replace(/#78a8ff\b/gi,'#235bc8'):recolor(node.value)
+        return node.clone({value})
+      })
+      if(!nodes.length)return
+      let target=screen;for(const ancestor of ancestors){const clone=ancestor.clone({nodes:[]});target.append(clone);target=clone}
+      // Embedded page styles mount after the root stylesheet. One element of
+      // specificity keeps UI overrides effective without using !important.
+      target.append(postcss.rule({selector:selectors.map(selector=>source.embedded?'html '+selector:selector).join(',\n'),nodes}));count++
+    })
+  }
+  return {css:'/* Generated by scripts/build-screen-brand-colors.cjs. UI colours only;\n   original print rules and document-paper colours are preserved. */\n'+root.toString()+'\n',count}
+}
+if(require.main===module){const {css,count}=generate();fs.writeFileSync('app/screen-brand-colors.css',css);console.log(`Updated screen brand colours: ${count} UI rules; print and paper rules excluded`)}
+module.exports={recolor,generate,palette,classroomExportStyles}

@@ -294,7 +294,7 @@ export default function DistrictSchoolsPage() {
 
       <div className="classroom-admin-page-legend">
         {[
-          { key: 'all', label: `ทั้งหมด ${stats.total.toLocaleString()}`, color: '#8B6B45', bg: '#F5EDE3' },
+          { key: 'all', label: `ทั้งหมด ${stats.total.toLocaleString()}`, color: '#235bc8', bg: '#edf4ff' },
           { key: 'has', label: `มีผู้ดูแลแล้ว ${stats.withAdmin.toLocaleString()}`, color: '#059669', bg: '#ECFDF5' },
           { key: 'none', label: `ยังไม่มีผู้ดูแล ${stats.withoutAdmin.toLocaleString()}`, color: '#D97706', bg: '#FFFBEB' },
         ].map(c => (
@@ -464,7 +464,7 @@ export default function DistrictSchoolsPage() {
                         style={{
                           position: 'relative', width: 40, height: 22, borderRadius: 100, border: 'none',
                           cursor: tunerBusyId === s.id ? 'wait' : 'pointer', padding: 0,
-                          background: s.layout_tuner_enabled ? '#8B6B45' : '#CBD5E1',
+                          background: s.layout_tuner_enabled ? '#235bc8' : '#CBD5E1',
                           transition: 'background 0.15s', opacity: tunerBusyId === s.id ? 0.6 : 1,
                         }}
                       >
@@ -511,14 +511,14 @@ export default function DistrictSchoolsPage() {
                   <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} style={{ display: 'none' }} />
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    style={{ padding: '20px', borderRadius: '12px', border: '2px dashed #8B6B45', background: '#F5EDE3', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '14px' }}
+                    style={{ padding: '20px', borderRadius: '12px', border: '2px dashed #235bc8', background: '#edf4ff', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '14px' }}
                   >
-                    <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#8B6B45', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#235bc8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/></svg>
                     </div>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: '14px', color: '#5C4330' }}>เลือกไฟล์ Excel</div>
-                      <div style={{ fontSize: '12px', color: '#B8956A', marginTop: '4px', lineHeight: 1.45 }}>
+                      <div style={{ fontWeight: 700, fontSize: '14px', color: '#465b78' }}>เลือกไฟล์ Excel</div>
+                      <div style={{ fontSize: '12px', color: '#60728c', marginTop: '4px', lineHeight: 1.45 }}>
                         แนะนำใช้ปุ่ม「นำเข้าจากกระทรวง」ถ้าต้องการฐานทั้งประเทศ
                       </div>
                     </div>

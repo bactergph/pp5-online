@@ -57,10 +57,10 @@ const STYLES = `
   }
   .schedule-empty { padding: 28px; text-align: center; color: #64748B; font-size: 13px; font-weight: 700; }
   .schedule-info {
-    padding: 12px 14px; border-radius: 12px; border: 1px solid #EFE6D8; background: #F5EDE3;
-    color: #5C4330; font-size: 12.5px; font-weight: 700;
+    padding: 12px 14px; border-radius: 12px; border: 1px solid #e9eef7; background: #edf4ff;
+    color: #465b78; font-size: 12.5px; font-weight: 700;
   }
-  .schedule-info a { color: #8B6B45; font-weight: 800; }
+  .schedule-info a { color: #235bc8; font-weight: 800; }
 `
 
 export default function ScheduleConflictsEntry() {

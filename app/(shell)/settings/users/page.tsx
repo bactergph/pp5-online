@@ -33,7 +33,7 @@ const PREFIXES = ['นาย', 'นาง', 'นางสาว']
 
 const ROLE_BADGE: Record<string, { bg: string; color: string }> = {
   district:      { bg: '#EDE9FE', color: '#6D28D9' },
-  admin:         { bg: '#F5EDE3', color: '#6B4F32' },
+  admin:         { bg: '#edf4ff', color: '#17469f' },
   principal:     { bg: '#FEF3C7', color: '#92400E' },
   deputy_principal: { bg: '#FFEDD5', color: '#9A3412' },
   academic_head: { bg: '#D1FAE5', color: '#065F46' },

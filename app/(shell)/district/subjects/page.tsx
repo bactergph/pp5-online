@@ -34,13 +34,13 @@ const CODE_GROUP: Record<string, string> = {
 
 const GROUP_COLOR: Record<string, string> = {
   'ภาษาไทย': '#DB2777',
-  'คณิตศาสตร์': '#8B6B45',
+  'คณิตศาสตร์': '#235bc8',
   'วิทยาศาสตร์และเทคโนโลยี': '#059669',
   'สังคมศึกษา ศาสนา และวัฒนธรรม': '#D97706',
   'สุขศึกษาและพลศึกษา': '#DC2626',
   'ศิลปะ': '#C49212',
   'การงานอาชีพ': '#0891B2',
-  'ภาษาต่างประเทศ': '#8B6B45',
+  'ภาษาต่างประเทศ': '#235bc8',
 }
 
 /**
@@ -356,7 +356,7 @@ export default function DistrictSubjectsPage() {
                     <div style={{ fontWeight: 600 }}>{s.name}</div>
                     {s.short_name && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.short_name}</div>}
                   </td>
-                  <td style={{ fontWeight: 700, color: '#8B6B45' }}>{gradeLabelFromSubject(s)}</td>
+                  <td style={{ fontWeight: 700, color: '#235bc8' }}>{gradeLabelFromSubject(s)}</td>
                   <td style={{ fontSize: 13 }}>{s.subject_group}</td>
                   <td style={{ fontSize: 13 }}>{s.type}</td>
                   <td style={{ textAlign: 'center' }}>{s.hours_per_year}</td>
@@ -390,7 +390,7 @@ export default function DistrictSubjectsPage() {
                   }}
                   placeholder="ท11101" />
                 <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-                  ชั้นจากรหัส: <b style={{ color: '#8B6B45' }}>{gradeLabelFromCode(draft.code) || '—'}</b>
+                  ชั้นจากรหัส: <b style={{ color: '#235bc8' }}>{gradeLabelFromCode(draft.code) || '—'}</b>
                   {' '}· เช่น ท11101 = ป.1, ท12101 = ป.2
                 </div>
               </div>
@@ -484,7 +484,7 @@ export default function DistrictSubjectsPage() {
                         ))}
                         <td style={{
                           borderTop: '1px solid var(--border)', borderLeft: '1px solid var(--border)',
-                          padding: '8px', fontSize: 13, fontWeight: 700, color: grade && grade !== '—' ? '#8B6B45' : 'var(--text-3)',
+                          padding: '8px', fontSize: 13, fontWeight: 700, color: grade && grade !== '—' ? '#235bc8' : 'var(--text-3)',
                         }}>
                           {grade || '—'}
                         </td>

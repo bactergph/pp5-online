@@ -84,13 +84,13 @@ const SUBJECT_GROUPS = [
 
 const GROUP_COLOR: Record<string, string> = {
   'ภาษาไทย': '#DB2777',
-  'คณิตศาสตร์': '#8B6B45',
+  'คณิตศาสตร์': '#235bc8',
   'วิทยาศาสตร์และเทคโนโลยี': '#059669',
   'สังคมศึกษา ศาสนา และวัฒนธรรม': '#D97706',
   'สุขศึกษาและพลศึกษา': '#DC2626',
   'ศิลปะ': '#C49212',
   'การงานอาชีพ': '#0891B2',
-  'ภาษาต่างประเทศ': '#8B6B45',
+  'ภาษาต่างประเทศ': '#235bc8',
 }
 
 const empty = {
@@ -959,7 +959,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
         <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{index + 1}</td>
         <td style={{ fontWeight: 600 }}>{s.code}</td>
         <td>{s.name}</td>
-        <td style={{ fontWeight: 700, color: '#8B6B45' }}>{grades.join(' · ') || '—'}</td>
+        <td style={{ fontWeight: 700, color: '#235bc8' }}>{grades.join(' · ') || '—'}</td>
         <td>
           <span style={{
             fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
@@ -1076,7 +1076,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                         ))}
                         <td style={{
                           borderTop: '1px solid var(--border)', borderLeft: '1px solid var(--border)',
-                          padding: '8px', fontSize: 13, fontWeight: 700, color: grade && grade !== '—' ? '#8B6B45' : 'var(--text-3)',
+                          padding: '8px', fontSize: 13, fontWeight: 700, color: grade && grade !== '—' ? '#235bc8' : 'var(--text-3)',
                         }}>
                           {grade || '—'}
                         </td>

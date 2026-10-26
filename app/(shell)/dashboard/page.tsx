@@ -121,8 +121,8 @@ export default async function DashboardPage() {
       {/* Welcome */}
       <div className="hero-panel page-hero" style={{
         background: isDistrict
-          ? 'linear-gradient(135deg, #2C2419 0%, #6B4F32 52%, #C49212 100%)'
-          : 'linear-gradient(135deg, #6B4F32 0%, #8B6B45 50%, #C49212 100%)',
+          ? 'linear-gradient(135deg, #1b2d4b 0%, #17469f 52%, #3479dc 100%)'
+          : 'linear-gradient(135deg, #17469f 0%, #235bc8 50%, #3479dc 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -158,7 +158,7 @@ export default async function DashboardPage() {
           ) : (
             <svg width="38" height="38" viewBox="0 0 28 28" fill="none">
               <path d="M14 2L26 8V14C26 20.6 20.8 26 14 28C7.2 26 2 20.6 2 14V8L14 2Z" fill="white" fillOpacity="0.9"/>
-              <path d="M9 13H19M9 17H15M11 9H17" stroke="#6B4F32" strokeWidth="1.8" strokeLinecap="round"/>
+              <path d="M9 13H19M9 17H15M11 9H17" stroke="#17469f" strokeWidth="1.8" strokeLinecap="round"/>
             </svg>
           )}
         </div>
@@ -220,7 +220,7 @@ export default async function DashboardPage() {
       {isDistrict && districtStats && (
         <div className="responsive-grid-sm">
           {[
-            { label: 'สมาชิกโรงเรียน', value: districtStats.total, icon: <UserIcon/>, color: '#8B6B45' },
+            { label: 'สมาชิกโรงเรียน', value: districtStats.total, icon: <UserIcon/>, color: '#235bc8' },
             { label: 'ใช้งานอยู่', value: districtStats.active, icon: <GridIcon/>, color: '#059669' },
             { label: 'รออนุมัติ / ระงับ', value: districtStats.pending, icon: <AlertIcon/>, color: districtStats.pending > 0 ? '#D97706' : '#059669' },
             { label: 'โรงเรียนในระบบ', value: districtStats.schools, icon: <HomeIcon/>, color: '#0891B2' },
@@ -253,7 +253,7 @@ export default async function DashboardPage() {
       {/* Stats — school roles */}
       {!isDistrict && (
         <div className="responsive-grid-sm">
-          <StatCard icon={<HomeIcon/>} label="ห้องเรียน" value={schoolStats?.classrooms ?? '-'} color="#8B6B45" bg="#F5EDE3"/>
+          <StatCard icon={<HomeIcon/>} label="ห้องเรียน" value={schoolStats?.classrooms ?? '-'} color="#235bc8" bg="#edf4ff"/>
           <StatCard icon={<BookIcon/>} label="รายวิชา" value={schoolStats?.subjects ?? '-'} color="#0891B2" bg="#ECFEFF"/>
           <StatCard icon={<UserIcon/>} label="นักเรียน" value={schoolStats?.students ?? '-'} color="#059669" bg="#ECFDF5"/>
           <StatCard icon={<DocIcon/>} label="ปพ.5 ที่เปิดบันทึก" value={schoolStats?.pp5 ?? '-'} color="#D97706" bg="#FFFBEB"/>
@@ -277,13 +277,13 @@ type QL = { href: string; icon: ReactNode; label: string; desc: string; color: s
 
 function getQuickLinks(role: string): QL[] {
   const all: Record<string, QL> = {
-    schools:    { href: '/district/schools',          icon: <HomeIcon/>,  label: 'ฐานข้อมูลโรงเรียน',        desc: 'เพิ่ม แก้ไข และเตรียมข้อมูลโรงเรียนลูกค้า', color: '#8B6B45', bg: '#F5EDE3' },
+    schools:    { href: '/district/schools',          icon: <HomeIcon/>,  label: 'ฐานข้อมูลโรงเรียน',        desc: 'เพิ่ม แก้ไข และเตรียมข้อมูลโรงเรียนลูกค้า', color: '#235bc8', bg: '#edf4ff' },
     admins:     { href: '/district/admins',           icon: <UserIcon/>,  label: 'สมาชิกโรงเรียน',           desc: 'อนุมัติ ระงับ รีเซ็ตรหัสผ่าน และตั้งโควตาผู้ใช้', color: '#0891B2', bg: '#ECFEFF' },
     schedules:  { href: '/schedules/class/manage',    icon: <GridIcon/>,  label: 'จัดตารางเรียน',           desc: 'เตรียมข้อมูลและจัดตารางอัตโนมัติ 7 ขั้นตอน', color: '#235bc8', bg: '#edf4ff' },
     timetable:  { href: '/schedules/teaching',         icon: <ClockIcon/>, label: 'ดูตารางสอน',           desc: 'ดูคาบสอนและตารางสอนรายสัปดาห์', color: '#235bc8', bg: '#edf4ff' },
     subjects:   { href: '/district/subjects',         icon: <BookIcon/>,  label: 'โครงสร้างรายวิชากลาง',     desc: 'แม่แบบรายวิชาให้โรงเรียนนำไปใช้',           color: '#059669', bg: '#ECFDF5' },
     d_export:   { href: '/district/free-ad',          icon: <DocIcon/>,   label: 'จัดการโฆษณา',             desc: 'กำหนดโฆษณาสำหรับหน้าจัดตารางสอนฟรี', color: '#DB2777', bg: '#FDF2F8' },
-    school:     { href: '/settings/school',           icon: <HomeIcon/>,  label: 'ตั้งค่าโรงเรียน',        desc: 'ข้อมูลโรงเรียน ผู้บริหาร',               color: '#8B6B45', bg: '#F5EDE3' },
+    school:     { href: '/settings/school',           icon: <HomeIcon/>,  label: 'ตั้งค่าโรงเรียน',        desc: 'ข้อมูลโรงเรียน ผู้บริหาร',               color: '#235bc8', bg: '#edf4ff' },
     users:      { href: '/settings/users',            icon: <UserIcon/>,  label: 'จัดการชื่อผู้ใช้งาน',     desc: 'เพิ่ม แก้ไข ครูและบัญชีผู้ใช้งาน',        color: '#0891B2', bg: '#ECFEFF' },
     classrooms: { href: '/classrooms',                icon: <GridIcon/>,  label: 'ชั้นเรียน',              desc: 'จัดการห้องเรียน ครูประจำชั้น',            color: '#059669', bg: '#ECFDF5' },
     scores:     { href: '/scores',                    icon: <EditIcon/>,  label: 'บันทึกคะแนน',            desc: 'กรอกคะแนนระหว่างเรียน กลางภาค ปลายภาค', color: '#D97706', bg: '#FFFBEB' },
