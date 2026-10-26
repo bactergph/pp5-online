@@ -41,6 +41,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'saveClassScheduleCell' |
   'savePeriodTimes' |
   'savePreparation' |
+  'setJointTeachingScheduleCell' |
   'saveSchedulePlaces' |
   'saveScheduleActivity' |
   'saveScheduleActivityName' |

@@ -30,7 +30,7 @@ function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
 }
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
 export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota'
-export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; code?: FixedScheduleIssueCode; details?: string[] }
+export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; manageStep?:number; code?: FixedScheduleIssueCode; details?: string[] }
 export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking'|'block_repair';elapsedMs?:number;timeLimitMs?:number}
 export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
 export const SCHEDULE_SEARCH_TIME_LIMIT_MS = 45_000

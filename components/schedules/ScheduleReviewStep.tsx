@@ -8,6 +8,7 @@ import { activityTeachers } from '@/lib/schedule-activity-teams'
 import { activityTimetableTeacherLabel, teacherTimetableName } from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
 import { FiAlertCircle, FiCheckCircle, FiChevronRight, FiGrid, FiInfo, FiRefreshCw, FiSave, FiTrash2, FiZap } from 'react-icons/fi'
+import SchedulePeriodBudget from './SchedulePeriodBudget'
 import './schedule-review.css'
 
 export type ScheduleDraftView = {
@@ -23,7 +24,7 @@ type Props = {
   onConfirm:()=>void; onDiscard:()=>void; onFix:(step:number)=>void
   workingLabel?:string
 }
-const steps:Record<number,string>={1:'วันและเวลา',2:'กำหนดชั้น',3:'กำหนดครู',4:'รายวิชา',5:'กิจกรรม',6:'ภาระสอนและล็อกคาบ',7:'ตรวจและจัดตาราง'}
+const steps:Record<number,string>={1:'วันและเวลา',2:'กำหนดชั้น',3:'กำหนดครู',4:'กิจกรรม',5:'รายวิชา',6:'ภาระสอนและล็อกคาบ',7:'ตรวจและจัดตาราง'}
 
 export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocked,onRooms,onClear,onCheck,onGenerate,onConfirm,onDiscard,onFix,workingLabel}:Props) {
   const resultRef=useRef<HTMLDivElement>(null)
@@ -108,6 +109,7 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
       </details>
       {groups.length>0&&<details className="prep-review-activities"><summary>กิจกรรมที่นำมาจัด {groups.length} กลุ่ม</summary><ul>{groups.map(group=><li key={group.id}><b>{data.activities.find(activity=>activity.id===group.settingId)?.label||'กิจกรรม'}</b><span>{group.weeklyPeriods} คาบ/สัปดาห์ · {group.cells.length?group.cells.map(cell=>`${SCHEDULE_DAYS.find(day=>day.value===cell.day)?.label} คาบ ${cell.period}`).join(', '):'จัดวันและคาบอัตโนมัติ'}</span>{group.mode==='joint'&&group.roomIds.some(id=>!rooms.includes(id))&&<small>กิจกรรมรวมกลุ่มอาจเปลี่ยนคาบในอีก {group.roomIds.filter(id=>!rooms.includes(id)).length} ห้อง เพื่อให้จัดพร้อมกัน</small>}</li>)}</ul></details>}
     </section>
+    <SchedulePeriodBudget data={data} rooms={rooms} onFix={onFix}/>
     {blocked&&<p className="prep-notice" role="status"><FiInfo aria-hidden="true"/>บันทึกข้อมูลครู รายวิชา หรือกิจกรรมที่กำลังแก้ก่อนสร้างร่าง</p>}
     <div className="prep-review-action-bar">
       <span><FiInfo aria-hidden="true"/>{rooms.length ? 'ตารางจริงจะไม่เปลี่ยนจนยืนยันบันทึก' : 'เลือกอย่างน้อย 1 ห้องก่อนจัดตาราง'}</span>

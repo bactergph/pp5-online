@@ -1,0 +1,7 @@
+import type {Preparation} from '@/lib/schedule-preparation'
+import {schedulePeriodBudget} from '@/lib/schedule-period-budget'
+export default function SchedulePeriodBudget({data,rooms,onFix}:{data:Preparation;rooms?:string[];onFix?:(step:number)=>void}){
+  const rows=schedulePeriodBudget(data,rooms),missing=rows.filter(row=>row.missing),excess=rows.filter(row=>row.excess)
+  if(!rows.length)return null
+  return <section className="prep-period-budget" aria-label="คาบวิชาและกิจกรรมต่อสัปดาห์"><header><div><h3>คาบเรียนต่อสัปดาห์</h3><p>วิชา + กิจกรรม เทียบกับวันและเวลาคาบที่กำหนด</p></div><b role="status">{excess.length?`เกิน ${excess.length} ห้อง`:missing.length?`ยังขาด ${missing.length} ห้อง`:'กำหนดครบทุกห้อง'}</b></header><div className="prep-scroll"><table><thead><tr><th>ชั้น/ห้อง</th><th>วิชา</th><th>กิจกรรม</th><th>รวม / คาบเรียน</th><th>สถานะ</th></tr></thead><tbody>{rows.map(row=><tr key={row.roomId}><th>{row.label}</th><td>{row.subjects}</td><td>{row.activities}</td><td>{row.total} / {row.target}{row.reserved>0&&<small>ล็อกคาบว่าง {row.reserved} จาก {row.capacity} คาบ</small>}</td><td className={row.excess?'prep-budget-over':row.missing?'prep-budget-missing':'prep-budget-complete'}>{row.excess?`เกิน ${row.excess} คาบ`:row.missing?`ขาด ${row.missing} คาบ`:'ครบแล้ว'}</td></tr>)}</tbody></table></div>{onFix&&<footer><button type="button" onClick={()=>onFix(4)}>กำหนดกิจกรรม</button><button type="button" onClick={()=>onFix(5)}>กำหนดรายวิชา</button></footer>}</section>
+}

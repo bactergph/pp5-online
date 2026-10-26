@@ -14,6 +14,7 @@ export async function fetchPreparation(year:string,term:number){return scheduleR
 export async function fetchScheduleActivityCatalog(){return scheduleResult(()=>planning.activityCatalog())}
 export async function saveScheduleActivityName(id:string|null,label:string,shortLabel:string,weeklyPeriods=1){return scheduleResult(()=>planning.saveActivityName(id,label,shortLabel,weeklyPeriods))}
 export async function removeScheduleActivityName(id:string){return scheduleResult(()=>planning.removeActivityName(id))}
+export async function setJointTeachingScheduleCell(year:string,term:number,request:import('@/lib/schedule-joint-lock').JointLockRequest){return scheduleResult(()=>planning.setJointTeachingCell(year,term,request))}
 export async function savePreparation(year:string,term:number,hash:string,plan:SchedulePlan){return scheduleResult(()=>planning.savePlan(year,term,hash,plan))}
 export async function saveSchedulePlaces(year:string,term:number,hash:string,change:import('@/lib/schedule-places').SchedulePlaceChange){return scheduleResult(()=>planning.savePlaces(year,term,hash,change))}
 export async function checkPreparation(year:string,term:number,rooms:string[],clear:boolean){return scheduleResult(()=>planning.preflight(year,term,rooms,clear).then(r=>r.issues))}

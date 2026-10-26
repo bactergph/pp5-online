@@ -1,4 +1,5 @@
 import 'server-only'
+import {applyJointTeachingLock,type JointLockRequest} from './schedule-joint-lock'
 import {withJointTeachingGroups,validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingScope} from './schedule-joint-teaching'
 import { activityTeachers, activityWeeklyPeriods, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { randomUUID } from 'node:crypto'
@@ -103,6 +104,11 @@ export async function removeActivityName(id:string){
  fail(removed.error)
  return activityCatalog()
 }
+export async function setJointTeachingCell(year:string,term:number,request:JointLockRequest){
+ const session=await actor(),current=await preparation(year,term),rows=applyJointTeachingLock(current,request,year)
+ const result=await createServerClient().rpc('save_schedule_joint_lock',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:current.hash,p_expected:current.slots,p_rows:rows,p_allow_unlock:request.remove||!request.locked});fail(result.error)
+ return {rooms:request.expected.length}
+}
 export async function savePlaces(year:string,term:number,hash:string,change:SchedulePlaceChange){
  const s=await actor(),current=await preparation(year,term)
  if(current.hash!==hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
@@ -169,7 +175,7 @@ function input(data:Preparation,scope:string[],clear:boolean,year:string){
  const lessons=allLessons.map(l=>{const active=scope.includes(l.classroomId)&&!l.activity||autoIds.has(l.id);const count=active?(placed.flexible.get(l.id)?.count??l.count):retained.filter(s=>lessonKey(s)===l.id).length;return {...l,...placed.patch.get(l.id),count,fixedOnly:!active,pattern:active?(l.activity?Array(count).fill(1):l.pattern):undefined,teacherOptional:!active||l.teacherOptional,preferMorning:active&&!l.activity&&lessonPrefersMorning(l)}})
  return {retained,lessons,offerings:placed.offerings,unlock:placed.unlock}
 }
-function shiftManageStep<T extends {step:number}>(issue:T){return {...issue,step:({1:1,2:3,3:4,4:6,5:6,6:7} as Record<number,number>)[issue.step]||7}}
+function shiftManageStep<T extends {step:number}>(issue:T){return {...issue,step:({1:1,2:3,3:5,4:6,5:6,6:7} as Record<number,number>)[issue.step]||7}}
 export async function preflight(year:string,term:number,scope:string[],clear:boolean){
  const data=await preparation(year,term),activityIssues:ReturnType<typeof checkPlanning>=[],groupIds=new Set<string>(),roomActivities=new Set<string>()
  // Commit validates every activity team, including pinned teams outside the chosen scope.
@@ -177,8 +183,8 @@ export async function preflight(year:string,term:number,scope:string[],clear:boo
  for(const group of data.plan.activityGroups||[]){
   const name=data.activities.find(activity=>activity.id===group.settingId)?.label||'กิจกรรม'
   try{validateActivityTeam(group,data.classrooms.map(room=>room.id),data.teachers.map(teacher=>teacher.id),data.activities.map(activity=>activity.id),data.plan.days,data.periods)}
-  catch(error){activityIssues.push({severity:'error',message:`${name}: ${error instanceof Error?error.message:String(error)}`,step:5});continue}
-  if(groupIds.has(group.id)||group.roomIds.some(room=>roomActivities.has(`${group.settingId}:${room}`)))activityIssues.push({severity:'error',message:`${name}: กำหนดทีมกิจกรรมซ้ำในห้องเดียวกัน กรุณารวมเป็นทีมเดียว`,step:5})
+  catch(error){activityIssues.push({severity:'error',message:`${name}: ${error instanceof Error?error.message:String(error)}`,step:4});continue}
+  if(groupIds.has(group.id)||group.roomIds.some(room=>roomActivities.has(`${group.settingId}:${room}`)))activityIssues.push({severity:'error',message:`${name}: กำหนดทีมกิจกรรมซ้ำในห้องเดียวกัน กรุณารวมเป็นทีมเดียว`,step:4})
   groupIds.add(group.id);for(const room of group.roomIds)roomActivities.add(`${group.settingId}:${room}`)
  }
  if(activityIssues.length)return {data,issues:activityIssues,retained:data.slots,lessons:data.lessons,offerings:[] as {id:string;classroom_id:string;evaluation_setting_id:string}[],unlock:[] as ScheduleSlot[]}
@@ -187,14 +193,14 @@ export async function preflight(year:string,term:number,scope:string[],clear:boo
  for(const l of lessons.filter(l=>l.count>0&&(!l.fixedOnly||l.activity&&(data.plan.activityGroups||[]).some(group=>group.settingId===l.subjectId&&group.roomIds.includes(l.classroomId))))){
   const teachers=l.teacherIds??(l.teacherId?[l.teacherId]:[])
   for(const teacherId of teachers){
-   if(!data.teachers.some(t=>t.id===teacherId))poolIssues.push({severity:'error',message:`${l.label} ครูผู้สอนไม่อยู่ในรายชื่อบุคลากรที่ใช้งานได้`,step:l.activity?5:6})
+   if(!data.teachers.some(t=>t.id===teacherId))poolIssues.push({severity:'error',message:`${l.label} ครูผู้สอนไม่อยู่ในรายชื่อบุคลากรที่ใช้งานได้`,step:l.activity?4:6})
    else if(data.plan.teacherIds&&!data.plan.teacherIds.includes(teacherId))poolIssues.push({severity:'error',message:`${l.label} ครูผู้สอนไม่ได้อยู่ในรายการครูที่เลือกจัดตาราง`,step:3})
   }
  }
  for(const id of scope)if(!lessons.some(l=>l.classroomId===id&&!l.activity)){const room=data.classrooms.find(c=>c.id===id);issues.push({severity:'error',message:`${room?`${room.level}/${room.name}`:'ห้องนี้'} ยังไม่มีรายวิชา`,step:3})}
  if(!data.timesConfigured)issues.push({severity:'error',message:'ยังไม่บันทึกเวลาคาบของโรงเรียน กรุณาตรวจและบันทึกเวลาเริ่ม–จบก่อนจัด',step:1})
- if(!data.blocksSupported)issues.push({severity:'error',message:'ยังไม่มีตารางครูไม่ว่าง กรุณาติดตั้ง migration 062 ก่อนตรวจและจัดตาราง',step:5})
- for(const l of lessons.filter(l=>scope.includes(l.classroomId)&&!l.activity&&l.roomName&&!data.plan.rules[l.id]?.roomId))issues.push({severity:'warning',message:`${l.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`,step:5})
+ if(!data.blocksSupported)issues.push({severity:'error',message:'ยังไม่มีตารางครูไม่ว่าง กรุณาติดตั้ง migration 062 ก่อนตรวจและจัดตาราง',step:4})
+ for(const l of lessons.filter(l=>scope.includes(l.classroomId)&&!l.activity&&l.roomName&&!data.plan.rules[l.id]?.roomId))issues.push({severity:'warning',message:`${l.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`,step:4})
  const timeError=validatePeriodTimes(data.periods);if(timeError)issues.push({severity:'error',message:timeError,step:1})
  if(!Array.isArray(data.plan.days)||!data.plan.days.length)issues.push({severity:'error',message:'ยังไม่ได้เลือกวันเรียน',step:1})
  if(!clear&&retained.some(s=>scope.includes(s.classroom_id)&&s.class_subject_id&&!s.locked))issues.push({severity:'warning',message:'กำลังเติมเฉพาะช่องว่าง คาบวิชาเดิมจะอยู่ที่เดิม หากต้องการจัดใหม่ให้เลือก “จัดวิชาที่ไม่ล็อกใหม่”',step:6})

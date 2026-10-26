@@ -1,4 +1,5 @@
 'use client'
+import type {JointLockRequest} from '@/lib/schedule-joint-lock'
 import { useRef, useState } from 'react'
 import Swal from 'sweetalert2'
 import type { Preparation } from '@/lib/schedule-preparation'
@@ -21,9 +22,9 @@ export type WorkloadChange = {
   rules?: { lessonId: string; value: LessonRule }[]
   places?: Place[]
 }
-type OnlineActions = typeof import('@/app/schedules/actions')
+type OnlineActions = typeof import('@/app/schedules/actions') & typeof import('@/app/schedules/planning-actions')
 export type WorkloadOperations = {
-  [K in 'editTeacherScheduleCell' | 'saveClassScheduleCell' | 'setTeacherAvailabilityBlock' | 'toggleScheduleCellLock']:
+  [K in 'setJointTeachingScheduleCell' | 'editTeacherScheduleCell' | 'saveClassScheduleCell' | 'setTeacherAvailabilityBlock' | 'toggleScheduleCellLock']:
     (...args: Parameters<OnlineActions[K]>) => Promise<{error?:string|null}>
 }
 type Draft = { id: string; teacherId: string; count: number; pattern: number[]; roomId: string | null; spread: boolean; morning: boolean; timePreference?: LessonRule['timePreference'] }
@@ -71,6 +72,10 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
   onRefresh: () => Promise<void>
   operations?: WorkloadOperations
 }) {
+  const [jointLock,setJointLock]=useState<JointLockRequest|null>(null)
+  const [jointCollision,setJointCollision]=useState<string[]>([])
+  const [lockNotice,setLockNotice]=useState('')
+  const jointTrigger=useRef<HTMLButtonElement>(null)
   const disconnected = async ():Promise<never> => {throw Error('ไม่พบตัวบันทึกคาบ กรุณาโหลดหน้าใหม่')}
   const {editTeacherScheduleCell,saveClassScheduleCell,setTeacherAvailabilityBlock,toggleScheduleCellLock}=operations||{
     editTeacherScheduleCell:disconnected,saveClassScheduleCell:disconnected,setTeacherAvailabilityBlock:disconnected,toggleScheduleCellLock:disconnected,
@@ -249,6 +254,7 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
   function teacherBlocked(day: number, period: number) { return blocks.some(block => block.teacherId === teacherId && block.day === day && block.period === period) }
   function lockKey(day: number, period: number) { return `${lockMode === 'room' ? activeRoom : teacherId}:${day}:${period}` }
   function openLock(day: number, period: number) {
+    setJointLock(null);setJointCollision([]);setLockNotice('')
     if ((lockMode === 'room' && !activeRoom) || (lockMode === 'teacher' && !teacherId) || queuedLocks.current.has(lockKey(day, period))) return
     const slot = lockMode === 'room' ? roomSlot(day, period) : teacherSlot(day, period)
     setLockCell({ day, period })
@@ -269,10 +275,21 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
       finally { queuedLocks.current.delete(key); setPendingLocks([...queuedLocks.current]); setLockingKey('') }
     })
   }
+  function prepareJointLock(lessonId:string|null,locked:boolean,remove=false){
+    if(!lockCell)return false
+    setJointCollision([]);setLockNotice('')
+    const lesson=lessons.find(lesson=>lesson.id===lessonId),group=teachingGroups.find(group=>group.lessonIds.includes(lessonId||''))
+    if(group){setJointLock({lessonId:lessonId!,...lockCell,locked,remove,expected:lessons.filter(lesson=>group.lessonIds.includes(lesson.id)).map(lesson=>{const old=slots.find(row=>row.classroom_id===lesson.classroomId&&row.day_of_week===lockCell.day&&row.period===lockCell.period);return {classroomId:lesson.classroomId,lessonId:old?.class_subject_id||null,locked:!!old?.locked}})});return true}
+    if(!remove&&lesson){const others=slots.filter(row=>row.day_of_week===lockCell.day&&row.period===lockCell.period&&row.classroom_id!==lesson.classroomId&&lessons.some(other=>other.id===row.class_subject_id&&teacherOf(other)===teacherOf(lesson)));if(others.length){setJointCollision(others.map(row=>roomLabel(row.classroom_id)));return true}}
+    return false
+  }
+  function confirmJointLock(){if(!jointLock||!lockCell)return;const request=jointLock;setJointLock(null);void enqueueLock(lockKey(request.day,request.period),async()=>{const saved=await (operations?.setJointTeachingScheduleCell||disconnected)(year,term,request);if(saved.error)throw Error(saved.error)})}
   function applyRoomLock(lessonId: string | null, shouldLock: boolean) {
     if (!lockCell || !activeRoom) return
     const slot = roomSlot(lockCell.day, lockCell.period)
     const currentId = slot?.class_subject_id || null
+    if(lessonId&&lessonId!==currentId&&teachingGroups.some(group=>group.lessonIds.includes(currentId||''))){setLockNotice('คาบเดิมเป็นสอนรวม กรุณาเอาวิชาออกทั้งกลุ่มก่อนเปลี่ยนเป็นวิชาอื่น');return}
+    if(prepareJointLock(lessonId||currentId,shouldLock,!lessonId))return
     void enqueueLock(`${activeRoom}:${lockCell.day}:${lockCell.period}`, async () => {
       if (slot?.activity_id && lessonId !== currentId) throw Error('คาบนี้เป็นกิจกรรม แก้ได้ที่ขั้นกิจกรรม')
       if (slot?.locked && lessonId !== currentId) {
@@ -296,6 +313,7 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
     const current = teacherSlot(lockCell.day, lockCell.period)
     const targetLesson = lesson || (current?.class_subject_id ? lessons.find(item => item.id === current.class_subject_id) : undefined)
     if (!targetLesson) return
+    if(prepareJointLock(targetLesson.id,true,!lessonId))return
     const room = targetLesson.classroomId
     const target = slots.find(item => item.classroom_id === room && item.day_of_week === lockCell.day && item.period === lockCell.period)
     void enqueueLock(`${teacherId}:${lockCell.day}:${lockCell.period}`, async () => {
@@ -358,7 +376,7 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
   const rowProps = { busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit: openLesson, hasLessons: lessons.length > 0 }
   return <section className="prep-input-panel prep-teacher-panel prep-workload">
     <WorkloadSaveFeedback status={saveStatus} />
-    <div className="prep-load-toolbar"><span>ครูสอนพร้อมกันหลายห้อง</span><JointTeachingEditor groups={teachingGroups} lessons={lessons.map(lesson=>({...lesson,...rules[lesson.id],teacherId:teacherAssignments[lesson.id]??lesson.teacherId}))} teachers={teachers} classrooms={classrooms} busy={busy} onSave={onTeachingGroupsChange}/></div>
+    <div className="prep-load-toolbar"><span>ครูสอนพร้อมกันหลายห้อง</span><JointTeachingEditor buttonRef={jointTrigger} groups={teachingGroups} lessons={lessons.map(lesson=>({...lesson,...rules[lesson.id],teacherId:teacherAssignments[lesson.id]??lesson.teacherId}))} teachers={teachers} classrooms={classrooms} busy={busy} onSave={onTeachingGroupsChange}/></div>
     <div className="prep-teacher-bar">
       <div className="prep-teacher-title"><h2>กำหนดภาระสอน</h2><p>{view === 'room' ? `${activeLevel}/${levelRooms.find(room => room.id === activeRoom)?.room || ''} · ${visible.length} วิชา` : view === 'teacher' ? (teacherId ? `${teacherName(teacherId)} · จากครู ${teachers.length} คน` : `ครูในชุดนี้ ${teachers.length} คน`) : view === 'lock' ? (lockMode === 'room' ? 'เลือกห้อง แล้วแตะคาบเพื่อกำหนดวิชาและล็อกคาบเรียน' : `เลือกจากครู ${teachers.length} คน แล้วแตะคาบเพื่อกำหนดวิชาหรือล็อกคาบว่าง`) : 'แตะการ์ดวิชา แล้วเลือกหลายห้องเพื่อกำหนดครู'}</p></div>
       <div className="prep-teacher-tools prep-subject-tools">
@@ -399,8 +417,9 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
         const locked = !!slot?.locked
         const key = lockKey(day.value, period.period)
         const waiting = pendingLocks.includes(key)
+        const combinedRooms=lesson?lessons.filter(other=>other.id===lesson.id||lesson.activityGroupId&&other.activityGroupId===lesson.activityGroupId).map(other=>roomLabel(other.classroomId)).join(' + '):''
         const label = lesson?.code || (slot?.activity_id ? 'กิจกรรม' : blocked ? 'คาบว่าง' : 'ว่าง')
-        return <td key={period.period}><button type="button" className={blocked && !lesson ? 'is-free-lock' : undefined} aria-pressed={locked || (blocked && !lesson)} aria-busy={waiting} disabled={waiting} onClick={() => openLock(day.value, period.period)}><b>{label}</b><small>{waiting ? (key === lockingKey ? 'กำลังบันทึก' : 'รอคิว') : lesson ? `${lockMode === 'teacher' ? roomLabel(lesson.classroomId) : ''}${locked ? ' ล็อกแล้ว' : ''}` : blocked ? 'ล็อกคาบว่าง' : 'แตะเพื่อกำหนด'}</small></button></td>
+        return <td key={period.period}><button type="button" className={blocked && !lesson ? 'is-free-lock' : undefined} aria-pressed={locked || (blocked && !lesson)} aria-busy={waiting} disabled={waiting} onClick={() => openLock(day.value, period.period)}><b>{label}</b><small>{waiting ? (key === lockingKey ? 'กำลังบันทึก' : 'รอคิว') : lesson ? `${lockMode === 'teacher' ? combinedRooms : ''}${locked ? ' ล็อกแล้ว' : ''}` : blocked ? 'ล็อกคาบว่าง' : 'แตะเพื่อกำหนด'}</small></button></td>
       })}</tr>)}</tbody></table></div>}
     </>}
     {view === 'code' && <>
@@ -421,7 +440,7 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
     <div className="prep-load-save"><span>{ready ? 'กำหนดครูและภาระสอนครบแล้ว' : 'ยังมีวิชาที่ยังไม่กำหนดครูหรือคาบให้ครบ'}</span>{saveNotice}</div>
     <dialog ref={lockDialog} className="prep-team-dialog prep-activity-dialog" aria-labelledby="lock-title" onCancel={event => { event.preventDefault(); closeLock() }}>{lockCell && <>
       <header><div><h2 id="lock-title">{lockMode === 'room' ? 'ล็อกคาบเรียน' : 'ล็อกคาบสอน'}</h2><p>{SCHEDULE_DAYS.find(day => day.value === lockCell.day)?.label} · คาบ {lockCell.period} · {lockMode === 'room' ? roomLabel(activeRoom) : teacherName(teacherId)}</p></div><button type="button" aria-label="ปิด" onClick={closeLock}>ปิด</button></header>
-      <div className="prep-team-dialog-body"><fieldset className="prep-activity-sections" disabled={saving}>
+      <div className="prep-team-dialog-body"><fieldset className="prep-activity-sections" disabled={saving||!!jointLock}>
         {lockMode === 'teacher' && <section className="prep-activity-block"><div className="prep-activity-head"><span>1</span><div><h3>คาบว่าง</h3><p>ล็อกไว้เมื่อครูไม่สะดวกสอนคาบนี้</p></div></div>
           <div className="prep-activity-scope">{teacherBlocked(lockCell.day, lockCell.period) ? <button type="button" onClick={() => applyTeacherFree(false)}>ปลดล็อกคาบว่าง</button> : <button type="button" disabled={!!teacherSlot(lockCell.day, lockCell.period)} onClick={() => applyTeacherFree(true)}>ล็อกคาบว่าง</button>}</div>
         </section>}
@@ -429,7 +448,11 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
           {lockMode === 'room' && roomSlot(lockCell.day, lockCell.period)?.activity_id ? <p className="prep-teacher-empty">คาบนี้เป็นกิจกรรม แก้ได้ที่ขั้นกิจกรรม</p> : <div className="prep-lock-picks">{(lockMode === 'room' ? lessons.filter(lesson => lesson.classroomId === activeRoom) : lessons.filter(lesson => teacherOf(lesson) === teacherId)).slice().sort((a, b) => a.code.localeCompare(b.code, 'th')).map(lesson => <button type="button" key={lesson.id} aria-pressed={lockPick === lesson.id} onClick={() => setLockPick(lesson.id)}><strong>{lesson.fullName || lesson.name}</strong><b>{lesson.code}</b><small>{roomLabel(lesson.classroomId)}</small></button>)}</div>}
         </section>
       </fieldset></div>
+      {lockNotice&&<p className="prep-error" role="alert">{lockNotice}</p>}
+      {jointLock&&<section className="prep-notice" role="alert"><b>{jointLock.remove?'นำคาบสอนรวมออก':jointLock.locked?'ล็อกคาบสอนรวม':'ปลดล็อกคาบสอนรวม'}พร้อมกันทุกห้อง?</b><p>ครูคนเดียวสอนรวม {jointLock.expected.map(row=>roomLabel(row.classroomId)).join(' + ')} · คาบนี้นับภาระครูครั้งเดียว</p></section>}
+      {jointCollision.length>0&&<section className="prep-notice" role="alert"><b>ครูมีคาบสอนห้อง {jointCollision.join(', ')} อยู่แล้ว</b><p>หากต้องการสอนพร้อมกัน ให้กำหนดกลุ่มสอนรวมก่อน แล้วกลับมาล็อกคาบนี้</p><button type="button" onClick={()=>{closeLock();jointTrigger.current?.click()}}>ตั้งค่าสอนรวมหลายห้อง</button></section>}
       <footer>
+        {jointLock?<><button type="button" onClick={()=>setJointLock(null)}>ย้อนกลับ</button><button type="button" className="prep-primary" onClick={confirmJointLock}>ยืนยันสอนรวม</button></>:<>
         <span>{lockPick ? 'เลือกวิชาแล้ว' : 'เลือกวิชา หรือล็อกคาบว่าง'}</span>
         <button type="button" onClick={closeLock}>ปิด</button>
         {lockMode === 'room' && !!roomSlot(lockCell.day, lockCell.period)?.class_subject_id && <button type="button" onClick={() => applyRoomLock(null, false)}>เอาวิชาออก</button>}
@@ -437,6 +460,7 @@ export default function WorkloadEditor({ teachingGroups, onTeachingGroupsChange,
         {lockMode === 'room' && <button type="button" className="prep-primary" disabled={!lockPick || !!roomSlot(lockCell.day, lockCell.period)?.activity_id} onClick={() => applyRoomLock(lockPick, true)}>กำหนดวิชาและล็อก</button>}
         {lockMode === 'teacher' && !!teacherSlot(lockCell.day, lockCell.period) && <button type="button" onClick={() => applyTeacherSubject(null)}>เอาวิชาออก</button>}
         {lockMode === 'teacher' && <button type="button" className="prep-primary" disabled={!lockPick} onClick={() => applyTeacherSubject(lockPick)}>ลงวิชาที่จะสอน</button>}
+        </>}
       </footer>
     </>}</dialog>
     <dialog ref={dialog} className="prep-team-dialog prep-activity-dialog" aria-labelledby="load-title" onCancel={event => { event.preventDefault(); close() }}>{draft && draftLesson && <>

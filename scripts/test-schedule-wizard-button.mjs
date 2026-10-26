@@ -16,7 +16,7 @@ fs.mkdirSync(out,{recursive:true})
 function load(file,deps={}){
   const exports={}
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,
-    {exports,console,require:name=>{if(name==='server-only')return {};if(name in deps)return deps[name];throw Error(`Unexpected dependency ${name} in ${file}`)}})
+    {exports,console,require:name=>{if(name==='server-only')return {};if(name in deps)return deps[name];if(name.startsWith('.'))return load(path.relative(root,path.resolve(root,path.dirname(file),name+'.ts')));throw Error(`Unexpected dependency ${name} in ${file}`)}})
   return exports
 }
 const schedules=load('lib/schedules.ts'),helpers=load('lib/schedule-helpers.ts',{'@/lib/schedules':schedules})

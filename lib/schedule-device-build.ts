@@ -150,10 +150,10 @@ export function prepareDeviceDraft(data: DeviceSnapshot, year: string, scope: st
       new Set(group.cells.map(cell => cell.day+':'+cell.period)).size !== group.cells.length ||
       group.cells.some(cell => !data.plan.days.includes(cell.day) || !data.periods.some(row => !row.is_break && row.period === cell.period)) ||
       group.roomIds.some(id => activityTeachers(group, id).some(teacher => !data.teachers.some(row => row.id === teacher)))
-    if (invalid) issues.push({ severity:'error', message:name+': ตรวจห้อง ครู จำนวนคาบ และวันกิจกรรมให้ถูกต้อง', step:4 })
+    if (invalid) issues.push({ severity:'error', message:name+': ตรวจห้อง ครู จำนวนคาบ และวันกิจกรรมให้ถูกต้อง', step:4,manageStep:4 })
     for (const room of group.roomIds) {
       const key = group.settingId+':'+room
-      if (activityKeys.has(key)) issues.push({severity:'error',message:name+': มีกิจกรรมซ้ำในห้องเดียวกัน',step:4})
+      if (activityKeys.has(key)) issues.push({severity:'error',message:name+': มีกิจกรรมซ้ำในห้องเดียวกัน',step:4,manageStep:4})
       activityKeys.add(key)
     }
   }

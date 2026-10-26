@@ -1,11 +1,11 @@
 'use client'
-import {useRef,useState} from 'react'
+import {useRef,useState,type RefObject} from 'react'
 import type {ScheduleLesson} from '@/lib/schedule-store'
 import type {Preparation} from '@/lib/schedule-preparation'
 import {validateJointTeachingGroups,type JointTeachingGroup} from '@/lib/schedule-joint-teaching'
 import './joint-teaching.css'
 
-export default function JointTeachingEditor({groups,lessons,teachers,classrooms,busy,onSave}:{groups:JointTeachingGroup[];lessons:(ScheduleLesson&{pattern?:number[]})[];teachers:Preparation['teachers'];classrooms:Preparation['classrooms'];busy:boolean;onSave:(groups:JointTeachingGroup[])=>Promise<void>}){
+export default function JointTeachingEditor({buttonRef,groups,lessons,teachers,classrooms,busy,onSave}:{buttonRef?:RefObject<HTMLButtonElement|null>;groups:JointTeachingGroup[];lessons:(ScheduleLesson&{pattern?:number[]})[];teachers:Preparation['teachers'];classrooms:Preparation['classrooms'];busy:boolean;onSave:(groups:JointTeachingGroup[])=>Promise<void>}){
   const dialog=useRef<HTMLDialogElement>(null)
   const [teacher,setTeacher]=useState(''),[selected,setSelected]=useState<string[]>([]),[query,setQuery]=useState(''),[error,setError]=useState(''),[saving,setSaving]=useState(false)
   const label=(id:string)=>{const room=classrooms.find(room=>room.id===id);return room?`${room.level}/${room.name||room.room}`:'ห้องที่ไม่พบ'}
@@ -18,7 +18,7 @@ export default function JointTeachingEditor({groups,lessons,teachers,classrooms,
     try{validateJointTeachingGroups(next,lessons);await onSave(next);setSelected([])}catch(error){setError(error instanceof Error?error.message:'บันทึกไม่สำเร็จ')}finally{setSaving(false)}
   }
   return <>
-    <button type="button" disabled={busy} onClick={()=>{setError('');dialog.current?.showModal()}}>สอนรวมหลายห้อง{groups.length?` · ${groups.length} กลุ่ม`:''}</button>
+    <button ref={buttonRef} type="button" disabled={busy} onClick={()=>{setError('');dialog.current?.showModal()}}>สอนรวมหลายห้อง{groups.length?` · ${groups.length} กลุ่ม`:''}</button>
     <dialog ref={dialog} className="prep-joint-dialog" aria-labelledby="joint-teaching-title" onCancel={event=>{if(saving)event.preventDefault()}}>
       <header><div><h2 id="joint-teaching-title">สอนรวมหลายห้อง</h2><p>ครูคนเดียว สอนพร้อมกันหลายห้อง · นับภาระสอนครั้งเดียว</p></div><button type="button" disabled={saving} onClick={()=>dialog.current?.close()}>ปิด</button></header>
       <div className="prep-joint-body">

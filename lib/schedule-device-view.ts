@@ -25,7 +25,7 @@ export function devicePreparation(plan: FreeWizardPlan): Preparation {
   }
 }
 
-export const deviceIssueSteps = (issues: PlanningIssue[]) => issues.map(issue => ({...issue,step:({1:1,2:3,3:4,4:5,5:6,6:7} as Record<number,number>)[issue.step] || 7}))
+export const deviceIssueSteps = (issues: PlanningIssue[]) => issues.map(issue => ({...issue,step:issue.manageStep??(({1:1,2:3,3:5,4:6,5:6,6:7} as Record<number,number>)[issue.step] || 7)}))
 
 export function devicePreflight(plan: FreeWizardPlan, rooms: string[], clear: boolean, teacherLimit?:number) {
   try {

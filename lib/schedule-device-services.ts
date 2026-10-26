@@ -1,3 +1,4 @@
+import {applyJointTeachingLock} from './schedule-joint-lock'
 import type { ScheduleOperations } from '../components/schedules/ScheduleServices'
 import { activityTeachers, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { validateSubjectInputs } from './schedule-input'
@@ -211,6 +212,11 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       if(change.kind==='remove'&&plan(year,term===1?2:1).subjects.some(subject=>subject.placeId===change.id))throw Error(`สถานที่นี้ยังใช้ในภาคเรียนที่ ${term===1?2:1} กรุณาเปลี่ยนสถานที่ในภาคเรียนนั้นก่อนลบ`)
       const next={...current,places:config.rooms,subjects:current.subjects.map(subject=>({...subject,placeId:config.rules[subject.id]?.roomId??(config.rules[subject.id]?null:subject.placeId)}))}
       return put(year,term,next)
+    })),
+    setJointTeachingScheduleCell:(year,term,request)=>outcome(()=>mutate(year,term,async current=>{
+      const rows=applyJointTeachingLock(devicePreparation(current),request,year)
+      const next={...current,timetable:localDraftCells({status:'complete',issues:[],rows,offerings:[],unlock:[],assigned:0,locked:0})}
+      fixed(next);await put(year,term,next);return {rooms:request.expected.length}
     })),
     savePreparation:(year,term,hash,config)=>outcome(()=>mutate(year,term,async current=>{
       stale(current,hash);validatePlan(config,current.subjects.map(subject=>subject.id))

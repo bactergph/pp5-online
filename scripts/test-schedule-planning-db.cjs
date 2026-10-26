@@ -319,6 +319,19 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   await assert.rejects(saveJointRows([],[jointRows[0]]),/สอนแทน/);
   console.log('PASS: 088 repeatable; different offerings jointly saved, shared teacher/venue counted once; partial edits, unsafe ungrouping, incompatible rules, foreign year, stale snapshots and teacher reassignment rejected atomically; safe whole-group clearing; private SQL helpers');
 
+
+  const jointLockSql=fs.readFileSync('supabase/migrations/089_schedule_joint_lock.sql','utf8');await db.exec(jointLockSql);await db.exec(jointLockSql);
+  await saveJointConfig(jointConfig);
+  const jointManualRows=jointRows.map(row=>({...row,day_of_week:3,locked:true}));
+  const lockSnapshot=await jointHash();
+  const saveJointLock=(hash,before,after,unlock=false)=>db.query('select save_schedule_joint_lock($1,$2,1,$3,$4::jsonb,$5::jsonb,$6)',[id(1),id(9010),hash,JSON.stringify(before),JSON.stringify(after),unlock]);
+  await saveJointLock(lockSnapshot,[],jointManualRows);
+  await assert.rejects(saveJointLock(lockSnapshot,[],jointManualRows),/เปลี่ยน/);
+  await assert.rejects(saveJointLock(await jointHash(),jointManualRows,jointManualRows.slice(1)),/สอนรวม/);
+  await assert.rejects(saveJointLock(await jointHash(),jointManualRows,[]),/ล็อก/);
+  await saveJointLock(await jointHash(),jointManualRows,[],true);
+  assert.equal((await db.query(`select has_function_privilege('authenticated','save_schedule_joint_lock(uuid,uuid,int,text,jsonb,jsonb,boolean)','execute') allowed`)).rows[0].allowed,false);
+  console.log('PASS: 089 repeatable; atomic joint locks, synchronized classrooms, stale snapshots and implicit unlock rejection, explicit unlock/clear, service-only RPC');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

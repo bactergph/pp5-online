@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:interface-design": "node scripts/test-dashboard-shortcuts.cjs && node scripts/test-interface-design.mjs",
-    "test:schedule-joint-teaching": "node scripts/test-schedule-joint-teaching.cjs",
+    "test:schedule-joint-teaching": "node scripts/test-schedule-joint-teaching.cjs && node scripts/test-schedule-joint-lock.cjs && node scripts/test-schedule-period-budget.cjs",
     "test:schedule-retained-blocks": "node scripts/test-schedule-retained-blocks.cjs",
     "test:schedules": "node scripts/test-school-schedule.cjs && node scripts/test-schedule-operations.cjs && node scripts/test-schedule-store.cjs && node scripts/test-school-schedule-db.cjs && node scripts/test-substitute-availability.cjs && node scripts/test-substitute-services.cjs && node scripts/test-schedule-workload.mjs",
     "test:schedule-wizard-button": "node scripts/test-schedule-wizard-button.mjs",

@@ -436,7 +436,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
         {isManage && canEdit && <nav className="schedule-workspace-nav" aria-label="พื้นที่จัดตาราง">
           <button type="button" aria-pressed={workspace==='class'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('class'))}><FiGrid aria-hidden="true"/>ตารางเรียน</button>
           <button type="button" aria-pressed={workspace==='teacher'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('teacher'))}><FiUsers aria-hidden="true"/>ตารางสอน / ล็อกคาบ</button>
-          <button type="button" aria-pressed={workspace==='activity'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationStep(5);setWorkspace('activity')})}><FiCalendar aria-hidden="true"/>กิจกรรมและครู</button>
+          <button type="button" aria-pressed={workspace==='activity'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationStep(4);setWorkspace('activity')})}><FiCalendar aria-hidden="true"/>กิจกรรมและครู</button>
           <button type="button" aria-pressed={workspace==='places'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('places'))}><FiMapPin aria-hidden="true"/>สถานที่</button>
           <button type="button" className="schedule-wizard-entry" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})}><FiZap aria-hidden="true"/>จัดตาราง</button>
           {onSchoolSettings && <button type="button" className="device-school-settings-button" disabled={schoolSettingsDisabled||!!savingKey||!!busyAction||preparationBusy||preparationDirty} onClick={onSchoolSettings}><FiSettings aria-hidden="true" />ตั้งค่าเบื้องต้น</button>}
@@ -491,7 +491,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
         )}
 
 
-        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} initialRooms={preparationRooms} initialStep={workspace==='activity'?5:preparationStep} onChanged={refreshPreparation} />}
+        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} initialRooms={preparationRooms} initialStep={workspace==='activity'?4:preparationStep} onChanged={refreshPreparation} />}
         {workspace==='places'&&selectedYear&&isManage&&canEdit&&<SchedulePlacesEntry key={`${selectedYear}:${semester}:places`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} onChanged={()=>void loadGrid()} />}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
