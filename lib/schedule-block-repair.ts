@@ -65,6 +65,9 @@ export function solveBlockRepair(
   }
   for (const lesson of lessons) {
     if (lesson.fixedOnly || lesson.count === 0) continue
+    // A completely retained offering is already satisfied. In particular, a
+    // fully locked double is not a partial block that needs reconstruction.
+    if ((retained.get(lesson.id) || 0) === lesson.count) continue
     if (lesson.activity) { const id = lesson.activityGroupId || lesson.id; groups.set(id, [...groups.get(id) || [], lesson]); continue }
     const pattern = lesson.pattern || Array(lesson.count).fill(1), kept = retained.get(lesson.id) || 0
     // Completing a partially locked double needs the exact block-cover search.
