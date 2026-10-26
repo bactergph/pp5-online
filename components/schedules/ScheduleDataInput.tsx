@@ -8,6 +8,7 @@ import type { Preparation } from '@/lib/schedule-preparation'
 import ScheduleInputGrid from './ScheduleInputGrid'
 import LocalScheduleTeachers from './LocalScheduleTeachers'
 import { teacherImportCapacity } from '@/lib/schedule-teacher-capacity'
+import ScheduleCentralSubjects from './ScheduleCentralSubjects'
 
 export default function ScheduleDataInput({ kind, data, year, term, onSaved, onDirty, locked, onBusy, onRoster }: {
   kind: 'teachers' | 'subjects'; data: Preparation; year: string; term: number
@@ -304,6 +305,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
           <button type="button" disabled={busy} onClick={exportSubjects}>นำออก</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadSubjects(file) }} />
         </div>
+        {addOpen&&<ScheduleCentralSubjects key={activeLevel} rooms={data.classrooms} initialLevel={activeLevel} existing={timetableLessons} staged={rows} disabled={busy||locked} onAppend={incoming=>change([...rows.filter(row=>row.some(Boolean)),...incoming])}/>}
         <p className="prep-subject-hint">กรอกห้อง รหัส ชื่อ จำนวนคาบ กลุ่มสาระ และประเภท หรือวางจาก Excel ได้หลายแถว ครูผู้สอน การแบ่งคาบ และห้องสถานที่กำหนดในขั้นภาระสอน</p>
         <fieldset disabled={busy}>
           <ScheduleInputGrid label="ตารางนำเข้ารายวิชา" rows={rows} onChange={change} statuses={statuses} maxRows={SUBJECT_ROW_LIMIT}
