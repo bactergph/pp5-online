@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase'
 import { getSession, createSession } from '@/lib/session'
 import { clearUserFromLeaderSlots, syncSchoolLeaderSlot, syncUserRoleToSchoolLeaders } from '@/lib/school-leaders'
 import { formatStaffName } from '@/lib/roles'
+import {assertPersonalHomeroom,isPersonalSubjectAccess} from '@/lib/personal-data-scope'
 import { logActivity, resolveClassroomSchoolId, resolveClassSubjectContext } from '@/lib/audit'
 import { classSubjectSemesterForLevel, type ClassSubjectSemester } from '@/lib/class-subject-term'
 import {
@@ -2507,6 +2508,7 @@ export async function deleteClub(id: string) {
 
 export async function fetchClubAssignments(classroomId: string, academicYearId: string) {
   const session = await requireSchoolSession()
+  await assertPersonalHomeroom(session,classroomId,academicYearId)
   const db = createServerClient()
   if (!session.schoolId) return { students: [], assignments: {}, error: 'ยังไม่ได้เลือกโรงเรียน' }
 
@@ -2597,7 +2599,7 @@ export async function fetchScoreClassSubjects(classroomId: string) {
   const db = createServerClient()
   let q = db.from('class_subjects').select('id, subject_id, teacher_id, order_number')
     .eq('classroom_id', classroomId).order('order_number')
-  if (session.role === 'teacher') q = q.eq('teacher_id', session.userId)
+  if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) q = q.eq('teacher_id', session.userId)
   const { data } = await q
   return data || []
 }
@@ -2608,7 +2610,7 @@ export async function fetchScoreClassroomsLite(yearId: string) {
   const db = createServerClient()
   const schoolId = session.schoolId || ''
 
-  if (session.role === 'teacher') {
+  if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) {
     const { data } = await db.from('class_subjects')
       .select('classrooms!inner(id, level, room)')
       .eq('teacher_id', session.userId)
@@ -2914,9 +2916,15 @@ export async function removeAllClassSubjects(classroomId: string, semester?: Cla
 // ============================================================
 
 export async function fetchScoreConfigs(classSubjectIds: string[], term: number) {
-  await requireSchoolSession()
+  const session=await requireSchoolSession()
   if (classSubjectIds.length === 0) return []
   const db = createServerClient()
+  if(session.role==='teacher'||await isPersonalSubjectAccess(session)){
+    const {data,error}=await db.from('class_subjects').select('id').in('id',classSubjectIds).eq('teacher_id',session.userId)
+    if(error)throw Error('ตรวจสอบสิทธิ์รายวิชาไม่สำเร็จ')
+    classSubjectIds=(data||[]).map(row=>row.id)
+    if(!classSubjectIds.length)return []
+  }
   const { data } = await db.from('score_configs').select('*')
     .eq('term', term).in('class_subject_id', classSubjectIds)
   return data || []
@@ -2931,7 +2939,7 @@ export async function saveScoreConfigs(rows: {
   if (rows.length === 0) return { error: 'ไม่มีข้อมูล' }
   const db = createServerClient()
   // ครู: แก้ได้เฉพาะวิชาที่ตนสอน
-  if (session.role === 'teacher') {
+  if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) {
     const ids = rows.map(r => r.class_subject_id)
     const { data: mine } = await db.from('class_subjects').select('id').in('id', ids).eq('teacher_id', session.userId)
     const mineSet = new Set((mine || []).map((m: { id: string }) => m.id))

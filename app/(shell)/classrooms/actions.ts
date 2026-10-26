@@ -67,7 +67,7 @@ export async function fetchClassroomInit() {
     db.from('academic_years').select('id, year_be, is_active')
       .eq('school_id', sid).order('year_be', { ascending: false }),
     db.from('users').select('id, prefix, full_name, is_homeroom')
-      .in('role', ['teacher', 'academic_head', 'deputy_principal']).eq('school_id', sid).eq('is_active', true)
+      .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin']).eq('school_id', sid).eq('is_active', true)
       .order('full_name'),
   ])
   const years = yearsRes.data || []

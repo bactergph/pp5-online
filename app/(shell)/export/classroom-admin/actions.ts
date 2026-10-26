@@ -13,6 +13,7 @@ import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
 import { fetchAllRows } from '@/lib/supabase-paginate'
 import { ensureThaiNamePrefixJoined, formatStaffName } from '@/lib/roles'
+import {assertPersonalHomeroom,personalHomeroomIds} from '@/lib/personal-data-scope'
 
 type RoleSession = {
   userId: string
@@ -95,7 +96,9 @@ export async function fetchClassroomAdminExportContext() {
     .order('level')
     .order('room')
 
-  if (session.role === 'teacher') {
+  const personalRooms=await personalHomeroomIds(session)
+  if(personalRooms!==null)classroomQuery=classroomQuery.in('id',personalRooms)
+  else if (session.role === 'teacher') {
     classroomQuery = classroomQuery.or(`homeroom_teacher_id.eq.${session.userId},homeroom_teacher2_id.eq.${session.userId}`)
   }
 
@@ -133,6 +136,7 @@ export async function fetchClassroomAdminExportContext() {
 
 export async function fetchClassroomAdminExportData(classroomId: string, academicYearId: string, monthKey: string, term: 1 | 2) {
   const session = await requireExportSession()
+  await assertPersonalHomeroom(session,classroomId,academicYearId)
   const db = createServerClient()
   const range = monthRange(monthKey)
 
@@ -142,7 +146,7 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
     .maybeSingle()
   if (!classroom) return { error: 'ไม่พบห้องเรียน' }
   if (classroom.school_id !== session.schoolId) return { error: 'ไม่มีสิทธิ์เข้าถึงห้องนี้' }
-  if (session.role === 'teacher' && classroom.homeroom_teacher_id !== session.userId && classroom.homeroom_teacher2_id !== session.userId) {
+  if (session.role === 'teacher' && (await personalHomeroomIds(session))===null && classroom.homeroom_teacher_id !== session.userId && classroom.homeroom_teacher2_id !== session.userId) {
     return { error: 'ดูได้เฉพาะห้องที่เป็นครูประจำชั้น' }
   }
 

@@ -12,6 +12,7 @@ import {
   type HourlyStatus,
 } from '@/lib/hourly-attendance'
 import { fetchAllRows } from '@/lib/supabase-paginate'
+import {isPersonalSubjectAccess} from '@/lib/personal-data-scope'
 
 const CAN_EDIT = ['admin', 'district', 'academic_head', 'deputy_principal', 'teacher']
 
@@ -23,7 +24,7 @@ async function requireSession() {
 
 async function assertClassSubjectAccess(classSubjectId: string, session: Awaited<ReturnType<typeof requireSession>>) {
   const db = createServerClient()
-  if (session.role === 'teacher') {
+  if (session.role === 'teacher'||await isPersonalSubjectAccess(session)) {
     const { data } = await db.from('class_subjects')
       .select('id, classroom_id, subject_id, academic_year_id')
       .eq('id', classSubjectId)

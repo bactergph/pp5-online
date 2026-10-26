@@ -2,6 +2,7 @@
 import './classroom-manager.css'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import LoadingButton from '@/components/LoadingButton'
+import PersonalHomeroomPanel from '@/components/classroom-admin/PersonalHomeroomPanel'
 import { useRouter } from 'next/navigation'
 import AppAlertModal from '@/components/AppAlertModal'
 import { SCHOOL_LEVEL_GROUPS, schoolLevels, type SchoolEducationType } from '@/lib/school-education-type'
@@ -223,6 +224,7 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
         onClose={() => setAlertModal(null)}
       />
       <div className="page-stack classroom-modern">
+        {!embedded&&<PersonalHomeroomPanel/>}
         {embedded ? (
           <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>{subtitle}</p>
         ) : (

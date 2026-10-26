@@ -3,6 +3,7 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassroomSchoolId } from '@/lib/audit'
+import {assertPersonalHomeroom,personalHomeroomIds} from '@/lib/personal-data-scope'
 import {
   EVALUATION_DEFAULT_SETTINGS,
   READING_SCORE_FIELD_KEYS,
@@ -104,7 +105,8 @@ export async function fetchEvaluationInit() {
       .eq('academic_year_id', active.id)
       .order('level')
       .order('room')
-    classrooms = cs || []
+    const personalRooms=await personalHomeroomIds(session,active.id)
+    classrooms = (cs || []).filter(room=>personalRooms===null||personalRooms.includes(room.id))
   }
 
   return {
@@ -125,11 +127,13 @@ export async function fetchEvaluationClassrooms(yearId: string) {
     .order('level')
     .order('room')
 
-  return data || []
+  const personalRooms=await personalHomeroomIds(session,yearId)
+  return (data || []).filter(room=>personalRooms===null||personalRooms.includes(room.id))
 }
 
 export async function fetchEvaluationData(kind: EvaluationKind, classroomId: string, academicYearId: string, term: 1 | 2) {
   const session = await requireSession()
+  await assertPersonalHomeroom(session,classroomId,academicYearId)
   const db = createServerClient()
   const schoolId = session.schoolId || await resolveClassroomSchoolId(classroomId)
 
@@ -252,6 +256,7 @@ export async function saveEvaluationRows(
 ) {
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
+  try{await assertPersonalHomeroom(session,classroomId,academicYearId)}catch(error){return {error:error instanceof Error?error.message:'ไม่มีสิทธิ์ห้องประจำชั้น'}}
   if (!rows.length) return { error: 'ไม่มีข้อมูล' }
 
   const db = createServerClient()

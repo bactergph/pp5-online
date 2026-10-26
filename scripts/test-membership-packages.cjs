@@ -9,6 +9,12 @@ const id=n=>`20000000-0000-4000-8000-${String(n).padStart(12,'0')}`
  for(const [count,price]of [[1,990],[50,990],[99,990],[100,1000],[120,1200],[299,2990],[300,3000],[600,6000],[2100,21000],[1000000,10000000]])assert.equal(pricing.schoolAnnualQuote(count).annualPrice,price)
  for(const count of [0,-1,1.5,NaN,Infinity,1000001,'300'])assert.equal(pricing.schoolAnnualQuote(count),null)
  assert.equal(m.serverRoomLimit({kind:'individual',plan:'pro_plus'}),50)
+ assert.equal(m.personalHomeroomLimit({kind:'individual',plan:'pro'}),1)
+ assert.equal(m.personalHomeroomLimit({kind:'individual',plan:'pro_plus'}),3)
+ assert.equal(m.personalHomeroomLimit({kind:'school'}),null)
+ const offers=pricing.personalMembershipOffers(25)
+ assert.ok(offers.find(o=>o.id==='pro').points.some(p=>p.includes('ประจำชั้น 1 ห้อง')))
+ assert.ok(offers.find(o=>o.id==='pro_plus').points.some(p=>p.includes('ประจำชั้นสูงสุด 3 ห้อง')))
  const plus={membership_kind:'individual',member_plan:'pro_plus',membership_started_on:'2026-01-01',membership_expires_on:'2027-01-01',free_schedule_teacher_limit:80}
  assert.equal(m.membershipFromRow(plus,'2026-10-25').plan,'pro_plus');assert.equal(m.membershipFromRow(plus,'2027-01-02').plan,'free');assert.equal(m.membershipFromRow(plus,'2027-01-02').freeTeacherLimit,80)
  assert.match(m.membershipLabel(m.membershipFromRow(plus,'2026-10-25')),/PRO PLUS/)

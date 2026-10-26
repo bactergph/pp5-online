@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import PersonalHomeroomPanel from '@/components/classroom-admin/PersonalHomeroomPanel'
 
 type HubItem = {
   href: string
@@ -89,6 +90,7 @@ const GROUPS: HubGroup[] = [
 export default function ClassroomAdminPage() {
   return (
     <div className="page-stack classroom-admin-hub">
+      <PersonalHomeroomPanel/>
       <div className="page-hero">
         <div>
           <span className="page-hero-kicker">Classroom admin</span>

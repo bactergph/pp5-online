@@ -128,7 +128,7 @@ protected SQL writes, same-school scope, independent schools and Free access.
 
 Run `085_membership_packages_pricing.sql` after 084 before deploying the new member UI. It expands Pro to 20 distinct room identities, adds Pro Plus with 50, and adds protected billing fields plus a service-role-only `set_annual_membership_v2` RPC. Existing subscriptions and classroom data are preserved; no existing member is billed, expired, upgraded or downgraded by the migration. The old RPC is retained for compatibility during deployment.
 
-- Pro: 499 THB/year, one real login, 20 rooms. Pro Plus: 799 THB/year, one real login, 50 rooms. Both allow unlimited inactive teaching personnel and all paid features according to the account role. The database still prevents a second real login for a personal workspace.
+- Pro: 499 THB/year, one real login, 20 rooms and 1 selected homeroom. Pro Plus: 799 THB/year, one real login, 50 rooms and 3 selected homerooms. Both allow unlimited inactive teaching personnel for scheduling. Personal academic data is limited to subjects the owner teaches and homerooms selected under migration 087. The database still prevents a second real login for a personal workspace.
 - School: max(990 THB, agreed student count × 10 THB) per calendar-year term. Super Admin supplies a positive integer student count and confirms activation manually. This is the current-year count for billing, not a count of archived student rows or a new automatic deletion/student cap. School personnel accounts no longer inherit the obsolete default Auth metadata quota of 15.
 - The accepted annual price and student count are stored on the school and in the same atomic membership history record. They do not initiate a payment, charge a card, or automatically reprice an active subscription. Existing members have no inferred retroactive bill. Renewal can use an updated agreed student count.
 - The comparison dialog has personal and School tabs, current-package badges, annual prices, a live School calculator, full feature descriptions and a mobile layout. The member badge opens it for paid members too. Free can dismiss it without being trapped by a redirect.
@@ -138,3 +138,17 @@ Run `085_membership_packages_pricing.sql` after 084 before deploying the new mem
 Run `086_school_minimum_990.sql` after 085 for the revised 990 THB minimum. It updates future School grants/renewals only, preserving already-agreed prices and history.
 
 Validation: `npm run test:membership`; the new package tests execute the actual 085 SQL in PGlite, including direct/bulk room writes, expiry/CAS/renewal/history, protected quote writes and legacy preservation. UI tests use synthetic accounts only.
+
+## Personal teaching and homeroom scope (087)
+
+Run `087_personal_teaching_homeroom_scope.sql` after 086. It adds a protected selection table and a service-role-only RPC for the membership owner. Pro allows 1 selected homeroom and Pro Plus allows 3 per academic year. These rooms are selected from the existing 20/50 room quota; selecting homerooms does not create additional classroom capacity. School keeps its existing role and teacher assignments.
+
+Owners select rooms in **ห้องประจำชั้นของฉัน** on the classroom settings or classroom administration page. Selection is atomic, validates the school/year/owner, and shares the membership advisory lock. An existing unambiguous owner assignment is initialized only when it fits the plan. Otherwise the owner chooses explicitly. Membership downgrades and room changes preserve past records; an over-limit selection must be reduced before further homeroom editing.
+
+- Scores, score configurations, subject attendance and subject reports use only the owner's teaching assignments, including when the owner has the admin role needed for importing/configuring a personal workspace.
+- Homeroom administration, health, shared student evaluations and class/PP6 reports use selected homerooms. PP6 still requires complete underlying results; this change does not synthesize scores for other teachers.
+- Database write triggers cover subject and homeroom data, validate both old and new rows on updates, and reject mixed-scope bulk writes atomically. Parent FK cleanup remains available. No historical academic data is deleted by this migration.
+- Trusted archive loaders live in a server-only module, separate from authenticated public Server Actions, so clients cannot supply an artificial district/admin role.
+- Free remains local scheduling with its existing teacher allowance. This migration adds no student cap, billing change, automatic repricing or retention deletion.
+
+Tests: `test-personal-homeroom.cjs` executes actual SQL in PGlite; `test-personal-data-scope.cjs` tests server helpers/actions; `test-personal-report-scope.cjs` tests report filtering and unchanged School access; `test-personal-homeroom-ui.mjs` renders the real selection component with synthetic data at four responsive widths. `test-score-entry-period.cjs` covers personal-owner subject access and School admin compatibility.

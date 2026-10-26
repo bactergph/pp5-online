@@ -8,6 +8,7 @@ import { fetchAllRows } from '@/lib/supabase-paginate'
 import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
 import { ensureThaiNamePrefixJoined, formatStaffName } from '@/lib/roles'
+import {assertPersonalHomeroom,personalHomeroomIds} from '@/lib/personal-data-scope'
 import {
   getHealthInspectionRecordsCached,
   getMonthlyActivityRowsCached,
@@ -58,10 +59,11 @@ async function getClassroomForAccess(classroomId: string, session: ClassroomAdmi
     .maybeSingle()
 
   if (!classroom) return { error: 'ไม่พบห้องเรียน' as const, classroom: null }
+  try{await assertPersonalHomeroom(session,classroomId,classroom.academic_year_id)}catch(error){return {error:error instanceof Error?error.message:'ไม่มีสิทธิ์ห้องประจำชั้น',classroom:null}}
   if (session.role !== 'district' && classroom.school_id !== session.schoolId) {
     return { error: 'ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้' as const, classroom: null }
   }
-  if (session.role === 'teacher') {
+  if (session.role === 'teacher' && (await personalHomeroomIds(session))===null) {
     const isHomeroom = classroom.homeroom_teacher_id === session.userId || classroom.homeroom_teacher2_id === session.userId
     if (!isHomeroom) return { error: 'บันทึกได้เฉพาะห้องที่เป็นครูประจำชั้น' as const, classroom: null }
   }
@@ -230,7 +232,9 @@ export async function fetchClassroomAdminContext() {
     .order('level')
     .order('room')
 
-  if (session.role === 'teacher') {
+  const personalRooms=await personalHomeroomIds(session)
+  if(personalRooms!==null)classroomQuery=classroomQuery.in('id',personalRooms)
+  else if (session.role === 'teacher') {
     classroomQuery = classroomQuery.or(`homeroom_teacher_id.eq.${session.userId},homeroom_teacher2_id.eq.${session.userId}`)
   }
 

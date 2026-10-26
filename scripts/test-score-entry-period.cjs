@@ -6,7 +6,7 @@ const ts = require('typescript')
 const source = ts.transpileModule(readFileSync('lib/score-entry-period.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS },
 }).outputText
-let records
+let records, personal = false
 const db = { from(table) {
   const filters = {}
   return {
@@ -21,7 +21,7 @@ const db = { from(table) {
 const exportsObject = {}
 runInNewContext(source, {
   exports: exportsObject,
-  require: name => name === 'server-only' ? {} : { createServerClient: () => db },
+  require: name => name === 'server-only' ? {} : name === '@/lib/personal-data-scope' ? {isPersonalSubjectAccess:async()=>personal} : { createServerClient: () => db },
 })
 const session = { schoolId: 'school-a', role: 'teacher', userId: 'teacher-a' }
 async function check() {
@@ -37,6 +37,10 @@ async function check() {
   assert.ok((await get(session, 3)).error)
   assert.ok((await get(session, 2, 'class-b')).error)
   assert.equal((await get({ ...session, role: 'admin' })).open, false)
+  personal=true
+  assert.equal((await get({...session,role:'admin'})).open,false)
+  assert.ok((await get({...session,role:'admin',userId:'other-owner'})).error)
+  personal=false
   records.class_subjects.academic_year_id = 'year-b'
   assert.ok((await get(session, 2)).error)
   records.class_subjects.academic_year_id = 'year-a'

@@ -1,5 +1,6 @@
 import 'server-only'
 import { createServerClient } from '@/lib/supabase'
+import {isPersonalSubjectAccess} from '@/lib/personal-data-scope'
 
 export async function getScoreEntryPeriod(
   session: { schoolId: string | null; role: string; userId: string },
@@ -15,7 +16,7 @@ export async function getScoreEntryPeriod(
   if (subjectError || !subject || (classroomId && classroomId !== subject.classroom_id)) {
     return { error: 'ไม่พบรายวิชาหรือห้องเรียน' }
   }
-  if (session.role === 'teacher' && subject.teacher_id !== session.userId) return { error: 'ไม่มีสิทธิ์ในรายวิชานี้' }
+  if ((session.role === 'teacher'||await isPersonalSubjectAccess(session)) && subject.teacher_id !== session.userId) return { error: 'บันทึกได้เฉพาะรายวิชาที่ตนรับผิดชอบ' }
   const { data: year, error } = await db.from('academic_years')
     .select('year_be, term1_scores_open, term2_scores_open')
     .eq('id', subject.academic_year_id).eq('school_id', session.schoolId).maybeSingle()

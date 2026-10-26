@@ -21,7 +21,7 @@ import { loadClassDocReportSignatures } from '@/lib/report-signatures'
 import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
 import { fetchAllRows } from '@/lib/supabase-paginate'
-import { loadReportDataForArchive } from '@/app/(shell)/reports/actions'
+import { loadReportDataForArchive } from '@/lib/report-data-server'
 import { DEFAULT_PP5_PRINT_LAYOUTS } from '@/lib/pp5-print-layout'
 import { DEFAULT_PP6_SECTION_LAYOUT } from '@/lib/pp6-print-layout'
 import {

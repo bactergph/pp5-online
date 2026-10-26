@@ -1,6 +1,8 @@
 import {freeTeacherLimit} from './free-schedule-entitlement'
 export const INDIVIDUAL_PRO_ROOM_LIMIT = 20
 export const INDIVIDUAL_PRO_PLUS_ROOM_LIMIT = 50
+export const INDIVIDUAL_PRO_HOMEROOM_LIMIT = 1
+export const INDIVIDUAL_PRO_PLUS_HOMEROOM_LIMIT = 3
 export const MEMBERSHIP_CONTACT_URL = 'https://www.facebook.com/share/1Dn81diqEv/?mibextid=wwXIfr'
 export type MemberPackage = 'free' | 'pro' | 'pro_plus' | 'school'
 type Dates = { startsOn?: string | null; expiresOn?: string | null; expired?: boolean; scheduled?: boolean; subscribedPackage?: MemberPackage; version?: number; freeTeacherLimit?:number; studentCount?:number|null; annualPrice?:number|null }
@@ -31,6 +33,7 @@ export const membershipPackage = (membership: Membership): MemberPackage => memb
 export function membershipLabel(membership: Membership) { return membership.kind === 'school' ? 'SCHOOL · สมาชิกโรงเรียน' : membership.plan === 'pro_plus' ? 'PRO PLUS · สมาชิกโปรพลัส' : membership.plan === 'pro' ? 'PRO · สมาชิกโปร' : 'FREE · สมาชิกฟรี' }
 export function membershipDateLabel(value?: string | null) { return value && validMembershipDate(value) ? new Date(value + 'T12:00:00+07:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Bangkok' }) : '' }
 export function serverRoomLimit(membership: Membership): number | null { return membership.kind === 'school' ? null : membership.plan === 'pro_plus' ? INDIVIDUAL_PRO_PLUS_ROOM_LIMIT : membership.plan === 'pro' ? INDIVIDUAL_PRO_ROOM_LIMIT : 0 }
+export function personalHomeroomLimit(membership: Membership): number | null { return membership.kind === 'school' ? null : membership.plan === 'pro_plus' ? INDIVIDUAL_PRO_PLUS_HOMEROOM_LIMIT : membership.plan === 'pro' ? INDIVIDUAL_PRO_HOMEROOM_LIMIT : 0 }
 export function membershipHome(membership: Membership) { return isFreeMembership(membership) ? '/schedules/device/manage' : '/dashboard' }
 export function membershipAllows(path: string, membership: Membership) {
   const clean = path.split(/[?#]/)[0].replace(/\/$/, '') || '/'
