@@ -1,5 +1,5 @@
 import 'server-only'
-import {prepareJointTeachingSession,applyJointTeachingLock,type JointLockRequest} from './schedule-joint-lock'
+import {prepareJointTeachingSession,prepareJointTeachingCancellation,applyJointTeachingLock,type JointLockRequest} from './schedule-joint-lock'
 import {withJointTeachingGroups,validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingScope} from './schedule-joint-teaching'
 import { activityTeachers, activityWeeklyPeriods, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { randomUUID } from 'node:crypto'
@@ -106,10 +106,10 @@ export async function removeActivityName(id:string){
 }
 export async function setJointTeachingCell(year:string,term:number,request:JointLockRequest){
  const session=await actor(),current=await preparation(year,term)
- if(request.lessonIds){
-  const changed=prepareJointTeachingSession(current,request,year)
+ if(request.lessonIds||request.cancelGroup){
+  const changed=request.cancelGroup?prepareJointTeachingCancellation(current,request):prepareJointTeachingSession(current,request,year)
   const saved=await createServerClient().rpc('save_schedule_joint_session',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:current.hash,p_expected:current.slots,p_rows:changed.rows,p_config:changed.plan,p_replace:!!(request.replaceExisting||request.remove),p_lesson_ids:request.lessonIds})
-  fail(saved.error);return {rooms:request.lessonIds.length}
+  fail(saved.error);return {rooms:request.lessonIds?.length||0}
  }
  const rows=applyJointTeachingLock(current,request,year)
  const result=await createServerClient().rpc('save_schedule_joint_lock',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:current.hash,p_expected:current.slots,p_rows:rows,p_allow_unlock:request.remove||!request.locked});fail(result.error)

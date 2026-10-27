@@ -1,5 +1,5 @@
 'use client'
-import {applyJointTeachingLock,prepareJointTeachingSession} from '@/lib/schedule-joint-lock'
+import {applyJointTeachingLock,prepareJointTeachingSession,prepareJointTeachingCancellation} from '@/lib/schedule-joint-lock'
 import {localDraftCells} from '@/lib/schedule-device-view'
 import { useEffect,useRef } from 'react'
 import WorkloadEditor, {type WorkloadChange,type WorkloadOperations} from './WorkloadEditor'
@@ -29,7 +29,7 @@ export default function FreeWorkloadEditor({plan,onPlan,busy}:{plan:FreeWizardPl
   }
   const attempt=async(work:()=>Promise<void>)=>{try{await work();return {error:null}}catch(error){return {error:error instanceof Error?error.message:'บันทึกไม่สำเร็จ'}}}
   const operations:WorkloadOperations={
-    setJointTeachingScheduleCell:(_year,_term,request)=>attempt(async()=>{const changed=request.lessonIds?prepareJointTeachingSession(devicePreparation(latest.current),request,_year):null;const rows=changed?.rows||applyJointTeachingLock(devicePreparation(latest.current),request,_year);await save({...latest.current,teachingGroups:changed?.plan.teachingGroups||latest.current.teachingGroups,timetable:localDraftCells({status:'complete',issues:[],rows,offerings:[],unlock:[],assigned:0,locked:0})})}),
+    setJointTeachingScheduleCell:(_year,_term,request)=>attempt(async()=>{const changed=request.cancelGroup?prepareJointTeachingCancellation(devicePreparation(latest.current),request):request.lessonIds?prepareJointTeachingSession(devicePreparation(latest.current),request,_year):null;const rows=changed?.rows||applyJointTeachingLock(devicePreparation(latest.current),request,_year);await save({...latest.current,teachingGroups:changed?.plan.teachingGroups||latest.current.teachingGroups,timetable:localDraftCells({status:'complete',issues:[],rows,offerings:[],unlock:[],assigned:0,locked:0})})}),
     saveClassScheduleCell:(room,_year,day,period,lesson,_note,_term,expected)=>attempt(()=>save(changeDeviceCell(latest.current,room,day,period,lesson,expected))),
     toggleScheduleCellLock:(room,_year,day,period)=>attempt(()=>save(lockDeviceCell(latest.current,room,day,period))),
     setTeacherAvailabilityBlock:(_year,_term,teacher,day,period,blocked)=>attempt(()=>save(blockDeviceTeacher(latest.current,teacher,day,period,blocked))),

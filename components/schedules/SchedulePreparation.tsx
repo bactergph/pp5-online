@@ -66,7 +66,12 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  runLock.current=true;setBusy(true);setWorkingLabel('กำลังบันทึกกลุ่มสอนรวม…')
  try{const result=await savePreparation(yearId,semester,data.hash,{...data.plan,teachingGroups:groups,rules:{...data.plan.rules,...Object.fromEntries(groups.flatMap(group=>group.lessonIds).map(id=>{const lesson=data.lessons.find(lesson=>lesson.id===id)!;return [id,data.plan.rules[id]||{count:lesson.count,pattern:lesson.pattern||Array(lesson.count).fill(1),roomId:lesson.roomId||null,morning:!!lesson.morning,timePreference:lesson.timePreference||'any',spread:lesson.spread??true}]}))}});if(result.error||!result.data)throw Error(result.error||'บันทึกไม่สำเร็จ');setData(result.data);setDraft(null);setIssues(null);setMessage('บันทึกกลุ่มสอนรวมแล้ว');onChanged()}finally{runLock.current=false;setBusy(false)}
  }
- async function refreshLocks(){const latest=await fetchPreparation(yearId,semester);if(latest.error||!latest.data)throw Error(latest.error||'โหลดคาบที่ล็อกไม่สำเร็จ');setData(current=>current?{...current,hash:latest.data!.hash,slots:latest.data!.slots,blocks:latest.data!.blocks}:latest.data);setDraft(null);setIssues(null)}
+ async function refreshLocks(){
+ const latest=await fetchPreparation(yearId,semester);if(latest.error||!latest.data)throw Error(latest.error||'โหลดคาบที่ล็อกไม่สำเร็จ');const fresh=latest.data
+ // Joint lock edits change both slots and grouping metadata. Keep unsaved plan
+ // settings while refreshing the saved groups and their teacher-load keys.
+ setData(current=>current?{...current,hash:fresh.hash,slots:fresh.slots,blocks:fresh.blocks,lessons:fresh.lessons,plan:{...current.plan,teachingGroups:fresh.plan.teachingGroups}}:fresh);setDraft(null);setIssues(null)
+ }
  async function saveWorkload(change:WorkloadChange){
  if(!data||runLock.current)throw Error('กำลังบันทึก กรุณารอให้เสร็จก่อน')
  if(dirty||timeDirty||hasUnsavedInput)throw Error('บันทึกการตั้งค่าหรือข้อมูลในขั้นก่อนหน้าให้เรียบร้อยก่อนกำหนดภาระสอน')

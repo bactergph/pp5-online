@@ -1,4 +1,4 @@
-import {applyJointTeachingLock,prepareJointTeachingSession} from './schedule-joint-lock'
+import {applyJointTeachingLock,prepareJointTeachingSession,prepareJointTeachingCancellation} from './schedule-joint-lock'
 import type { ScheduleOperations } from '../components/schedules/ScheduleServices'
 import { activityTeachers, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { validateSubjectInputs } from './schedule-input'
@@ -214,7 +214,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       return put(year,term,next)
     })),
     setJointTeachingScheduleCell:(year,term,request)=>outcome(()=>mutate(year,term,async current=>{
-      const changed=request.lessonIds?prepareJointTeachingSession(devicePreparation(current),request,year):null
+      const changed=request.cancelGroup?prepareJointTeachingCancellation(devicePreparation(current),request):request.lessonIds?prepareJointTeachingSession(devicePreparation(current),request,year):null
       const rows=changed?.rows||applyJointTeachingLock(devicePreparation(current),request,year)
       const next={...current,teachingGroups:changed?.plan.teachingGroups||current.teachingGroups,timetable:localDraftCells({status:'complete',issues:[],rows,offerings:[],unlock:[],assigned:0,locked:0})}
       fixed(next);await put(year,term,next);return {rooms:request.expected.length}

@@ -3,8 +3,21 @@ import {checkPlanning,solvePlannedSchedule,type SchedulePlan,type PlannedLesson}
 import type {PeriodTimeRow} from './schedule-helpers'
 import type {DeviceSlot} from './schedule-device-build'
 
-export type JointLockRequest={lessonId:string;day:number;period:number;locked:boolean;remove?:boolean;lessonIds?:string[];periods?:number[];replaceExisting?:boolean;expectedHash?:string;groupId?:string;expected:{classroomId:string;lessonId:string|null;locked:boolean;period?:number}[]}
+export type JointLockRequest={lessonId:string;day:number;period:number;locked:boolean;remove?:boolean;cancelGroup?:boolean;lessonIds?:string[];periods?:number[];replaceExisting?:boolean;expectedHash?:string;groupId?:string;expected:{classroomId:string;lessonId:string|null;locked:boolean;period?:number}[]}
 type Data={hash?:string;plan:SchedulePlan;lessons:PlannedLesson[];slots:DeviceSlot[];periods:PeriodTimeRow[];blocks:{teacherId:string;day:number;period:number}[]}
+/** Cancel only the selected group's shared sessions, including their locks, in
+ * the same write as its metadata. Ordinary residual lessons stay in place. */
+export function prepareJointTeachingCancellation(data:Data,request:JointLockRequest){
+  if(!request.expectedHash||request.expectedHash!==data.hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนยกเลิกสอนรวม')
+  const group=data.plan.teachingGroups?.find(group=>group.id===request.groupId),ids=request.lessonIds
+  if(request.cancelGroup!==true||request.remove!==true||request.locked!==false||!group||!Array.isArray(ids)||ids.length!==group.lessonIds.length||new Set(ids).size!==ids.length||!ids.includes(request.lessonId)||group.lessonIds.some(id=>!ids.includes(id)))throw Error('ไม่พบกลุ่มสอนรวมที่ต้องการยกเลิก กรุณาโหลดข้อมูลล่าสุด')
+  const plan={...data.plan,teachingGroups:(data.plan.teachingGroups||[]).filter(item=>item.id!==group.id)}
+  const rows=data.slots.filter(row=>!row.class_subject_id||!ids.includes(row.class_subject_id)||!!group.cells&&!group.cells.some(cell=>cell.day===row.day_of_week&&cell.period===row.period))
+  const lessons=withJointTeachingGroups(data.lessons,plan,true)
+  const errors=jointTeachingSlotErrors(lessons,rows.map(row=>({classroomId:row.classroom_id,lessonId:row.class_subject_id,day:row.day_of_week,period:row.period,locked:row.locked})))
+  if(errors.length)throw Error(errors[0])
+  return {plan,rows}
+}
 /** Explicit shared sessions are scoped to the chosen periods, never the whole week. */
 export function prepareJointTeachingSession(data:Data,request:JointLockRequest,year:string){
   if(!request.expectedHash||request.expectedHash!==data.hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนย้ายหรือล็อกสอนรวม')
@@ -40,6 +53,9 @@ export function prepareJointTeachingSession(data:Data,request:JointLockRequest,y
   if(!request.remove)for(const lesson of members)for(const period of periods)rows.push({classroom_id:lesson.classroomId,academic_year_id:year,day_of_week:request.day,period,class_subject_id:lesson.id,activity_id:null,note:data.slots.find(row=>row.class_subject_id===lesson.id&&row.day_of_week===request.day&&row.period===period)?.note||null,locked:true})
   const planned=rows.map(row=>({classroomId:row.classroom_id,lessonId:row.activity_id?'activity:'+row.activity_id:row.class_subject_id,day:row.day_of_week,period:row.period}))
   const sync=jointTeachingSlotErrors(lessons,planned);if(sync.length)throw Error(sync[0])
+  // Removing a shared cell must work even while the remaining preparation is
+  // incomplete. It cannot add a collision or require a fresh solver solution.
+  if(request.remove)return {plan,rows}
   const fixed=checkPlanning(lessons,planned,plan.days,data.periods,data.blocks).find(issue=>issue.severity==='error'&&issue.code?.startsWith('fixed_'));if(fixed)throw Error(fixed.message)
   const active=new Set(ids),remaining=lessons.map(lesson=>({...lesson,count:active.has(lesson.id)?lesson.count:planned.filter(row=>row.lessonId===lesson.id).length,pattern:active.has(lesson.id)?lesson.pattern:undefined,fixedOnly:!active.has(lesson.id),teacherOptional:!active.has(lesson.id)||lesson.teacherOptional}))
   const answer=solvePlannedSchedule(remaining,planned,plan,data.periods,data.blocks,30000,1500)
@@ -67,6 +83,7 @@ export function applyJointTeachingLock(data:Data,request:JointLockRequest,year:s
   if(!request.remove)for(const lesson of members)rows.push({classroom_id:lesson.classroomId,academic_year_id:year,day_of_week:request.day,period:request.period,class_subject_id:lesson.id,activity_id:null,note:data.slots.find(row=>row.class_subject_id===lesson.id&&row.day_of_week===request.day&&row.period===request.period)?.note||null,locked:request.locked})
   const planned=rows.map(row=>({classroomId:row.classroom_id,lessonId:row.activity_id?'activity:'+row.activity_id:row.class_subject_id,day:row.day_of_week,period:row.period}))
   const sync=jointTeachingSlotErrors(data.lessons,planned);if(sync.length)throw Error(sync[0])
+  if(request.remove)return rows
   const fixed=checkPlanning(data.lessons,planned,data.plan.days,data.periods,data.blocks).find(issue=>issue.severity==='error'&&issue.code?.startsWith('fixed_'));if(fixed)throw Error(fixed.message)
   // Verify remaining parts of each double/triple can still be completed. Other
   // offerings stay fixed; unrelated unfinished input does not block this edit.
