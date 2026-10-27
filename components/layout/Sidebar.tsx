@@ -759,12 +759,12 @@ export default function Sidebar({
           {userName.charAt(0)}
         </div>
         <div className="sidebar-user-copy">
-          <div className="sidebar-user-name">{userName}</div>
+          <div className="sidebar-user-name" title={userName}>{userName}</div>
           <div className="sidebar-user-role">
             {getRoleLabel(userRole, isActingDirector)}{isHomeroom ? ' · ครูประจำชั้น' : ''}
           </div>
-          {membership && <MembershipBadge membership={membership} onChoose={onMembershipUpgrade} />}
         </div>
+        {membership && <MembershipBadge membership={membership} onChoose={onMembershipUpgrade} />}
       </div>
 
       {membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-sidebar"/>}

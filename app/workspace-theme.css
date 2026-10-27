@@ -43,11 +43,13 @@
   .workspace-theme .sidebar-section-label { color: var(--text-3); }
   .workspace-theme .sidebar-brand-mark { box-shadow: none; }
   .workspace-theme .sidebar-user-chip {
-    margin: 14px 12px; padding: 13px;
-    border: 1px solid #dbe5f3; border-radius: 16px;
+    display: grid; grid-template-columns: 29px minmax(0, 1fr); gap: 7px 9px;
+    margin: 10px 12px; padding: 10px 12px;
+    border: 1px solid #dbe5f3; border-radius: 14px;
     background: linear-gradient(125deg, #f0f5ff, #fffdf6);
     box-shadow: inset 0 1px #fff, 0 3px 10px #17365b05;
   }
+  .workspace-theme .sidebar-user-role { font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
   .workspace-theme .sidebar-user-avatar,
   .workspace-theme .navbar-avatar {
     border: 1px solid #fff8; border-radius: 12px;
