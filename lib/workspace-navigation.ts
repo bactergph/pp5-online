@@ -51,6 +51,7 @@ const routes:Record<string,[string,string]>={
   '/schedules/device/workload':['จัดตารางสอนฟรี','สรุปภาระสอน'],
   '/schedules/device/print':['จัดตารางสอนฟรี','พิมพ์ตาราง'],
   '/export/schedules':['พิมพ์เอกสาร','พิมพ์ตารางเรียน / ตารางสอน'],
+  '/export/sgs':['Export เอกสาร','ส่งคะแนนเข้า SGS'],
   '/export/qr-code':['พิมพ์เอกสาร','QR-Code'],
   '/classroom-admin':['งานประจำชั้น','ธุรการชั้นเรียน'],
   '/classroom-admin/sign':['เอกสารรอลงนาม','ธุรการเสนอเซ็น'],

@@ -12,9 +12,6 @@ import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
 import { calcGrade, gradeLabel, gradeColor, RESULT_OPTIONS } from '@/lib/grade'
 import { scoreTransferData, parseScoreTransfer } from '@/lib/score-transfer'
-import { buildSGSScorePacket } from '@/lib/sgs-transfer'
-import type { ScorePacket } from '@/extensions/jarnsek-sgs/core'
-import SGSExportDialog from '@/components/SGSExportDialog'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Subject = { id: string; code: string; name: string }
@@ -56,7 +53,6 @@ export default function ScoreEntryPage() {
   const [dirty, setDirty] = useState(false)
   const [saveStatus, setSaveStatus] = useState('')
   const [transferBusy, setTransferBusy] = useState(false)
-  const [sgsPacket, setSGSPacket] = useState<ScorePacket | null>(null)
   const [importPreview, setImportPreview] = useState<{ rows: Record<string, Row>; context: string; filename: string } | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const transferContext = JSON.stringify([selectedYear, selectedClass, selectedCS, term, config?.between_scores, config?.midterm_max, config?.final_max])
@@ -306,16 +302,6 @@ export default function ScoreEntryPage() {
     } finally { setTransferBusy(false) }
   }
 
-  function prepareSGS() {
-    if (!config || loadingGrid || loadedEntry !== `${selectedClass}:${selectedCS}:${term}`) return
-    try {
-      const classroom=classrooms.find(item=>item.id===selectedClass)
-      const subject=subjectMap[items.find(item=>item.id===selectedCS)?.subject_id||'']
-      if(!classroom||!subject)throw Error('กรุณาเลือกห้องและวิชาให้ครบ')
-      setSGSPacket(buildSGSScorePacket({yearBe:years.find(year=>year.id===selectedYear)?.year_be||0,term,classroom:`${classroom.level}/${classroom.room}`,subjectCode:subject.code,subjectName:subject.name,students,config,rows}))
-    } catch(error) {setAlertModal({type:'error',title:'ยังส่งคะแนน SGS ไม่ได้',message:error instanceof Error?error.message:'กรุณาตรวจข้อมูลนักเรียนและคะแนน'})}
-  }
-
   async function importScores(file: File) {
     if (!config || !canEdit || saving) return
     const context = transferContext
@@ -533,8 +519,6 @@ export default function ScoreEntryPage() {
                 <div><strong>นำเข้า / ส่งออกคะแนน</strong><p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 13 }}>ดาวน์โหลด Excel ของห้อง วิชา และภาคเรียนที่เลือก กรอกคะแนนแล้วนำกลับเข้า</p></div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button className="btn btn-secondary" disabled={transferBusy || saving || loadedEntry !== `${selectedClass}:${selectedCS}:${term}`} onClick={() => void exportScores()}>ส่งออก Excel</button>
-                  <button className="btn btn-primary" disabled={loadingGrid || transferBusy || saving || loadedEntry !== `${selectedClass}:${selectedCS}:${term}`} onClick={prepareSGS}>ส่งคะแนนเข้า SGS</button>
-                  {sgsPacket && <SGSExportDialog packet={sgsPacket} unsaved={dirty} onClose={()=>setSGSPacket(null)} />}
                   <button className="btn btn-secondary" disabled={!canEdit || transferBusy || saving} onClick={() => importInput.current?.click()}>{transferBusy ? 'กำลังจัดการไฟล์…' : 'นำเข้าคะแนน'}</button>
                   <input ref={importInput} type="file" accept=".xlsx" hidden aria-label="เลือกไฟล์คะแนน Excel" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importScores(file) }} />
                 </div>

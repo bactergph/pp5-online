@@ -317,9 +317,12 @@ const REPORT_OVERSIGHT: NavItem = {
     { href: '/reports/individual', label: 'รายงานรายบุคคล', icon: ic(I.users) },
   ],
 }
+const SGS_EXPORT: NavItem = { href: '/export/sgs', label: 'ส่งคะแนนเข้า SGS', icon: ic(I.export) }
+const EXPORT_SGS: NavItem = { href: '/export', label: 'Export เอกสาร', icon: ic(I.export), children: [SGS_EXPORT] }
 const EXPORT_FULL: NavItem = {
   href: '/export', label: 'Export เอกสาร', icon: ic(I.export),
   children: [
+    SGS_EXPORT,
     { href: '/export/schoolmis',       label: 'SchoolMIS', icon: ic(I.export) },
     { href: '/export/grade-matrix',    label: 'Grade Matrix', icon: ic(I.grid) },
     { href: '/export/name-list',       label: 'รายชื่อนักเรียน', icon: ic(I.users) },
@@ -428,14 +431,14 @@ const ACADEMIC_HEAD_NAV: NavSection[] = [
   { label: 'ตารางเรียน / ตารางสอน', items: [SCHEDULE_MANAGE_MAIN, FREE_SCHEDULE] },
   { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
   { label: 'ตรวจสอบและอนุมัติ', items: [DOCUMENTS_SIGN_NAV] },
-  { label: 'รายงานสำหรับวิชาการ', items: [REPORT_OVERSIGHT, ACTIVITY_LOG] },
+  { label: 'รายงานสำหรับวิชาการ', items: [REPORT_OVERSIGHT, EXPORT_SGS, ACTIVITY_LOG] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
 ]
 const TEACHER_NAV: NavSection[] = [
   { items: [DASHBOARD] },
   { label: 'งานสอนรายวิชา', items: [SCORES, SCORE_CONFIG, ATTENDANCE, SCHEDULE_VIEW_MAIN, FREE_SCHEDULE] },
   { label: 'นักเรียน', items: [STUDENTS] },
-  { label: 'รายงาน / เอกสาร', items: [TEACHER_REPORTS, DOCUMENTS_SIGN_NAV, ACTIVITY_LOG] },
+  { label: 'รายงาน / เอกสาร', items: [TEACHER_REPORTS, EXPORT_SGS, DOCUMENTS_SIGN_NAV, ACTIVITY_LOG] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
 ]
 const HOMEROOM_NAV: NavSection[] = [
@@ -444,7 +447,7 @@ const HOMEROOM_NAV: NavSection[] = [
   { label: 'นักเรียน', items: [STUDENTS] },
   { label: 'งานประจำชั้น', items: [CLASSROOM_ADMIN_MAIN, CLASSROOM_ADMIN_SIGN_NAV] },
   { label: 'วัดและประเมินผล', items: [PP5_MAIN, DOCUMENTS_SIGN_NAV] },
-  { label: 'รายงาน / เอกสาร', items: [TEACHER_REPORTS, ACTIVITY_LOG] },
+  { label: 'รายงาน / เอกสาร', items: [TEACHER_REPORTS, EXPORT_SGS, ACTIVITY_LOG] },
   { label: 'ตั้งค่า', items: [USER_SETTINGS] },
 ]
 

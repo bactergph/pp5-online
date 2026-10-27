@@ -30,6 +30,7 @@ const TITLE_BY_PREFIX: { prefix: string; title: string }[] = [
   { prefix: '/classroom-admin', title: 'ธุรการชั้นเรียน' },
   { prefix: '/activity', title: 'ประวัติการใช้งาน' },
   { prefix: '/export/qr-code', title: 'QR-Code' },
+  { prefix: '/export/sgs', title: 'ส่งคะแนนเข้า SGS' },
   { prefix: '/export', title: 'Export' },
   { prefix: '/dashboard', title: 'หน้าหลัก' },
 ]

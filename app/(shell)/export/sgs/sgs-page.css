@@ -1,0 +1,25 @@
+.sgs-export-page{max-width:1200px;min-width:0;margin:0 auto}
+.sgs-page-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.sgs-page-heading h1{margin:10px 0 5px;font-size:26px;font-weight:700;color:var(--text,#1b2d4b)}
+.sgs-page-heading p{margin:0;color:var(--text-3,#60728c);font-size:14px;line-height:1.7}
+.sgs-page-heading .btn{gap:8px;white-space:normal}
+.sgs-page-notice{display:flex;align-items:flex-start;gap:9px;padding:12px 14px;border:1px solid #d4e3f7;border-radius:12px;background:#edf5ff;color:#355779;font-size:13px;line-height:1.7}
+.sgs-page-notice>svg{flex:none;margin-top:3px}.sgs-page-notice a{color:#155eaf;text-decoration:underline}
+.sgs-page-selection{padding:20px;min-width:0}.sgs-export-page h2{margin:0 0 16px;font-size:17px;font-weight:600}
+.sgs-page-fields{display:grid;grid-template-columns:.8fr .9fr .9fr 1.6fr;gap:14px}
+.sgs-page-fields label{display:grid;align-content:start;gap:7px;font-size:13px;font-weight:500;min-width:0}
+.sgs-page-fields select{width:100%;min-width:0;max-width:100%;min-height:44px;font:inherit;font-size:14px}
+.sgs-page-selection>p{font-size:13px;color:var(--text-3,#60728c);margin:14px 0}
+.sgs-page-selection>.alert{margin-top:16px;overflow-wrap:anywhere}
+.sgs-page-ready{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid #e1e9f4;margin-top:20px;padding-top:18px}
+.sgs-page-ready>div{min-width:0;flex:1 1 240px}.sgs-page-ready strong{display:block;overflow-wrap:anywhere;font-size:14px}
+.sgs-page-ready span{display:block;margin-top:5px;font-size:13px;line-height:1.7;color:var(--text-3,#60728c)}
+.sgs-page-ready .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;white-space:normal}
+.sgs-page-guide{padding:18px;border:1px solid #dce5f2;border-radius:14px;background:#f8fbff}
+.sgs-page-guide ol{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0;padding:0;list-style:none;counter-reset:sgs-step}
+.sgs-page-guide li{position:relative;min-width:0;padding-left:34px;counter-increment:sgs-step}
+.sgs-page-guide li::before{content:counter(sgs-step);position:absolute;left:0;top:0;display:grid;place-items:center;width:25px;height:25px;border-radius:8px;background:#e4eeff;color:#235bc8;font-size:12px;font-weight:700}
+.sgs-page-guide li b{font-size:14px}.sgs-page-guide li span{display:block;font-size:13px;line-height:1.7;color:var(--text-3,#60728c);margin-top:3px}
+.sgs-page-guide>p{display:flex;align-items:flex-start;gap:7px;margin:16px 0 0;font-size:12px;line-height:1.7;color:var(--text-3,#60728c)}.sgs-page-guide>p svg{flex:none;margin-top:3px}
+@media(max-width:900px){.sgs-page-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:540px){.sgs-page-selection,.sgs-page-guide{padding:14px}.sgs-page-heading h1{font-size:23px}.sgs-page-heading .btn,.sgs-page-ready .btn{width:100%}.sgs-page-fields{gap:12px}.sgs-page-fields label:nth-child(n+3){grid-column:1/-1}.sgs-page-fields select{font-size:16px}.sgs-page-guide ol{grid-template-columns:1fr}.sgs-page-ready{gap:12px}}

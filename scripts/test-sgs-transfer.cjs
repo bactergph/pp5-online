@@ -34,6 +34,10 @@ const params={yearBe:2569,term:2,classroom:'ม.1/1',subjectCode:'ท21102',subj
 const exported=exportsObject.buildSGSScorePacket(params)
 assert.equal(exported.students[0].studentCode,'00101');assert.equal(exported.columns.length,2);assert.deepEqual(Array.from(exported.students[0].values),[0,15]);assert.ok(!JSON.stringify(exported).includes('internal-uuid'))
 assert.throws(()=>exportsObject.buildSGSScorePacket({...params,students:[{...params.students[0],student_code:null}]}),/เลขประจำตัว/)
+const persisted=exportsObject.buildSavedSGSScorePacket({...params,scores:[{student_id:'internal-uuid',unit_scores:{'1':0,'2':null},midterm_score:null,final_score:15}]})
+assert.deepEqual(Array.from(persisted.students[0].values),[0,15]);assert.equal(persisted.students[0].studentCode,'00101')
+const blankPersisted=exportsObject.buildSavedSGSScorePacket({...params,scores:[]});assert.deepEqual(Array.from(blankPersisted.students[0].values),[null,null])
+assert.throws(()=>exportsObject.buildSavedSGSScorePacket({...params,scores:[{student_id:'internal-uuid',unit_scores:{'1':21}}]}),/คะแนน/)
 
 // Service worker authorization, receipt isolation and expiry with synthetic Chrome APIs.
 let messageHandler,actionHandler,removedHandler,now=Date.now(),storage={},injections=0
