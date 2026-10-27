@@ -1,10 +1,11 @@
 import type { PlannedLesson, PlannedSlot, SchedulePlan } from './schedule-planning'
 import type { PeriodTimeRow } from './schedule-helpers'
+import { solveTightSingles } from './schedule-tight-repair'
 
 type Block = { cells: number[]; day: number; morning: boolean }
 type Choice = Block & { keys: number[] }
 type Task = { members: PlannedLesson[]; length: number; resources: number[]; options: Choice[]; priority: number }
-type Attempt = { status: 'complete' | 'timeout'; assignments: PlannedSlot[]; nodes: number }
+type Attempt = { status: 'complete' | 'timeout' | 'conflict'; assignments: PlannedSlot[]; nodes: number; message?: string; details?: string[] }
 
 /** Bounded ejection search. Move whole lesson blocks, evicting their conflicting
  * blocks for reinsertion. Fixed cells and unavailable times never enter a domain.
@@ -94,11 +95,23 @@ export function solveBlockRepair(
   }
   if (!tasks.length) return { status: 'complete', assignments: [], nodes: 0 }
 
+  let exactNodes = 0
+  if (tasks.length <= 400 && tasks.every(task => task.length === 1)) {
+    const resourceNames = new Map([...resources].map(([key, id]) => {
+      const separator = key.indexOf(':'), kind = key.slice(0, separator), value = key.slice(separator + 1)
+      const lesson = lessons.find(lesson => kind === 'class' ? lesson.classroomId === value : kind === 'teacher' ? teachers(lesson).includes(value) : lesson.roomId === value)
+      return [id, kind === 'teacher' ? `ครู${lesson?.teacherName || `ของ ${lesson?.label || 'รายวิชาที่เลือก'}`}` : kind === 'venue' ? 'สถานที่ร่วม' : `ห้อง ${lesson?.label.split(' · ')[0] || ''}`] as const
+    }))
+    const exact = solveTightSingles(tasks, cells, resourceNames, Math.min(maxNodes, 15000), Math.min(deadline, Date.now() + 750))
+    if (exact.status !== 'timeout') return exact
+    exactNodes = exact.nodes
+  }
+
   const occupancy = new Int32Array(resources.size * width).fill(-1)
   const placed = new Int32Array(tasks.length).fill(-1), removed = new Int32Array(tasks.length)
   const last = new Int32Array(tasks.length).fill(-1000), pending = new Set(tasks.map((_, i) => i))
   const dayUse = new Map<string, number>()
-  let state = 1, nodes = 0
+  let state = 1, nodes = exactNodes
   const random = () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) / 4294967296 }
   const place = (id: number, option: number, add: boolean) => {
     const choice = tasks[id].options[option]

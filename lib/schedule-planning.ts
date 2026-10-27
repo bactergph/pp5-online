@@ -515,10 +515,14 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
     nodes:result.nodes+repairNodes,elapsedMs:Date.now()-started,timeLimitMs:requestedTimeLimitMs})
   const issues=checkPlanning(lessons,fixed,plan.days,times,unavailable)
   if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,assignments:[] as PlannedSlot[],issues,nodes:0}
-  if(lessons.some(lesson=>!lesson.activity&&(lesson.activityGroupId||Object.keys(lesson.jointTeachingCells||{}).length)))return finish({...solveJointTeachingSchedule(lessons,fixed,plan,times,unavailable,blocksFor,lessonMorningPriority,maxNodes,timeLimitMs),issues})
+  if(lessons.some(lesson=>!lesson.activity&&(lesson.activityGroupId||Object.keys(lesson.jointTeachingCells||{}).length))){
+    const joint=solveJointTeachingSchedule(lessons,fixed,plan,times,unavailable,blocksFor,lessonMorningPriority,maxNodes,timeLimitMs)
+    return finish({...joint,issues:[...issues,...joint.issues]})
+  }
   if(!plan.reduceGaps&&plan.maxContinuous===0&&lessons.length>=50&&lessons.some(l=>!l.fixedOnly&&(l.activity||l.pattern?.some(length=>length>1)))&&maxNodes>0&&timeLimitMs>0){
     const repairStarted=Date.now(),repair=solveBlockRepair(lessons,fixed,plan,times,unavailable,lessonMorningPriority,Math.min(maxNodes,120_000),Math.min(timeLimitMs,6000))
     if(repair?.status==='complete')return finish({...repair,issues,solver:'block_repair',timeLimitMs})
+    if(repair?.status==='conflict')return finish({...repair,issues:[...issues,{severity:'error',step:6,manageStep:6,message:repair.message!,details:repair.details}],solver:'block_repair',timeLimitMs})
     repairNodes=repair?.nodes||0
     timeLimitMs=Math.max(0,timeLimitMs-(Date.now()-repairStarted));maxNodes=Math.max(0,maxNodes-repairNodes)
     if(!timeLimitMs||!maxNodes)return finish({status:'timeout',assignments:[],issues,nodes:0,solver:'block_repair',limitReason:!maxNodes?'node_limit':'time_limit'})

@@ -15,6 +15,7 @@ export function solveJointTeachingSchedule(lessons:PlannedLesson[],fixed:Planned
   if(lessons.length>=40&&maxNodes>0&&timeLimitMs>0){
     const repaired=solveBlockRepair(lessons,fixed,plan,times,unavailable,priority,Math.min(maxNodes,120000),Math.min(timeLimitMs,6000))
     if(repaired?.status==='complete')return {...repaired,issues:[],solver:'block_repair'}
+    if(repaired?.status==='conflict')return {...repaired,issues:[{severity:'error',step:6,manageStep:6,message:repaired.message!,details:repaired.details}],solver:'block_repair'}
     nodes=repaired?.nodes||0
   }
   const byId=new Map(lessons.map(lesson=>[lesson.id,lesson])),cell=(r:string,d:number,p:number)=>`${r}:${d}:${p}`

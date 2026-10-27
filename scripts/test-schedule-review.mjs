@@ -66,4 +66,5 @@ assert.ok(many.includes('แสดงเพิ่มอีก'))
 const loadDetails=html({issues:[{severity:'error',message:'ครู ตัวอย่าง ต้องสอน 38 คาบ แต่มีเวลาว่าง 35 คาบ',step:6,details:['ม.2/1 · คณิตศาสตร์: 18 คาบ/สัปดาห์','ม.5/1 · อังกฤษ: 19 คาบ/สัปดาห์']}]})
 assert.ok(loadDetails.includes('ดูรายวิชาและกิจกรรมที่นับภาระสอน'))
 assert.ok(loadDetails.includes('คณิตศาสตร์: 18 คาบ/สัปดาห์'));assert.ok(loadDetails.includes('อังกฤษ: 19 คาบ/สัปดาห์'))
+const contradiction=html({draft:{status:'conflict',id:null,rows:[],issues:[],assigned:0,locked:0},issues:[{severity:'error',step:6,message:'คาบล็อกขัดกัน',details:['ต้องใช้อีก 19 คาบ แต่มีช่องว่าง 18 ช่อง']}]});assert.ok(contradiction.includes('ดูรายละเอียดเงื่อนไขที่ขัดกัน'));assert.ok(contradiction.includes('19 คาบ'));assert.ok(contradiction.includes('<details open=""'));
 console.log('PASS: independent quota/pattern/room/teacher/joint verification; venue readiness; draft/timeout/conflict UI; true activity cells; outside-scope review and bounded issue lists')
