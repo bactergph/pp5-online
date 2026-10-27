@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import {searchWorkspaceMenu} from '@/lib/workspace-navigation'
+import {workspaceAppearance} from '@/lib/workspace-appearance'
 import { useFormStatus } from 'react-dom'
 import { ROLE_LABELS } from '@/lib/roles'
 import { defaultSidebarIcon, normalizeSidebarTone, type SidebarTone } from '@/lib/sidebar-tones'
@@ -491,6 +492,7 @@ function renderSubmenuLink(
         opts.onClose()
       }}
       data-sidebar-current={opts.isCurrent(child.href) ? 'true' : undefined}
+      data-nav-tone={workspaceAppearance(child.href).tone}
       className={`sidebar-child-link sidebar-submenu-link sidebar-submenu-link--${tone} ${active ? 'is-active' : ''}`}
     >
       {icon && <span className="sidebar-child-icon">{icon}</span>}
@@ -681,14 +683,14 @@ export default function Sidebar({
 
     if (!item.children) {
       return (
-        <Link key={item.href} href={href} prefetch={membership&&!membershipAllows(item.href,membership)?false:undefined} onClick={onClose} data-sidebar-current={isCurrent(item.href) ? 'true' : undefined} className={`sidebar-link ${active ? 'is-active' : ''}`}>
+        <Link key={item.href} href={href} prefetch={membership&&!membershipAllows(item.href,membership)?false:undefined} onClick={onClose} data-nav-tone={workspaceAppearance(item.href).tone} data-sidebar-current={isCurrent(item.href) ? 'true' : undefined} className={`sidebar-link ${active ? 'is-active' : ''}`}>
           {left}{membership&&!membershipAllows(item.href,membership)&&<small className="membership-lock">PRO</small>}
         </Link>
       )
     }
     const open = isExpanded(item)
     return (
-      <div key={item.href} className={`sidebar-item${open ? ' is-open' : ''}${active ? ' has-active' : ''}`}>
+      <div key={item.href} data-nav-tone={workspaceAppearance(item.href).tone} className={`sidebar-item${open ? ' is-open' : ''}${active ? ' has-active' : ''}`}>
         <button
           type="button"
           data-membership-locked={locked ? item.label : undefined}
@@ -775,7 +777,7 @@ export default function Sidebar({
       <div className="sidebar-search"><label htmlFor="workspace-menu-search"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input ref={searchRef} id="workspace-menu-search" type="search" value={query} maxLength={120} placeholder="ค้นหาเมนู…" aria-label="ค้นหาเมนู" aria-controls={searching?'workspace-menu-results':undefined} onChange={event=>setSearch({path:pathname,query:event.target.value})} onKeyDown={event=>{if(event.key==='Escape'&&query){event.preventDefault();event.stopPropagation();setSearch({path:pathname,query:''})}}}/></label>{searching&&<button type="button" aria-label="ล้างการค้นหาเมนู" onClick={()=>{setSearch({path:pathname,query:''});searchRef.current?.focus()}}>×</button>}</div>
       {/* Nav (sectioned) */}
       <nav ref={navRef} className="sidebar-nav" aria-label="เมนูหลัก">
-        {searching?<div id="workspace-menu-results" className="sidebar-search-results"><p role="status" aria-live="polite">พบ {results.length} เมนู</p>{results.length?results.map(result=><Link key={result.href} href={scopedHref(result.href)} prefetch={false} className="sidebar-search-result" aria-current={isCurrent(result.href)?'page':undefined} onClick={onClose}><span className="sidebar-search-result-icon" aria-hidden="true">{leafIcon(result)}</span><span><strong>{result.label}</strong><small>{result.trail}</small></span>{membership&&!membershipAllows(result.href,membership)&&<small className="membership-lock">PRO</small>}</Link>):<div className="sidebar-search-empty">ไม่พบเมนูที่ค้นหา<small>ลองใช้คำ เช่น คะแนน ตาราง หรือครู</small></div>}</div>:sections.map((section, si) => (
+        {searching?<div id="workspace-menu-results" className="sidebar-search-results"><p role="status" aria-live="polite">พบ {results.length} เมนู</p>{results.length?results.map(result=><Link key={result.href} href={scopedHref(result.href)} prefetch={false} className="sidebar-search-result" data-nav-tone={workspaceAppearance(result.href).tone} aria-current={isCurrent(result.href)?'page':undefined} onClick={onClose}><span className="sidebar-search-result-icon" aria-hidden="true">{leafIcon(result)}</span><span><strong>{result.label}</strong><small>{result.trail}</small></span>{membership&&!membershipAllows(result.href,membership)&&<small className="membership-lock">PRO</small>}</Link>):<div className="sidebar-search-empty">ไม่พบเมนูที่ค้นหา<small>ลองใช้คำ เช่น คะแนน ตาราง หรือครู</small></div>}</div>:sections.map((section, si) => (
           <div key={si} className={section.label ? 'sidebar-section' : 'sidebar-section sidebar-section-first'}>
             {section.label && (
               <div className="sidebar-section-label">

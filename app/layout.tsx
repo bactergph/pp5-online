@@ -8,6 +8,7 @@ import './report-fonts.css'
 import './screen-brand-colors.css'
 import './workspace-theme.css'
 import './workspace-controls.css'
+import './workspace-depth.css'
 import './public-brand.css'
 
 export const metadata: Metadata = {

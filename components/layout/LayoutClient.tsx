@@ -1,6 +1,7 @@
 'use client'
 
 import {workspacePageContext} from '@/lib/workspace-navigation'
+import {workspaceAppearance} from '@/lib/workspace-appearance'
 import { Suspense, useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Sidebar from './Sidebar'
@@ -104,6 +105,7 @@ function LayoutClientInner({
     return () => { active = false }
   }, [upgradeRequested, welcomeRequested, packageName])
   const pageContext=workspacePageContext(pathname,schoolCode,titleFromPath(pathname,title))
+  const appearance=workspaceAppearance(pathname,schoolCode)
   const pageTitle=pageContext.title
   // onboarding wizard: ไม่โชว์ sidebar/navbar — โหลดเต็มจอเลยหลังเลือกโรงเรียน
   const onSchoolSettings = pathname === '/settings/school' || pathname.endsWith('/settings/school')
@@ -138,7 +140,7 @@ function LayoutClientInner({
 
   if (chromeless) {
     return (
-      <div className="app-shell app-shell--chromeless">
+      <div className="app-shell app-shell--chromeless workspace-theme" data-workspace-tone={appearance.tone} data-workspace-module={appearance.label}>
         <NavigationProgress />
         <main className="main-content main-content--chromeless">
           {children}
@@ -148,7 +150,7 @@ function LayoutClientInner({
   }
 
   return (
-    <div className="app-shell workspace-theme" data-membership-free={freeAccess?'true':undefined} data-membership-school-code={schoolCode||undefined} onClickCapture={event=>{
+    <div className="app-shell workspace-theme" data-workspace-tone={appearance.tone} data-workspace-module={appearance.label} data-membership-free={freeAccess?'true':undefined} data-membership-school-code={schoolCode||undefined} onClickCapture={event=>{
       if(!effectiveMembership || !isFreeMembership(effectiveMembership) || !(event.target instanceof Element))return
       const locked=event.target.closest<HTMLElement>('[data-membership-locked]');if(locked){event.preventDefault();event.stopPropagation();setUpgrade(locked.dataset.membershipLocked||'ฟังก์ชันนี้');return}
       const link=event.target.closest<HTMLAnchorElement>('a[href]');if(!link)return
