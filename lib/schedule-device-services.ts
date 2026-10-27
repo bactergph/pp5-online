@@ -18,6 +18,7 @@ import { availableSubstitutes } from './substitute-availability'
 import { SCHEDULE_DAYS } from './schedules'
 import { verifyCompleteSchedule } from './schedule-verification'
 import { applySchedulePlaceChange } from './schedule-places'
+import { prepareSubjectDetails } from './schedule-subject-details'
 
 type Options = { read:()=>LocalScheduleBundle; write:(bundle:LocalScheduleBundle)=>Promise<boolean>; onComputing?:(controller:AbortController|null)=>void; teacherLimit?:number|(()=>number) }
 type Plan = LocalScheduleBundle['terms'][1]
@@ -199,6 +200,12 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
         if(index<0)subjects.push(subject);else subjects[index]=subject
       }
       const next={...current,subjects,places};fixed(next);await put(year,term,next);return preparation(year,term)
+    })),
+    saveScheduleSubjectDetails:(year,term,hash,lessonId,input)=>outcome(()=>mutate(year,term,async current=>{
+      stale(current,hash)
+      const {details,rule}=prepareSubjectDetails(devicePreparation(current),lessonId,input)
+      const next={...current,subjects:current.subjects.map(subject=>subject.id===lessonId?{...subject,code:details.code,name:details.name,shortName:details.shortName,subjectGroup:details.group,subjectType:details.type,periods:rule.count,pattern:rule.pattern}:subject)}
+      await put(year,term,next);return preparation(year,term)
     })),
     removeScheduleInputSubjects:(year,term,hash,ids)=>outcome(()=>mutate(year,term,async current=>{
       stale(current,hash)

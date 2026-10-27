@@ -25,7 +25,8 @@
     "test:schedule-planning": "node scripts/test-schedule-input.cjs && node scripts/test-schedule-planning.cjs && node scripts/test-schedule-preparation.cjs && node scripts/test-schedule-planning-db.cjs && node scripts/test-schedule-planning-scale.cjs && node scripts/test-free-schedule-gaps.cjs && node scripts/test-flexible-activities.mjs && node scripts/test-schedule-review.mjs && node scripts/test-schedule-morning.mjs && node scripts/test-schedule-dense-school.mjs && node scripts/test-schedule-block-repair.mjs && node scripts/test-schedule-tight-repair.cjs",
     "test:subject-settings": "node scripts/test-subject-semester.mjs && node scripts/test-class-subject-copy.mjs",
     "test:schedule-central-subjects": "node scripts/test-schedule-central-subjects.cjs && node scripts/test-schedule-central-subjects-ui.mjs",
-    "test:schedule-real-worker": "node scripts/test-schedule-real-worker.mjs"
+    "test:schedule-real-worker": "node scripts/test-schedule-real-worker.mjs",
+    "test:schedule-subject-details": "node scripts/test-schedule-subject-details.cjs && node scripts/test-schedule-subject-details-ui.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "^149.0.0",

@@ -34,6 +34,7 @@ export type FreeSubject = {
   roomId: string
   code: string
   name: string
+  shortName?: string
   teacherId: string
   periods: number
   pattern: number[]
@@ -142,6 +143,7 @@ export function normalizePlan(raw?: Partial<FreeWizardPlan>): FreeWizardPlan {
       roomId: subject.roomId,
       code: subject.code || '',
       name: subject.name,
+      shortName: subject.shortName,
       teacherId: subject.teacherId,
       periods: subject.periods,
       pattern: subject.pattern && subject.pattern.reduce((sum, item) => sum + item, 0) === subject.periods && subject.pattern.every(item => Number.isInteger(item) && item >= 1 && item <= 8) ? subject.pattern : patternFor(subject.periods, 0),
@@ -270,7 +272,7 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
       teacherId: subject.teacherId,
       count: subject.periods,
       label: `${room?.label || 'ห้อง'} · ${subject.name}`,
-      name: subject.name,
+      name: subject.shortName?.trim() || subject.name,
       fullName: subject.name,
       code: subject.code,
       subjectGroup: subject.subjectGroup,

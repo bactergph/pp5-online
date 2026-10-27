@@ -2,9 +2,11 @@
 import * as planning from '@/lib/schedule-preparation'
 import { scheduleResult } from '@/lib/schedule-action-result'
 import type { SchedulePlan } from '@/lib/schedule-planning'
-import { importScheduleTeachers, importScheduleSubjects, removeScheduleSubjects, saveTeachingAssignments } from '@/lib/schedule-input-server'
+import { importScheduleTeachers, importScheduleSubjects, removeScheduleSubjects, saveTeachingAssignments, saveSubjectDetails } from '@/lib/schedule-input-server'
 import { saveTimetableRooms } from '@/lib/schedule-classrooms'
 import type { SubjectInputRow } from '@/lib/schedule-input'
+import type { SubjectDetailsInput } from '@/lib/schedule-subject-details'
+export async function saveScheduleSubjectDetails(year:string,term:number,hash:string,lessonId:string,details:SubjectDetailsInput){return scheduleResult(()=>saveSubjectDetails(year,term,hash,lessonId,details))}
 export async function saveScheduleInputTeachers(year:string,term:number,rows:{key:string;prefix:string;name:string;position:string}[]){return scheduleResult(()=>importScheduleTeachers(year,term,rows))}
 export async function saveScheduleInputSubjects(year:string,term:number,hash:string,rows:SubjectInputRow[]){return scheduleResult(()=>importScheduleSubjects(year,term,hash,rows))}
 export async function removeScheduleInputSubjects(year:string,term:number,hash:string,lessonIds:string[]){return scheduleResult(()=>removeScheduleSubjects(year,term,hash,lessonIds))}

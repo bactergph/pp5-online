@@ -5,6 +5,18 @@ import { SCHEDULE_EDIT_ROLES } from './schedules'
 import { saveStaffRows } from './staff-table'
 import { preparation, type Preparation } from './schedule-preparation'
 import { validateSubjectInputs, type SubjectInputRow } from './schedule-input'
+import { prepareSubjectDetails, type SubjectDetailsInput } from './schedule-subject-details'
+
+export async function saveSubjectDetails(year:string,term:number,hash:string,lessonId:string,input:SubjectDetailsInput){
+  const session=await getSession()
+  if(!session?.schoolId||session.mustChangePassword||!SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number]))throw Error('ไม่มีสิทธิ์แก้ไขรายวิชา')
+  const current=await preparation(year,term)
+  if(current.hash!==hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
+  const {details,rule}=prepareSubjectDetails(current,lessonId,input)
+  const saved=await createServerClient().rpc('save_schedule_subject_details',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:hash,p_lesson:lessonId,p_details:details,p_rule:rule})
+  failWrite(saved.error,'บันทึกรายละเอียดรายวิชาไม่สำเร็จ')
+  return preparation(year,term)
+}
 
 function failWrite(error: { message?: string; code?: string } | null, fallback: string) {
   if (!error) return

@@ -23,7 +23,7 @@ export function deviceDocumentPages(plan:FreeWizardPlan,kind:'class'|'teacher',i
         gridData[`${day}-${period}`]={line1:names,line2:'(กิจกรรม)',line3:detail}
       }else if(subjects.length){
         const cell=subjects[0],subject=plan.subjects.find(row=>row.id===cell.subjectId)
-        if(subject)gridData[`${day}-${period}`]={line1:subject.name,line2:subject.code?`(${subject.code})`:'',line3:kind==='class'?compact(plan.teachers.find(row=>row.id===subject.teacherId)?.name||''):subjects.map(item=>plan.rooms.find(row=>row.id===item.classroomId)?.label||'').filter(Boolean).join(' + '),line4:plan.places.find(row=>row.id===subject.placeId)?.name||''}
+        if(subject)gridData[`${day}-${period}`]={line1:subject.shortName?.trim()||subject.name,line2:subject.code?`(${subject.code})`:'',line3:kind==='class'?compact(plan.teachers.find(row=>row.id===subject.teacherId)?.name||''):subjects.map(item=>plan.rooms.find(row=>row.id===item.classroomId)?.label||'').filter(Boolean).join(' + '),line4:plan.places.find(row=>row.id===subject.placeId)?.name||''}
       }else if(kind==='teacher'&&plan.blocks.some(block=>block.teacherId===id&&block.day===day&&block.period===period))gridData[`${day}-${period}`]={line1:'ไม่ว่าง',line2:''}
       else gridData[`${day}-${period}`]={line1:'—',line2:''}
     }

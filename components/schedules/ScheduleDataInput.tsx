@@ -9,6 +9,7 @@ import ScheduleInputGrid from './ScheduleInputGrid'
 import LocalScheduleTeachers from './LocalScheduleTeachers'
 import { teacherImportCapacity } from '@/lib/schedule-teacher-capacity'
 import ScheduleCentralSubjects from './ScheduleCentralSubjects'
+import ScheduleSubjectEditor from './ScheduleSubjectEditor'
 
 export default function ScheduleDataInput({ kind, data, year, term, onSaved, onDirty, locked, onBusy, onRoster }: {
   kind: 'teachers' | 'subjects'; data: Preparation; year: string; term: number
@@ -22,6 +23,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
   const [query, setQuery] = useState('')
   const [subjectLevel, setSubjectLevel] = useState('')
   const [subjectRoom, setSubjectRoom] = useState('')
+  const [editingSubject,setEditingSubject]=useState<string|null>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const saving = useRef(false)
@@ -291,7 +293,8 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
         <button type="button" className="prep-room-delete" disabled={busy || !count} onClick={() => void removeLessons(subjectLessons.filter(lesson => lesson.classroomId === room.id).map(lesson => lesson.id), `ลบรายวิชาของห้อง ${room.level}/${room.name} ทั้ง ${count} รายการ?`)}>ลบ</button>
       </div>
     })}</div>}
-    {orderedLessons.length === 0 ? <p className="prep-teacher-empty">{subjectLessons.length ? 'ไม่พบรายวิชาในห้องนี้' : 'ยังไม่มีรายวิชา กดเพิ่มรายวิชาเพื่อกรอกหรือวางจาก Excel'}</p> : <ul className="prep-subject-list">{orderedLessons.map(lesson => <li key={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}</span><small>{teacherLabel(lesson.teacherId) || 'ยังไม่กำหนดครู'}</small><em>{periodCount(lesson)} คาบ</em><i>{lesson.subjectGroup?.trim() || 'ไม่ระบุหมวด'}</i><button type="button" disabled={busy} onClick={() => void removeLessons([lesson.id], `ลบ ${lesson.code} ${lesson.fullName || lesson.name} ออกจากห้อง ${activeRoomLabel ? `${activeRoomLabel.level}/${activeRoomLabel.name}` : 'นี้'}?`)}>ลบ</button></li>)}<li className="is-total"><b>รวม</b><span>คาบต่อสัปดาห์ของห้องนี้</span><small>{roomLessons.length} รายวิชา</small><em>{activePeriodTotal} คาบ</em><i /><span /></li></ul>}
+    {orderedLessons.length === 0 ? <p className="prep-teacher-empty">{subjectLessons.length ? 'ไม่พบรายวิชาในห้องนี้' : 'ยังไม่มีรายวิชา กดเพิ่มรายวิชาเพื่อกรอกหรือวางจาก Excel'}</p> : <ul className="prep-subject-list">{orderedLessons.map(lesson => <li key={lesson.id} data-lesson={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}</span><small>{teacherLabel(lesson.teacherId) || 'ยังไม่กำหนดครู'}</small><em>{periodCount(lesson)} คาบ</em><i>{lesson.subjectGroup?.trim() || 'ไม่ระบุหมวด'}</i><div className="prep-row-actions"><button type="button" className="prep-row-edit" disabled={busy||locked} onClick={()=>{setError('');setMessage('');setEditingSubject(lesson.id)}}>แก้ไข</button><button type="button" disabled={busy} onClick={() => void removeLessons([lesson.id], `ลบ ${lesson.code} ${lesson.fullName || lesson.name} ออกจากห้อง ${activeRoomLabel ? `${activeRoomLabel.level}/${activeRoomLabel.name}` : 'นี้'}?`)}>ลบ</button></div></li>)}<li className="is-total"><b>รวม</b><span>คาบต่อสัปดาห์ของห้องนี้</span><small>{roomLessons.length} รายวิชา</small><em>{activePeriodTotal} คาบ</em><i /><span /></li></ul>}
+    {editingSubject&&<ScheduleSubjectEditor key={editingSubject} data={data} lessonId={editingSubject} year={year} term={term} onClose={()=>setEditingSubject(null)} onSaved={async()=>{await onSaved();setMessage('บันทึกรายละเอียดรายวิชาแล้ว')}} onReload={onSaved} onDirty={dirty=>onDirty(dirty||filled.length>0)} onBusy={onBusy}/>}
     {levelRooms.length > 0 && <div className="prep-period-summary" aria-label="รวมคาบต่อสัปดาห์แต่ละห้อง"><span>รวมคาบต่อสัปดาห์</span>{levelRooms.map(room => <button key={room.id} type="button" aria-pressed={room.id === activeRoom} onClick={() => setSubjectRoom(room.id)}>ห้อง {room.name}<em>{roomPeriodTotal(room.id)}</em></button>)}</div>}
     <dialog ref={dialogRef} className="prep-team-dialog prep-teacher-dialog prep-subject-dialog" aria-labelledby="add-subject-title" onCancel={event => { event.preventDefault(); closeAdd() }}>
       <header>
