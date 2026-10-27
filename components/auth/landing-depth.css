@@ -148,3 +148,31 @@
   .jsk.jsk-home .jsk-module-visual{padding:8px;border-radius:16px}
   .jsk.jsk-home .jsk-module-ribbon{font-size:12px}
 }
+
+/* The mobile disclosure floats below the header. Opening it never moves the
+   page, and short/landscape viewports can scroll the menu itself. */
+.jsk.jsk-home .jsk-mobile-nav[hidden]{display:none}
+@media(max-width:1150px){
+  .jsk.jsk-home .jsk-menu[aria-expanded=true]{background:#235bc8;color:#fff;border-color:#235bc8}
+  .jsk.jsk-home .jsk-mobile-nav:not([hidden]){display:block;position:absolute;top:calc(100% + 8px);left:0;right:0;width:min(600px,calc(100% - 32px));max-height:calc(100vh - 112px);max-height:calc(100dvh - 112px);margin:0 auto;padding:16px;overflow-y:auto;overscroll-behavior:contain;border:1px solid #cedbed;border-radius:18px;background:#fff;box-shadow:0 16px 44px #112d5133;z-index:2}
+  .jsk.jsk-home .jsk-mobile-nav-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:0 2px}
+  .jsk.jsk-home .jsk-mobile-nav-heading strong{font-size:16px;color:#19324f}
+  .jsk.jsk-home .jsk-mobile-nav-heading>span{font-size:12px;color:#526780}
+  .jsk.jsk-home .jsk-mobile-nav-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .jsk.jsk-home .jsk-mobile-nav a.jsk-mobile-topic{display:flex;align-items:center;gap:10px;min-height:80px;min-width:0;padding:12px 10px;border:1px solid var(--module-line);border-radius:12px;background:linear-gradient(125deg,var(--module-tint),#fff);color:#19324f}
+  .jsk.jsk-home .jsk-mobile-topic>span:last-child{min-width:0}
+  .jsk.jsk-home .jsk-mobile-topic-icon{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:9px;background:var(--module-accent);color:#fff}
+  .jsk.jsk-home .jsk-mobile-topic-icon svg{width:17px;height:17px}
+  .jsk.jsk-home .jsk-mobile-topic strong{display:block;font-size:15px;line-height:1.6;overflow-wrap:anywhere}
+  .jsk.jsk-home .jsk-mobile-topic small{display:block;margin-top:3px;font-size:12px;line-height:1.6;color:#4b627c;overflow-wrap:anywhere}
+  .jsk.jsk-home .jsk-mobile-nav a.jsk-mobile-topic:hover{border-color:var(--module-accent);background:var(--module-tint)}
+  .jsk.jsk-home .jsk-mobile-nav-footer{display:grid;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #e2e9f3;text-align:center}
+  .jsk.jsk-home .jsk-mobile-nav-footer .jsk-button{justify-content:center;min-height:48px;border-top:1px solid #235bc8;color:#fff}
+  .jsk.jsk-home .jsk-mobile-nav-footer>small{font-size:12px;line-height:1.7;color:#526780}
+}
+@media(max-width:360px){
+  .jsk.jsk-home .jsk-mobile-nav:not([hidden]){padding:12px;width:calc(100% - 24px)}
+  .jsk.jsk-home .jsk-mobile-nav a.jsk-mobile-topic{gap:8px;padding:10px 8px}
+  .jsk.jsk-home .jsk-mobile-topic-icon{width:26px;height:30px}
+  .jsk.jsk-home .jsk-mobile-nav-heading>span{font-size:11px}
+}

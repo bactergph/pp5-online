@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { FiArrowRight, FiCheck, FiChevronRight, FiFileText, FiMaximize2, FiMenu, FiX, FiZoomIn, FiZoomOut } from 'react-icons/fi'
+import { FiArrowRight, FiAward, FiBookOpen, FiCalendar, FiCheck, FiChevronRight, FiClipboard, FiFileText, FiGrid, FiMaximize2, FiMenu, FiX, FiZoomIn, FiZoomOut } from 'react-icons/fi'
 import { DEFAULT_FREE_TEACHER_LIMIT } from '@/lib/free-schedule-entitlement'
 import { MEMBERSHIP_CONTACT_URL } from '@/lib/membership'
 import { personalMembershipOffers, SCHOOL_MINIMUM_PRICE, SCHOOL_PRICE_PER_STUDENT } from '@/lib/membership-offers'
@@ -14,6 +14,14 @@ import { LandingOverviewHero, LandingProductSections } from './LandingModules'
 
 const galleryOrder = [1, 0, 2, 3]
 const offers = personalMembershipOffers(DEFAULT_FREE_TEACHER_LIMIT)
+const mobileNavigationDetails: Record<string, {icon: typeof FiGrid; tone: string; description: string}> = {
+  features: {icon: FiGrid, tone: 'blue', description: 'เครื่องมือทั้งหมด'},
+  schedule: {icon: FiCalendar, tone: 'blue', description: 'จัดตารางอัตโนมัติ'},
+  pp5: {icon: FiBookOpen, tone: 'teal', description: 'คะแนนรายวิชา'},
+  pp6: {icon: FiFileText, tone: 'violet', description: 'รายงานนักเรียน'},
+  classroom: {icon: FiClipboard, tone: 'amber', description: 'งานประจำชั้น'},
+  packages: {icon: FiAward, tone: 'blue', description: 'เลือกให้เหมาะกับงาน'},
+}
 
 const schoolTypes = [
   { title: 'โรงเรียนประเภทประถม', levels: 'ตั้งชั้นเรียนได้ตั้งแต่ อ.2–ม.3', description: 'งานรายวิชา พร้อมงานประจำชั้น', items: ['คะแนน เวลาเรียนรายวิชา และการประเมิน', 'ปพ.5 รายวิชา · ปพ.6 นักเรียน', 'ปพ.5 รวมชั้นเรียน', 'ธุรการชั้นเรียน เช่น การมาเรียน นม และเงินออม'] },
@@ -36,10 +44,47 @@ export default function PublicWelcome() {
   const [detail, setDetail] = useState<number | null>(null)
   const [zoom, setZoom] = useState(false)
   const dialog = useRef<HTMLDialogElement>(null)
+  const header = useRef<HTMLElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
   const imageTrigger = useRef<HTMLElement | null>(null)
   const imageScroll = useRef<HTMLDivElement>(null)
   const current = detail === null ? null : examples[detail]
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !header.current?.contains(event.target)) setMenuOpen(false)
+    }
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setMenuOpen(false)
+      menuButton.current?.focus()
+    }
+    const closeOnFocusExit = (event: FocusEvent) => {
+      if (event.target instanceof Node && !header.current?.contains(event.target)) setMenuOpen(false)
+    }
+    const desktop = window.matchMedia('(min-width: 1151px)')
+    const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false) }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    document.addEventListener('focusin', closeOnFocusExit)
+    desktop.addEventListener('change', closeOnDesktop)
+    closeOnDesktop()
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+      document.removeEventListener('focusin', closeOnFocusExit)
+      desktop.removeEventListener('change', closeOnDesktop)
+    }
+  }, [menuOpen])
+
+  function selectMobileSection(id: string) {
+    setMenuOpen(false)
+    const target = document.getElementById(id)
+    target?.setAttribute('tabindex', '-1')
+    requestAnimationFrame(() => target?.focus({preventScroll: true}))
+  }
 
   useEffect(() => {
     const node = dialog.current
@@ -64,11 +109,9 @@ export default function PublicWelcome() {
   return (
     <div className="jsk jsk-home">
       <a className="jsk-skip" href="#main">ข้ามไปยังเนื้อหา</a>
-      <header className="jsk-header" onKeyDown={event => {
-        if (event.key === 'Escape' && menuOpen) { setMenuOpen(false); menuButton.current?.focus() }
-      }}>
+      <header ref={header} className="jsk-header">
         <div className="jsk-container jsk-header-row">
-          <a className="jsk-brand" href="#main" aria-label="จารย์เสก หน้าแรก">
+          <a className="jsk-brand" href="#main" aria-label="จารย์เสก หน้าแรก" onClick={() => setMenuOpen(false)}>
             <Image src="/brand/jarnsek-logo.png" alt="" width={46} height={46} />
             <span><strong>จารย์เสก</strong><small>งานวิชาการของโรงเรียน</small></span>
           </a>
@@ -79,9 +122,13 @@ export default function PublicWelcome() {
             <button ref={menuButton} className="jsk-menu" aria-label={menuOpen ? 'ปิดเมนู' : 'เปิดเมนู'} aria-expanded={menuOpen} aria-controls="mobile-menu" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <FiX /> : <FiMenu />}</button>
           </div>
         </div>
-        <nav id="mobile-menu" className="jsk-mobile-nav jsk-container" aria-label="เมนูมือถือ" hidden={!menuOpen}>
-          {navigation.map(([id, label]) => <a key={id} href={'#' + id} onClick={() => setMenuOpen(false)}>{label}</a>)}
-          <Link href="/login">เข้าสู่ระบบ</Link><Link href="/register">สมัครสมาชิกฟรี</Link>
+        <nav id="mobile-menu" className="jsk-mobile-nav" aria-label="เมนูมือถือ" hidden={!menuOpen}>
+          <div className="jsk-mobile-nav-heading"><strong>สำรวจจารย์เสก</strong><span>เลือกงานที่คุณสนใจ</span></div>
+          <div className="jsk-mobile-nav-grid">{navigation.map(([id, label]) => {
+            const {icon: Icon, tone, description} = mobileNavigationDetails[id]
+            return <a key={id} href={'#' + id} className={'jsk-mobile-topic is-' + tone} onClick={() => selectMobileSection(id)}><span className="jsk-mobile-topic-icon"><Icon aria-hidden/></span><span><strong>{label}</strong><small>{description}</small></span></a>
+          })}</div>
+          <div className="jsk-mobile-nav-footer"><Link className="jsk-button jsk-primary" href="/register" onClick={() => setMenuOpen(false)}>เริ่มใช้งานฟรี<FiArrowRight aria-hidden/></Link><small>จัดตารางฟรี · ครูสูงสุด {DEFAULT_FREE_TEACHER_LIMIT} คน</small></div>
         </nav>
       </header>
 
