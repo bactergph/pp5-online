@@ -366,7 +366,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
     if(blocked)return
     const label=scope==='school'?'ทั้งโรงเรียน':scope==='level'?`ระดับชั้น ${selectedClassroom?.level}`:`ห้อง ${selectedClassroom?.label}`
     const roomCount=scope==='school'?classrooms.length:scope==='level'?classrooms.filter(c=>c.level===selectedClassroom?.level).length:1
-    if (!(await scheduleAlert.fire({icon:'warning',title:`ล้างตาราง${label}?`,text:`ปีการศึกษา ${selectedYearObj?.year_be} ภาคเรียนที่ ${semester} · ${roomCount} ห้อง นำเฉพาะคาบที่ไม่ล็อกออก คาบที่ล็อกและล็อกคาบว่างของครูจะเก็บไว้`,showCancelButton:true,confirmButtonText:'ยืนยันล้างตาราง',confirmButtonColor:'#be3340'})).isConfirmed) return
+    if (!(await scheduleAlert.fire({icon:'warning',title:`ล้างตาราง${label}?`,text:`ปีการศึกษา ${selectedYearObj?.year_be} ภาคเรียนที่ ${semester} · ${roomCount} ห้อง นำเฉพาะคาบรายวิชาที่ไม่ล็อกออก เก็บกิจกรรม คาบล็อก และคาบว่างครูทั้งหมด`,showCancelButton:true,confirmButtonText:'ยืนยันล้างตาราง',confirmButtonColor:'#be3340'})).isConfirmed) return
     setBusyAction('clear')
     try {
       const result = await clearScheduleScope(selectedYear,semester,scope,selectedClass)
@@ -482,9 +482,9 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
               <summary className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50">เครื่องมือเพิ่มเติม ▾</summary>
               <div className="schedule-tools-menu absolute right-0 top-14 z-20 grid w-80 gap-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xl [&_label]:flex [&_label]:gap-2 [&_label]:text-sm [&_input]:accent-blue-700 [&_p]:text-xs [&_p]:leading-6 [&_p]:text-stone-500">
                 <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked || copySourceClassrooms.length === 0} onClick={() => { setCopyFromClass(copySourceClassrooms[0]?.id || ''); setCopyOpen(true) }}>คัดลอกจากห้องอื่น</button>
-                <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 border-rose-200! text-rose-700! hover:bg-rose-50!" disabled={blocked} onClick={()=>handleClear('room')}>{busyAction === 'clear' ? 'กำลังล้าง...' : 'ล้างคาบที่ไม่ล็อกของห้องนี้'}</button>
-                <button type="button" className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={blocked} onClick={()=>handleClear('level')}>ล้างตารางทั้งระดับชั้น {selectedClassroom?.level}</button>
-                <button type="button" className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={blocked} onClick={()=>handleClear('school')}>ล้างตารางทั้งโรงเรียน</button>
+                <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 border-rose-200! text-rose-700! hover:bg-rose-50!" disabled={blocked} onClick={()=>handleClear('room')}>{busyAction === 'clear' ? 'กำลังล้าง...' : 'ล้างเฉพาะรายวิชาของห้องนี้'}</button>
+                <button type="button" className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={blocked} onClick={()=>handleClear('level')}>ล้างเฉพาะรายวิชาทั้งระดับชั้น {selectedClassroom?.level}</button>
+                <button type="button" className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={blocked} onClick={()=>handleClear('school')}>ล้างเฉพาะรายวิชาทั้งโรงเรียน</button>
               </div>
             </details>
           </div>

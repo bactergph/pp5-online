@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm'),ts=require('typescript'),assert=require('assert/strict');
-function moduleFrom(path,deps){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:n=>deps[n]||(n==='./schedule-joint-teaching'?moduleFrom('lib/schedule-joint-teaching.ts',{}):{})});return exports}
+function moduleFrom(path,deps){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,performance,require:n=>deps[n]||(n.startsWith('.')?moduleFrom(require('path').resolve(require('path').dirname(path),n+'.ts'),{}):{})});return exports}
 const schedules=moduleFrom('lib/schedules.ts',{});
 const teams=moduleFrom('lib/schedule-activity-teams.ts',{'./schedule-helpers':{}});
 for(const level of ['อ.2','อ.3','อ2','อนุบาล 2'])assert.equal(schedules.isTimetableClassroom(level),false);
@@ -122,4 +122,8 @@ const writesBeforeStale=planWrites;await assert.rejects(api.savePlaces('year',1,
 locations=await api.savePlaces('year',1,'snapshot',{kind:'remove',id:placeId,replacementId:null});assert.equal(locations.plan.rooms.length,0);
 session={...session,role:'teacher'};await assert.rejects(api.savePlaces('year',1,'snapshot',{kind:'add',place:{id:placeId,name:'ห้ามเขียน'}}),/สิทธิ์/);
 console.log('PASS: online place CRUD uses school/role authorization and atomic plan snapshots, preserves quotas, refreshes labels and explicitly clears legacy names');
+session={schoolId:'school',userId:'admin',role:'admin'};data.classrooms=structuredClone(originalData.classrooms);data.lessons=structuredClone(originalData.lessons);data.slots=structuredClone(originalData.slots);
+const savedActivity={id:'11111111-1111-4111-8111-111111111150',settingId:'activity',mode:'joint',roomIds:['A'],teacherIds:['T'],roomTeachers:{},weeklyPeriods:1,cells:[]};planConfig={...planning.emptyPlan(),activityGroups:[savedActivity]};data.lessons.push({id:'activity:placed',classroomId:'A',subjectId:'activity',teacherId:null,teacherIds:['T'],count:1,label:'ลูกเสือ',name:'ลูกเสือ',activity:true});data.slots.push({...data.slots[0],period:2,class_subject_id:null,activity_id:'placed'});
+const beforeTeamPreview=JSON.stringify(data.slots);const teamPreview=await api.previewActivityTeam('year',1,'snapshot',{...savedActivity,teacherIds:[]});assert.equal(teamPreview.locked,0);assert.equal(teamPreview.affected,0);assert.equal(JSON.stringify(data.slots),beforeTeamPreview);
+console.log('PASS: online teacher-only activity preview keeps generated placements and unrelated locked subjects without requesting an unlock');
 session={...session,role:'teacher'};await assert.rejects(api.generate('year',1,['A'],true),/สิทธิ์/);session=null;await assert.rejects(api.confirmDraft('draft'),/สิทธิ์/);assert.equal(liveWrites,0);console.log('PASS: preparation authorization, auto writes draft only, multi-room/multi-cell activity preview and locked impact, scope/duplicate/break rejection')})().catch(e=>{console.error(e);process.exitCode=1});

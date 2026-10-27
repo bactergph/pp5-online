@@ -117,7 +117,11 @@ const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'
   const clearSchool=await api.clearScope('y',2,'school','a');assert.equal(clearSchool.removed,1);assert.equal(data.slots.length,1);assert.ok(data.slots[0].locked)
   await assert.rejects(api.clearScope('y',2,'school','foreign'),/room/)
   reset();data.slots=[slot('a','l1',1),slot('b','l2',1)];await api.clearScope('y',1,'room','a');assert.equal(data.slots.length,1);assert.equal(data.slots[0].classroom_id,'b')
-  console.log('PASS: atomic room/level/school clearing retains locked periods, other levels and term isolation')
+  reset();data.slots=[slot('a','l1',1),slot('a','l1',2,true),slot('b','l2',1),{...slot('a',null,3,true),activity_id:'locked-activity'},{...slot('a',null,4),activity_id:'flexible-activity'}]
+  const beforeSelected=JSON.stringify(data.lessons),selectedClear=await api.clearScope('y',2,'selected','a',['a'])
+  assert.equal(selectedClear.rooms,1);assert.equal(selectedClear.removed,1);assert.equal(writes,1);assert.equal(data.slots.length,4);assert.equal(data.slots.filter(row=>row.activity_id).length,2);assert.equal(JSON.stringify(data.lessons),beforeSelected);assert.ok(data.slots.some(row=>row.classroom_id==='b'))
+  await assert.rejects(api.clearScope('y',2,'selected','a',['foreign']),/เลือกห้อง/);assert.equal(writes,1)
+  console.log('PASS: atomic room/level/school/selected clearing retains all activities and locked periods, preserves other rooms and term isolation')
   reset();data.lessons[1].teacherId='other';data.slots=[slot('a','l1',1),slot('a','l1',2,true),slot('b','l2',1)]
   const teacherClear=await api.clearTeacher('y',2,'t');assert.equal(teacherClear.removed,1);assert.equal(data.slots.length,2);assert.ok(data.slots.some(s=>s.classroom_id==='b'));assert.ok(data.slots.some(s=>s.locked));assert.equal(writtenTerm,2)
   console.log('PASS: clearing selected teacher preserves other teachers and locked periods')

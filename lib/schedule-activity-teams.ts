@@ -1,6 +1,12 @@
 import type { PeriodTimeRow } from './schedule-helpers'
 export type ActivityTeam = { id:string; settingId:string; mode:'joint'|'separate'; roomIds:string[]; teacherIds:string[]; roomTeachers:Record<string,string[]>; weeklyPeriods:number; cells:{day:number;period:number}[] }
 export function activityTeachers(group:ActivityTeam,room:string){return group.mode==='joint'?group.teacherIds:group.roomTeachers[room]||[]}
+/** A teacher-only edit changes responsibility, not the saved timetable or locks. */
+export function activityTeamKeepsSchedule(old:ActivityTeam|undefined,next:ActivityTeam) {
+ if(!old||old.settingId!==next.settingId||old.mode!==next.mode&&(old.roomIds.length!==1||next.roomIds.length!==1)||old.weeklyPeriods!==next.weeklyPeriods)return false
+ const same=(a:string[],b:string[])=>a.length===b.length&&a.every(value=>b.includes(value))
+ return same(old.roomIds,next.roomIds)&&same(old.cells.map(cell=>`${cell.day}:${cell.period}`),next.cells.map(cell=>`${cell.day}:${cell.period}`))
+}
 /** Restore saved teams only for newly selected rooms; keep deliberate draft edits, including an empty team. */
 export function restoreActivityRoomTeachers(draft:ActivityTeam,groups:ActivityTeam[],roomIds:string[]):ActivityTeam {
  const added=roomIds.filter(id=>!draft.roomIds.includes(id))

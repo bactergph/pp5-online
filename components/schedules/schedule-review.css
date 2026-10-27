@@ -154,3 +154,5 @@
  .schedule-prep .prep-review-incomplete{padding:14px;gap:8px}
 }
 @media(prefers-reduced-motion:reduce){.schedule-prep .prep-review-working>svg{animation:none}}
+.schedule-prep .prep-review-actions .prep-review-clear-subjects{color:#b42336;border-color:#f0c8ce;background:#fff8f8}
+.schedule-prep .prep-review-actions .prep-review-clear-subjects:hover:not(:disabled){background:#ffedf0}

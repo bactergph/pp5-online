@@ -1,6 +1,6 @@
 import {applyJointTeachingLock,prepareJointTeachingSession,prepareJointTeachingCancellation} from './schedule-joint-lock'
 import type { ScheduleOperations } from '../components/schedules/ScheduleServices'
-import { activityTeachers, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
+import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { validateSubjectInputs } from './schedule-input'
 import { validatePeriodTimes } from './schedule-helpers'
 import {validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingSubjectLabel,teachingEventAt,teachingQuotaParts} from './schedule-joint-teaching'
@@ -106,7 +106,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     if(remove&&!old)throw Error('ไม่พบทีมกิจกรรม')
     if(!remove)validateActivityTeam(group,current.rooms.map(room=>room.id),current.teacherIds??current.teachers.map(t=>t.id),(current.activityCatalog||[]).map(item=>item.id),current.days,current.periods)
     const overwrites=remove?[]:current.activities.filter(item=>item.id!==group.id&&(item.settingId||item.id)===group.settingId&&item.roomIds.some(id=>group.roomIds.includes(id))).map(item=>({rooms:item.roomIds.filter(id=>group.roomIds.includes(id)).map(roomId=>({roomId,previous:freeActivityTeachers(item,roomId),next:activityTeachers(group,roomId),duplicates:freeActivityTeachers(item,roomId).filter(id=>activityTeachers(group,roomId).includes(id))}))}))
-    const affected=current.timetable.filter(cell=>!!old&&cell.activityId===old.id||!remove&&group.roomIds.includes(cell.classroomId)&&(group.cells.some(target=>target.day===cell.day&&target.period===cell.period)||current.activities.some(item=>item.id===cell.activityId&&(item.settingId||item.id)===group.settingId)))
+    const affected=!remove&&activityTeamKeepsSchedule(old?freeActivityGroup(old):undefined,group)?[]:current.timetable.filter(cell=>!!old&&cell.activityId===old.id||!remove&&group.roomIds.includes(cell.classroomId)&&(group.cells.some(target=>target.day===cell.day&&target.period===cell.period)||current.activities.some(item=>item.id===cell.activityId&&(item.settingId||item.id)===group.settingId)))
     return {affected:affected.length,locked:affected.filter(cell=>cell.locked).length,hash:deviceDataKey(current),overwrites}
   }
   const saveActivity=(year:string,term:number,hash:string,group:ActivityTeam,remove=false,unlock=false,overwrite=false)=>mutate(year,term,async current=>{
@@ -120,7 +120,8 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       return {...item,roomIds,roomTeachers:Object.fromEntries(Object.entries(item.roomTeachers).filter(([id])=>roomIds.includes(id))),roomTeacherIds:Object.fromEntries(Object.entries(item.roomTeacherIds||{}).filter(([id])=>roomIds.includes(id)))}
     }).filter(item=>item.roomIds.length)
     if(!remove)activities.push({id:group.id,settingId:group.settingId,name:catalog?.label||'กิจกรรม',mode:group.mode,roomIds:group.roomIds,teacherId:group.teacherIds[0]||'',teacherIds:group.teacherIds,roomTeachers:Object.fromEntries(Object.entries(group.roomTeachers).map(([id,ids])=>[id,ids[0]||''])),roomTeacherIds:group.roomTeachers,weeklyPeriods:group.weeklyPeriods,cells:group.cells} satisfies FreeActivity)
-    const timetable=current.timetable.filter(cell=>{
+    const old=current.activities.find(item=>item.id===group.id)
+    const timetable=!remove&&activityTeamKeepsSchedule(old?freeActivityGroup(old):undefined,group)?current.timetable:current.timetable.filter(cell=>{
       if(cell.activityId===group.id)return false
       if(remove)return true
       if(!group.roomIds.includes(cell.classroomId))return true
@@ -289,10 +290,12 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     toggleScheduleCellLock:(room,year,day,period,term=1)=>outcome(()=>mutate(year,term,async current=>{const next=lockDeviceCell(current,room,day,period);await put(year,term,next);return {locked:!!next.timetable.find(cell=>cell.classroomId===room&&cell.day===day&&cell.period===period)?.locked}})),
     setTeacherAvailabilityBlock:(year,term,teacher,day,period,blocked)=>outcome(()=>mutate(year,term,async current=>{await put(year,term,blockDeviceTeacher(current,teacher,day,period,blocked));return {ok:true}})),
     editTeacherScheduleCell:(year,term,teacher,room,day,period,expected,lesson)=>outcome(()=>mutate(year,term,async current=>{if(lesson&&!current.subjects.some(subject=>subject.id===lesson&&subject.teacherId===teacher&&subject.roomId===room))throw Error('วิชานี้ไม่ใช่ภาระของครูที่เลือก');await put(year,term,changeDeviceCell(current,room,day,period,lesson,expected));return {ok:true}})),
-    clearScheduleScope:(year,term,kind,room)=>outcome(()=>mutate(year,term,async current=>{
+    clearScheduleScope:(year,term,kind,room,selectedRooms)=>outcome(()=>mutate(year,term,async current=>{
+      if(!['room','level','school','selected'].includes(kind))throw Error('ขอบเขตการล้างไม่ถูกต้อง')
       const selected=current.rooms.find(item=>item.id===room);if(!selected)throw Error('เลือกห้องเรียนก่อนล้างตาราง')
-      const level=selected.label.split('/')[0],rooms=current.rooms.filter(item=>kind==='school'||(kind==='room'?item.id===room:item.label.split('/')[0]===level)),ids=new Set(rooms.map(room=>room.id))
-      const next={...current,timetable:current.timetable.filter(cell=>cell.locked||!ids.has(cell.classroomId))}
+      if(kind==='selected'&&(!Array.isArray(selectedRooms)||!selectedRooms.length||selectedRooms.some(id=>!current.rooms.some(room=>room.id===id))))throw Error('เลือกห้องเรียนในเครื่องนี้ก่อนล้างรายวิชา')
+      const level=selected.label.split('/')[0],rooms=current.rooms.filter(item=>kind==='selected'?selectedRooms!.includes(item.id):kind==='school'||(kind==='room'?item.id===room:item.label.split('/')[0]===level)),ids=new Set(rooms.map(room=>room.id))
+      const next={...current,timetable:current.timetable.filter(cell=>cell.locked||!!cell.activityId||!cell.subjectId||!ids.has(cell.classroomId)||!!deviceActivityAt(current,cell.classroomId,cell.day,cell.period))}
       await put(year,term,next);return {rooms:rooms.length,removed:current.timetable.length-next.timetable.length}
     })),
     clearTeacherSchedule:(year,term,teacher)=>outcome(()=>mutate(year,term,async current=>{const next=clearDeviceCells(current,{kind:'teacher',id:teacher});await put(year,term,next);return {removed:current.timetable.length-next.timetable.length}})),

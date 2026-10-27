@@ -1,7 +1,7 @@
 import 'server-only'
 import {prepareJointTeachingSession,prepareJointTeachingCancellation,applyJointTeachingLock,type JointLockRequest} from './schedule-joint-lock'
 import {withJointTeachingGroups,validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingScope} from './schedule-joint-teaching'
-import { activityTeachers, activityWeeklyPeriods, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
+import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { randomUUID } from 'node:crypto'
 import { getSession } from './session'
 import { createServerClient } from './supabase'
@@ -254,6 +254,7 @@ export async function previewActivityTeam(year:string,term:number,hash:string,gr
  const old=data.plan.activityGroups?.find(g=>g.id===group.id)
  if(remove&&!old)throw Error('ไม่พบทีมกิจกรรม')
  if(!remove)validateActivityTeam(group,data.classrooms.map(c=>c.id),data.plan.teacherIds??data.teachers.map(t=>t.id),data.activities.map(a=>a.id),data.plan.days,data.periods)
+ if(!remove&&activityTeamKeepsSchedule(old,group))return {affected:0,locked:0,overwrites:[],hash:data.hash}
  const target=remove?old!:group
  const overwrites=remove?[]:(data.plan.activityGroups||[]).filter(g=>g.id!==group.id&&g.settingId===group.settingId&&g.roomIds.some(id=>group.roomIds.includes(id))).map(g=>({rooms:g.roomIds.filter(id=>group.roomIds.includes(id)).map(roomId=>({roomId,previous:activityTeachers(g,roomId),next:activityTeachers(group,roomId),duplicates:activityTeachers(g,roomId).filter(id=>activityTeachers(group,roomId).includes(id))}))}))
  const overwriteRooms=new Set(overwrites.flatMap(g=>g.rooms.map(r=>r.roomId)))

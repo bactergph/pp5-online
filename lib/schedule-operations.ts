@@ -128,17 +128,18 @@ export async function setTeacherBlock(year: string, semester: number, teacherId:
 export async function clearRoom(roomId: string, year: string, semester = 1) {
   const ctx = await context(year, semester)
   requireScheduleClass(ctx.data, roomId)
-  await commit(ctx, year, ctx.data.slots.filter(s => s.classroom_id !== roomId || s.locked), 'ล้างคาบที่ไม่ล็อกในห้องเรียน')
+  await commit(ctx, year, ctx.data.slots.filter(s => s.classroom_id !== roomId || s.locked || !s.class_subject_id || !!s.activity_id), 'ล้างคาบรายวิชาที่ไม่ล็อกในห้องเรียน')
   return { ok: true }
 }
-export async function clearScope(year:string,semester:number,scope:'room'|'level'|'school',roomId:string) {
+export async function clearScope(year:string,semester:number,scope:'room'|'level'|'school'|'selected',roomId:string,selectedRooms?:string[]) {
   const ctx=await context(year,semester)
-  if(!['room','level','school'].includes(scope))throw new Error('ขอบเขตการล้างไม่ถูกต้อง')
+  if(!['room','level','school','selected'].includes(scope))throw new Error('ขอบเขตการล้างไม่ถูกต้อง')
   const room=requireScheduleClass(ctx.data,roomId)
-  const rooms=ctx.data.classrooms.filter(c=>scope==='school'||(scope==='level'?c.level===room.level:c.id===room.id))
+  if(scope==='selected'&&(!Array.isArray(selectedRooms)||!selectedRooms.length||selectedRooms.some(id=>!ctx.data.classrooms.some(c=>c.id===id))))throw Error('เลือกห้องเรียนในโรงเรียนนี้ก่อนล้างรายวิชา')
+  const rooms=ctx.data.classrooms.filter(c=>scope==='selected'?selectedRooms!.includes(c.id):scope==='school'||(scope==='level'?c.level===room.level:c.id===room.id))
   const ids=new Set(rooms.map(c=>c.id))
-  const removed=ctx.data.slots.filter(s=>ids.has(s.classroom_id)&&!s.locked)
-  await commit(ctx,year,ctx.data.slots.filter(s=>!ids.has(s.classroom_id)||s.locked),`ล้างตาราง ${scope==='school'?'ทั้งโรงเรียน':scope==='level'?`ระดับชั้น ${room.level}`:'รายห้อง'} · ${rooms.length} ห้อง · ${removed.length} คาบ`)
+  const removed=ctx.data.slots.filter(s=>ids.has(s.classroom_id)&&!s.locked&&!!s.class_subject_id&&!s.activity_id)
+  await commit(ctx,year,ctx.data.slots.filter(s=>!removed.includes(s)),`ล้างคาบรายวิชา ${scope==='school'?'ทั้งโรงเรียน':scope==='level'?`ระดับชั้น ${room.level}`:scope==='selected'?'ห้องที่เลือก':'รายห้อง'} · ${rooms.length} ห้อง · ${removed.length} คาบ`)
   return {rooms:rooms.length,removed:removed.length}
 }
 export async function clearTeacher(year:string,semester:number,teacherId:string) {

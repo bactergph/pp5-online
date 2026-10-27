@@ -21,12 +21,12 @@ export type ScheduleDraftView = {
 type Props = {
   data:Preparation; rooms:string[]; clear:boolean; issues:PlanningIssue[]|null; draft:ScheduleDraftView|null; blocked:boolean
   onRooms:(rooms:string[])=>void; onClear:(clear:boolean)=>void; onCheck:()=>void; onGenerate:()=>void
-  onConfirm:()=>void; onDiscard:()=>void; onFix:(step:number)=>void
+  onConfirm:()=>void; onDiscard:()=>void; onFix:(step:number)=>void; onClearSubjects?:()=>void
   workingLabel?:string
 }
 const steps:Record<number,string>={1:'วันและเวลา',2:'กำหนดชั้น',3:'กำหนดครู',4:'กิจกรรม',5:'รายวิชา',6:'ภาระสอนและล็อกคาบ',7:'ตรวจและจัดตาราง'}
 
-export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocked,onRooms,onClear,onCheck,onGenerate,onConfirm,onDiscard,onFix,workingLabel}:Props) {
+export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocked,onRooms,onClear,onCheck,onGenerate,onConfirm,onDiscard,onFix,onClearSubjects,workingLabel}:Props) {
   const resultRef=useRef<HTMLDivElement>(null)
   const [previewRoom,setPreviewRoom]=useState(''),[limits,setLimits]=useState<Record<number,number>>({})
   const [selectedLevel,setSelectedLevel]=useState('')
@@ -118,7 +118,7 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
     {blocked&&<p className="prep-notice" role="status"><FiInfo aria-hidden="true"/>บันทึกข้อมูลครู รายวิชา หรือกิจกรรมที่กำลังแก้ก่อนสร้างร่าง</p>}
     <div className="prep-review-action-bar">
       <span><FiInfo aria-hidden="true"/>{rooms.length ? 'ตารางจริงจะไม่เปลี่ยนจนยืนยันบันทึก' : 'เลือกอย่างน้อย 1 ห้องก่อนจัดตาราง'}</span>
-      <div className="prep-review-actions"><button type="button" disabled={blocked||!rooms.length} onClick={onCheck}><FiRefreshCw aria-hidden="true"/>ตรวจข้อมูลล่าสุด</button><button type="button" className="prep-primary" disabled={blocked||!rooms.length} onClick={onGenerate}><FiZap aria-hidden="true"/>สร้างตารางฉบับร่าง</button></div>
+      <div className="prep-review-actions">{onClearSubjects&&<button type="button" className="prep-review-clear-subjects" disabled={blocked||!!workingLabel||!rooms.length} onClick={onClearSubjects}><FiTrash2 aria-hidden="true"/>ล้างเฉพาะรายวิชา</button>}<button type="button" disabled={blocked||!rooms.length} onClick={onCheck}><FiRefreshCw aria-hidden="true"/>ตรวจข้อมูลล่าสุด</button><button type="button" className="prep-primary" disabled={blocked||!rooms.length} onClick={onGenerate}><FiZap aria-hidden="true"/>สร้างตารางฉบับร่าง</button></div>
     </div>
     {workingLabel&&<div className="prep-review-working" role="status"><FiRefreshCw aria-hidden="true"/><div><strong>{workingLabel}</strong><small>โปรดรอผลก่อนออกจากหน้านี้</small></div></div>}
 

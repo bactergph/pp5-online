@@ -375,6 +375,30 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   assert.equal((await db.query('select teacher_id from class_subjects where id=$1',[id(9050)])).rows[0].teacher_id,id(9201));assert.deepEqual(await rawRows(),beforeTeacherSlots);assert.equal(Number((await db.query('select score from scores where id=$1',[id(9070)])).rows[0].score),87);
   const teacherHash=await jointHash();for(const [patch,rule]of [[{teacherId:id(9202)},detailRule],[{teacherId:null},detailRule],[{periodMode:'single'},{...detailRule,pattern:[1,1]}],[{periodMode:'double'},{...detailRule,pattern:[1,1]}]]){await assert.rejects(saveDetails(teacherHash,{...subjectDetails,...patch},rule));assert.equal(await jointHash(),teacherHash,'Teacher/pattern failure is atomic');assert.deepEqual(await rawRows(),beforeTeacherSlots)}
   assert.equal((await db.query("select has_function_privilege('authenticated','save_schedule_subject_details(uuid,uuid,int,text,uuid,jsonb,jsonb)','execute') allowed")).rows[0].allowed,false);console.log('PASS: 092 repeatable; teacher and explicit block patterns update atomically; retained IDs/scores/slots, foreign-teacher rejection, split-day rejection and service-only RPC');
+  // Reproduce the production activity edit failure with unrelated locked subjects.
+  await db.query('insert into academic_years(id,school_id) values($1,$2)',[id(9300),id(1)]);
+  await db.query('insert into classrooms(id,school_id,academic_year_id,level,room) values($1,$2,$3,$4,1)',[id(9301),id(1),id(9300),'ป.4']);
+  await db.query('insert into users(id,school_id,role,is_active,email) values($1,$2,$3,true,$4),($5,$2,$3,true,$6)',[id(9303),id(1),'teacher','activity-a@example.invalid',id(9304),'activity-b@example.invalid']);
+  await db.query('insert into class_subjects(id,classroom_id,academic_year_id,subject_id,teacher_id) values($1,$2,$3,$4,$5)',[id(9307),id(9301),id(9300),id(40),id(9303)]);
+  const activityEditHash=async()=>(await db.query('select schedule_snapshot($1,$2,1) h',[id(1),id(9300)])).rows[0].h;
+  const editActivity=async(group,unlock=false,hash)=>db.query('select save_schedule_activity_team($1,$2,1,$3,$4::jsonb,false,$5,false)',[id(1),id(9300),hash??await activityEditHash(),JSON.stringify(group),unlock]);
+  const editGroup={id:id(9308),settingId:id(60),mode:'joint',roomIds:[id(9301)],teacherIds:[id(9303)],roomTeachers:{},weeklyPeriods:2,cells:[]};
+  await editActivity(editGroup);
+  const editOffering=(await db.query('select id from class_schedule_activities where classroom_id=$1 and academic_year_id=$2',[id(9301),id(9300)])).rows[0].id;
+  const editRows=[{...slot(9301,9307,1,{locked:true}),academic_year_id:id(9300)},...[2,3].map(day=>({...slot(9301,null,2,{activity_id:editOffering,locked:true}),academic_year_id:id(9300),day_of_week:day}))];
+  await db.query('select save_school_schedule_term($1,$2,$3::jsonb,$4::jsonb,false,1)',[id(1),id(9300),'[]',JSON.stringify(editRows)]);
+  const editRaw=async()=>(await db.query('select classroom_id,academic_year_id,day_of_week,period,class_subject_id,activity_id,note,locked from class_schedule_slots where academic_year_id=$1 and semester=1 order by day_of_week,period',[id(9300)])).rows;
+  const beforeEdit=await editRaw(),addedTeacher={...editGroup,teacherIds:[id(9303),id(9304)]};
+  await assert.rejects(editActivity(addedTeacher),/ต้องยืนยันแทนที่คาบล็อก/);assert.deepEqual(await editRaw(),beforeEdit);
+  const activityEditSql=fs.readFileSync('supabase/migrations/093_schedule_activity_teacher_edits.sql','utf8');await db.exec(activityEditSql);await db.exec(activityEditSql);
+  const oldEditHash=await activityEditHash();await editActivity(addedTeacher);assert.deepEqual(await editRaw(),beforeEdit,'Teacher-only edits must preserve ordinary subjects, generated activity cells and every lock');
+  const editConfig=(await db.query('select config from schedule_plans where school_id=$1 and academic_year_id=$2 and semester=1',[id(1),id(9300)])).rows[0].config;assert.deepEqual(editConfig.activityGroups[0].teacherIds,addedTeacher.teacherIds);
+  assert.equal((await db.query('select count(*)::int n from activity_team_teaching($1,$2,1,$3::jsonb) where teacher_id=$4',[id(1),id(9300),JSON.stringify(editRows),id(9304)])).rows[0].n,2);
+  await assert.rejects(editActivity(editGroup,false,oldEditHash),/เปลี่ยน/);assert.deepEqual(await editRaw(),beforeEdit);
+  await editActivity(editGroup);await db.query('select set_schedule_teacher_block($1,$2,1,$3,2,2,true)',[id(1),id(9300),id(9304)]);const conflictHash=await activityEditHash();await assert.rejects(editActivity(addedTeacher),/ล็อกคาบว่าง/);assert.equal(await activityEditHash(),conflictHash);assert.deepEqual(await editRaw(),beforeEdit);await db.query('select set_schedule_teacher_block($1,$2,1,$3,2,2,false)',[id(1),id(9300),id(9304)]);
+  const movedActivity={...addedTeacher,cells:[{day:4,period:2},{day:5,period:2}]};await assert.rejects(editActivity(movedActivity),/ต้องยืนยันแทนที่คาบล็อก/);assert.deepEqual(await editRaw(),beforeEdit);await editActivity(movedActivity,true);assert.ok((await editRaw()).some(row=>row.class_subject_id===id(9307)&&row.locked),'Moving activity never deletes unrelated ordinary course cells');
+  assert.equal((await db.query("select has_function_privilege('authenticated','save_schedule_activity_team(uuid,uuid,integer,text,jsonb,boolean,boolean,boolean)','execute') allowed")).rows[0].allowed,false);
+  console.log('PASS: reproduced production locked-subject deletion; 093 repeatable, teacher-only flexible activities retain all slots/locks, extra teacher appears immediately, null-safe move preserves unrelated subjects, stale/blocked teacher rollback and service-only RPC');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})
