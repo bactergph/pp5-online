@@ -200,6 +200,92 @@ export function improveMorningAssignments(lessons:PlannedLesson[],fixed:PlannedS
   }
   return result
 }
+/** Improve teacher session equity after feasibility is established. Whole subject
+ * blocks move together; retained cells, activities, shared teaching and explicit
+ * morning/afternoon requests never move to the other session. This bounded
+ * pass never reruns search. */
+export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot[],assignments:PlannedSlot[],days:number[],times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],preferences:{reduceGaps?:boolean;maxContinuous?:number}={}) {
+  const result=assignments.map(row=>({...row})),byId=new Map(lessons.map(lesson=>[lesson.id,lesson]))
+  const key=(id:string,day:number,period:number)=>id+':'+day+':'+period
+  const occupied=new Map<string,PlannedSlot>(),teacherBusy=new Map<string,Set<PlannedSlot>>(),venueBusy=new Map<string,Set<PlannedSlot>>(),dayCount=new Map<string,number>()
+  const blocked=new Set(unavailable.map(row=>key(row.teacherId,row.day,row.period))),retained=new Set(fixed.map(row=>key(row.classroomId,row.day,row.period)))
+  const register=(row:PlannedSlot,add:boolean)=>{
+    const position=key(row.classroomId,row.day,row.period),lesson=row.lessonId?byId.get(row.lessonId):undefined
+    if(add)occupied.set(position,row);else occupied.delete(position)
+    if(!lesson)return
+    const day=key(lesson.id,row.day,0);dayCount.set(day,(dayCount.get(day)||0)+(add?1:-1))
+    for(const [map,id]of [...lessonTeachers(lesson).map(id=>[teacherBusy,id]as const),[venueBusy,lesson.roomId]as const])if(id){
+      const k=key(id,row.day,row.period),rows=map.get(k)||new Set<PlannedSlot>();if(add)rows.add(row);else rows.delete(row)
+      if(rows.size)map.set(k,rows);else map.delete(k)
+    }
+  }
+  for(const row of [...fixed,...result])register(row,true)
+  const teaching=times.filter(time=>!time.is_break),morningPeriods=new Set(teaching.filter(time=>isMorningPeriod(time.period,times)).map(time=>time.period))
+  if(!morningPeriods.size||morningPeriods.size===teaching.length)return assignments
+  const stats=new Map<string,{morning:number;total:number;target:number;both:boolean}>()
+  for(const teacher of new Set(lessons.flatMap(lessonTeachers))){
+    let morning=0,total=0,availableMorning=0,available=0
+    for(const day of days)for(const time of teaching){const k=key(teacher,day,time.period),am=morningPeriods.has(time.period);if(!blocked.has(k)){available++;if(am)availableMorning++}if(teacherBusy.has(k)){total++;if(am)morning++}}
+    stats.set(teacher,{morning,total,target:available?total*availableMorning/available:0,both:availableMorning>0&&availableMorning<available})
+  }
+  const penalty=(teacher:string,morning?:number)=>{const stat=stats.get(teacher)!;if(stat.total<2||!stat.both)return 0;const m=morning??stat.morning;return 8*(m-stat.target)**2/stat.total+(stat.total>=4&&(m===0||m===stat.total)?2:0)}
+  type Unit={lesson:PlannedLesson;rows:PlannedSlot[]}
+  const grouped=new Map<string,PlannedSlot[]>()
+  for(const row of result){const lesson=row.lessonId?byId.get(row.lessonId):undefined;if(!lesson||lesson.activity||lesson.fixedOnly||lesson.activityGroupId||Object.keys(lesson.jointTeachingCells||{}).length)continue;const k=key(lesson.id,row.day,0);grouped.set(k,[...grouped.get(k)||[],row])}
+  const units:Unit[]=[],owner=new Map<PlannedSlot,Unit>(),choices=new Map<number,ReturnType<typeof blocksFor>>()
+  for(const rows of grouped.values()){
+    rows.sort((a,b)=>times.findIndex(time=>!time.is_break&&time.period===a.period)-times.findIndex(time=>!time.is_break&&time.period===b.period))
+    const lesson=byId.get(rows[0].lessonId!)!,length=rows.length
+    if((dayCount.get(key(lesson.id,rows[0].day,0))||0)!==length||rows.some(row=>retained.has(key(row.classroomId,row.day,row.period))))continue
+    if(!choices.has(length))choices.set(length,blocksFor(length,days,times).filter(block=>block.periods.every(period=>morningPeriods.has(period)===morningPeriods.has(block.periods[0]))))
+    if(!choices.get(length)!.some(block=>block.day===rows[0].day&&block.periods.every((period,index)=>period===rows[index].period)))continue
+    const unit={lesson,rows};units.push(unit);for(const row of rows)owner.set(row,unit)
+  }
+  const available=(lesson:PlannedLesson,day:number,period:number,ignore:Set<PlannedSlot>)=>{
+    for(const teacher of lessonTeachers(lesson))if(blocked.has(key(teacher,day,period))||[...teacherBusy.get(key(teacher,day,period))||[]].some(row=>!ignore.has(row)))return false
+    return !lesson.roomId||![...venueBusy.get(key(lesson.roomId,day,period))||[]].some(row=>!ignore.has(row))
+  }
+  const dayPenalty=(teacher:string,day:number,changes:Map<PlannedSlot,{day:number;period:number}>)=>{
+    let first=-1,last=-1,count=0,run=0,longest=0,index=0
+    for(const time of times){if(time.is_break){run=0;continue}const busy=[...teacherBusy.get(key(teacher,day,time.period))||[]].some(row=>!changes.has(row))||[...changes].some(([row,next])=>next.day===day&&next.period===time.period&&lessonTeachers(byId.get(row.lessonId!)!).includes(teacher));if(busy){if(first<0)first=index;last=index;count++;longest=Math.max(longest,++run)}else run=0;index++}
+    return {gaps:first<0?0:last-first+1-count,longest}
+  }
+  const deadline=Date.now()+200
+  for(let pass=0;pass<4;pass++){
+    let improved=false
+    units.sort((a,b)=>Math.max(0,...lessonTeachers(b.lesson).map(teacher=>penalty(teacher)))-Math.max(0,...lessonTeachers(a.lesson).map(teacher=>penalty(teacher))))
+    for(const unit of units){
+      if(Date.now()>=deadline)return result
+      const from=unit.rows[0],am=morningPeriods.has(from.period),length=unit.rows.length
+      let best:{changes:Map<PlannedSlot,{day:number;period:number}>;deltas:Map<string,number>}|undefined,bestDelta=-1e-6
+      for(const destination of choices.get(length)||[]){
+        if(Date.now()>=deadline)return result
+        if(morningPeriods.has(destination.periods[0])===am||destination.periods.some(period=>retained.has(key(from.classroomId,destination.day,period))))continue
+        const targets=destination.periods.map(period=>occupied.get(key(from.classroomId,destination.day,period))),present=targets.filter((row):row is PlannedSlot=>!!row),other=present.length?owner.get(present[0]):undefined
+        if(present.length&&(!other||other===unit||present.length!==length||other.rows.length!==length||present.some(row=>owner.get(row)!==other)))continue
+        if(from.day!==destination.day&&((dayCount.get(key(unit.lesson.id,destination.day,0))||0)>0||other&&(dayCount.get(key(other.lesson.id,from.day,0))||0)>0))continue
+        const ignore=new Set([...unit.rows,...other?.rows||[]])
+        if(destination.periods.some(period=>!available(unit.lesson,destination.day,period,ignore))||other&&unit.rows.some(row=>!available(other.lesson,row.day,row.period,ignore)))continue
+        const changes=new Map<PlannedSlot,{day:number;period:number}>(),deltas=new Map<string,number>()
+        unit.rows.forEach((row,index)=>changes.set(row,{day:destination.day,period:destination.periods[index]}))
+        other?.rows.forEach((row,index)=>changes.set(row,{day:unit.rows[index].day,period:unit.rows[index].period}))
+        let delta=0,explicitGain=0,violatesRequest=false
+        for(const [row,next]of changes){const lesson=byId.get(row.lessonId!)!,change=Number(morningPeriods.has(next.period))-Number(morningPeriods.has(row.period)),request=lesson.timePreference==='morning'||!lesson.timePreference&&lesson.morning?true:lesson.timePreference==='afternoon'?false:undefined;if(request!==undefined){const before=morningPeriods.has(row.period)===request,after=morningPeriods.has(next.period)===request;if(before&&!after)violatesRequest=true;if(!before&&after)explicitGain++}delta-=lessonMorningPriority(lesson)*change;for(const teacher of lessonTeachers(lesson))deltas.set(teacher,(deltas.get(teacher)||0)+change)}
+        let balanceDelta=0
+        for(const [teacher,change]of deltas)balanceDelta+=penalty(teacher,stats.get(teacher)!.morning+change)-penalty(teacher)
+        if(violatesRequest||balanceDelta>1e-6&&!explicitGain)continue
+        delta+=balanceDelta-explicitGain*1000
+        if(delta>=bestDelta)continue
+        let worsens=false
+        if(preferences.reduceGaps||preferences.maxContinuous)for(const teacher of deltas.keys())for(const day of new Set([from.day,destination.day])){const before=dayPenalty(teacher,day,new Map()),after=dayPenalty(teacher,day,changes);if(preferences.reduceGaps&&after.gaps>before.gaps||preferences.maxContinuous&&Math.max(0,after.longest-preferences.maxContinuous)>Math.max(0,before.longest-preferences.maxContinuous))worsens=true}
+        if(!worsens){best={changes,deltas};bestDelta=delta}
+      }
+      if(best){for(const row of best.changes.keys())register(row,false);for(const [row,next]of best.changes){row.day=next.day;row.period=next.period}for(const row of best.changes.keys())register(row,true);for(const [teacher,change]of best.deltas)stats.get(teacher)!.morning+=change;improved=true}
+    }
+    if(!improved)break
+  }
+  return result
+}
 /** Fast exact edge-colouring for dense, single-period timetables. Each lesson
  * period is an edge between a classroom and its teacher; one matching is one
  * timetable slot. Bipartite multigraphs can be coloured in max-degree rounds. */
@@ -515,7 +601,7 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   const started=Date.now(),requestedTimeLimitMs=timeLimitMs
   let repairNodes=0
   const finish=(result:PlannedScheduleResult):PlannedScheduleResult=>({...result,
-    assignments:result.status==='complete'?improveMorningAssignments(lessons,fixed,result.assignments,plan.days,times,unavailable,plan):result.assignments,
+    assignments:result.status==='complete'?balanceTeacherSessions(lessons,fixed,improveMorningAssignments(lessons,fixed,result.assignments,plan.days,times,unavailable,plan),plan.days,times,unavailable,plan):result.assignments,
     nodes:result.nodes+repairNodes,elapsedMs:Date.now()-started,timeLimitMs:requestedTimeLimitMs})
   const issues=checkPlanning(lessons,fixed,plan.days,times,unavailable)
   if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,assignments:[] as PlannedSlot[],issues,nodes:0}
