@@ -1,0 +1,124 @@
+/* Public homepage only; workspace, authentication and printed documents keep
+   their existing styles. Images are local examples already shipped with the app. */
+.jsk.jsk-home{--ink:#19324f;--muted:#526780;--blue:#235bc8;--line:#dce5f1;background:#fff}
+.jsk.jsk-home .jsk-button{border-radius:12px}
+.jsk.jsk-home .jsk-primary{background:linear-gradient(115deg,#2c6bd8,#235bc8);border-color:#235bc8;color:#fff;box-shadow:0 4px 12px #235bc820}
+.jsk.jsk-home .jsk-primary:hover{background:#174baf}
+.jsk.jsk-home .jsk-section{padding-block:64px}
+.jsk.jsk-home .jsk-header-row{gap:18px}
+.jsk.jsk-home .jsk-desktop-nav{gap:18px}
+.jsk.jsk-home .jsk-desktop-nav a:first-child{padding:4px 10px;border-radius:10px;background:#edf4ff;color:#235bc8}
+.jsk.jsk-home .jsk-hero{position:relative;isolation:isolate;padding:66px 0 54px;border:0;overflow:hidden;background:radial-gradient(ellipse at 90% 8%,#326bd766,transparent 52%),radial-gradient(ellipse at 0 95%,#2e537577,transparent 48%),linear-gradient(120deg,#142d51,#173c76 65%,#1c488c);color:#fff}
+.jsk.jsk-home .jsk-hero::before{content:'';position:absolute;z-index:-1;inset:0;opacity:.12;background-image:linear-gradient(#c2d9ff30 1px,transparent 1px),linear-gradient(90deg,#c2d9ff30 1px,transparent 1px);background-size:64px 64px;mask-image:linear-gradient(90deg,transparent,#000)}
+.jsk.jsk-home .jsk-hero-grid{grid-template-columns:.95fr 1.05fr;gap:48px;align-items:center}
+.jsk.jsk-home .jsk-hero-copy{min-width:0}
+.jsk.jsk-home .jsk-hero .jsk-eyebrow{display:inline-flex;align-items:center;gap:7px;color:#f4d58e;border:1px solid #e7cb8f35;border-radius:99px;background:#f8d9950d;padding:5px 12px;font-size:12px;line-height:1.7}
+.jsk.jsk-home .jsk-hero h1{font-size:clamp(35px,3.3vw,48px);line-height:1.55;letter-spacing:-.7px;color:#fff;font-weight:600}
+.jsk.jsk-home .jsk-hero h1 span{margin:0;color:#f4d18a}
+.jsk.jsk-home .jsk-hero .jsk-lead{max-width:520px;margin-top:18px!important;font-size:16px;line-height:1.9;color:#dce7fa}
+.jsk.jsk-home .jsk-hero-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.jsk.jsk-home .jsk-hero-pills span{display:inline-flex;align-items:center;gap:6px;border:1px solid #a9c6f33d;background:#ffffff0a;padding:5px 10px;border-radius:8px;color:#eff5ff;font-size:12px;line-height:1.7}
+.jsk.jsk-home .jsk-hero-pills svg{color:#a5e2cb}
+.jsk.jsk-home .jsk-hero .jsk-primary{color:#253751;background:linear-gradient(115deg,#f8dda4,#ebc371);border-color:#f3d48c;box-shadow:0 7px 20px #071e3d40,inset 0 1px #fff8}
+.jsk.jsk-home .jsk-hero .jsk-primary:hover{background:#ffe7b2;transform:translateY(-1px)}
+.jsk.jsk-home .jsk-hero-secondary{background:#ffffff08;border-color:#adc7ee66;color:#fff}
+.jsk.jsk-home .jsk-hero-secondary:hover{background:#ffffff18}
+.jsk.jsk-home .jsk-hero .jsk-hint{font-size:12px;color:#c0d1ec;line-height:1.8}
+.jsk.jsk-home .jsk-hero .jsk-existing{font-size:13px;color:#c0d1ec}
+.jsk.jsk-home .jsk-hero .jsk-existing a{color:#fff!important;min-height:36px}
+.jsk.jsk-home .jsk-hero-stage{padding:0;margin:0;max-width:100%;min-width:0}
+.jsk.jsk-home .jsk-hero .jsk-browser{border:1px solid #d3e3ff88;border-radius:18px;background:#fff;box-shadow:0 24px 64px #071c3d66}
+.jsk.jsk-home .jsk-browser-bar{height:42px;padding:0 13px;gap:8px;font-size:11px;background:#f5f8fe;color:#48617f}
+.jsk.jsk-home .jsk-browser-bar>span:first-child{letter-spacing:2px;color:#8fa5c3}
+.jsk.jsk-home .jsk-browser-bar b{margin-left:auto;font-size:10px;font-weight:500;border:1px solid #d8e3f1;border-radius:5px;padding:1px 5px;color:#526780;background:#fff}
+.jsk.jsk-home .jsk-hero-picture{aspect-ratio:1.6;height:auto;background:#f5f7fc}
+.jsk.jsk-home .jsk-hero-picture img{position:static;display:block;width:100%;max-width:100%;height:100%;object-fit:cover;object-position:center bottom}
+.jsk.jsk-home .jsk-expand{right:12px;bottom:12px;border-color:#ccdaed;color:#234b7e;background:#ffffffed;box-shadow:0 3px 12px #17365b14;font-size:12px}
+.jsk.jsk-home .jsk-browser-features{display:flex;align-items:center;justify-content:center;gap:20px;padding:10px;background:#f7faff;border-top:1px solid #e0e8f3;color:#345d8c;font-size:11px}
+.jsk.jsk-home .jsk-browser-features span{display:flex;align-items:center;gap:5px}
+.jsk.jsk-home .jsk-schedule-caption{display:grid;grid-template-columns:.9fr 1.1fr;gap:10px;margin-top:14px}
+.jsk.jsk-home .jsk-schedule-caption>span{display:grid;grid-template-columns:25px minmax(0,1fr);column-gap:8px;align-items:center;padding:11px 12px;border:1px solid #afc8ef40;border-radius:12px;background:#ffffff0a;min-width:0}
+.jsk.jsk-home .jsk-schedule-caption svg{grid-row:span 2;color:#edcd8d;font-size:21px}
+.jsk.jsk-home .jsk-schedule-caption strong{font-size:12px;color:#fff;font-weight:500;line-height:1.7}
+.jsk.jsk-home .jsk-schedule-caption small{font-size:10px;line-height:1.7;color:#c0d1ec}
+.jsk.jsk-home .jsk-visual-note{max-width:100%;margin-top:10px!important;text-align:center;color:#b7cce8;font-size:11px}
+.jsk.jsk-home .jsk-proof{position:relative;margin-top:24px;padding:18px 22px;border-radius:16px;background:#f6f9ff;border:1px solid #dce6f6;gap:16px}
+.jsk.jsk-home .jsk-proof>div{justify-content:center;font-size:13px;font-weight:500;min-width:0}
+.jsk.jsk-home .jsk-proof svg{flex:none;width:34px;height:34px;padding:8px;border-radius:10px;background:#e8f0ff;color:#235bc8}
+.jsk.jsk-home .jsk-schedule-heading{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.jsk.jsk-home .jsk-schedule-heading .jsk-section-heading{max-width:720px;margin-bottom:26px}
+.jsk.jsk-home .jsk-schedule-steps{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;padding:0;margin:8px 0 0;list-style:none}
+.jsk.jsk-home .jsk-schedule-steps li{min-width:0;border:1px solid #dce5f2;border-radius:14px;padding:15px 10px;background:#f8faff;text-align:center}
+.jsk.jsk-home .jsk-schedule-steps li>span{display:grid;place-items:center;width:29px;height:29px;margin:0 auto 9px;border-radius:9px;background:#e5eeff;color:#235bc8;font-size:13px;font-weight:700}
+.jsk.jsk-home .jsk-schedule-steps strong{display:block;font-size:12px;line-height:1.7;font-weight:600}
+.jsk.jsk-home .jsk-schedule-steps li:last-child{border-color:#235bc8;background:#235bc8;color:white}
+.jsk.jsk-home .jsk-schedule-steps li:last-child>span{background:#ffffff20;color:#fff}
+.jsk.jsk-home .jsk-schedule-capabilities{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 18px;padding:20px 0}
+.jsk.jsk-home .jsk-schedule-capabilities span{display:flex;align-items:center;gap:5px;font-size:12px;color:#48617e}
+.jsk.jsk-home .jsk-schedule-capabilities svg{color:#1c8769}
+.jsk.jsk-home .jsk-local-note{display:flex;align-items:flex-start;gap:12px;padding:16px;border:1px solid #e8ddc6;border-radius:12px;background:#fffbf2}
+.jsk.jsk-home .jsk-local-note>svg{flex:none;margin-top:4px;font-size:20px;color:#95702c}
+.jsk.jsk-home .jsk-local-note p{font-size:13px;line-height:1.8;color:#65593f}
+.jsk.jsk-home .jsk-local-note strong{color:#65502d}
+.jsk.jsk-home #features{padding-top:12px}
+.jsk.jsk-home .jsk-overview{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.jsk.jsk-home .jsk-overview>a{min-width:0;border:1px solid #dce5f1;border-radius:16px;background:#fff;padding:12px;box-shadow:0 5px 18px #17365b07;transition:transform .18s,border-color .18s}
+.jsk.jsk-home .jsk-overview>a:hover{transform:translateY(-4px);border-color:#90b2e7}
+.jsk.jsk-home .jsk-overview-image{height:160px;margin:0 0 12px;border-radius:10px;background:#f1f5fc}
+.jsk.jsk-home .jsk-overview-image img{position:static;width:100%;height:100%;object-fit:cover;object-position:center 35%}
+.jsk.jsk-home .jsk-overview-report img{object-fit:contain;object-position:center}
+.jsk.jsk-home .jsk-feature-plan{display:inline-block;border-radius:5px;background:#f0f3f9;color:#5b6c83;padding:1px 6px;font-size:10px;line-height:1.8}
+.jsk.jsk-home .jsk-feature-plan.is-free{background:#e8f6ef;color:#257055}
+.jsk.jsk-home .jsk-overview h3{margin-top:8px;font-size:17px}
+.jsk.jsk-home .jsk-overview p{font-size:13px;line-height:1.8;margin-top:7px}
+.jsk.jsk-home .jsk-overview .jsk-text-link{font-size:12px;margin-top:10px}
+.jsk.jsk-home .jsk-gallery-section{background:linear-gradient(180deg,#f4f8ff,#f8faff);border-block:1px solid #e2eaf6}
+.jsk.jsk-home .jsk-gallery-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.jsk.jsk-home .jsk-gallery-tabs button{min-height:44px;border:1px solid #d3e0f2;border-radius:10px;padding:8px 16px;background:#fff;color:#3b5574;font-size:14px}
+.jsk.jsk-home .jsk-gallery-tabs button[aria-selected=true]{border-color:#235bc8;background:#235bc8;color:#fff;box-shadow:0 3px 9px #235bc81c}
+.jsk.jsk-home .jsk-gallery-panel{display:grid;grid-template-columns:.7fr 1.3fr;gap:28px;align-items:center;padding:24px;border:1px solid #dce5f2;border-radius:20px;background:#fff;box-shadow:0 10px 32px #17365b08}
+.jsk.jsk-home .jsk-gallery-panel>div,.jsk.jsk-home .jsk-gallery-panel figure{min-width:0;margin:0}
+.jsk.jsk-home .jsk-gallery-copy h3{font-size:24px;margin-bottom:10px}
+.jsk.jsk-home .jsk-gallery-copy p{font-size:14px;color:#526780}
+.jsk.jsk-home .jsk-gallery-copy ul{display:grid;gap:10px;list-style:none;padding:0;margin:18px 0}
+.jsk.jsk-home .jsk-gallery-copy li{display:flex;align-items:flex-start;gap:7px;font-size:13px;line-height:1.8}
+.jsk.jsk-home .jsk-gallery-copy li svg{flex:none;color:#235bc8;margin-top:4px}
+.jsk.jsk-home .jsk-gallery-image{position:relative;display:block;width:100%;height:400px;overflow:hidden;border:1px solid #dce5f2;border-radius:12px;padding:0;background:#f3f6fc}
+.jsk.jsk-home .jsk-gallery-image img{display:block;width:100%;height:100%;object-fit:cover;object-position:center bottom}
+.jsk.jsk-home .jsk-gallery-image.is-document img{object-fit:contain}
+.jsk.jsk-home .jsk-gallery-panel figcaption{font-size:11px;color:#6c7d94;margin-top:8px;text-align:center}
+.jsk.jsk-home .jsk-tools article{border:1px solid #dce5f1;border-radius:16px;background:#fff;box-shadow:0 4px 18px #17365b06;padding:22px}
+.jsk.jsk-home .jsk-tools article>svg{padding:11px;width:44px;height:44px;border-radius:13px;background:#edf4ff;color:#235bc8}
+.jsk.jsk-home .jsk-tools article:nth-child(2)>svg{background:#edf8f3;color:#26755d}
+.jsk.jsk-home .jsk-tools article:nth-child(4)>svg{background:#fff7e7;color:#967029}
+.jsk.jsk-home .jsk-tools h3{font-size:19px}
+.jsk.jsk-home .jsk-tools p{font-size:14px}
+.jsk.jsk-home .jsk-school-type{border-radius:18px}
+.jsk.jsk-home .jsk-plan-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.jsk.jsk-home .jsk-plan{display:flex;flex-direction:column;min-width:0;padding:22px 18px;border:1px solid #dce5f1;border-radius:18px;background:#fff;box-shadow:0 4px 18px #17365b06}
+.jsk.jsk-home .jsk-plan.is-pro{border-color:#82a8e5;background:linear-gradient(165deg,#f0f6ff,#fff 60%);box-shadow:0 6px 22px #235bc80d}
+.jsk.jsk-home .jsk-plan.is-school{border-color:#e5d4b3;background:linear-gradient(165deg,#fffaee,#fff 65%)}
+.jsk.jsk-home .jsk-plan-audience{color:#637890;font-size:11px;line-height:1.7}
+.jsk.jsk-home .jsk-plan h3{font-size:24px;margin-top:6px}
+.jsk.jsk-home .jsk-plan-price{display:flex;align-items:baseline;flex-wrap:wrap;gap:7px;margin-top:16px}
+.jsk.jsk-home .jsk-plan-price strong{font-size:34px;line-height:1.4;color:#193d76;letter-spacing:-1px}
+.jsk.jsk-home .jsk-plan-price span{font-size:12px;color:#637890}
+.jsk.jsk-home .jsk-plan>p{font-size:12px;color:#4b6583;line-height:1.8;margin-top:8px;min-height:43px}
+.jsk.jsk-home .jsk-plan ul{display:grid;gap:12px;list-style:none;padding:18px 0;margin:14px 0 20px;border-top:1px solid #e3eaf5;flex:1;align-content:start}
+.jsk.jsk-home .jsk-plan li{display:flex;align-items:flex-start;gap:7px;font-size:12px;line-height:1.8}
+.jsk.jsk-home .jsk-plan li svg{flex:none;color:#235bc8;margin-top:4px}
+.jsk.jsk-home .jsk-plan .jsk-button{font-size:12px;padding-inline:10px;min-height:46px}
+.jsk.jsk-home .jsk-plan-note{font-size:12px;color:#637890;line-height:1.8;text-align:center;max-width:850px;margin:18px auto 0}
+.jsk.jsk-home .jsk-final{background:radial-gradient(ellipse at 95% 0,#2c65b955,transparent 60%),#17365f;color:#fff;border-block:0}
+.jsk.jsk-home .jsk-final h2{color:#fff}
+.jsk.jsk-home .jsk-final .jsk-eyebrow{color:#edcd8d}
+.jsk.jsk-home .jsk-final p,.jsk.jsk-home .jsk-final .jsk-hint{color:#d2dff3}
+.jsk.jsk-home .jsk-final .jsk-primary{background:#f2d08b;border-color:#f2d08b;color:#253751}
+@media(max-width:1100px){.jsk.jsk-home .jsk-desktop-nav{gap:10px}.jsk.jsk-home .jsk-desktop-nav a{font-size:13px}.jsk.jsk-home .jsk-hero-grid{gap:28px}.jsk.jsk-home .jsk-hero h1{font-size:35px}.jsk.jsk-home .jsk-plan-grid,.jsk.jsk-home .jsk-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.jsk.jsk-home .jsk-schedule-steps{grid-template-columns:repeat(4,minmax(0,1fr))}.jsk.jsk-home .jsk-schedule-steps li:last-child{grid-column:span 2}}
+@media(max-width:900px){.jsk.jsk-home .jsk-hero-grid{grid-template-columns:1fr;gap:32px}.jsk.jsk-home .jsk-hero-copy{max-width:720px!important}.jsk.jsk-home .jsk-hero h1{font-size:43px}.jsk.jsk-home .jsk-hero-stage{max-width:680px;margin:0 auto;width:100%}.jsk.jsk-home .jsk-hero-picture{aspect-ratio:1.5}.jsk.jsk-home .jsk-gallery-panel{grid-template-columns:1fr}.jsk.jsk-home .jsk-gallery-image{height:420px}.jsk.jsk-home .jsk-proof{grid-template-columns:repeat(2,minmax(0,1fr))}.jsk.jsk-home .jsk-proof>div{justify-content:flex-start}}
+@media(max-width:700px){.jsk.jsk-home .jsk-hero{padding:34px 0}.jsk.jsk-home .jsk-hero-grid{gap:28px}.jsk.jsk-home .jsk-hero h1{font-size:clamp(27px,6.7vw,36px);letter-spacing:-.4px;line-height:1.65}.jsk.jsk-home .jsk-hero .jsk-eyebrow{font-size:11px;padding:4px 9px}.jsk.jsk-home .jsk-hero .jsk-lead{font-size:14px;margin-top:14px!important}.jsk.jsk-home .jsk-hero .jsk-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.jsk.jsk-home .jsk-hero .jsk-button{font-size:12px;padding:11px 9px;gap:6px}.jsk.jsk-home .jsk-hero-pills{margin-top:16px;gap:6px}.jsk.jsk-home .jsk-hero-pills span{font-size:11px}.jsk.jsk-home .jsk-browser-bar{padding-inline:9px;font-size:10px}.jsk.jsk-home .jsk-browser-bar b{display:none}.jsk.jsk-home .jsk-browser-features{gap:16px;font-size:10px}.jsk.jsk-home .jsk-schedule-caption>span{padding:9px;grid-template-columns:20px minmax(0,1fr);column-gap:6px}.jsk.jsk-home .jsk-schedule-caption strong{font-size:10px}.jsk.jsk-home .jsk-schedule-caption small{font-size:9px}.jsk.jsk-home .jsk-proof{padding:14px;gap:12px;margin-top:18px}.jsk.jsk-home .jsk-proof>div{font-size:11px;gap:7px}.jsk.jsk-home .jsk-proof svg{width:28px;height:28px;padding:6px}.jsk.jsk-home .jsk-section{padding-block:44px}.jsk.jsk-home .jsk-schedule-heading{gap:0}.jsk.jsk-home .jsk-schedule-heading>.jsk-button{width:100%;margin:0 0 20px}.jsk.jsk-home .jsk-schedule-steps{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.jsk.jsk-home .jsk-schedule-steps li{display:flex;align-items:center;gap:9px;text-align:left;padding:12px}.jsk.jsk-home .jsk-schedule-steps li>span{flex:none;margin:0;width:25px;height:25px}.jsk.jsk-home .jsk-schedule-steps strong{font-size:11px}.jsk.jsk-home .jsk-schedule-capabilities{justify-content:flex-start;gap:8px 12px}.jsk.jsk-home .jsk-schedule-capabilities span{font-size:11px}.jsk.jsk-home .jsk-local-note{padding:12px;gap:9px}.jsk.jsk-home .jsk-local-note p{font-size:12px}.jsk.jsk-home #features{padding-top:12px}.jsk.jsk-home .jsk-overview{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.jsk.jsk-home .jsk-overview>a{display:block;padding:10px}.jsk.jsk-home .jsk-overview-image{height:110px;margin-bottom:9px}.jsk.jsk-home .jsk-overview h3{font-size:15px}.jsk.jsk-home .jsk-overview p{font-size:12px}.jsk.jsk-home .jsk-feature-plan{font-size:9px}.jsk.jsk-home .jsk-gallery-tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px}.jsk.jsk-home .jsk-gallery-tabs button{font-size:13px;padding:8px}.jsk.jsk-home .jsk-gallery-panel{padding:16px;gap:16px}.jsk.jsk-home .jsk-gallery-copy h3{font-size:21px}.jsk.jsk-home .jsk-gallery-image{height:300px}.jsk.jsk-home .jsk-tools article{padding:18px}.jsk.jsk-home .jsk-plan-grid{grid-template-columns:1fr;gap:14px}.jsk.jsk-home .jsk-plan{padding:20px}.jsk.jsk-home .jsk-plan>p{min-height:0}.jsk.jsk-home .jsk-plan ul{margin:12px 0 14px;gap:9px;padding:14px 0 0}.jsk.jsk-home .jsk-plan li{font-size:13px}.jsk.jsk-home .jsk-plan .jsk-button{font-size:14px}}
+@media(max-width:360px){.jsk.jsk-home .jsk-container{width:calc(100% - 28px)}.jsk.jsk-home .jsk-hero .jsk-actions{grid-template-columns:1fr}.jsk.jsk-home .jsk-overview{grid-template-columns:1fr}.jsk.jsk-home .jsk-overview-image{height:175px}.jsk.jsk-home .jsk-hero-pills span{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.jsk.jsk-home *, .jsk.jsk-home *::before{transition:none!important;transform:none!important;scroll-behavior:auto!important}}
+
+.jsk.jsk-home .jsk-plan-picker{display:none}
+@media(max-width:700px){.jsk.jsk-home .jsk-plan-picker{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:14px}.jsk.jsk-home .jsk-plan-picker>span{grid-column:1/-1;font-size:12px;color:#526780;margin-bottom:3px}.jsk.jsk-home .jsk-plan-picker button{min-height:44px;padding:8px 4px;border:1px solid #d2e0f3;border-radius:9px;background:#fff;color:#37577f;font-size:12px}.jsk.jsk-home .jsk-plan-picker [aria-pressed=true]{border-color:#235bc8;background:#235bc8;color:white}.jsk.jsk-home .jsk-plan:not(.is-active){display:none}}
