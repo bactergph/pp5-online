@@ -5,6 +5,9 @@ import { solvePlannedSchedule,type SchedulePlan } from './schedule-planning'
 import { DEFAULT_PERIOD_TIMES,type PeriodTimeRow } from './schedule-helpers'
 /** Verify that edited partial double/triple blocks can still be completed; other rooms stay fixed. */
 export async function validateManualPlan(school:string,year:string,term:number,before:ScheduleSlot[],after:ScheduleSlot[]){
+ // Removing placements only must remain available to repair an impossible schedule.
+ // Persistence still checks the expected snapshot and joint-teaching integrity.
+ if(after.length<before.length&&after.every(row=>before.some(old=>old.classroom_id===row.classroom_id&&old.day_of_week===row.day_of_week&&old.period===row.period&&old.class_subject_id===row.class_subject_id&&old.activity_id===row.activity_id&&old.locked===row.locked&&old.note===row.note)))return
  const db=createServerClient(),result=await db.from('schedule_plans').select('config').eq('school_id',school).eq('academic_year_id',year).eq('semester',term).maybeSingle()
  if(result.error){if(['42P01','PGRST205'].includes(result.error.code))return;throw Error('ตรวจเงื่อนไขตารางไม่สำเร็จ: '+result.error.message)}
  const plan=result.data?.config as SchedulePlan|undefined;if(!plan)return

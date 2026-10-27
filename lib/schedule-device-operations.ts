@@ -35,6 +35,15 @@ export function lockDeviceCell(plan:FreeWizardPlan,room:string,day:number,period
   if(current.locked&&!current.subjectId&&!current.activityId)return {...plan,timetable:plan.timetable.filter(cell=>cell!==current)}
   return {...plan,timetable:plan.timetable.map(cell=>cell===current?{...cell,locked:!cell.locked}:cell)}
 }
+/** Explicit removal releases this cell's lock in the same saved transaction. */
+export function removeDeviceSubjectCell(plan:FreeWizardPlan,room:string,day:number,period:number,expected:string) {
+  position(plan,room,day,period)
+  const current=plan.timetable.find(cell=>cell.classroomId===room&&cell.day===day&&cell.period===period)
+  if(!expected||!current||current.subjectId!==expected)throw Error('คาบนี้เปลี่ยนไปแล้ว กรุณาตรวจข้อมูลล่าสุด')
+  if(current.activityId||deviceActivityAt(plan,room,day,period))throw Error('คาบนี้เป็นกิจกรรม กรุณาแก้ที่เมนูกิจกรรม')
+  if(plan.teachingGroups?.some(group=>group.lessonIds.includes(expected)&&(!group.cells||group.cells.some(cell=>cell.day===day&&cell.period===period))))throw Error('คาบนี้สอนรวม กรุณาเอาคาบออกพร้อมกันทุกห้อง')
+  return {...plan,timetable:plan.timetable.filter(cell=>cell!==current)}
+}
 export function blockDeviceTeacher(plan:FreeWizardPlan,teacher:string,day:number,period:number,blocked:boolean) {
   if(!plan.teachers.some(item=>item.id===teacher)||!plan.days.includes(day)||!teachingRows(plan.periods).some(row=>row.period===period))throw Error('ครู วัน หรือคาบไม่ถูกต้อง')
   if(blocked&&plan.timetable.some(cell=>cell.day===day&&cell.period===period&&plan.subjects.some(subject=>subject.id===cell.subjectId&&subject.teacherId===teacher)))throw Error('ครูมีคาบสอนอยู่ กรุณาย้ายหรือนำวิชาออกก่อน')

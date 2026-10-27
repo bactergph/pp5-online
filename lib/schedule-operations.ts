@@ -1,4 +1,4 @@
-import {teachingQuotaParts} from './schedule-joint-teaching'
+import {teachingQuotaParts,teachingEventAt} from './schedule-joint-teaching'
 import 'server-only'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import { getSession } from '@/lib/session'
@@ -73,6 +73,20 @@ export async function toggleLock(roomId: string, year: string, day: number, peri
   rows.push({ ...(existing || { classroom_id: roomId, academic_year_id: year, day_of_week: day, period, class_subject_id: null, activity_id: null, note: null }), locked })
   await commit(ctx, year, rows, `${locked ? 'ล็อก' : 'ปลดล็อก'}คาบเรียน`, true)
   return { locked }
+}
+
+/** Remove only the selected offering's placement, including its lock, atomically. */
+export async function removeSubjectCell(roomId:string,year:string,day:number,period:number,expectedLesson:string,semester=1) {
+  cell(day,period)
+  const ctx=await context(year,semester)
+  requireScheduleClass(ctx.data,roomId)
+  const current=ctx.data.slots.find(row=>row.classroom_id===roomId&&row.day_of_week===day&&row.period===period)
+  if(!expectedLesson||!current||lessonKey(current)!==expectedLesson)throw Error('คาบนี้เปลี่ยนแล้ว กรุณาโหลดตารางล่าสุดก่อนแก้ไข')
+  const lesson=ctx.data.lessons.find(item=>item.id===expectedLesson&&item.classroomId===roomId)
+  if(!lesson||lesson.activity||current.activity_id)throw Error('คาบนี้เป็นกิจกรรม กรุณาแก้ที่เมนูกิจกรรม')
+  if(teachingEventAt(lesson,day,period)!==lesson.id)throw Error('คาบนี้สอนรวม กรุณาเอาคาบออกพร้อมกันทุกห้อง')
+  await commit(ctx,year,ctx.data.slots.filter(row=>row!==current),'นำวิชาและล็อกออกจากคาบเรียน',true)
+  return {ok:true}
 }
 
 export async function teacherAvailability(year: string, semester = 1) {

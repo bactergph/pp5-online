@@ -37,6 +37,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'previewScheduleActivityTeam' |
   'removeScheduleActivityName' |
   'removeScheduleInputSubjects' |
+  'removeScheduleSubjectCell' |
   'saveActivityLevelSchedule' |
   'saveClassScheduleCell' |
   'savePeriodTimes' |

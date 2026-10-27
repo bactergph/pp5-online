@@ -7,7 +7,7 @@ function moduleFrom(path, requireFn) {
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:requireFn})
   return exports
 }
-let data, writes, loadedTerm, writtenTerm, role='admin'
+let data, writes, loadedTerm, writtenTerm, lastUnlock, role='admin'
 const solver = moduleFrom('lib/schedule-solver.ts')
 const path=require('node:path'),cache={};function pure(file){const abs=path.resolve(file);if(cache[abs])return cache[abs];const exports={};cache[abs]=exports;vm.runInNewContext(ts.transpileModule(fs.readFileSync(abs,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,console,performance,require:name=>pure(path.resolve(path.dirname(abs),name+'.ts'))});return exports}
 let generatedDraft;
@@ -30,13 +30,13 @@ const store = {
   requireScheduleClass: (d,id)=>{const c=d.classrooms.find(c=>c.id===id);if(!c)throw Error('room');return c},
   lessonKey:s=>s.activity_id?'activity:'+s.activity_id:s.class_subject_id,
   lessonColumns:id=>({class_subject_id:id&&!id.startsWith('activity:')?id:null,activity_id:id?.startsWith('activity:')?id.slice(9):null}),
-  persistSchedule:async(s,y,before,after,unlock,term)=>{writtenTerm=term;writes++;data={...data,slots:after}},
+  persistSchedule:async(s,y,before,after,unlock,term)=>{writtenTerm=term;lastUnlock=unlock;writes++;data={...data,slots:after}},
 }
 const api=moduleFrom('lib/schedule-operations.ts',name=>({
   'server-only':{},'@/lib/session':{getSession:async()=>({schoolId:'s',role,userId:'u'})},
   '@/lib/supabase':{createServerClient:()=>{throw Error('Unexpected DB call')}},
   '@/lib/audit':{logActivity:async()=>{}},'@/lib/schedules':{SCHEDULE_EDIT_ROLES:['admin']},
-  '@/lib/schedule-store':store,'@/lib/schedule-solver':solver,'@/lib/schedule-preparation':preparation,
+  './schedule-joint-teaching':pure('lib/schedule-joint-teaching.ts'),'@/lib/schedule-store':store,'@/lib/schedule-solver':solver,'@/lib/schedule-preparation':preparation,
   '@/lib/schedule-activity':{LEARNER_DEVELOPMENT_KEY:'learner-development'},
 }[name]))
 function reset(){writes=0;data={classrooms:[{id:'a',level:'ป.1',room:1},{id:'b',level:'ป.2',room:1},{id:'empty',level:'อ.2',room:1}],lessons:[{id:'l1',classroomId:'a',teacherId:'t',count:2,label:'a · math',subjectId:'math',name:'math',activity:false},{id:'l2',classroomId:'b',teacherId:'t',count:2,label:'b · math',subjectId:'math',name:'math',activity:false}],slots:[]}}
@@ -74,6 +74,20 @@ const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'
   await api.autoSchedule('y',null,true)
   assert.ok(data.slots.every(s=>!s.activity_id),'automatic scheduling must never add an activity')
 
+  reset();data.slots=[slot('a','l1',1,true),slot('b','l2',2,true)]
+  const kept=data.slots[1],offering=JSON.stringify(data.lessons)
+  await api.removeSubjectCell('a','y',1,1,'l1',2)
+  assert.equal(writes,1);assert.equal(writtenTerm,2);assert.equal(lastUnlock,true);assert.deepEqual(data.slots,[kept]);assert.equal(JSON.stringify(data.lessons),offering)
+  reset();data.slots=[slot('a','l1',1,true)]
+  await assert.rejects(api.removeSubjectCell('a','y',1,1,'stale',2),/เปลี่ยน/);assert.equal(writes,0);assert.ok(data.slots[0].locked)
+  await assert.rejects(api.removeSubjectCell('foreign','y',1,1,'l1',2));assert.equal(writes,0)
+  data.lessons[0].jointTeachingCells={'1:1':'joint'}
+  await assert.rejects(api.removeSubjectCell('a','y',1,1,'l1',2),/สอนรวม/);assert.equal(writes,0)
+  delete data.lessons[0].jointTeachingCells;data.lessons[0].activityGroupId='whole-joint'
+  await assert.rejects(api.removeSubjectCell('a','y',1,1,'l1',2),/สอนรวม/);assert.equal(writes,0)
+  delete data.lessons[0].activityGroupId;data.lessons[0].activity=true
+  await assert.rejects(api.removeSubjectCell('a','y',1,1,'l1',2),/กิจกรรม/);assert.equal(writes,0)
+  console.log('PASS: explicit locked-subject removal is atomic, scoped to semester and classroom, preserves workload and unrelated locks, rejects stale/foreign/activity/shared cells')
   reset();data.slots=[slot('a','l1',1)]
   await api.editTeacherCell('y',2,'t','a',1,1,'l1',null)
   assert.equal(data.slots.length,0,'removing from teacher timetable must remove classroom slot')

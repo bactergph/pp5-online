@@ -10,7 +10,7 @@ import {freeTeacherLimit as resolveTeacherLimit} from './free-schedule-entitleme
 import { deviceDataKey, deviceDraftView, devicePreparation, devicePreflight, localDraftCells } from './schedule-device-view'
 import { deviceDocumentPages, deviceWorkload } from './schedule-device-documents'
 import { deviceYear, type LocalScheduleBundle } from './schedule-device-years'
-import { blockDeviceTeacher, changeDeviceCell, clearDeviceCells, deviceActivityAt, lockDeviceCell, moveDeviceCell } from './schedule-device-operations'
+import { blockDeviceTeacher, changeDeviceCell, clearDeviceCells, deviceActivityAt, lockDeviceCell, moveDeviceCell, removeDeviceSubjectCell } from './schedule-device-operations'
 import { solveScheduleOnDevice } from './schedule-device-run'
 import type { DeviceDraft } from './schedule-device-build'
 import type { FreeSubstituteEntry } from '../components/schedules/FreeSubstituteDesk'
@@ -284,6 +284,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     fetchClassScheduleSubjects:async(room,term=1)=>classBundle(selectedYear,term,room).subjects,
     fetchScheduleQuotas:async(room,year,term=1)=>classBundle(year,term,room).quotas,
     saveClassScheduleCell:(room,year,day,period,lesson,_note,term=1,expected)=>outcome(()=>mutate(year,term,async current=>{await put(year,term,changeDeviceCell(current,room,day,period,lesson,expected));return {ok:true}})),
+    removeScheduleSubjectCell:(room,year,day,period,expected,term=1)=>outcome(()=>mutate(year,term,async current=>{await put(year,term,removeDeviceSubjectCell(current,room,day,period,expected));return {ok:true}})),
     moveClassScheduleCell:(room,year,fromDay,fromPeriod,day,period,expected,term=1)=>outcome(()=>mutate(year,term,async current=>{const source=current.timetable.find(cell=>cell.classroomId===room&&cell.day===fromDay&&cell.period===fromPeriod);if(!source||source.subjectId!==expected)throw Error('คาบต้นทางเปลี่ยนแล้ว');await put(year,term,moveDeviceCell(current,source,{day,period},true))})),
     toggleScheduleCellLock:(room,year,day,period,term=1)=>outcome(()=>mutate(year,term,async current=>{const next=lockDeviceCell(current,room,day,period);await put(year,term,next);return {locked:!!next.timetable.find(cell=>cell.classroomId===room&&cell.day===day&&cell.period===period)?.locked}})),
     setTeacherAvailabilityBlock:(year,term,teacher,day,period,blocked)=>outcome(()=>mutate(year,term,async current=>{await put(year,term,blockDeviceTeacher(current,teacher,day,period,blocked));return {ok:true}})),
