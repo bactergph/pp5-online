@@ -35,8 +35,8 @@ await new Promise((resolve,reject)=>{const compiler=webpack({mode:'production',o
 let browser
 try{
   browser=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true,userDataDir:fs.mkdtempSync(path.join(out,'profile-')),args:['--no-first-run','--disable-gpu','--no-proxy-server']})
-  const page=await browser.newPage(),errors=[];page.on('pageerror',error=>{errors.push(error.message);console.error('Browser error:',error.message)})
-  await page.setRequestInterception(true);page.on('request',request=>request.url()==='https://schedule-test.invalid/'?request.respond({status:200,contentType:'text/html; charset=utf-8',body:'<meta charset="utf-8"><div id="root"></div>'}):request.abort());await page.goto('https://schedule-test.invalid/',{waitUntil:'domcontentloaded'});
+  const page=await browser.newPage(),errors=[];page.setDefaultNavigationTimeout(120000);page.on('pageerror',error=>{errors.push(error.message);console.error('Browser error:',error.message)})
+  await page.setRequestInterception(true);page.on('request',request=>request.url().startsWith('https://schedule-test.invalid/')?request.respond({status:200,contentType:'text/html; charset=utf-8',body:'<meta charset="utf-8"><div id="root"></div>'}):request.abort());await page.goto('https://schedule-test.invalid/',{waitUntil:'domcontentloaded'});
   const workerSources=Object.fromEntries(fs.readdirSync(out).filter(name=>name.endsWith('.js')).map(name=>[name,fs.readFileSync(path.join(out,name),'utf8')]));
   await page.evaluate(({input,sources})=>{window.testInput=input;window.workerCount=0;window.Worker=new Proxy(window.Worker,{construct(Target,args){window.workerCount++;const name=new URL(String(args[0]),'http://schedule-test.invalid/').pathname.split('/').pop();if(!sources[name])throw Error('Unknown worker asset '+name);const url=URL.createObjectURL(new Blob([sources[name]],{type:'text/javascript'}));return new Target(url,args[1])}})},{input,sources:workerSources});
   await page.addScriptTag({content:fs.readFileSync(path.join(out,'bundle.js'),'utf8')});await page.waitForFunction(()=>typeof window.check==='function');

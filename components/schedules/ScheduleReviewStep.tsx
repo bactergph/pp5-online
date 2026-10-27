@@ -7,7 +7,7 @@ import { SCHEDULE_DAYS } from '@/lib/schedules'
 import { activityTeachers } from '@/lib/schedule-activity-teams'
 import { activityTimetableTeacherLabel, teacherTimetableName } from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
-import { FiAlertCircle, FiCheckCircle, FiChevronRight, FiGrid, FiInfo, FiRefreshCw, FiSave, FiTrash2, FiZap } from 'react-icons/fi'
+import { FiAlertCircle, FiCalendar, FiCheckCircle, FiChevronDown, FiChevronRight, FiGrid, FiInfo, FiLock, FiPlusCircle, FiRefreshCw, FiSave, FiShield, FiSliders, FiTrash2, FiZap } from 'react-icons/fi'
 import SchedulePeriodBudget from './SchedulePeriodBudget'
 import './schedule-review.css'
 
@@ -97,17 +97,22 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
     </section>
 
     <section className="prep-review-options" aria-labelledby="review-mode-title">
-      <h3 id="review-mode-title">ต้องการจัดตารางแบบไหน?</h3>
-      <div className="prep-view-switch prep-review-rebuild" role="group" aria-label="รูปแบบจัดตาราง">
-        <button type="button" aria-pressed={!clear} onClick={()=>onClear(false)}>เติมเฉพาะช่องว่าง</button>
-        <button type="button" data-rebuild="true" aria-pressed={clear} onClick={()=>onClear(true)}>จัดวิชาที่ไม่ล็อกใหม่</button>
+      <div className="prep-review-options-heading"><FiSliders aria-hidden="true"/><div><h3 id="review-mode-title">ตั้งค่าการจัดตาราง</h3><p>เลือกวิธีจัดให้ {rooms.length} ห้อง แล้วสร้างฉบับร่างเพื่อตรวจสอบ</p></div></div>
+      <div className="prep-review-rebuild" role="group" aria-label="รูปแบบจัดตาราง">
+        <button type="button" aria-pressed={!clear} onClick={()=>onClear(false)}><FiPlusCircle aria-hidden="true"/><span><strong>เติมเฉพาะช่องว่าง</strong><small>เก็บตารางเดิม เติมคาบที่ยังขาด</small></span>{!clear&&<FiCheckCircle className="prep-review-mode-check" aria-hidden="true"/>}</button>
+        <button type="button" data-rebuild="true" aria-pressed={clear} onClick={()=>onClear(true)}><FiRefreshCw aria-hidden="true"/><span><strong>จัดวิชาที่ไม่ล็อกใหม่</strong><small>ขยับคาบที่ไม่ล็อกเพื่อจัดให้ลงตัว</small></span>{clear&&<FiCheckCircle className="prep-review-mode-check" aria-hidden="true"/>}</button>
       </div>
-      <p>{clear?'ย้ายวิชาที่ไม่ล็อกในห้องที่เลือกได้ โดยคงคาบล็อกและกิจกรรมที่ระบุวันไว้':'คงวิชาที่จัดไว้แล้ว แล้วนำคาบที่เหลือไปเติมในช่องว่าง'}</p>
+      <p className="prep-review-mode-note"><FiLock aria-hidden="true"/>ทั้งสองแบบคงคาบล็อกและกิจกรรมที่กำหนดวันไว้</p>
+      <div className="prep-review-inspectors">
       <details className="prep-review-conditions">
-        <summary><FiInfo aria-hidden="true"/>เงื่อนไขที่ใช้จัดตาราง</summary>
+        <summary><FiShield className="prep-review-inspector-icon" aria-hidden="true"/><span><strong>เงื่อนไขที่ใช้จัดตาราง</strong><small>ครู · สถานที่ · คาบล็อก · ช่วงเวลา</small></span><FiChevronDown className="prep-review-disclosure" aria-hidden="true"/></summary>
         <ul><li>ตรวจครูและสถานที่ชน รวมตารางของห้องนอกขอบเขตที่เลือก</li><li>รักษาคาบพัก คาบล็อก ช่วงครูไม่ว่าง และรูปแบบคาบที่กำหนด</li><li>เน้นจัดภาษาไทย วิทยาศาสตร์ และคณิตศาสตร์ไว้ก่อนพักกลางวัน แม้เลือกได้ทั้งเช้าและบ่าย หากเงื่อนไขไม่เอื้อจะใช้ช่วงบ่ายเพื่อจัดให้ครบ</li></ul>
       </details>
-      {groups.length>0&&<details className="prep-review-activities"><summary>กิจกรรมที่นำมาจัด {groups.length} กลุ่ม</summary><ul>{groups.map(group=><li key={group.id}><b>{data.activities.find(activity=>activity.id===group.settingId)?.label||'กิจกรรม'}</b><span>{group.weeklyPeriods} คาบ/สัปดาห์ · {group.cells.length?group.cells.map(cell=>`${SCHEDULE_DAYS.find(day=>day.value===cell.day)?.label} คาบ ${cell.period}`).join(', '):'จัดวันและคาบอัตโนมัติ'}</span>{group.mode==='joint'&&group.roomIds.some(id=>!rooms.includes(id))&&<small>กิจกรรมรวมกลุ่มอาจเปลี่ยนคาบในอีก {group.roomIds.filter(id=>!rooms.includes(id)).length} ห้อง เพื่อให้จัดพร้อมกัน</small>}</li>)}</ul></details>}
+      <details className="prep-review-activities"><summary><FiCalendar className="prep-review-inspector-icon" aria-hidden="true"/><span><strong>กิจกรรมที่นำมาจัด <b className="prep-review-activity-count">{groups.length} กลุ่ม</b></strong><small>ตรวจห้อง ครู และคาบกิจกรรม</small></span><FiChevronDown className="prep-review-disclosure" aria-hidden="true"/></summary>
+        {groups.length>0?<ul>{groups.map(group=><li key={group.id}><header><b>{data.activities.find(activity=>activity.id===group.settingId)?.label||'กิจกรรม'}</b><small>{group.weeklyPeriods} คาบ/สัปดาห์</small></header><span className="prep-review-activity-rooms">{group.roomIds.map(roomName).join(' · ')}</span><span>{group.cells.length?group.cells.map(cell=>`${SCHEDULE_DAYS.find(day=>day.value===cell.day)?.label} คาบ ${cell.period}`).join(', '):'จัดวันและคาบอัตโนมัติ'}</span><small>ครู: {teacherNames([...new Set(group.roomIds.flatMap(roomId=>activityTeachers(group,roomId)))])||'ยังไม่ระบุครู'}</small>{group.mode==='joint'&&group.roomIds.some(id=>!rooms.includes(id))&&<small>กิจกรรมรวมกลุ่มอาจเปลี่ยนคาบในอีก {group.roomIds.filter(id=>!rooms.includes(id)).length} ห้อง เพื่อให้จัดพร้อมกัน</small>}</li>)}</ul>:<p className="prep-review-no-activities">ยังไม่มีกิจกรรมสำหรับห้องที่เลือก</p>}
+        <button type="button" className="prep-review-edit-activities" onClick={()=>onFix(4)}>ไปแก้กิจกรรม<FiChevronRight aria-hidden="true"/></button>
+      </details>
+      </div>
     </section>
     <SchedulePeriodBudget data={data} rooms={rooms} onFix={onFix}/>
     {blocked&&<p className="prep-notice" role="status"><FiInfo aria-hidden="true"/>บันทึกข้อมูลครู รายวิชา หรือกิจกรรมที่กำลังแก้ก่อนสร้างร่าง</p>}

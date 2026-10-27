@@ -22,18 +22,46 @@
 .schedule-prep .prep-review-selection-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--review-border)}
 .schedule-prep .prep-review-selection-footer>div{display:flex;gap:8px;flex-wrap:wrap}
 .schedule-prep .prep-review-selection-footer small{font-size:13px;color:var(--review-muted)}
-.schedule-prep .prep-review-options{padding:22px 0 18px}
-.schedule-prep .prep-review-options h3{margin-bottom:10px}
-.schedule-prep .prep-review-step .prep-review-rebuild{display:inline-flex;align-items:stretch;margin:0 0 8px}
-.schedule-prep .prep-review-options>p{margin:0 0 12px;font-size:14px}
-.schedule-prep .prep-review-conditions,.schedule-prep .prep-review-step .prep-review-activities{border-top:1px solid #e6eef8}
-.schedule-prep .prep-review-conditions summary,.schedule-prep .prep-review-step .prep-review-activities summary,.schedule-prep .prep-review-room-summary summary,.schedule-prep .prep-review-warnings summary{min-height:44px;padding:12px 0;color:#174f95;font-size:14px;font-weight:600;cursor:pointer}
-.schedule-prep .prep-review-conditions summary svg{margin-right:8px;vertical-align:-2px}
+.schedule-prep .prep-review-options{margin:16px 0;padding:18px;border:1px solid #c8dcf7;border-radius:16px;background:linear-gradient(120deg,#f0f6ff,#fff);box-shadow:0 3px 14px #235bc809}
+.schedule-prep .prep-review-options-heading{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.schedule-prep .prep-review-options-heading>svg{width:36px;height:36px;padding:9px;flex:none;border:1px solid #d4e3f9;border-radius:10px;background:#e8f2ff;color:#235bc8}
+.schedule-prep .prep-review-options-heading h3{margin:0;color:#183c6c}
+.schedule-prep .prep-review-options-heading p{margin:3px 0 0;font-size:13px;color:var(--review-muted);line-height:1.6}
+.schedule-prep .prep-review-step .prep-review-rebuild{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}
+.schedule-prep .prep-review-step .prep-review-rebuild button{display:flex;align-items:center;gap:10px;min-width:0;min-height:76px;padding:12px;border:1px solid #d5e3f5;border-radius:12px;background:#fff;color:#46617e;text-align:left;font:inherit;cursor:pointer}
+.schedule-prep .prep-review-step .prep-review-rebuild button[aria-pressed=true]{border-color:#4285e6;background:#edf5ff;color:#174f95;box-shadow:inset 0 0 0 1px #4285e6}
+.schedule-prep .prep-review-rebuild button>svg{width:19px;height:19px;flex:none}
+.schedule-prep .prep-review-rebuild button>span{flex:1;min-width:0}
+.schedule-prep .prep-review-rebuild strong{display:block;font-size:14px;line-height:1.5}
+.schedule-prep .prep-review-step .prep-review-rebuild small{display:block;margin:3px 0 0;font-size:12px;line-height:1.5;color:var(--review-muted)}
+.schedule-prep .prep-review-mode-check{color:#235bc8}
+.schedule-prep .prep-review-options>.prep-review-mode-note{display:flex;align-items:flex-start;gap:6px;margin:10px 0 14px;font-size:12px;line-height:1.6;color:var(--review-muted)}
+.schedule-prep .prep-review-mode-note svg{flex:none;width:14px;height:14px;margin-top:2px}
+.schedule-prep .prep-review-inspectors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+.schedule-prep .prep-review-step .prep-review-inspectors>details{min-width:0;margin:0;border:1px solid #d5e3f5;border-radius:12px;background:#fff;overflow:hidden}
+.schedule-prep .prep-review-step .prep-review-inspectors summary{display:flex;align-items:center;gap:9px;min-height:68px;padding:12px;color:#174f95;cursor:pointer;list-style:none}
+.schedule-prep .prep-review-inspectors summary::-webkit-details-marker{display:none}
+.schedule-prep .prep-review-inspectors summary::marker{content:''}
+.schedule-prep .prep-review-inspectors summary>span{flex:1;min-width:0}
+.schedule-prep .prep-review-inspectors summary strong{display:block;font-size:14px;font-weight:600;line-height:1.6}
+.schedule-prep .prep-review-step .prep-review-inspectors summary small{display:block;margin:2px 0 0;font-size:12px;color:var(--review-muted);line-height:1.5}
+.schedule-prep .prep-review-inspector-icon{flex:none;width:18px;height:18px}
+.schedule-prep .prep-review-disclosure{flex:none;width:16px;height:16px;transition:transform .15s}
+.schedule-prep .prep-review-inspectors details[open] .prep-review-disclosure{transform:rotate(180deg)}
+.schedule-prep .prep-review-activity-count{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:6px;background:#e8f2ff;font-size:11px;white-space:nowrap}
+.schedule-prep .prep-review-step .prep-review-conditions>ul{padding:0 16px 0 30px;font-size:13px}
+.schedule-prep .prep-review-room-summary summary,.schedule-prep .prep-review-warnings summary{min-height:44px;padding:12px 0;color:#174f95;font-size:14px;font-weight:600;cursor:pointer}
 .schedule-prep .prep-review-step ul{margin:0 0 12px;padding-left:22px;color:#334155;font-size:14px;line-height:1.7}
 .schedule-prep .prep-review-step li{overflow-wrap:anywhere}
-.schedule-prep .prep-review-activities ul{display:grid;gap:10px}
+.schedule-prep .prep-review-step .prep-review-activities>ul{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:8px;max-height:280px;overflow:auto;overscroll-behavior:contain;margin:0;padding:0 12px 12px;list-style:none;scrollbar-width:thin}
+.schedule-prep .prep-review-activities li{min-width:0;padding:10px;border:1px solid #e0e9f5;border-radius:10px;background:#f8fbff}
+.schedule-prep .prep-review-activities li>header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;font-size:13px}
+.schedule-prep .prep-review-step .prep-review-activities li>header small{margin:0;white-space:nowrap;font-size:11px}
 .schedule-prep .prep-review-activities li>span{display:block;color:var(--review-muted);font-size:13px}
-.schedule-prep .prep-review-step .prep-review-activities small{font-size:13px;margin-top:4px;line-height:1.6}
+.schedule-prep .prep-review-activities .prep-review-activity-rooms{font-weight:600;margin:4px 0;color:#274d7c}
+.schedule-prep .prep-review-step .prep-review-activities small{display:block;font-size:12px;margin-top:4px;line-height:1.6}
+.schedule-prep .prep-review-edit-activities{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;margin:0 12px 12px;padding:8px 12px;border:1px solid #c8dcf7;border-radius:9px;background:#edf5ff;color:#174f95;font:inherit;font-size:13px;cursor:pointer}
+.schedule-prep .prep-review-no-activities{padding:0 12px;font-size:13px;color:var(--review-muted)}
 .schedule-prep .prep-review-action-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;padding:16px 0;border-top:1px solid var(--review-border)}
 .schedule-prep .prep-review-action-bar>span{display:flex;align-items:flex-start;gap:8px;max-width:370px;font-size:13px;line-height:1.6;color:var(--review-muted)}
 .schedule-prep .prep-review-action-bar>span svg{flex:none;width:16px;height:16px;margin-top:2px}
@@ -105,8 +133,13 @@
  .schedule-prep .prep-review-flow li{gap:5px;font-size:12px}
  .schedule-prep .prep-review-flow li>span{width:22px;height:22px}
  .schedule-prep .prep-review-flow svg{display:none}
- .schedule-prep .prep-review-step .prep-review-rebuild{display:flex;width:100%}
- .schedule-prep .prep-review-rebuild button{min-width:0;flex:1;font-size:13px;line-height:1.6;padding:10px 8px}
+ .schedule-prep .prep-review-options{padding:14px}
+ .schedule-prep .prep-review-options-heading p{font-size:12px}
+ .schedule-prep .prep-review-inspectors{grid-template-columns:1fr}
+ .schedule-prep .prep-review-step .prep-review-rebuild button{position:relative;align-items:flex-start;padding:10px;gap:6px}
+ .schedule-prep .prep-review-rebuild button>svg:not(.prep-review-mode-check){display:none}
+ .schedule-prep .prep-review-mode-check{width:14px!important;height:14px!important;position:absolute;right:7px;top:7px}
+ .schedule-prep .prep-review-rebuild strong{padding-right:12px;font-size:13px}
  .schedule-prep .prep-review-selection-footer{align-items:flex-start;flex-direction:column}
  .schedule-prep .prep-review-action-bar>span{max-width:none}
  .schedule-prep .prep-review-action-bar>.prep-review-actions,.schedule-prep .prep-review-save>.prep-review-actions{width:100%;display:grid;grid-template-columns:1fr}
