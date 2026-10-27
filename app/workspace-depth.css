@@ -4,7 +4,7 @@
   .workspace-theme {
     --ws-color:#245ed4;--ws-end:#153e91;--ws-soft:#e7f0ff;--ws-line:#c4d6f3;--ws-ink:#214c91;
     --primary:var(--ws-color);--primary-dk:var(--ws-end);--primary-bg:var(--ws-soft);
-    --ws-shadow:0 2px 5px #17365b06,0 17px 32px -19px #173c6c45;
+    --ws-shadow:0 1px 3px #17365b05,0 10px 24px -18px #173c6c35;
     --shadow-sm:0 2px 5px #17365b06,0 9px 20px -13px #173c6c35;
     --shadow:var(--ws-shadow);--shadow-md:0 5px 12px #17365b08,0 22px 40px -21px #173c6c55;
     background:radial-gradient(ellipse at 100% 0,var(--ws-soft),transparent 50%),radial-gradient(ellipse at 0 100%,#fff8e8,transparent 40%),#f3f6fb;
@@ -24,11 +24,11 @@
   .workspace-theme :is(.sidebar-user-avatar,.navbar-avatar){background:linear-gradient(140deg,var(--ws-color),var(--ws-end));box-shadow:0 4px 10px #17365b20,inset 0 1px 0 #ffffff60;color:#fff}
   .workspace-theme .sidebar-section-label{color:#526984;font-weight:700}
   .workspace-theme .sidebar-link{margin-block:4px;border:1px solid transparent;color:var(--ws-ink)}
-  .workspace-theme .sidebar-link-icon{display:grid;place-items:center;width:31px;height:31px;flex:none;border-radius:9px;border:1px solid #ffffff40;background:linear-gradient(135deg,var(--ws-color),var(--ws-end));color:#fff;box-shadow:0 3px 8px #17365b1c,inset 0 1px 0 #ffffff35}
+  .workspace-theme .sidebar-link-icon{display:grid;place-items:center;width:31px;height:31px;flex:none;border-radius:9px;border:1px solid var(--ws-line);background:var(--ws-soft);color:var(--ws-ink)}
   .workspace-theme .sidebar-link-icon>svg{width:17px;height:17px}
   .workspace-theme .sidebar-parent.is-open:not(.is-active){background:linear-gradient(110deg,var(--ws-soft),#fff);border-color:var(--ws-line);color:var(--ws-ink);box-shadow:0 3px 9px #17365b05}
   .workspace-theme .sidebar-link.is-active{background:linear-gradient(115deg,var(--ws-color),var(--ws-end));border-color:var(--ws-color);color:#fff;box-shadow:0 5px 12px #17365b22,inset 0 1px 0 #ffffff40}
-  .workspace-theme .sidebar-link.is-active .sidebar-link-icon{background:#ffffff1c;border-color:#ffffff40;box-shadow:inset 0 1px 0 #ffffff28}
+  .workspace-theme .sidebar-link.is-active .sidebar-link-icon{background:#ffffff1c;border-color:#ffffff40;color:#fff;box-shadow:inset 0 1px 0 #ffffff28}
   .workspace-theme .sidebar-link:hover:not(.is-active){background:var(--ws-soft);border-color:var(--ws-line);color:var(--ws-ink)}
   .workspace-theme .sidebar-children{border-left-color:var(--ws-line)}
   .workspace-theme .sidebar .sidebar-submenu--cards .sidebar-child-group-label{background:linear-gradient(110deg,var(--ws-soft),#f9fbff);color:var(--ws-ink);border-bottom:1px solid var(--ws-line)}
@@ -54,6 +54,9 @@
   .workspace-theme .page-hero{background:radial-gradient(ellipse at 95% 0,#ffffff20,transparent 60%),linear-gradient(115deg,var(--ws-end),var(--ws-color))!important;border-color:var(--ws-color)}
   .workspace-theme .page-hero .btn-secondary{color:var(--ws-ink);border-color:#ffffff80;background:#fff;box-shadow:0 3px 9px #0e2c4e14}
   .workspace-theme .section-title::before{background:linear-gradient(var(--ws-color),var(--ws-end));box-shadow:0 2px 5px #17365b14}
+  .workspace-theme .page-title{font-size:clamp(24px,2.3vw,30px);line-height:1.5;text-wrap:balance}
+  .workspace-theme .page-subtitle{font-size:15px;line-height:1.8}
+  .workspace-theme .section-title{font-size:17px;line-height:1.6}
   .workspace-theme :is(.nav-tile,.icon-tile){border-top:3px solid var(--ws-color);box-shadow:var(--ws-shadow);background:linear-gradient(145deg,var(--ws-soft),#fff 65%)}
   .workspace-theme :is(.nav-tile,.icon-tile):hover{border-color:var(--ws-line);border-top-color:var(--ws-color);box-shadow:var(--shadow-md)}
   .workspace-theme .dashboard-stat{border-top:3px solid var(--dashboard-accent);background:linear-gradient(140deg,var(--dashboard-tint),#fff 68%);box-shadow:var(--ws-shadow)}
@@ -74,6 +77,9 @@
   .workspace-theme :is(.subject-chip-row,.school-settings-tabs,.score-entry-tabs) :is([aria-selected=true],[aria-pressed=true],.is-active){color:var(--ws-ink);background:var(--ws-soft);border-color:var(--ws-line);box-shadow:0 3px 8px #17365b08}
 
   /* Dense score/evaluation screens and report controls use the same surfaces. */
+  .workspace-theme :is(.score-entry-head,.eval-head){padding:16px 20px;border:1px solid var(--ws-line);border-left:4px solid var(--ws-color);border-radius:16px;background:linear-gradient(115deg,#fff,var(--ws-soft));box-shadow:var(--ws-shadow)}
+  .workspace-theme :is(.score-entry-title h1,.eval-title){font-size:clamp(22px,2.2vw,28px);line-height:1.5;text-wrap:balance}
+  .workspace-theme :is(.score-entry-title p,.eval-subtitle){font-size:14px;line-height:1.8;color:#506681}
   .workspace-theme :is(.score-entry-title-mark,.eval-mark,.wizard-head-icon){background:linear-gradient(135deg,var(--ws-color),var(--ws-end));color:#fff;border-color:var(--ws-color);box-shadow:0 5px 12px #17365b19}
   .workspace-theme :is(.score-entry-table,.classroom-admin-table)>thead>tr>th{border-color:var(--ws-line);background:linear-gradient(#f9fbff,var(--ws-soft));color:var(--ws-ink)}
   .workspace-theme :is(.eval-tab,.score-entry-tab).is-active{background:var(--ws-soft);border-color:var(--ws-line);color:var(--ws-ink);box-shadow:0 3px 8px #17365b08}

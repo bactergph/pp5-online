@@ -38,8 +38,8 @@ export function LandingOverviewHero({onExample}:Props) {
         <div className="jsk-hero-copy">
           <p className="jsk-eyebrow"><FiLayers aria-hidden/>ผู้ช่วยครูและงานวิชาการของโรงเรียน</p>
           <h1 id="suite-title">งานสอน งานเอกสาร<br/><span>ดูแลง่ายในที่เดียว</span></h1>
-          <p className="jsk-lead">ตั้งแต่จัดตารางเรียน บันทึกคะแนนและเวลาเรียน ไปจนถึง ปพ.5 ปพ.6 และธุรการชั้นเรียน ให้จารย์เสกช่วยเชื่อมงานแต่ละวันของครูและโรงเรียน</p>
-          <div className="jsk-suite-tags"><span>ตารางเรียน</span><span>ปพ.5</span><span>ปพ.6</span><span>ธุรการชั้นเรียน</span><span>นำเข้า–ส่งออก</span></div>
+          <p className="jsk-lead">จัดตารางเรียน บันทึกคะแนน ดูแลชั้นเรียน<br className="jsk-desktop-break"/> แล้วต่อยอดเป็น ปพ.5 ปพ.6 พร้อมพิมพ์</p>
+          <div className="jsk-suite-tags"><span><FiCheck aria-hidden/>ใช้งานผ่านเว็บ</span><span><FiCheck aria-hidden/>นำข้อมูลจาก Excel มาใช้ต่อ</span></div>
           <div className="jsk-actions"><Link className="jsk-button jsk-primary" href="/register">เริ่มใช้งานฟรี<FiArrowRight aria-hidden/></Link><a className="jsk-button jsk-hero-secondary" href="#features">ดูว่าเราช่วยอะไรได้บ้าง<FiArrowDown aria-hidden/></a></div>
           <p className="jsk-hint">เริ่มฟรีสำหรับจัดตาราง ครูสูงสุด {DEFAULT_FREE_TEACHER_LIMIT} คน · งานวิชาการเพิ่มเติมเลือก Pro / Pro Plus / School</p>
           <p className="jsk-existing">มีบัญชีอยู่แล้ว? <Link href="/login">เข้าสู่ระบบ</Link></p>
@@ -58,6 +58,13 @@ export function LandingOverviewHero({onExample}:Props) {
           </div>
           <p className="jsk-visual-note">ภาพประกอบจากระบบ · ข้อมูลสมมติ · ความสามารถตามแพ็กเกจและสิทธิ์ผู้ใช้</p>
         </div>
+      </div>
+    </section>
+    <section className="jsk-outcomes" aria-label="เริ่มต้นใช้งานอย่างไร">
+      <div className="jsk-container jsk-outcome-grid">
+        <div><FiLayers aria-hidden/><strong>เริ่มจากข้อมูลที่มี</strong><p>วางรายชื่อครูและรายวิชาจาก Excel ในเมนูที่รองรับ</p></div>
+        <div><FiCheckCircle aria-hidden/><strong>ตรวจให้ชัดก่อนใช้จริง</strong><p>ดูฉบับร่างตารางและตัวอย่างเอกสารก่อนยืนยัน</p></div>
+        <div><FiDownload aria-hidden/><strong>พร้อมส่งต่อ พร้อมพิมพ์</strong><p>เลือกส่งออกข้อมูลและเอกสารตามงานที่ต้องใช้</p></div>
       </div>
     </section>
     <section id="features" className="jsk-container jsk-suite-overview" aria-labelledby="overview-title">
