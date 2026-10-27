@@ -3,6 +3,8 @@ import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass 
 import * as scheduleOps from '@/lib/schedule-operations'
 import { summarizeScheduleWorkload } from '@/lib/schedule-workload'
 import { substituteTimetableForDay, substituteWeekday } from '@/lib/schedule-substitute'
+import {substituteRosterSnapshot, validateSubstituteRoster, validateSubstituteAcknowledgements, type SubstituteRosterEntry, type SubstituteBusy} from '@/lib/substitute-roster'
+import {lessonTeachers} from '@/lib/schedule-activity-teams'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
@@ -244,7 +246,7 @@ export async function fetchSubstituteDay(date: string, yearId: string, semester 
   const { data: entries, error: entriesError } = await db.from('schedule_substitute_entries')
     .select(`
       id, absent_teacher_id, period, class_subject_id, classroom_id,
-      subject_label, room_label, substitute_teacher_id, leave_type, note
+      subject_label, room_label, substitute_teacher_id, leave_type, note, override_conflicts, conflict_details, conflict_confirmed_at
     `)
     .eq('substitute_day_id', dayRow!.id)
     .order('period')
@@ -258,8 +260,10 @@ export async function fetchSubstituteDay(date: string, yearId: string, semester 
   return {
     day: dayRow,
     day_label: SCHEDULE_DAYS.find(d => d.value === dayRow!.day_of_week)?.label || '',
-    busy: [...(blocks.data || []).map(b => ({teacherId:b.teacher_id,period:b.period})),
-      ...substituteTimetableForDay(schedule, dayOfWeek).flatMap(slot => slot.teacherIds.map(teacherId => ({teacherId,period:slot.period})))],
+    teacher_names:schedule.teacherNames,
+    classrooms:schedule.classrooms.map(room=>({id:room.id,label:`${room.level}/${room.room}`})),
+    busy: [...(blocks.data || []).map(b => ({teacherId:b.teacher_id,period:b.period,kind:'block' as const})),
+      ...substituteTimetableForDay(schedule, dayOfWeek).flatMap(slot => slot.teacherIds.map(teacherId => ({teacherId,period:slot.period,kind:slot.activity?'activity' as const:'lesson' as const,label:slot.subject_label,roomLabel:slot.room_label})))] as SubstituteBusy[],
     entries: entries || [],
   }
 }
@@ -276,6 +280,47 @@ export async function loadSubstituteSlotsForTeacher(
   return substituteTimetableForDay(schedule, substituteWeekday(date))
     .filter(slot => slot.teacherIds.includes(absentTeacherId))
     .map(slot => ({period:slot.period, class_subject_id:slot.class_subject_id, classroom_id:slot.classroom_id, room_label:slot.room_label, subject_label:slot.subject_label}))
+}
+
+export async function loadSubstituteRosterSlots(date:string,yearId:string,teacherIds:string[],semester=1) {
+  const session=await requireScheduleSession()
+  if(!session.schoolId||!canEdit(session))throw Error('ไม่มีสิทธิ์')
+  if(!Array.isArray(teacherIds)||!teacherIds.length||teacherIds.length>200||new Set(teacherIds).size!==teacherIds.length)throw Error('กรุณาเลือกครูที่ลา 1–200 คน')
+  const schedule=await loadSchedule(session.schoolId,yearId,semester)
+  if(teacherIds.some(id=>!schedule.teacherNames[id]))throw Error('ไม่พบครูในโรงเรียนนี้')
+  const timetable=substituteTimetableForDay(schedule,substituteWeekday(date))
+  const slots=teacherIds.flatMap(absent_teacher_id=>timetable.filter(slot=>slot.teacherIds.includes(absent_teacher_id)).map(slot=>({absent_teacher_id,period:slot.period,class_subject_id:slot.class_subject_id,classroom_id:slot.classroom_id,room_label:slot.room_label,subject_label:slot.subject_label})))
+  return {slots,missing:teacherIds.filter(id=>!slots.some(slot=>slot.absent_teacher_id===id))}
+}
+
+/** All adds/edits/deletions commit together. The timetable is never rewritten. */
+export async function saveSubstituteRoster(dayId:string,expected:SubstituteRosterEntry[],rows:SubstituteRosterEntry[]) {
+  const session=await requireScheduleSession()
+  if(!session.schoolId||!canEdit(session))throw Error('ไม่มีสิทธิ์')
+  const db=createServerClient()
+  const {data:day,error:dayError}=await db.from('schedule_substitute_days').select('id,date,academic_year_id,semester,day_of_week').eq('id',dayId).eq('school_id',session.schoolId).maybeSingle()
+  if(dayError||!day)throw Error('ไม่พบตารางสอนแทนของโรงเรียนนี้')
+  const term=day.semester||1
+  // Read the fingerprint before dependent reads; the writer rechecks it under
+  // the same school/year lock used by timetable and teacher-block writers.
+  const snapshot=await db.rpc('schedule_snapshot',{p_school:session.schoolId,p_year:day.academic_year_id,p_term:term})
+  if(snapshot.error||!snapshot.data)throw Error('ตรวจข้อมูลตารางเรียนล่าสุดไม่สำเร็จ')
+  const [schedule,blockResult,periodResult]=await Promise.all([
+    loadSchedule(session.schoolId,day.academic_year_id,term),
+    db.from('schedule_teacher_blocks').select('teacher_id,period').eq('school_id',session.schoolId).eq('academic_year_id',day.academic_year_id).eq('semester',term).eq('day_of_week',day.day_of_week),
+    fetchPeriodTimes(),
+  ])
+  if(blockResult.error)throw Error('โหลดคาบไม่ว่างไม่สำเร็จ')
+  const normalized=rows.map(row=>({...row,subject_label:row.subject_label?.trim()||null,note:row.note?.trim()||null,
+    room_label:schedule.classrooms.filter(room=>room.id===row.classroom_id).map(room=>`${room.level}/${room.room}`)[0]||null}))
+  validateSubstituteRoster(normalized,new Set(Object.keys(schedule.teacherNames)),new Set(schedule.classrooms.map(room=>room.id)),new Set(periodResult.times.filter(row=>!row.is_break).map(row=>row.period)))
+  for(const row of normalized)if(row.class_subject_id&&!schedule.lessons.some(lesson=>lesson.id===row.class_subject_id&&lesson.classroomId===row.classroom_id&&lessonTeachers(lesson).includes(row.absent_teacher_id)))throw Error('รายวิชาไม่ตรงกับครู ห้อง หรือภาคเรียน กรุณาตรวจรายการที่แก้ไข')
+  const busy:SubstituteBusy[]=[...(blockResult.data||[]).map(row=>({teacherId:row.teacher_id,period:row.period,kind:'block' as const})),
+    ...substituteTimetableForDay(schedule,day.day_of_week).flatMap(slot=>slot.teacherIds.map(teacherId=>({teacherId,period:slot.period,kind:slot.activity?'activity' as const:'lesson' as const,label:slot.subject_label,roomLabel:slot.room_label})))]
+  const checked=validateSubstituteAcknowledgements(normalized,busy,schedule.teacherNames)
+  const {error}=await db.rpc('save_substitute_roster',{p_school_id:session.schoolId,p_day_id:dayId,p_expected:substituteRosterSnapshot(expected),p_rows:substituteRosterSnapshot(checked),p_snapshot:snapshot.data,p_actor:session.userId})
+  if(error)throw Error(error.code==='PGRST202'?'กรุณารันฐานข้อมูล 094_substitute_roster.sql ก่อนใช้งาน':error.message)
+  return {ok:true}
 }
 
 export async function saveSubstituteTeacher(

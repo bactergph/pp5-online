@@ -428,6 +428,14 @@ export async function saveSubstituteDay(dayId: string, expected: import('./exten
   const mod = await import('./extended-actions')
   return scheduleResult(() => mod.saveSubstituteDay(dayId, expected, rows))
 }
+export async function loadSubstituteRosterSlots(date:string,year:string,teachers:string[],term=1) {
+  const mod=await import('./extended-actions')
+  return mod.loadSubstituteRosterSlots(date,year,teachers,term)
+}
+export async function saveSubstituteRoster(dayId:string,expected:import('@/lib/substitute-roster').SubstituteRosterEntry[],rows:import('@/lib/substitute-roster').SubstituteRosterEntry[]) {
+  const mod=await import('./extended-actions')
+  return scheduleResult(()=>mod.saveSubstituteRoster(dayId,expected,rows))
+}
 export async function fetchSubstitutePdfContext() {
   const mod = await import('./extended-actions')
   return mod.fetchSubstitutePdfContext()

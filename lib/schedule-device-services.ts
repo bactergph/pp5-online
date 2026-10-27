@@ -15,6 +15,7 @@ import { solveScheduleOnDevice } from './schedule-device-run'
 import type { DeviceDraft } from './schedule-device-build'
 import type { FreeSubstituteEntry } from '../components/schedules/FreeSubstituteDesk'
 import { availableSubstitutes } from './substitute-availability'
+import {substituteRosterSnapshot,validateSubstituteRoster,validateSubstituteAcknowledgements,type SubstituteBusy} from './substitute-roster'
 import { SCHEDULE_DAYS } from './schedules'
 import { verifyCompleteSchedule } from './schedule-verification'
 import { applySchedulePlaceChange } from './schedule-places'
@@ -130,7 +131,12 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     })
     const next={...current,activities,timetable};fixed(next);return put(year,term,next)
   })
-  const externalEntry=(entry:FreeSubstituteEntry)=>({id:entry.id,absent_teacher_id:entry.absentTeacherId,period:entry.period,class_subject_id:entry.subjectId||null,classroom_id:entry.roomId||null,subject_label:entry.subjectLabel,room_label:entry.roomLabel,substitute_teacher_id:entry.substituteTeacherId,leave_type:entry.leaveType,note:entry.note})
+  const externalEntry=(entry:FreeSubstituteEntry)=>({id:entry.id,absent_teacher_id:entry.absentTeacherId,period:entry.period,class_subject_id:entry.subjectId||null,classroom_id:entry.roomId||null,subject_label:entry.subjectLabel,room_label:entry.roomLabel,substitute_teacher_id:entry.substituteTeacherId,leave_type:entry.leaveType,note:entry.note,override_conflicts:entry.overrideConflicts===true,conflict_details:entry.conflictDetails||[],conflict_confirmed_at:entry.conflictConfirmedAt||null})
+  function rosterBusy(current:FreeWizardPlan,day:number):SubstituteBusy[] {
+    const lessons=devicePreparation(current).lessons
+    return [...current.blocks.filter(row=>row.day===day).map(row=>({teacherId:row.teacherId,period:row.period,kind:'block' as const})),
+      ...busyCells(current).filter(row=>row.day===day).map(row=>{const lesson=lessons.find(lesson=>lesson.id===row.lessonId);return {teacherId:row.teacherId,period:row.period,kind:row.lessonId.startsWith('activity:')?'activity' as const:'lesson' as const,label:lesson?`${lesson.code||''} ${lesson.name}`.trim():row.label,roomLabel:current.rooms.find(room=>room.id===row.classroomId)?.label||''}})]
+  }
   function teacherSlots(date:string,year:string,teacher:string,term:number) {
     const current=plan(year,term),data=devicePreparation(current),day=weekday(date)
     return allCells(current).filter(cell=>cell.day===day).flatMap(cell=>{
@@ -357,8 +363,34 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     },
     fetchSubstituteDay:async(date,year,term=1)=>{
       const current=plan(year,term),day=weekday(date)
-      return {day:{id:key(year,term,date),date,day_of_week:day,note:null},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',busy:[...current.blocks.filter(row=>row.day===day),...busyCells(current).filter(row=>row.day===day)].map(({teacherId,period})=>({teacherId,period})),entries:(current.substitutes[date]||[]).map(externalEntry)}
+      return {day:{id:key(year,term,date),date,day_of_week:day,note:null},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',teacher_names:Object.fromEntries(current.teachers.map(teacher=>[teacher.id,teacher.name])),classrooms:current.rooms.map(room=>({id:room.id,label:room.label})),busy:rosterBusy(current,day),entries:(current.substitutes[date]||[]).map(externalEntry)}
     },
+    loadSubstituteRosterSlots:async(date,year,teachers,term=1)=>{
+      const current=plan(year,term)
+      if(!teachers.length||teachers.length>200||new Set(teachers).size!==teachers.length||teachers.some(id=>!current.teachers.some(teacher=>teacher.id===id)))throw Error('กรุณาเลือกครูที่ลาให้ถูกต้อง')
+      const slots=teachers.flatMap(absent_teacher_id=>teacherSlots(date,year,absent_teacher_id,term).map(slot=>({...slot,absent_teacher_id})))
+      return {slots,missing:teachers.filter(id=>!slots.some(slot=>slot.absent_teacher_id===id))}
+    },
+    saveSubstituteRoster:(id,expected,rows)=>outcome(async()=>{
+      const {year,term,date}=dayKey(id)
+      return mutate(year,term,async current=>{
+        const saved=current.substitutes[date]||[]
+        if(JSON.stringify(substituteRosterSnapshot(saved.map(externalEntry)))!==JSON.stringify(substituteRosterSnapshot(expected)))throw Error('ตารางสอนแทนเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุด')
+        const normalized=rows.map(row=>({...row,subject_label:row.subject_label?.trim()||null,note:row.note?.trim()||null,room_label:current.rooms.find(room=>room.id===row.classroom_id)?.label||null}))
+        validateSubstituteRoster(normalized,new Set(current.teachers.map(teacher=>teacher.id)),new Set(current.rooms.map(room=>room.id)),new Set(current.periods.filter(row=>!row.is_break).map(row=>row.period)))
+        for(const row of normalized)if(row.class_subject_id&&!current.subjects.some(subject=>subject.id===row.class_subject_id&&subject.roomId===row.classroom_id&&subject.teacherId===row.absent_teacher_id))throw Error('รายวิชาไม่ตรงกับครูหรือห้อง')
+        const checked=validateSubstituteAcknowledgements(normalized,rosterBusy(current,weekday(date)),Object.fromEntries(current.teachers.map(teacher=>[teacher.id,teacher.name])))
+        const next:FreeSubstituteEntry[]=checked.map(row=>({id:row.id,absentTeacherId:row.absent_teacher_id,period:row.period,subjectId:row.class_subject_id||'',roomId:row.classroom_id!,subjectLabel:row.subject_label!,roomLabel:row.room_label!,substituteTeacherId:row.substitute_teacher_id,leaveType:row.leave_type,note:row.note,overrideConflicts:row.override_conflicts,conflictDetails:row.conflict_details,conflictConfirmedAt:row.override_conflicts?new Date().toISOString():null}))
+        const substitutes={...current.substitutes,[date]:next}
+        if(!next.length)delete substitutes[date]
+        const bundle=read(),workspace=year===deviceYear(bundle)?bundle:bundle.archives?.[year]
+        if(!workspace)throw Error('ไม่พบปีการศึกษา')
+        const nextWorkspace={...workspace,terms:{...workspace.terms,[term]:{...workspace.terms[term as 1|2],substitutes}}}
+        const nextBundle=year===deviceYear(bundle)?{...bundle,terms:nextWorkspace.terms}:{...bundle,archives:{...bundle.archives,[year]:nextWorkspace}}
+        if(!await write(nextBundle))throw Error('ยังไม่ได้บันทึกลงเครื่อง กรุณาดาวน์โหลดสำเนาก่อนปิดหน้านี้')
+        return {ok:true}
+      })
+    }),
     loadSubstituteSlotsForTeacher:async(date,year,teacher,term=1)=>teacherSlots(date,year,teacher,term),
     importSubstituteFromSchedule:(dayId,date,year,teacher,leaveType,term=1)=>outcome(()=>mutate(year,term,async current=>{
       if(dayId!==key(year,term,date))throw Error('วันที่นำเข้าเปลี่ยนแล้ว')

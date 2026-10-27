@@ -13,6 +13,9 @@ export type DeviceSubstitute = {
   substituteTeacherId: string | null
   leaveType: string
   note: string | null
+  overrideConflicts?:boolean
+  conflictDetails?:string[]
+  conflictConfirmedAt?:string|null
 }
 export type DeviceScheduleUpload = {
   teachers: DeviceTeacher[]
@@ -43,7 +46,7 @@ export function cleanDeviceSchedule(raw: Partial<DeviceScheduleUpload> | null | 
   const substitutes: Record<string, DeviceSubstitute[]> = {}
   for (const [date, rows] of Object.entries(raw?.substitutes || {}).slice(0, 120)) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
-    substitutes[date] = (rows || []).slice(0, 40).map(item => ({
+    substitutes[date] = (rows || []).slice(0, 2000).map(item => ({
       id: text(item?.id, 80),
       absentTeacherId: text(item?.absentTeacherId, 80),
       period: Math.round(Number(item?.period) || 0),
@@ -54,6 +57,9 @@ export function cleanDeviceSchedule(raw: Partial<DeviceScheduleUpload> | null | 
       substituteTeacherId: text(item?.substituteTeacherId, 80) || null,
       leaveType: text(item?.leaveType, 40) || 'ลาป่วย',
       note: text(item?.note, 200) || null,
+      overrideConflicts:item?.overrideConflicts===true,
+      conflictDetails:Array.isArray(item?.conflictDetails)?item.conflictDetails.slice(0,100).map(value=>text(value,1000)):[],
+      conflictConfirmedAt:text(item?.conflictConfirmedAt,40)||null,
     })).filter(item => item.id && item.absentTeacherId && item.period >= 1 && item.period <= 8)
   }
   return { teachers, rooms, subjects, timetable, substitutes }

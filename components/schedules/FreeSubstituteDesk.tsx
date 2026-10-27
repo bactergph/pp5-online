@@ -18,6 +18,9 @@ export type FreeSubstituteEntry = {
   substituteTeacherId: string | null
   leaveType: string
   note: string | null
+  overrideConflicts?:boolean
+  conflictDetails?:string[]
+  conflictConfirmedAt?:string|null
 }
 
 type Teacher = { id: string; name: string }

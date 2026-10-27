@@ -11,7 +11,7 @@ export function substituteTimetableForDay(schedule: Awaited<ReturnType<typeof lo
     for (const cell of display.cells) if (cell.day === day) periods.set(cell.period, cell.lessonId)
     return [...periods].flatMap(([period, id]) => {
       const lesson = lessons.find(item => item.id === id)
-      return lesson ? [{period, teacherIds: lessonTeachers(lesson), class_subject_id: lesson.activity ? null : lesson.id,
+      return lesson ? [{period, teacherIds: lessonTeachers(lesson), activity:!!lesson.activity, class_subject_id: lesson.activity ? null : lesson.id,
         classroom_id: room.id, room_label: `${room.level}/${room.room}`,
         subject_label: `${lesson.code || ''} ${lesson.name}`.trim()}] : []
     })

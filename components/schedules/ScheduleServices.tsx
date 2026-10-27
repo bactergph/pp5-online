@@ -33,6 +33,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'getTeacherConflictAt' |
   'importSubstituteFromSchedule' |
   'loadSubstituteSlotsForTeacher' |
+  'loadSubstituteRosterSlots' |
   'moveClassScheduleCell' |
   'previewScheduleActivityTeam' |
   'removeScheduleActivityName' |
@@ -52,6 +53,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'saveScheduleInputTeachers' |
   'saveScheduleTeachingAssignments' |
   'saveSubstituteDay' |
+  'saveSubstituteRoster' |
   'saveTimetableClassrooms' |
   'setTeacherAvailabilityBlock' |
   'toggleScheduleCellLock'

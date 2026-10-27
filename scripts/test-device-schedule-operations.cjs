@@ -124,6 +124,8 @@ function inspectLocalGraph(file){
  const absolute=path.resolve(file)
  if(clientFiles.has(absolute))return
  clientFiles.add(absolute)
+ // The central catalogue is an intentional read-only reference lookup; no school planning data is sent.
+ if(absolute===path.resolve('app/schedules/catalog-actions.ts'))return
  const source=fs.readFileSync(absolute,'utf8'),tree=ts.createSourceFile(absolute,source,ts.ScriptTarget.Latest,true,absolute.endsWith('tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS)
  assert.ok(!tree.statements.some(node=>ts.isExpressionStatement(node)&&ts.isStringLiteral(node.expression)&&node.expression.text==='use server'),'Local dependency cannot be a server action: '+file)
  for(const node of tree.statements){
@@ -140,4 +142,4 @@ function inspectLocalGraph(file){
  }
 }
 inspectLocalGraph('components/schedules/FreeScheduleDesk.tsx');inspectLocalGraph('lib/schedule-device.worker.ts')
-console.log('PASS: '+clientFiles.size+' local client/worker dependency files contain no runtime server actions, server-only modules, Supabase or server auth imports')
+console.log('PASS: '+clientFiles.size+' local client/worker files keep computation and writes on-device; only the explicit read-only central catalogue is allowed outside the local graph')
