@@ -9,6 +9,10 @@ function moduleFrom(path, requireFn) {
 }
 let data, writes, loadedTerm, writtenTerm, role='admin'
 const solver = moduleFrom('lib/schedule-solver.ts')
+const path=require('node:path'),cache={};function pure(file){const abs=path.resolve(file);if(cache[abs])return cache[abs];const exports={};cache[abs]=exports;vm.runInNewContext(ts.transpileModule(fs.readFileSync(abs,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,console,performance,require:name=>pure(path.resolve(path.dirname(abs),name+'.ts'))});return exports}
+let generatedDraft;
+const preparation={async generate(year,term,scope,clear){const retained=data.slots.filter(row=>!scope.includes(row.classroom_id)||row.locked||row.activity_id||!clear);const lessons=data.lessons.map(lesson=>({...lesson,fixedOnly:lesson.activity||!scope.includes(lesson.classroomId),count:!lesson.activity&&scope.includes(lesson.classroomId)?lesson.count:retained.filter(row=>(row.activity_id?'activity:'+row.activity_id:row.class_subject_id)===lesson.id).length}));const result=pure('lib/schedule-planning.ts').solvePlannedSchedule(lessons,retained.map(row=>({classroomId:row.classroom_id,lessonId:row.activity_id?'activity:'+row.activity_id:row.class_subject_id,day:row.day_of_week,period:row.period})),pure('lib/schedule-planning.ts').emptyPlan(),timing.DEFAULT_PERIOD_TIMES,[]);if(result.status!=='complete')return {...result,id:null};generatedDraft={term,rows:[...retained,...result.assignments.map(row=>({classroom_id:row.classroomId,academic_year_id:year,day_of_week:row.day,period:row.period,class_subject_id:row.lessonId,activity_id:null,note:null,locked:false}))]};return {...result,id:'draft',assigned:result.assignments.length,locked:0}},async confirmDraft(){writtenTerm=generatedDraft.term;writes++;data={...data,slots:generatedDraft.rows};return {committed:true}},async cancelDraft(){generatedDraft=null}}
+
 const timing = moduleFrom('lib/schedule-helpers.ts',()=>({SCHEDULE_DAYS:[],SCHEDULE_PERIOD_COUNT:6}))
 for (const morning of [2,3,4]) {
   const shifted=timing.moveLunchBreak(timing.DEFAULT_PERIOD_TIMES,morning)
@@ -32,7 +36,7 @@ const api=moduleFrom('lib/schedule-operations.ts',name=>({
   'server-only':{},'@/lib/session':{getSession:async()=>({schoolId:'s',role,userId:'u'})},
   '@/lib/supabase':{createServerClient:()=>{throw Error('Unexpected DB call')}},
   '@/lib/audit':{logActivity:async()=>{}},'@/lib/schedules':{SCHEDULE_EDIT_ROLES:['admin']},
-  '@/lib/schedule-store':store,'@/lib/schedule-solver':solver,
+  '@/lib/schedule-store':store,'@/lib/schedule-solver':solver,'@/lib/schedule-preparation':preparation,
   '@/lib/schedule-activity':{LEARNER_DEVELOPMENT_KEY:'learner-development'},
 }[name]))
 function reset(){writes=0;data={classrooms:[{id:'a',level:'ป.1',room:1},{id:'b',level:'ป.2',room:1},{id:'empty',level:'อ.2',room:1}],lessons:[{id:'l1',classroomId:'a',teacherId:'t',count:2,label:'a · math',subjectId:'math',name:'math',activity:false},{id:'l2',classroomId:'b',teacherId:'t',count:2,label:'b · math',subjectId:'math',name:'math',activity:false}],slots:[]}}

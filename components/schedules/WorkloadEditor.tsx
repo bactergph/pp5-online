@@ -497,7 +497,7 @@ export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachin
           <div className="prep-load-place"><input value={placeName} onChange={event => setPlaceName(event.target.value)} placeholder="เช่น ห้องคอมพิวเตอร์" aria-label="ชื่อสถานที่ใหม่" /><button type="button" disabled={!placeName.trim()} onClick={addPlace}>เพิ่มสถานที่</button></div>
         </section>
         <section className="prep-activity-block"><div className="prep-activity-head"><span>4</span><div><h3>ความต้องการ</h3><p>ใช้ช่วยจัดตาราง ระบบยังคงไม่ให้ครูหรือห้องชนกัน</p></div></div>
-          <div className="prep-activity-pills"><button type="button" aria-pressed={draft.spread} onClick={() => setDraft({ ...draft, spread: !draft.spread })}>กระจายวัน</button><button type="button" aria-pressed={draft.morning} onClick={() => setDraft({ ...draft, morning: !draft.morning, timePreference: draft.morning ? 'any' : 'morning' })}>ช่วงเช้า</button></div>
+          <div className="prep-activity-pills"><span>รายวิชาแยกวันเสมอ · คาบคู่เรียนติดกัน</span><button type="button" aria-pressed={draft.morning} onClick={() => setDraft({ ...draft, morning: !draft.morning, timePreference: draft.morning ? 'any' : 'morning' })}>ช่วงเช้า</button></div>
         </section>
       </fieldset></div>
       <footer>{saveNotice}<button type="button" disabled={saving} onClick={close}>ยกเลิก</button><button type="button" className="prep-primary" disabled={saving || !draft.teacherId || !patternReady} onClick={() => void apply()}>{saving ? 'กำลังบันทึก…' : 'บันทึกวิชานี้'}</button></footer>

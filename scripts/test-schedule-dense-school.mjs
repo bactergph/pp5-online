@@ -3,11 +3,8 @@ import vm from 'node:vm'
 import assert from 'node:assert/strict'
 import ts from 'typescript'
 
-function load(file,deps={}){
-  const exports={}
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:name=>deps[name]||(name==='./schedule-joint-teaching'?load('lib/schedule-joint-teaching.ts'):{})})
-  return exports
-}
+const cache=new Map();
+function load(file,deps={}){if(cache.has(file))return cache.get(file);const exports={};cache.set(file,exports);vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,performance,console,require:name=>deps[name]||(name.startsWith('./')?load('lib/'+name.slice(2)+'.ts'):{})});return exports}
 const solver=load('lib/schedule-solver.ts'),planning=load('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':load('lib/schedule-block-repair.ts')})
 const {verifyCompleteSchedule}=load('lib/schedule-verification.ts',{'./schedule-planning':planning})
 // Numeric identifiers, subject categories and counts only; no staff/student data.
@@ -30,7 +27,7 @@ function check(input,label){
   const before=JSON.stringify({input,fixed,blocks}),started=Date.now()
   const result=planning.solvePlannedSchedule(input,fixed,plan,fixture.periods,blocks)
   assert.equal(result.status,'complete',`${label}: ${result.status} ${result.message||''}`)
-  assert.equal(result.solver,'dense_slot_matching')
+  assert.ok(['dense_slot_matching','block_repair'].includes(result.solver))
   const rows=[...fixed,...result.assignments]
   assert.equal(rows.length,2144);assert.equal(result.assignments.length,2045)
   const issues=verifyCompleteSchedule(input,rows,plan.days,fixture.periods,blocks)

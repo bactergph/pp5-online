@@ -48,7 +48,7 @@ export function solveJointTeachingSchedule(lessons:PlannedLesson[],fixed:Planned
   const used=new Set<number>(),equivalent=new Map<string,number>(),dayUse=new Map<string,number>()
   function candidates(task:typeof tasks[number]){
     const last=equivalent.get(`${task.unit.id}:${task.length}`)
-    return (domains.get(task.length)||[]).filter(block=>(last===undefined||block.ordinal>last)&&task.unit.members.every(lesson=>block.periods.every(period=>{
+    return (domains.get(task.length)||[]).filter(block=>(last===undefined||block.ordinal>last)&&task.unit.members.every(lesson=>(lesson.activity||(!(dayUse.get(`${lesson.id}:${block.day}`)||0)&&![...fixedByLesson.get(lesson.id)||[]].some(key=>{const [day,period]=key.split(':').map(Number);return day===block.day&&!block.periods.includes(period)})))&&block.periods.every(period=>{
       const key=cell(lesson.classroomId,block.day,period),existing=occupied.get(key)
       if(covered.has(key)||existing&&existing!==lesson.id)return false
       if(teachers(lesson).some(teacher=>{const held=busy.get(cell(teacher,block.day,period));return held&&held!==teachingEventAt(lesson,block.day,period)}))return false

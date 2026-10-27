@@ -368,6 +368,13 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   assert.equal((await db.query("select has_function_privilege('authenticated','save_schedule_subject_details(uuid,uuid,int,text,uuid,jsonb,jsonb)','execute') allowed")).rows[0].allowed,false);
   console.log('PASS: 091 repeatable; stable subject/offering IDs, score and locked-slot preservation, atomic metadata/quota edits, duplicate/stale/scope/venue guards, annual curriculum unchanged, term-specific quotas and service-only RPC');
 
+
+  const detailTeacherSql=fs.readFileSync('supabase/migrations/092_schedule_subject_teacher_pattern.sql','utf8');await db.exec(detailTeacherSql);await db.exec(detailTeacherSql);
+  await db.query('insert into users(id,school_id,role,is_active,email) values($1,$2,$3,true,$4),($5,$6,$3,true,$7)',[id(9201),id(1),'teacher','teacher-new@example.invalid',id(9202),id(2),'foreign@example.invalid']);
+  const beforeTeacherSlots=await rawRows();await saveDetails(await jointHash(),{...subjectDetails,teacherId:id(9201),periodMode:'double'});
+  assert.equal((await db.query('select teacher_id from class_subjects where id=$1',[id(9050)])).rows[0].teacher_id,id(9201));assert.deepEqual(await rawRows(),beforeTeacherSlots);assert.equal(Number((await db.query('select score from scores where id=$1',[id(9070)])).rows[0].score),87);
+  const teacherHash=await jointHash();for(const [patch,rule]of [[{teacherId:id(9202)},detailRule],[{teacherId:null},detailRule],[{periodMode:'single'},{...detailRule,pattern:[1,1]}],[{periodMode:'double'},{...detailRule,pattern:[1,1]}]]){await assert.rejects(saveDetails(teacherHash,{...subjectDetails,...patch},rule));assert.equal(await jointHash(),teacherHash,'Teacher/pattern failure is atomic');assert.deepEqual(await rawRows(),beforeTeacherSlots)}
+  assert.equal((await db.query("select has_function_privilege('authenticated','save_schedule_subject_details(uuid,uuid,int,text,uuid,jsonb,jsonb)','execute') allowed")).rows[0].allowed,false);console.log('PASS: 092 repeatable; teacher and explicit block patterns update atomically; retained IDs/scores/slots, foreign-teacher rejection, split-day rejection and service-only RPC');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

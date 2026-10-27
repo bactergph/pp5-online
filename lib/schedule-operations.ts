@@ -6,7 +6,7 @@ import { createServerClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/audit'
 import { SCHEDULE_EDIT_ROLES } from '@/lib/schedules'
 import { lessonColumns, lessonKey, loadSchedule, loadScheduleConstraints, persistSchedule, requireScheduleClass, type ScheduleSlot } from '@/lib/schedule-store'
-import { solveSchoolSchedule } from '@/lib/schedule-solver'
+import { generate, confirmDraft, cancelDraft } from '@/lib/schedule-preparation'
 import { LEARNER_DEVELOPMENT_KEY } from '@/lib/schedule-activity'
 
 async function context(yearId: string, semester = 1) {
@@ -190,18 +190,14 @@ export async function autoSchedule(year: string, roomId: string | null, clearFir
   for (const room of ctx.data.classrooms.filter(c => scope.has(c.id))) {
     if (!ctx.data.lessons.some(l => l.classroomId === room.id && !l.activity)) throw new Error(`${room.level}/${room.room}: ยังไม่กำหนดรายวิชาและครูผู้สอน`)
   }
-  const retained = ctx.data.slots.filter(s => !scope.has(s.classroom_id) || s.locked || !!s.activity_id || !clearFirst)
-  const outsideCounts = new Map<string, number>()
-  for (const s of retained.filter(s => !scope.has(s.classroom_id) || !!s.activity_id)) {
-    const id = lessonKey(s); if (id) outsideCounts.set(id, (outsideCounts.get(id) || 0) + 1)
-  }
-  const lessons = ctx.data.lessons.map(l => ({ ...l, count: !l.activity && scope.has(l.classroomId) ? l.count : outsideCounts.get(l.id) || 0 }))
-  const result = solveSchoolSchedule(lessons, retained.filter(s => s.locked || lessonKey(s) || s.note).map(s => ({ classroomId: s.classroom_id, lessonId: lessonKey(s), day: s.day_of_week, period: s.period })),150000,ctx.constraints.periodCount,ctx.constraints.blocks)
-  if (result.error) throw new Error(result.error)
-  const rows = retained.filter(s => s.locked || lessonKey(s) || s.note)
-  for (const a of result.assignments) rows.push({ classroom_id: a.classroomId, academic_year_id: year, day_of_week: a.day, period: a.period, ...lessonColumns(a.lessonId), note: null, locked: false })
-  await commit(ctx, year, rows, `จัดตาราง${roomId ? 'รายห้อง' : 'ทั้งโรงเรียน'} ${result.assignments.length} คาบ`)
-  return { ok: true, assigned: result.assignments.length, classrooms: scope.size, skipped }
+  // The older board action uses the same block/day rules and final verification
+  // as step 7 instead of bypassing them through the legacy single-slot solver.
+  const draft = await generate(year, semester, [...scope], clearFirst)
+  if (draft.status !== 'complete' || !draft.id) throw Error(draft.issues.find(issue => issue.severity === 'error')?.message || ('message' in draft ? draft.message : '') || 'ยังสร้างตารางที่ตรงเงื่อนไขไม่ได้ กรุณาตรวจที่ขั้นตรวจและจัดตาราง')
+  if (draft.locked) { await cancelDraft(draft.id); throw Error('ต้องยืนยันการปลดล็อกคาบกิจกรรม กรุณาสร้างและตรวจฉบับร่างในขั้นตรวจและจัดตาราง') }
+  const saved = await confirmDraft(draft.id)
+  if (!saved.committed) throw Error('ยังบันทึกตารางไม่สำเร็จ กรุณาโหลดข้อมูลล่าสุด')
+  return { ok: true, assigned: draft.assigned, classrooms: scope.size, skipped }
 }
 
 export async function activityOptions(year: string, roomId: string, semester = 1) {

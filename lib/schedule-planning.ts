@@ -4,6 +4,7 @@ import { solveSchoolSchedule } from './schedule-solver'
 import { solveBlockRepair } from './schedule-block-repair'
 import type {JointTeachingGroup} from './schedule-joint-teaching'
 import {solveJointTeachingSchedule} from './schedule-joint-solver'
+import { subjectDayIssue } from './schedule-subject-days'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
 export type TimePreference = 'any' | 'morning' | 'afternoon'
@@ -30,7 +31,7 @@ function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
   return index >= 0 && index < breakAt
 }
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
-export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota' | 'fixed_joint_mismatch'
+export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota' | 'fixed_joint_mismatch' | 'subject_day'
 export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; manageStep?:number; code?: FixedScheduleIssueCode; details?: string[] }
 export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking'|'block_repair';elapsedMs?:number;timeLimitMs?:number}
 export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
@@ -75,6 +76,8 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
     if(l?.roomId){const owner=teachingEventAt(l,slot.day,slot.period),held=places.get(l.roomId+':'+key);if(held&&held!==owner)fixedError('fixed_venue_conflict',l.label+' ห้องสถานที่ชน',5);places.set(l.roomId+':'+key,owner)}
   }
   for(const l of lessons){
+    const dayIssue=subjectDayIssue(l,fixed,days,times)
+    if(dayIssue)issues.push({severity:'error',message:dayIssue,step:5,manageStep:5,code:'subject_day' as const})
     if(!lessonTeachers(l).length&&!l.teacherOptional&&l.count>0)err(l.label+' ยังไม่มีครู',5)
     if(!Number.isInteger(l.count)||l.count<0||(!l.activity&&!l.fixedOnly&&l.count===0))err(l.label+' ยังไม่มีภาระสอนที่ถูกต้อง',5)
     if(l.pattern&&(l.pattern.reduce((a,b)=>a+b,0)!==l.count||l.pattern.some(n=>!Number.isInteger(n)||n<1)))err(l.label+' รูปแบบคาบรวมไม่ตรงภาระสอน',5)
@@ -175,6 +178,7 @@ export function improveMorningAssignments(lessons:PlannedLesson[],fixed:PlannedS
         const other=occupied.get(key),otherLesson=other?.lessonId?byId.get(other.lessonId):undefined
         if(other&&(!otherLesson||!single(otherLesson)))continue
         if(otherLesson&&direction*((priority.get(otherLesson.id)||0)-value)>=0)continue
+        if(row.day!==destination.day&&((dayCount.get(`${lesson.id}:${destination.day}`)||0)>0||otherLesson&&(dayCount.get(`${otherLesson.id}:${row.day}`)||0)>0))continue
         if(spreadDelta(lesson,row.day,destination.day)+(otherLesson?spreadDelta(otherLesson,destination.day,row.day):0)>0)continue
         const ignore=new Set(other?[row,other]:[row])
         if(!available(lesson,destination.day,destination.period,ignore)||otherLesson&&!available(otherLesson,row.day,row.period,ignore))continue
@@ -519,7 +523,7 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
     const joint=solveJointTeachingSchedule(lessons,fixed,plan,times,unavailable,blocksFor,lessonMorningPriority,maxNodes,timeLimitMs)
     return finish({...joint,issues:[...issues,...joint.issues]})
   }
-  if(!plan.reduceGaps&&plan.maxContinuous===0&&lessons.length>=50&&lessons.some(l=>!l.fixedOnly&&(l.activity||l.pattern?.some(length=>length>1)))&&maxNodes>0&&timeLimitMs>0){
+  if(!plan.reduceGaps&&plan.maxContinuous===0&&lessons.some(l=>!l.fixedOnly&&(l.activity||l.count>1))&&maxNodes>0&&timeLimitMs>0){
     const repairStarted=Date.now(),repair=solveBlockRepair(lessons,fixed,plan,times,unavailable,lessonMorningPriority,Math.min(maxNodes,120_000),Math.min(timeLimitMs,6000))
     if(repair?.status==='complete')return finish({...repair,issues,solver:'block_repair',timeLimitMs})
     if(repair?.status==='conflict')return finish({...repair,issues:[...issues,{severity:'error',step:6,manageStep:6,message:repair.message!,details:repair.details}],solver:'block_repair',timeLimitMs})
@@ -535,6 +539,7 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   // quickly. Keep advanced plans on the block solver below.
   const teachingPeriods=times.filter(t=>!t.is_break).map(t=>t.period)
   const singlePeriod=!plan.reduceGaps&&plan.maxContinuous===0
+    &&lessons.every(l=>l.activity||l.fixedOnly||l.count<=1)
     &&lessons.every(l=>!l.morning&&(!l.pattern||l.pattern.every(n=>n===1))&&(!l.teacherIds||l.teacherIds.length<=1||l.activity))
   const fullWeek=plan.days.length===5&&[1,2,3,4,5].every((d,i)=>plan.days[i]===d)
     &&teachingPeriods.length>0&&teachingPeriods.every((p,i)=>p===i+1)
@@ -586,7 +591,7 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   }).sort((a,b)=>b.length-a.length||Number(!!b.l.roomId)-Number(!!a.l.roomId))
   const usedTask=new Set<number>();const chosen=new Map<string,number>();const chosenEquivalentBlock=new Map<string,number>()
   function candidates(task:typeof tasks[number]){const {l,length}=task,group=l.id+':'+length,last=chosenEquivalentBlock.get(group),teachers=teachersByLesson.get(l.id)||[],owner=l.activityGroupId||l.id,available:{day:number;periods:number[];ordinal:number}[]=[]
-    for(const b of blocksByLength.get(length)||[]){if(last!==undefined&&b.ordinal<=last)continue;let valid=true
+    for(const b of blocksByLength.get(length)||[]){if(last!==undefined&&b.ordinal<=last)continue;if(!l.activity&&((chosen.get(l.id+':'+b.day)||0)>0||fixed.some(row=>row.lessonId===l.id&&row.day===b.day&&!b.periods.includes(row.period))))continue;let valid=true
       for(const p of b.periods){const k=cell(l.classroomId,b.day,p),o=occupied.get(k);if((l.fixedOnly&&o!==l.id)||covered.has(k)||(o&&o!==l.id)){valid=false;break}
         for(const id of teachers){const busy=teacherBusy.get(cell(id,b.day,p));if(busy&&busy!==owner){valid=false;break}}if(!valid)break
         if(l.roomId){const roomOwner=roomBusy.get(cell(l.roomId,b.day,p));if(roomOwner&&roomOwner!==l.id){valid=false;break}}

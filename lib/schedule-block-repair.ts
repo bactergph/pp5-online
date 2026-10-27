@@ -36,11 +36,14 @@ export function solveBlockRepair(
     ...(lesson.roomId ? [resource(`venue:${lesson.roomId}`)] : []),
   ])]]))
   const hard = new Set<number>(), retained = new Map<string, number>()
+  const dayAnchor = new Map(plan.days.map(day => [day, cells.findIndex(cell => cell.day === day)]))
+  const subjectDayResource = new Map(lessons.filter(lesson => !lesson.activity && !lesson.fixedOnly).map(lesson => [lesson.id, resource(`subject-day:${lesson.id}`)]))
   for (const row of fixed) {
     const slot = index.get(`${row.day}:${row.period}`), lesson = row.lessonId ? byId.get(row.lessonId) : undefined
     if (slot === undefined) return null
     for (const id of lesson ? lessonResources.get(lesson.id)! : [resource(`class:${row.classroomId}`)]) hard.add(id * width + slot)
     if (lesson) retained.set(lesson.id, (retained.get(lesson.id) || 0) + 1)
+    if (lesson && subjectDayResource.has(lesson.id)) hard.add(subjectDayResource.get(lesson.id)! * width + dayAnchor.get(row.day)!)
   }
   for (const block of unavailable) {
     const slot = index.get(`${block.day}:${block.period}`)
@@ -89,6 +92,7 @@ export function solveBlockRepair(
   for (const task of tasks) {
     task.options = (domains.get(task.length) || []).flatMap(block => {
       const keys = task.resources.flatMap(id => block.cells.map(slot => id * width + slot))
+      for (const lesson of task.members) if (subjectDayResource.has(lesson.id)) keys.push(subjectDayResource.get(lesson.id)! * width + dayAnchor.get(block.day)!)
       return keys.some(key => hard.has(key)) ? [] : [{ ...block, keys }]
     })
     if (!task.options.length) return null
