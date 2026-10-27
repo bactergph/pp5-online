@@ -6,6 +6,7 @@ import { FiArrowDown, FiArrowRight, FiBookOpen, FiCalendar, FiCheck, FiCheckCirc
 import { DEFAULT_FREE_TEACHER_LIMIT } from '@/lib/free-schedule-entitlement'
 import { examples } from './landing-content'
 import './landing-modules.css'
+import './landing-depth.css'
 
 type Props = { onExample:(index:number,trigger:HTMLElement)=>void }
 const modules = [
