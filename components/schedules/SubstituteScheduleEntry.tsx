@@ -4,20 +4,21 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import {FiPlus,FiSearch,FiCheckCircle,FiAlertTriangle,FiUsers,FiEdit2,FiTrash2,FiDownload} from 'react-icons/fi'
 import {useScheduleGuard,useScheduleOperations,useScheduleServices} from './ScheduleServices'
 import {currentScheduleSemester,periodTimeLabel,type PeriodTimeRow} from '@/lib/schedule-helpers'
-import {indexSubstituteAvailability,substituteMinutes,validateSubstituteRoster,SUBSTITUTE_LEAVE_TYPES,type SubstituteRosterEntry as Entry,type SubstituteBusy} from '@/lib/substitute-roster'
+import {indexSubstituteAvailability,validateSubstituteRoster,SUBSTITUTE_LEAVE_TYPES,type SubstituteRosterEntry as Entry,type SubstituteBusy} from '@/lib/substitute-roster'
 import {directorDisplayName} from '@/lib/school-director'
 import {buildSubstitutePdf} from '@/lib/jspdf-substitute'
 import AppAlertModal from '@/components/AppAlertModal'
+import SubstituteSavedHistory from './SubstituteSavedHistory'
+import type {SubstituteHistoryRecord} from '@/lib/substitute-history'
 import './substitute-roster.css'
 
 type Teacher={id:string;prefix:string;full_name:string}
 type Year={id:string;year_be:number;is_active:boolean}
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
 const rowKey=(row:Entry)=>[row.absent_teacher_id,row.period,row.classroom_id].join(':')
-const duration=(minutes:number)=>[minutes>=60?`${Math.floor(minutes/60)} ชม.`:'',minutes%60?`${minutes%60} นาที`:''].filter(Boolean).join(' ')||'0 นาที'
 
 export default function SubstituteScheduleEntry(){
-  const {fetchScheduleInit,fetchPeriodTimes,fetchSubstituteDay,loadSubstituteRosterSlots,saveSubstituteRoster,fetchSubstitutePdfContext}=useScheduleOperations()
+  const {fetchScheduleInit,fetchPeriodTimes,fetchSubstituteDay,loadSubstituteRosterSlots,saveSubstituteRoster,deleteSubstituteRosterEntries,fetchSubstitutePdfContext}=useScheduleOperations()
   const {local}=useScheduleServices()
   const [years,setYears]=useState<Year[]>([]),[teachers,setTeachers]=useState<Teacher[]>([]),[periods,setPeriods]=useState<PeriodTimeRow[]>([])
   const [year,setYear]=useState(''),[term,setTerm]=useState(String(currentScheduleSemester())),[date,setDate]=useState(today)
@@ -29,6 +30,8 @@ export default function SubstituteScheduleEntry(){
   const [deletion,setDeletion]=useState<{ids:string[];label:string}|null>(null),[editorRow,setEditorRow]=useState<Entry|null>(null),[editorError,setEditorError]=useState('')
   const [groupFilter,setGroupFilter]=useState('')
   const [pendingSave,setPendingSave]=useState<Entry[]|null>(null)
+  const [historyRevision,setHistoryRevision]=useState(0),[savedDeletion,setSavedDeletion]=useState<SubstituteHistoryRecord|null>(null),[editing,setEditing]=useState(true)
+  const workbench=useRef<HTMLDetailsElement>(null),focusEdit=useRef(false)
   const request=useRef(0),operation=useRef(false),editor=useRef<HTMLDialogElement>(null),confirmation=useRef<HTMLDialogElement>(null)
   const names=useMemo(()=>({...Object.fromEntries(teachers.map(teacher=>[teacher.id,`${teacher.prefix||''} ${teacher.full_name}`.trim()])),...dayNames}),[teachers,dayNames])
   const key=`${year}:${term}:${date}`,blocked=!!working||loadingDay||loadedKey!==key||!date||!year
@@ -46,11 +49,12 @@ export default function SubstituteScheduleEntry(){
     const ticket=++request.current;setLoadingDay(true)
     try{const data=await fetchSubstituteDay(date,year,Number(term));if(ticket!==request.current)return false
       setDayId(data.day?.id||'');setDayLabel(data.day_label||'');setBusy(data.busy);setRooms(data.classrooms);setDayNames(data.teacher_names)
-      setEntries(data.entries as Entry[]);setOriginal(data.entries as Entry[]);setDirty(false);setLoadedKey(`${year}:${term}:${date}`);return true
+      setEntries(data.entries as Entry[]);setOriginal(data.entries as Entry[]);setDirty(false);setLoadedKey(`${year}:${term}:${date}`);setHistoryRevision(value=>value+1);return true
     }catch(error){if(ticket===request.current){setLoadedKey('');setAlert({type:'error',title:'โหลดตารางสอนแทนไม่สำเร็จ',message:error instanceof Error?error.message:'กรุณาลองใหม่'})}return false}
     finally{if(ticket===request.current)setLoadingDay(false)}
   },[fetchSubstituteDay,date,year,term])
   useEffect(()=>{const counter=request;let cancelled=false;void Promise.resolve().then(()=>{if(!cancelled&&year&&date)return loadDay()});return()=>{cancelled=true;counter.current++}},[loadDay,year,date])
+  useEffect(()=>{if(editing&&loadedKey===key&&focusEdit.current){focusEdit.current=false;workbench.current?.focus({preventScroll:true});workbench.current?.scrollIntoView({block:'start',behavior:'instant'})}},[editing,loadedKey,key])
   const conflictFor=useMemo(()=>indexSubstituteAvailability(entries,busy,names),[entries,busy,names])
   const reasons=(row:Entry)=>row.substitute_teacher_id?conflictFor(row.substitute_teacher_id,row):[]
   const conflicts=entries.filter(row=>reasons(row).length>0),unassigned=entries.filter(row=>!row.substitute_teacher_id)
@@ -87,14 +91,33 @@ export default function SubstituteScheduleEntry(){
     operation.current=true;setPendingSave(null);setWorking('กำลังบันทึกตารางสอนแทนทั้งหมด…')
     try{const result=await saveSubstituteRoster(dayId,original,rows);if(result.error)throw Error(result.error)
       setEntries(rows);setOriginal(rows);setDirty(false)
-      if(await loadDay())setAlert({type:'success',title:'บันทึกตารางสอนแทนทั้งหมดแล้ว',message:`ครูที่ลา ${new Set(rows.map(row=>row.absent_teacher_id)).size} คน · ${rows.length} รายการ · ยังรอครูสอนแทน ${rows.filter(row=>!row.substitute_teacher_id).length} รายการ`})
+      setEditing(false);if(await loadDay())setAlert({type:'success',title:'บันทึกตารางสอนแทนทั้งหมดแล้ว',message:`ครูที่ลา ${new Set(rows.map(row=>row.absent_teacher_id)).size} คน · ${rows.length} รายการ · ยังรอครูสอนแทน ${rows.filter(row=>!row.substitute_teacher_id).length} รายการ`})
     }catch(error){setAlert({type:'error',title:'บันทึกไม่สำเร็จ',message:error instanceof Error?error.message:'กรุณาลองใหม่'})}
     finally{operation.current=false;setWorking('')}
   }
-  async function pdf(){
-    if(blocked||dirty||!original.length||operation.current)return
+  function editSaved(record:SubstituteHistoryRecord){
+    if(blocked||dirty)return
+    setGroupFilter(record.absentId);setSelected([record.absentId]);setEditing(true);focusEdit.current=true
+    if(date===record.day.date)void loadDay();else setDate(record.day.date)
+  }
+  async function deleteSaved(){
+    const record=savedDeletion
+    if(!record||blocked||dirty||operation.current)return
+    operation.current=true;setSavedDeletion(null);setWorking('กำลังลบรายการที่บันทึกแล้ว…')
+    try{
+      const result=await deleteSubstituteRosterEntries(record.day.id,record.day.entries,record.entries.map(row=>row.id))
+      if(result.error)throw Error(result.error)
+      setHistoryRevision(value=>value+1)
+      if(date===record.day.date&&!await loadDay())return
+      setAlert({type:'success',title:'ลบรายการสอนแทนแล้ว',message:'ลบเฉพาะรายการของครูที่เลือก รายการครูอื่นและตารางเรียนยังคงอยู่'})
+    }catch(error){setAlert({type:'error',title:'ลบไม่สำเร็จ',message:error instanceof Error?error.message:'กรุณาลองใหม่'})}
+    finally{operation.current=false;setWorking('')}
+  }
+  async function pdf(record?:SubstituteHistoryRecord,historyNames:Record<string,string>={}){
+    const rows=record?.entries||original,pdfDate=record?.day.date||date
+    if(blocked||dirty||!rows.length||operation.current)return
     operation.current=true;setWorking('กำลังสร้าง PDF…')
-    try{const context=await fetchSubstitutePdfContext(),result=await buildSubstitutePdf({schoolName:context.school?.name||'โรงเรียน',logoUrl:context.school?.logo_url,date,year:years.find(row=>row.id===year)?.year_be||0,term,academicHead:context.academicHead,director:directorDisplayName(context.school,''),times:context.periodTimes,teachers,entries:original.map(row=>({...row,note:[row.note,row.override_conflicts?'ยืนยันสอนแทนทั้งที่ไม่ว่าง (รายละเอียดในระบบ)':''].filter(Boolean).join(' · ')||null}))})
+    try{const context=await fetchSubstitutePdfContext(),result=await buildSubstitutePdf({schoolName:context.school?.name||'โรงเรียน',logoUrl:context.school?.logo_url,date:pdfDate,year:years.find(row=>row.id===year)?.year_be||0,term,academicHead:context.academicHead,director:directorDisplayName(context.school,''),times:context.periodTimes,teachers,teacherNames:{...names,...historyNames},entries:rows.map(row=>({...row,note:[row.note,row.override_conflicts?'ยืนยันสอนแทนทั้งที่ไม่ว่าง (รายละเอียดในระบบ)':''].filter(Boolean).join(' · ')||null}))})
       const url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download=result.fileName;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)
     }catch(error){setAlert({type:'error',title:'สร้าง PDF ไม่สำเร็จ',message:error instanceof Error?error.message:'กรุณาลองใหม่'})}
     finally{operation.current=false;setWorking('')}
@@ -105,10 +128,12 @@ export default function SubstituteScheduleEntry(){
     <section className="sub-roster-filters" aria-label="เลือกวันและภาคเรียน">
       <label>ปีการศึกษา<select aria-label="ปีการศึกษา" disabled={!!working||dirty} value={year} onChange={event=>setYear(event.target.value)}>{years.map(row=><option key={row.id} value={row.id}>พ.ศ. {row.year_be}</option>)}</select></label>
       <label>ภาคเรียน<select aria-label="ภาคเรียน" disabled={!!working||dirty} value={term} onChange={event=>setTerm(event.target.value)}><option value="1">ภาคเรียนที่ 1</option><option value="2">ภาคเรียนที่ 2</option></select></label>
-      <label>วันที่<input aria-label="วันที่สอนแทน" type="date" disabled={!!working||dirty} value={date} onChange={event=>setDate(event.target.value)}/></label>
+      <label>วันที่<input aria-label="วันที่สอนแทน" type="date" disabled={!!working||dirty} value={date} onChange={event=>{setEditing(true);setGroupFilter('');setDate(event.target.value)}}/></label>
       <div className="sub-roster-day sub-day-label">{date?new Intl.DateTimeFormat('th-TH',{dateStyle:'long',timeZone:'Asia/Bangkok'}).format(new Date(date+'T12:00:00+07:00')):'เลือกวันที่'}<small>{dayLabel?'วัน'+dayLabel:''}</small></div>
     </section>
     {!year&&<p role="status">ยังไม่มีปีการศึกษา กรุณาตั้งค่าปีการศึกษาก่อนใช้งาน</p>}
+    {!!working||loadingDay?<p className="sub-roster-loading" role="status">{working||'กำลังโหลดข้อมูลของวันที่เลือก…'}</p>:null}
+    <details ref={workbench} tabIndex={-1} className="sub-roster-workbench" open={editing} onToggle={event=>setEditing(event.currentTarget.open)}><summary><span><strong>{editing?'จัดรายการสอนแทนของวันที่เลือก':'แก้ไขหรือเพิ่มรายการของวันที่เลือก'}</strong><small>{original.length?`บันทึกแล้ว ${original.length} รายการ`:'เลือกครูที่ลา แล้วกำหนดครูสอนแทน'}</small></span><FiEdit2 aria-hidden/></summary><div className="sub-roster-workbench-body">
     <section className="sub-roster-picker" aria-labelledby="sub-absent-title">
       <div className="sub-roster-section-head"><div><h2 id="sub-absent-title"><FiUsers aria-hidden/>ครูที่ลา / ไม่อยู่</h2><p>เลือกได้หลายคนในวันเดียว เช่น เลือก 5 คนแล้วนำเข้าคาบพร้อมกัน</p></div><strong>เลือก {selected.length} คน</strong></div>
       <div className="sub-roster-picker-tools"><label className="sub-roster-search"><FiSearch aria-hidden/><input type="search" aria-label="ค้นหาครูที่ลา" placeholder="ค้นหาชื่อครู" value={teacherSearch} onChange={event=>setTeacherSearch(event.target.value)}/></label><button type="button" disabled={blocked} onClick={()=>setSelected(current=>[...new Set([...current,...visibleTeachers.map(teacher=>teacher.id)])])}>เลือกผลค้นหาทั้งหมด</button><button type="button" disabled={blocked||!selected.length} onClick={()=>setSelected([])}>ล้างการเลือก</button></div>
@@ -116,7 +141,7 @@ export default function SubstituteScheduleEntry(){
       <div className="sub-roster-import sub-actions"><label>ประเภทการลา<select aria-label="ประเภทการลาที่นำเข้า" disabled={blocked} value={leaveType} onChange={event=>setLeaveType(event.target.value)}>{SUBSTITUTE_LEAVE_TYPES.map(type=><option key={type}>{type}</option>)}</select></label><button type="button" className="sub-roster-primary" disabled={blocked||!selected.length} onClick={()=>void importRows()}>นำเข้าจากตารางเรียน ({selected.length} คน)</button><button type="button" disabled={blocked||!rooms.length||!teachers.length} onClick={()=>openEditor()}><FiPlus aria-hidden/>เพิ่มรายการเอง</button></div>
     </section>
     <div className="sub-roster-overview" aria-live="polite"><span><b>{absentIds.length}</b> ครูที่ลา</span><span><b>{entries.length}</b> รายการ</span><span><FiCheckCircle aria-hidden/><b>{entries.length-unassigned.length}</b> กำหนดครูแล้ว</span><span className={conflicts.length?'has-conflicts':''}><FiAlertTriangle aria-hidden/><b>{conflicts.length}</b> รายการไม่ว่าง</span></div>
-    {!!working||loadingDay?<p className="sub-roster-loading" role="status">{working||'กำลังโหลดข้อมูลของวันที่เลือก…'}</p>:null}
+
     <div className="sub-roster-list-head"><h2>คาบที่ต้องจัดสอนแทน</h2><button type="button" disabled={!!working||loadingDay||dirty||!year||!date} onClick={()=>void loadDay()}>ตรวจข้อมูลล่าสุด</button></div>
     {(entries.length>0||original.length>0||dirty)&&<div className="sub-roster-actions"><button type="button" disabled={blocked||dirty||!original.length} onClick={()=>void pdf()}><FiDownload aria-hidden/>ดาวน์โหลด PDF</button>{dirty&&<button type="button" disabled={blocked} onClick={()=>{setEntries(original);setDirty(false)}}>ยกเลิกการแก้ไข</button>}<button type="button" className="sub-roster-danger" disabled={blocked||!entries.length} onClick={()=>setDeletion({ids:entries.map(row=>row.id),label:'ทุกรายการในวันนี้'})}>ลบทั้งหมดของวันนี้</button></div>}
     {absentIds.length>1&&<div className="sub-roster-group-filter" role="group" aria-label="แสดงรายการของครู"><button type="button" aria-pressed={!groupFilter||!absentIds.includes(groupFilter)} onClick={()=>setGroupFilter('')}>ครูทุกคน ({absentIds.length})</button>{absentIds.map(id=><button type="button" key={id} aria-pressed={groupFilter===id} onClick={()=>setGroupFilter(id)}>{names[id]}</button>)}</div>}
@@ -132,13 +157,12 @@ export default function SubstituteScheduleEntry(){
         })}</tbody></table></div></section>
     })}
     {(entries.length>0||original.length>0||dirty)&&<footer className="sub-roster-footer sub-footer"><div><strong>{dirty?'มีการเปลี่ยนแปลงที่ยังไม่บันทึก':'ข้อมูลที่บันทึกแล้ว'}</strong><small>{unassigned.length} รายการยังไม่มีครู · {conflicts.length} รายการไม่ว่าง</small></div><button type="button" className="sub-roster-primary" disabled={blocked} onClick={prepareSave}>{working?'กำลังดำเนินการ…':'บันทึกทั้งหมด'}</button></footer>}
-    <section className="sub-roster-saved" aria-labelledby="sub-saved-title"><h2 id="sub-saved-title">สรุปครูที่มาสอนแทน · บันทึกแล้ว</h2>{dirty&&<p>สรุปนี้เป็นข้อมูลที่บันทึกแล้ว กดบันทึกทั้งหมดเพื่ออัปเดต</p>}<div className="sub-roster-saved-grid">{[...new Set(original.flatMap(row=>row.substitute_teacher_id?[row.substitute_teacher_id]:[]))].sort((a,b)=>(names[a]||'').localeCompare(names[b]||'','th')).map(id=>{
-      const rows=original.filter(row=>row.substitute_teacher_id===id)
-      return <article key={id}><h3>{names[id]||'ครูสอนแทน'}</h3><p>{rows.length} รายการ · {new Set(rows.map(row=>row.period)).size} ช่วงคาบ · {duration(substituteMinutes(rows,periods))}</p><ul>{rows.sort((a,b)=>a.period-b.period).map(row=><li key={row.id}><strong>คาบ {row.period} · {row.room_label}</strong><span>{row.subject_label} · แทน {names[row.absent_teacher_id]||'ครูเจ้าของคาบ'}</span>{row.override_conflicts&&<small>ยืนยันสอนแทนทั้งที่ไม่ว่าง</small>}</li>)}</ul></article>
-    })}</div>{!original.some(row=>row.substitute_teacher_id)&&<p>ยังไม่มีครูสอนแทนที่บันทึกในวันที่เลือก</p>}</section>
+    </div></details>
+    <SubstituteSavedHistory year={year} term={Number(term)} revision={historyRevision} disabled={blocked||dirty} names={names} onEdit={editSaved} onPdf={(record,teacherNames)=>void pdf(record,teacherNames)} onDelete={setSavedDeletion}/>
     <dialog ref={editor} className="sub-roster-dialog" aria-labelledby="sub-editor-title" onCancel={()=>setEditorRow(null)} onClose={()=>setEditorRow(null)}><form onSubmit={event=>{event.preventDefault();applyEditor()}}><header><h2 id="sub-editor-title">{entries.some(row=>row.id===editorRow?.id)?'แก้ไขรายการสอนแทน':'เพิ่มรายการสอนแทน'}</h2><button type="button" onClick={()=>setEditorRow(null)}>ปิด</button></header>{editorRow&&<div className="sub-roster-editor-grid"><label>ครูเจ้าของคาบ<select aria-label="ครูเจ้าของคาบ" value={editorRow.absent_teacher_id} onChange={event=>setEditorRow({...editorRow,absent_teacher_id:event.target.value,class_subject_id:null})}>{teachers.map(teacher=><option key={teacher.id} value={teacher.id}>{names[teacher.id]}</option>)}</select></label><label>คาบเรียน<select aria-label="คาบเรียน" value={editorRow.period} onChange={event=>setEditorRow({...editorRow,period:Number(event.target.value)})}>{regularPeriods.map(period=><option key={period.period} value={period.period}>คาบ {period.period} · {periodTimeLabel(periods,period.period)}</option>)}</select></label><label>ชั้น / ห้อง<select aria-label="ชั้นและห้อง" value={editorRow.classroom_id||''} onChange={event=>setEditorRow({...editorRow,classroom_id:event.target.value,class_subject_id:null})}>{rooms.map(room=><option key={room.id} value={room.id}>{room.label}</option>)}</select></label><label>รายวิชา<input aria-label="รายวิชาสอนแทน" required maxLength={300} value={editorRow.subject_label||''} onChange={event=>setEditorRow({...editorRow,subject_label:event.target.value,class_subject_id:null})}/></label><label>ประเภทการลา<select value={editorRow.leave_type} onChange={event=>setEditorRow({...editorRow,leave_type:event.target.value})}>{[...new Set([...SUBSTITUTE_LEAVE_TYPES,editorRow.leave_type])].map(type=><option key={type}>{type}</option>)}</select></label><label>หมายเหตุ<input maxLength={1000} value={editorRow.note||''} onChange={event=>setEditorRow({...editorRow,note:event.target.value||null})}/></label>{editorError&&<p className="sub-roster-error" role="alert">{editorError}</p>}</div>}<footer><button type="button" onClick={()=>setEditorRow(null)}>ยกเลิก</button><button type="submit" className="sub-roster-primary">ใช้รายการนี้</button></footer></form></dialog>
     <dialog ref={confirmation} className="sub-roster-dialog" aria-labelledby="sub-conflict-title" onCancel={()=>setPendingSave(null)} onClose={()=>setPendingSave(null)}><header><div><h2 id="sub-conflict-title">ยืนยันสอนแทนทั้งที่ไม่ว่าง?</h2><p>ตรวจรายละเอียดก่อนบันทึก ครูเหล่านี้มีภาระในเวลาที่เลือก</p></div></header><div className="sub-roster-confirm-list">{pendingSave?.filter(row=>row.conflict_details?.length).map(row=><article key={row.id}><strong>{names[row.substitute_teacher_id||'']} · คาบ {row.period}</strong><p>แทน {names[row.absent_teacher_id]} · {row.room_label} · {row.subject_label}</p><ul>{row.conflict_details?.map(text=><li key={text}>{text}</li>)}</ul></article>)}</div><footer><button type="button" onClick={()=>setPendingSave(null)}>กลับไปแก้ไข</button><button type="button" className="sub-roster-primary" disabled={!!working} onClick={()=>pendingSave&&void persist(pendingSave)}>ยืนยันบันทึกทั้งที่ไม่ว่าง</button></footer></dialog>
     {alert&&<AppAlertModal open autoCloseMs={0} type={alert.type} title={alert.title} message={alert.message} onClose={()=>setAlert(null)}/>}
+    {savedDeletion&&<AppAlertModal open type="confirm" title="ลบรายการที่บันทึกแล้ว?" message={`${names[savedDeletion.absentId]||'ครูเจ้าของคาบ'} · ${savedDeletion.day.date} · ${savedDeletion.entries.length} รายการ จะลบเฉพาะครูคนนี้ในวันนี้`} confirmLabel="ยืนยันลบรายการ" cancelLabel="ยกเลิก" onClose={()=>setSavedDeletion(null)} onConfirm={()=>void deleteSaved()}/>}
     {deletion&&<AppAlertModal open type="confirm" title="ลบรายการสอนแทน?" message={`${deletion.label} (${deletion.ids.length} รายการ) จะนำออกจากร่าง แล้วกดบันทึกทั้งหมดเพื่อยืนยันการเปลี่ยนแปลง`} confirmLabel="ยืนยันลบ" cancelLabel="ยกเลิก" onClose={()=>setDeletion(null)} onConfirm={()=>{setEntries(current=>current.filter(row=>!deletion.ids.includes(row.id)));setDirty(true);setDeletion(null)}}/>}
   </div>
 }

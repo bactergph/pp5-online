@@ -15,6 +15,7 @@ import { solveScheduleOnDevice } from './schedule-device-run'
 import type { DeviceDraft } from './schedule-device-build'
 import type { FreeSubstituteEntry } from '../components/schedules/FreeSubstituteDesk'
 import { availableSubstitutes } from './substitute-availability'
+import {pageSubstituteHistory,validateSubstituteHistoryScope} from './substitute-history'
 import {substituteRosterSnapshot,validateSubstituteRoster,validateSubstituteAcknowledgements,type SubstituteBusy} from './substitute-roster'
 import { SCHEDULE_DAYS } from './schedules'
 import { verifyCompleteSchedule } from './schedule-verification'
@@ -361,6 +362,27 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
         }))]
       })))
     },
+    fetchSubstituteHistory:async(year,term=1,before)=>{
+      validateSubstituteHistoryScope(year,term,before)
+      const current=plan(year,term)
+      return {...pageSubstituteHistory(Object.entries(current.substitutes).map(([date,rows])=>({id:key(year,term,date),date,entries:rows.map(externalEntry)})),before),teacher_names:Object.fromEntries(current.teachers.map(teacher=>[teacher.id,teacher.name]))}
+    },
+    deleteSubstituteRosterEntries:(id,expected,ids)=>outcome(async()=>{
+      const {year,term,date}=dayKey(id)
+      return mutate(year,term,async current=>{
+        const saved=current.substitutes[date]||[]
+        if(JSON.stringify(substituteRosterSnapshot(saved.map(externalEntry)))!==JSON.stringify(substituteRosterSnapshot(expected)))throw Error('รายการสอนแทนเปลี่ยนแล้ว กรุณาโหลดรายการล่าสุดก่อนลบ')
+        if(!ids.length||new Set(ids).size!==ids.length||ids.some(id=>!saved.some(row=>row.id===id)))throw Error('ไม่พบรายการสอนแทนที่ต้องการลบ')
+        const remaining=saved.filter(row=>!ids.includes(row.id)),substitutes={...current.substitutes,[date]:remaining}
+        if(!remaining.length)delete substitutes[date]
+        const bundle=read(),workspace=year===deviceYear(bundle)?bundle:bundle.archives?.[year]
+        if(!workspace)throw Error('ไม่พบปีการศึกษา')
+        const nextWorkspace={...workspace,terms:{...workspace.terms,[term]:{...workspace.terms[term as 1|2],substitutes}}}
+        const next=year===deviceYear(bundle)?{...bundle,terms:nextWorkspace.terms}:{...bundle,archives:{...bundle.archives,[year]:nextWorkspace}}
+        if(!await write(next))throw Error('ยังไม่ได้บันทึกลงเครื่อง กรุณาลองใหม่')
+        return {deleted:ids.length}
+      })
+    }),
     fetchSubstituteDay:async(date,year,term=1)=>{
       const current=plan(year,term),day=weekday(date)
       return {day:{id:key(year,term,date),date,day_of_week:day,note:null},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',teacher_names:Object.fromEntries(current.teachers.map(teacher=>[teacher.id,teacher.name])),classrooms:current.rooms.map(room=>({id:room.id,label:room.label})),busy:rosterBusy(current,day),entries:(current.substitutes[date]||[]).map(externalEntry)}

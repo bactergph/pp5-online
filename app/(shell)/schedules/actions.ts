@@ -441,6 +441,16 @@ export async function fetchSubstitutePdfContext() {
   return mod.fetchSubstitutePdfContext()
 }
 
+export async function fetchSubstituteHistory(year:string,term=1,before?:string) {
+  const mod=await import('./extended-actions')
+  return mod.fetchSubstituteHistory(year,term,before)
+}
+
+export async function deleteSubstituteRosterEntries(dayId:string,expected:import('@/lib/substitute-roster').SubstituteRosterEntry[],ids:string[]) {
+  const mod=await import('./extended-actions')
+  return scheduleResult(()=>mod.deleteSubstituteRosterEntries(dayId,expected,ids))
+}
+
 export async function deleteSubstituteEntries(dayId: string, expected: import('./extended-actions').SubstituteChange[], ids: string[]) {
   const mod = await import('./extended-actions')
   return scheduleResult(() => mod.deleteSubstituteEntries(dayId, expected, ids))

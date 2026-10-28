@@ -5,6 +5,7 @@ import { summarizeScheduleWorkload } from '@/lib/schedule-workload'
 import { substituteTimetableForDay, substituteWeekday } from '@/lib/schedule-substitute'
 import {substituteRosterSnapshot, validateSubstituteRoster, validateSubstituteAcknowledgements, type SubstituteRosterEntry, type SubstituteBusy} from '@/lib/substitute-roster'
 import {lessonTeachers} from '@/lib/schedule-activity-teams'
+import {SUBSTITUTE_HISTORY_PAGE_DAYS,pageSubstituteHistory,validateSubstituteHistoryScope,type SubstituteHistoryDay,type SubstituteHistoryPage} from '@/lib/substitute-history'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
@@ -199,6 +200,26 @@ export async function fetchScheduleExportContext() {
   if (schoolError) throw new Error('โหลดข้อมูลโรงเรียนไม่สำเร็จ')
   const periodTimes = await fetchPeriodTimes()
   return { school: school ? { ...school, director_position: 'ผู้อำนวยการสถานศึกษา' } : null, periodTimes: periodTimes.times }
+}
+
+export async function fetchSubstituteHistory(yearId:string,semester=1,before?:string):Promise<SubstituteHistoryPage> {
+  const session=await requireScheduleSession()
+  if(!session.schoolId||!canEdit(session))throw Error('ไม่มีสิทธิ์')
+  validateSubstituteHistoryScope(yearId,semester,before)
+  const db=createServerClient()
+  const owner=await db.from('academic_years').select('id').eq('id',yearId).eq('school_id',session.schoolId).maybeSingle()
+  if(owner.error||!owner.data)throw Error('ไม่พบปีการศึกษาของโรงเรียนนี้')
+  let query=db.from('schedule_substitute_days').select(`id,date,entries:schedule_substitute_entries!inner(
+    id,absent_teacher_id,period,class_subject_id,classroom_id,subject_label,room_label,substitute_teacher_id,leave_type,note,override_conflicts,conflict_details,conflict_confirmed_at
+  )`).eq('school_id',session.schoolId).eq('academic_year_id',yearId).eq('semester',semester).order('date',{ascending:false}).limit(SUBSTITUTE_HISTORY_PAGE_DAYS+1)
+  if(before)query=query.lt('date',before)
+  const result=await query
+  if(result.error)throw Error('โหลดรายการสอนแทนที่บันทึกแล้วไม่สำเร็จ')
+  const page=pageSubstituteHistory((result.data||[]) as SubstituteHistoryDay[],before)
+  const ids=[...new Set(page.days.flatMap(day=>day.entries.flatMap(row=>[row.absent_teacher_id,...row.substitute_teacher_id?[row.substitute_teacher_id]:[]])))]
+  const names=ids.length?await db.from('users').select('id,prefix,full_name').eq('school_id',session.schoolId).in('id',ids):{data:[],error:null}
+  if(names.error)throw Error('โหลดชื่อครูในรายการที่บันทึกแล้วไม่สำเร็จ')
+  return {...page,teacher_names:Object.fromEntries((names.data||[]).map(row=>[row.id,`${row.prefix||''}${row.full_name}`]))}
 }
 
 export async function fetchSubstituteDay(date: string, yearId: string, semester = 1) {
@@ -426,4 +447,13 @@ export async function deleteSubstituteEntries(dayId: string, expected: Substitut
   })
   if (error) throw new Error(error.code === 'PGRST202' ? 'กรุณารันไฟล์ฐานข้อมูล 083_substitute_delete.sql ก่อนลบ' : error.message)
   return {ok: true}
+}
+
+export async function deleteSubstituteRosterEntries(dayId:string,expected:SubstituteRosterEntry[],ids:string[]) {
+  const session=await requireScheduleSession()
+  if(!session.schoolId||!canEdit(session))throw Error('ไม่มีสิทธิ์')
+  if(!Array.isArray(expected)||expected.length>2000||!Array.isArray(ids)||!ids.length||new Set(ids).size!==ids.length||ids.some(id=>!expected.some(row=>row.id===id)))throw Error('ไม่พบรายการสอนแทนที่ต้องการลบ')
+  const result=await createServerClient().rpc('delete_substitute_roster_entries',{p_school_id:session.schoolId,p_day_id:dayId,p_expected:substituteRosterSnapshot(expected),p_ids:ids,p_actor:session.userId})
+  if(result.error)throw Error(result.error.code==='PGRST202'?'กรุณารันฐานข้อมูล 096_substitute_saved_record_delete.sql ก่อนลบรายการ':result.error.message)
+  return {deleted:result.data as number}
 }

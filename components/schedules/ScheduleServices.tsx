@@ -10,6 +10,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'createScheduleDraft' |
   'discardScheduleDraft' |
   'deleteSubstituteEntries' |
+  'deleteSubstituteRosterEntries' |
   'editTeacherScheduleCell' |
   'fetchActivityLevelOptions' |
   'fetchClassScheduleBundle' |
@@ -27,6 +28,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'fetchScheduleQuotas' |
   'fetchScheduleWorkload' |
   'fetchSubstituteDay' |
+  'fetchSubstituteHistory' |
   'fetchSubstitutePdfContext' |
   'fetchTeacherAvailability' |
   'fetchTeachingScheduleGrid' |
