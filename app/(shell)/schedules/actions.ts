@@ -1,8 +1,9 @@
 'use server'
-import {jointTeachingSubjectLabel,teachingEventAt} from '@/lib/schedule-joint-teaching'
+import {teachingEventAt} from '@/lib/schedule-joint-teaching'
 
 import { activityTeachers, applyActivityDisplay, lessonTeachers, roomActivityDisplay } from '@/lib/schedule-activity-teams'
 import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
+import {scheduleTeachingView} from '@/lib/schedule-teaching-view'
 import { scheduleResult } from '@/lib/schedule-action-result'
 import * as scheduleOps from '@/lib/schedule-operations'
 import { createServerClient } from '@/lib/supabase'
@@ -183,44 +184,7 @@ export async function saveClassScheduleCell(classroomId: string, yearId: string,
 export async function moveClassScheduleCell(roomId:string,yearId:string,fromDay:number,fromPeriod:number,toDay:number,toPeriod:number,expectedLesson:string,semester=1) {
   return scheduleResult(()=>scheduleOps.moveCell(roomId,yearId,fromDay,fromPeriod,toDay,toPeriod,expectedLesson,semester))
 }
-function teachingCells(data: ScheduleData, teacherId: string) {
-  const lessons = new Map(data.lessons.map(lesson => [lesson.id, lesson]))
-  const rooms = new Map(data.classrooms.map(room => [room.id, room]))
-  const cells: Record<string,{label:string;subject_line:string;room_line:string}> = {}
-  for (const d of SCHEDULE_DAYS) for(let p=1;p<=SCHEDULE_PERIOD_COUNT;p++) cells[d.value+'-'+p]={label:'',subject_line:'',room_line:''}
-  for(const row of data.slots) {
-    const lesson=lessons.get(lessonKey(row) || '')
-    if(!lesson || lesson.activity || !lessonTeachers(lesson).includes(teacherId)) continue
-    const room=rooms.get(row.classroom_id)
-    if (!room) continue
-    const roomLine=room.level+'/'+room.room
-    const subjectLine=[jointTeachingSubjectLabel(lesson,data.lessons,row.day_of_week,row.period),lesson.roomName].filter(Boolean).join(' · ')
-    const key=row.day_of_week+'-'+row.period
-    cells[key]={label:[cells[key]?.label,roomLine+'\n'+subjectLine].filter(Boolean).join('\n'),subject_line:[...new Set([cells[key]?.subject_line,subjectLine].filter(Boolean))].join(' / '),room_line:[cells[key]?.room_line,roomLine].filter(Boolean).join(' + ')}
-  }
-  const activityCells: Record<string, { rooms: string[]; subjectLine: string }> = {}
-  for (const group of data.activityGroups || []) {
-    for (const roomId of group.roomIds || []) {
-      if (!activityTeachers(group, roomId).includes(teacherId)) continue
-      const lesson = data.lessons.find(item => item.activity && item.classroomId === roomId && item.subjectId === group.settingId)
-      const room = rooms.get(roomId)
-      const roomLine = room ? `${room.level}/${room.room}` : ''
-      const subjectLine = [((lesson?.code || '') + ' ' + (lesson?.name || 'กิจกรรม')).trim(), lesson?.roomName].filter(Boolean).join(' · ')
-      for (const cell of group.cells || []) {
-        const key = `${Number(cell.day)}-${Number(cell.period)}`
-        const entry = activityCells[key] || { rooms: [], subjectLine: '' }
-        if (roomLine && !entry.rooms.includes(roomLine)) entry.rooms.push(roomLine)
-        if (subjectLine && !entry.subjectLine.split(' · ').includes(subjectLine)) entry.subjectLine = [entry.subjectLine, subjectLine].filter(Boolean).join(' · ')
-        activityCells[key] = entry
-      }
-    }
-  }
-  for (const [key, entry] of Object.entries(activityCells)) {
-    const roomLine = entry.rooms.join('\n')
-    cells[key] = { label: entry.rooms.map(room => `${room}\n${entry.subjectLine}`).join('\n'), subject_line: entry.subjectLine, room_line: roomLine }
-  }
-  return cells
-}
+function teachingCells(data: ScheduleData, teacherId: string) {return scheduleTeachingView(data,teacherId)}
 
 function classPdfGrid(data: ScheduleData, classroomId: string) {
   const view = classRoomView(data, classroomId)
@@ -241,9 +205,10 @@ function classPdfGrid(data: ScheduleData, classroomId: string) {
   return grid
 }
 
-function teachingPdfGrid(cells: Record<string, { subject_line: string; room_line: string }>) {
+function teachingPdfGrid(cells: Record<string, { subject_line: string; room_line: string; pdf?:import('@/lib/jspdf-schedules').SchedulePdfCell }>) {
   const grid: Record<string, { line1: string; line2: string; line3?: string; line4?: string }> = {}
   for (const [key, cell] of Object.entries(cells)) {
+    if(cell.pdf){grid[key]=cell.pdf;continue}
     const [subjectPart, place = ''] = (cell.subject_line || '').split(/\s*·\s*/)
     const match = subjectPart.trim().match(/^(\S+)\s+(.+)$/)
     grid[key] = {

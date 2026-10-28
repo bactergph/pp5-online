@@ -1,5 +1,6 @@
 import { lessonTeachers, roomActivityDisplay } from './schedule-activity-teams'
 import type { loadSchedule } from './schedule-store'
+import {jointTeachingSubjectLabel} from './schedule-joint-teaching'
 
 /** Use the same lessons and activity overlays as the visible class timetable. */
 export function substituteTimetableForDay(schedule: Awaited<ReturnType<typeof loadSchedule>>, day: number) {
@@ -12,6 +13,7 @@ export function substituteTimetableForDay(schedule: Awaited<ReturnType<typeof lo
     return [...periods].flatMap(([period, id]) => {
       const lesson = lessons.find(item => item.id === id)
       return lesson ? [{period, teacherIds: lessonTeachers(lesson), activity:!!lesson.activity, class_subject_id: lesson.activity ? null : lesson.id,
+        lesson_id:lesson.id,subject_name:lesson.name,subject_code:lesson.code||'',room_name:lesson.roomName||'',subject_line:[jointTeachingSubjectLabel(lesson,lessons,day,period),lesson.roomName].filter(Boolean).join(' · '),
         classroom_id: room.id, room_label: `${room.level}/${room.room}`,
         subject_label: `${lesson.code || ''} ${lesson.name}`.trim()}] : []
     })

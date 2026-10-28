@@ -3,12 +3,13 @@ import type { ScheduleOperations } from '../components/schedules/ScheduleService
 import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
 import { validateSubjectInputs } from './schedule-input'
 import { validatePeriodTimes } from './schedule-helpers'
-import {validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingSubjectLabel,teachingEventAt,teachingQuotaParts} from './schedule-joint-teaching'
+import {validateJointTeachingGroups,jointTeachingSlotErrors,teachingEventAt,teachingQuotaParts} from './schedule-joint-teaching'
 import { validatePlan } from './schedule-planning'
 import { freeActivityGroup, freeActivityTeachers, newId, toDeviceSnapshot, type FreeActivity, type FreeWizardPlan } from './schedule-device-free'
 import {freeTeacherLimit as resolveTeacherLimit} from './free-schedule-entitlement'
 import { deviceDataKey, deviceDraftView, devicePreparation, devicePreflight, localDraftCells } from './schedule-device-view'
-import { deviceDocumentPages, deviceWorkload } from './schedule-device-documents'
+import {scheduleTeachingView} from './schedule-teaching-view'
+import { deviceDisplaySchedule, deviceDocumentPages, deviceWorkload } from './schedule-device-documents'
 import { deviceYear, type LocalScheduleBundle } from './schedule-device-years'
 import { blockDeviceTeacher, changeDeviceCell, clearDeviceCells, deviceActivityAt, lockDeviceCell, moveDeviceCell, removeDeviceSubjectCell } from './schedule-device-operations'
 import { solveScheduleOnDevice } from './schedule-device-run'
@@ -332,15 +333,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       for(const lesson of data.lessons)for(const teacherId of lessonTeachers(lesson))for(const part of teachingQuotaParts(lesson)){const id=part.id,key=id+':'+teacherId,used=allCells(current).filter(cell=>lessonId(cell)===lesson.id&&(part.cell?part.cell===`${cell.day}:${cell.period}`:!lesson.jointTeachingCells?.[`${cell.day}:${cell.period}`])).length,old=quotas.get(key);if(old){old.used=Math.max(old.used,used);old.target=Math.max(old.target,part.count);old.label+=' / '+lesson.label}else quotas.set(key,{id,teacherId,label:lesson.label,activity:!!lesson.activity,target:part.count,used})}
       return {teachers:current.teachers,blocks:current.blocks,supported:true,lessons:data.lessons.filter(lesson=>!lesson.activity).map(lesson=>({id:lesson.id,teacherId:lesson.teacherId,classroomId:lesson.classroomId,label:lesson.label})),slots:allCells(current).map(cell=>({classroomId:cell.classroomId,day:cell.day,period:cell.period,lessonId:lessonId(cell),locked:!!cell.locked})),busy,quotas:[...quotas.values()]}
     },
-    fetchTeachingScheduleGrid:async(teacher,year,term=1)=>{
-      const current=plan(year,term),data=devicePreparation(current),grid:Record<string,{label:string;subject_line:string;room_line:string}>={}
-      for(const cell of busyCells(current).filter(cell=>cell.teacherId===teacher)){
-        const lesson=data.lessons.find(lesson=>lesson.id===cell.lessonId)!,key=`${cell.day}-${cell.period}`,room=current.rooms.find(room=>room.id===cell.classroomId)?.label||''
-        const previous=grid[key]
-        grid[key]={label:lesson.name,subject_line:[jointTeachingSubjectLabel(lesson,data.lessons,cell.day,cell.period),lesson.roomName].filter(Boolean).join(' · '),room_line:previous?`${previous.room_line}, ${room}`:room}
-      }
-      return grid
-    },
+    fetchTeachingScheduleGrid:async(teacher,year,term=1)=>scheduleTeachingView(deviceDisplaySchedule(plan(year,term)),teacher),
     getTeacherConflictAt:async(year,teacher,day,period,ignore,term=1)=>{const current=plan(year,term),rooms=[...new Set(busyCells(current).filter(cell=>cell.teacherId===teacher&&cell.day===day&&cell.period===period&&cell.classroomId!==ignore).map(cell=>current.rooms.find(room=>room.id===cell.classroomId)?.label||''))];return {busy:rooms.length>0,rooms}},
     fetchScheduleConflicts:async(year,term=1)=>{
       const current=plan(year,term),busy=busyCells(current),conflicts:Awaited<ReturnType<ScheduleOperations['fetchScheduleConflicts']>>['conflicts']=[]
@@ -354,13 +347,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     fetchScheduleExportContext:async()=>exportContext(),
     fetchSchedulePdfGrids:async(year,term,kind,ids)=>{
       if(kind==='class')return Object.fromEntries(deviceDocumentPages(plan(year,term),'class',ids,term,year).map((page,index)=>[ids[index],page.gridData]))
-      return Object.fromEntries(await Promise.all(ids.map(async id=>{
-        const cells=await services.fetchTeachingScheduleGrid(id,year,term)
-        return [id,Object.fromEntries(Object.entries(cells).map(([key,cell])=>{
-          const [subjectPart,place='']=(cell.subject_line||'').split(/\s*·\s*/),match=subjectPart.trim().match(/^(\S+)\s+(.+)$/)
-          return [key,{line1:cell.room_line||'—',line2:match?.[2]||subjectPart,line3:match?`(${match[1]})`:'',line4:place}]
-        }))]
-      })))
+      return Object.fromEntries(deviceDocumentPages(plan(year,term),'teacher',ids,term,year).map((page,index)=>[ids[index],page.gridData]))
     },
     fetchSubstituteHistory:async(year,term=1,before)=>{
       validateSubstituteHistoryScope(year,term,before)

@@ -72,7 +72,7 @@ assert.equal(rows.find(row=>row.id==='t2').activity_hours,1,'Joint activity is c
 const pages=docs.deviceDocumentPages(grouped,'class',['r1','r2'],2,'2569')
 assert.equal(pages.length,2);assert.equal(pages[0].gridData['1-1'].line3,'นายสมชาย');assert.equal(pages[0].gridData['1-1'].line4,'ห้องวิทย์');assert.equal(pages[1].gridData['4-5'].line1,'ลูกเสือ')
 const teacherPages=docs.deviceDocumentPages(grouped,'teacher',['t2'],2,'2569')
-assert.equal(teacherPages[0].gridData['4-5'].line3,'ม.1/1, ม.1/2')
+assert.equal(teacherPages[0].gridData['4-5'].line1,'ม.1/1 + ม.1/2')
 const snapshot=free.toDeviceSnapshot(plan,['r1'])
 assert.equal(snapshot.lessons[0].timePreference,'afternoon');assert.equal(snapshot.plan.rules.s1.timePreference,'afternoon');assert.equal(view.devicePreparation(plan).lessons[0].spread,false)
 const copied=ops.copyDeviceSubjects(plan,'r1',['r2','r3'])

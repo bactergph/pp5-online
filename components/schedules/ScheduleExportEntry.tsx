@@ -2,7 +2,7 @@
 import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
-import { activityTimetableTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { periodTimeLabel, scheduleSemesterForYear, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
@@ -13,17 +13,6 @@ type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?
 type Classroom = { id: string; level: string; room: number; label: string }
 type Teacher = { id: string; prefix: string; full_name: string }
 type ExportType = 'class' | 'teaching'
-
-function teachingLines(roomLine: string, subjectLine: string) {
-  const [subjectPart, place = ''] = (subjectLine || '').split(/\s*·\s*/)
-  const match = subjectPart.trim().match(/^(\S+)\s+(.+)$/)
-  return {
-    line1: roomLine || '—',
-    line2: match?.[2] || subjectPart,
-    line3: match ? `(${match[1]})` : '',
-    line4: place,
-  }
-}
 
 const STYLES = `
   .sched-export-page { display: grid; gap: 16px; color: #182b49; }
@@ -102,6 +91,11 @@ const STYLES = `
     padding: 12px 14px; border: 1px solid #fecaca; border-radius: 12px;
     background: #fef2f2; color: #be123c; font-size: 13px; font-weight: 700;
   }
+  .sched-export-download {display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;border:1px solid #abc9ef;border-radius:14px;background:#f1f7ff;position:relative;box-shadow:0 6px 24px #143c6b15}
+  .sched-export-download>div{display:grid;gap:5px;min-width:0}.sched-export-download small{font-size:12px;color:#52647c}.sched-export-download button{flex:none}
+  @media(max-width:520px){.sched-export-download{padding:12px;gap:10px;flex-wrap:wrap}.sched-export-download button{width:100%}}
+  @media print{.sched-export-download{display:none!important}}
+  .sched-export-preview-options{max-width:420px}.sched-export-preview-options select{width:100%}@media print{.sched-export-preview-options{display:none!important}}
   .sched-export-preview { border: 1px solid #dce6f2; border-radius: 14px; background: #fff; overflow: auto; }
   .sched-print-head {
     display: flex; align-items: center; justify-content: center; gap: 16px; text-align: left;
@@ -145,7 +139,7 @@ const STYLES = `
 `
 
 export default function ScheduleExportPage() {
-  const { fetchScheduleDays, fetchClassScheduleGrid, fetchClassScheduleSubjects, fetchScheduleClassrooms, fetchScheduleInit, fetchSchedulePdfGrids, fetchTeachingScheduleGrid, fetchScheduleExportContext } = useScheduleOperations()
+  const { fetchScheduleDays, fetchScheduleClassrooms, fetchScheduleInit, fetchSchedulePdfGrids, fetchScheduleExportContext } = useScheduleOperations()
 
   const [loading, setLoading] = useState(true)
   const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
@@ -242,48 +236,16 @@ export default function ScheduleExportPage() {
     }
   }, [fetchScheduleInit,fetchScheduleExportContext])
 
-  const loadClassGrid = useCallback(async () => {
-    const request = ++gridRequest.current
-    const [grid, subs] = await Promise.all([
-      fetchClassScheduleGrid(classroomId, yearId, Number(semester)),
-      fetchClassScheduleSubjects(classroomId, Number(semester)),
-    ])
-    const subjMap = Object.fromEntries(
-      (subs as { id: string; label: string; subject_name?: string; subject_code?: string; teacher_name: string; room_name?: string }[]).map(s => [s.id, s]),
-    )
-
-    const data: Record<string, { line1: string; line2: string; line3?: string; line4?: string }> = {}
-    for (const [key, cell] of Object.entries(grid as Record<string, { class_subject_id: string | null; note: string | null }>)) {
-      const subj = cell.class_subject_id ? subjMap[cell.class_subject_id] : undefined
-      const activity = isActivityLessonId(cell.class_subject_id)
-      data[key] = subj ? {
-        line1: subj.subject_name || subj.label || (activity ? 'กิจกรรม' : '—'),
-        line2: subj.subject_code ? `(${subj.subject_code})` : activity ? '(กิจกรรม)' : '',
-        line3: activity ? activityTimetableTeacherLabel(subj.teacher_name) : teacherTimetableName(subj.teacher_name),
-        line4: subj.room_name || '',
-      } : { line1: cell.note || '—', line2: '' }
-    }
-    if (request !== gridRequest.current) return
-    setError('')
-    setGridData(data)
-    setLoadedContext(`class:${yearId}:${semester}:${classroomId}`)
-    setPreviewReady(true)
-  }, [classroomId, yearId, semester,fetchClassScheduleGrid,fetchClassScheduleSubjects])
-
-  const loadTeachingGrid = useCallback(async () => {
-    const request = ++gridRequest.current
-    const grid = await fetchTeachingScheduleGrid(teacherId, yearId, Number(semester))
-
-    const data: Record<string, { line1: string; line2: string; line3?: string; line4?: string }> = {}
-    for (const [key, cell] of Object.entries(grid as Record<string, { room_line: string; subject_line: string }>)) {
-      data[key] = teachingLines(cell.room_line, cell.subject_line)
-    }
-    if (request !== gridRequest.current) return
-    setError('')
-    setGridData(data)
-    setLoadedContext(`teaching:${yearId}:${semester}:${teacherId}`)
-    setPreviewReady(true)
-  }, [teacherId, yearId, semester,fetchTeachingScheduleGrid])
+  const loadPreview = useCallback(async () => {
+    const id=exportType==='class'?classroomId:teacherId
+    if(!id)return
+    const request=++gridRequest.current
+    try{
+      const grids=await fetchSchedulePdfGrids(yearId,Number(semester),exportType,[id])
+      if(request!==gridRequest.current)return
+      setError('');setGridData(grids[id]||{});setLoadedContext(`${exportType}:${yearId}:${semester}:${id}`);setPreviewReady(true)
+    }catch(error){if(request!==gridRequest.current)return;setPreviewReady(false);setError(error instanceof Error?error.message:'โหลดตารางไม่สำเร็จ')}
+  },[exportType,classroomId,teacherId,yearId,semester,fetchSchedulePdfGrids])
 
   const invalidateGridRequest = useCallback(() => { ++gridRequest.current }, [])
   useEffect(() => { void Promise.resolve().then(init) }, [init])
@@ -308,10 +270,9 @@ export default function ScheduleExportPage() {
 
   useEffect(() => {
     if (!yearId) return
-    if (exportType === 'class' && classroomId) void Promise.resolve().then(loadClassGrid).catch(() => setError('โหลดตารางไม่สำเร็จ'))
-    else if (exportType === 'teaching' && teacherId) void Promise.resolve().then(loadTeachingGrid).catch(() => setError('โหลดตารางไม่สำเร็จ'))
+    void Promise.resolve().then(loadPreview)
     return invalidateGridRequest
-  }, [yearId, exportType, classroomId, teacherId, loadClassGrid, loadTeachingGrid, invalidateGridRequest])
+  }, [yearId, exportType, classroomId, teacherId, loadPreview, invalidateGridRequest])
 
   useEffect(() => {
     if (!printMode.current || !previewReady || loadedContext !== currentContext) return
@@ -428,9 +389,7 @@ export default function ScheduleExportPage() {
             <h1>พิมพ์ตาราง</h1>
             <p>เลือกห้องหรือครู แล้วส่งออก PDF พร้อมหัวกระดาษโรงเรียน</p>
           </div>
-          <button type="button" className="sched-export-btn" disabled={!pdfReady} onClick={exportPdf}>
-            บันทึก PDF {exportType === 'class' ? `${classIds.length} ห้อง` : `${teacherIds.length} คน`}
-          </button>
+
         </div>
 
         <div className="sched-export-type" role="group" aria-label="ประเภทตาราง">
@@ -469,25 +428,7 @@ export default function ScheduleExportPage() {
             </div>
             <p id="schedule-print-date-note" className="sched-export-note">{printDate ? `${formatThaiDate(printDate)} · ใช้กับทุกหน้าที่เลือก` : 'เลือกวันที่ก่อนบันทึก PDF'}</p>
           </div>
-          {exportType === 'class' ? (
-            <div className="sched-export-field">
-              <label htmlFor="schedule-preview-room">ดูตัวอย่างห้อง</label>
-              <select id="schedule-preview-room" value={classroomId} onChange={e => setClassroomId(e.target.value)}>
-                {classrooms.filter(c => classIds.includes(c.id)).map(c => (
-                  <option key={c.id} value={c.id}>{c.label}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="sched-export-field">
-              <label htmlFor="schedule-preview-teacher">ดูตัวอย่างครู</label>
-              <select id="schedule-preview-teacher" value={teacherId} onChange={e => setTeacherId(e.target.value)}>
-                {teachers.filter(t => teacherIds.includes(t.id)).map(t => (
-                  <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+
         </div>
 
         <section className="sched-export-picks-card">
@@ -528,9 +469,29 @@ export default function ScheduleExportPage() {
           )}
         </section>
 
+        <div className="sched-export-download" aria-label="บันทึกตารางที่เลือก"><div><strong>เลือกแล้ว {selectedCount} {exportType==='class'?'ห้อง':'คน'}</strong><small>PDF รวมรายการที่เลือก · วันที่ใต้ลายเซ็น {formatThaiDate(printDate)}</small></div><button type="button" className="sched-export-btn" disabled={!pdfReady} onClick={exportPdf}>บันทึก PDF {exportType==='class'?`${classIds.length} ห้อง`:`${teacherIds.length} คน`}</button></div>
         {error && <div className="sched-export-error" role="alert">{error}</div>}
 
-        {loadedContext !== currentContext ? <p className="sched-export-note">กำลังโหลดตาราง...</p> : <div className="sched-export-preview">
+        <div className="sched-export-preview-options">          {exportType === 'class' ? (
+            <div className="sched-export-field">
+              <label htmlFor="schedule-preview-room">ดูตัวอย่างห้อง</label>
+              <select id="schedule-preview-room" value={classroomId} onChange={e => setClassroomId(e.target.value)}>
+                {classrooms.filter(c => classIds.includes(c.id)).map(c => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="sched-export-field">
+              <label htmlFor="schedule-preview-teacher">ดูตัวอย่างครู</label>
+              <select id="schedule-preview-teacher" value={teacherId} onChange={e => setTeacherId(e.target.value)}>
+                {teachers.filter(t => teacherIds.includes(t.id)).map(t => (
+                  <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>
+                ))}
+              </select>
+            </div>
+          )}</div>
+        {!selectedCount ? <p className="sched-export-note">เลือกห้องหรือครูด้านบนเพื่อดูตัวอย่างและบันทึก PDF</p> : loadedContext !== currentContext ? <p className="sched-export-note">กำลังโหลดตาราง...</p> : <div className="sched-export-preview">
           <header className="sched-print-head">
             <div className="sched-print-logo">
               {schoolLogoUrl ? (
