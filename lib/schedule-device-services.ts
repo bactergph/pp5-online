@@ -23,6 +23,7 @@ import { verifyCompleteSchedule } from './schedule-verification'
 import { applySchedulePlaceChange } from './schedule-places'
 import { prepareSubjectDetails } from './schedule-subject-details'
 import { planScheduleClear, scheduleClearRooms } from './schedule-clear'
+import {activityLockCells} from './schedule-lock-state'
 
 type Options = { read:()=>LocalScheduleBundle; write:(bundle:LocalScheduleBundle)=>Promise<boolean>; onComputing?:(controller:AbortController|null)=>void; teacherLimit?:number|(()=>number) }
 type Plan = LocalScheduleBundle['terms'][1]
@@ -346,7 +347,8 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     fetchTeacherAvailability:async(year,term=1)=>{
       const current=plan(year,term),data=preparation(year,term),busy=busyCells(current),quotas=new Map<string,{id:string;teacherId:string;label:string;activity:boolean;target:number;used:number}>()
       for(const lesson of data.lessons)for(const teacherId of lessonTeachers(lesson))for(const part of teachingQuotaParts(lesson)){const id=part.id,key=id+':'+teacherId,used=allCells(current).filter(cell=>lessonId(cell)===lesson.id&&(part.cell?part.cell===`${cell.day}:${cell.period}`:!lesson.jointTeachingCells?.[`${cell.day}:${cell.period}`])).length,old=quotas.get(key);if(old){old.used=Math.max(old.used,used);old.target=Math.max(old.target,part.count);old.label+=' / '+lesson.label}else quotas.set(key,{id,teacherId,label:lesson.label,activity:!!lesson.activity,target:part.count,used})}
-      return {teachers:current.teachers,blocks:current.blocks,supported:true,lessons:data.lessons.filter(lesson=>!lesson.activity).map(lesson=>({id:lesson.id,teacherId:lesson.teacherId,classroomId:lesson.classroomId,label:lesson.label})),slots:allCells(current).map(cell=>({classroomId:cell.classroomId,day:cell.day,period:cell.period,lessonId:lessonId(cell),locked:!!cell.locked})),busy,quotas:[...quotas.values()]}
+      const activityCells=new Map(activityLockCells(data.plan.activityGroups||[],data.lessons,data.slots).map(cell=>[`${cell.classroomId}:${cell.day}:${cell.period}`,cell]))
+      return {teachers:current.teachers,blocks:current.blocks,substituteReservations:data.substituteReservations,supported:true,lessons:data.lessons.filter(lesson=>!lesson.activity).map(lesson=>({id:lesson.id,teacherId:lesson.teacherId,classroomId:lesson.classroomId,label:lesson.label})),slots:allCells(current).map(cell=>({classroomId:cell.classroomId,day:cell.day,period:cell.period,lessonId:lessonId(cell),locked:!!cell.locked})),busy:busy.map(row=>{const activity=activityCells.get(`${row.classroomId}:${row.day}:${row.period}`);return {...row,activity:!!activity,activityFixed:!!activity?.fixed}}),quotas:[...quotas.values()]}
     },
     fetchTeachingScheduleGrid:async(teacher,year,term=1)=>scheduleTeachingView(deviceDisplaySchedule(plan(year,term)),teacher),
     getTeacherConflictAt:async(year,teacher,day,period,ignore,term=1)=>{const current=plan(year,term),rooms=[...new Set(busyCells(current).filter(cell=>cell.teacherId===teacher&&cell.day===day&&cell.period===period&&cell.classroomId!==ignore).map(cell=>current.rooms.find(room=>room.id===cell.classroomId)?.label||''))];return {busy:rooms.length>0,rooms}},

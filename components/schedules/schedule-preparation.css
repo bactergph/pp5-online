@@ -353,6 +353,18 @@
 .schedule-prep .prep-lock-grid small{color:#64748b;font-size:11px;font-weight:600}
 .schedule-prep .prep-lock-grid button[aria-pressed=true] small{color:#174f95}
 .schedule-prep .prep-lock-grid button.is-free-lock{background:#f4f8fd;border-style:dashed;border-color:#1373d9;color:#174f95}
+.schedule-prep .prep-lock-grid button.is-activity,.schedule-prep .prep-lock-grid button.is-activity[aria-pressed=true]{background:#d1fae5;border:2px solid #059669;color:#064e3b;box-shadow:inset 4px 0 #059669}
+.schedule-prep .prep-lock-grid button.is-activity small{color:#065f46}
+.schedule-prep .prep-lock-grid button.is-substitute{background:#f3e8ff;border-color:#a855f7;color:#6b21a8}
+.schedule-prep .prep-lock-grid button.is-substitute small{color:#7e22ce}
+.schedule-prep .prep-lock-activity-note{background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46}
+.schedule-prep .prep-lock-substitute-note{background:#faf5ff;border:1px solid #d8b4fe;color:#6b21a8}
+.availability-cell.is-activity{background:#d1fae5!important;border:2px solid #059669!important;color:#064e3b!important;box-shadow:inset 4px 0 #059669}
+.availability-substitute-note,.availability-substitute-tag{padding:8px 10px;border-radius:8px;background:#f3e8ff;color:#6b21a8;font-size:12px;line-height:1.7}
+.availability-substitute-note a{font-weight:700;text-decoration:underline}
+.availability-cell.is-substitute{background:#faf5ff!important;border-color:#c084fc!important;color:#6b21a8!important}
+.prep-lock-legend{display:flex;flex-wrap:wrap;gap:8px 16px;color:#52647c;font-size:12px;line-height:1.7}
+.prep-lock-legend span:first-child{color:#065f46}.prep-lock-legend span:last-child{color:#7e22ce}
 .schedule-prep .prep-lock-picks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:320px;overflow:auto}
 .schedule-prep .prep-lock-picks button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;height:auto;min-height:72px;padding:10px 12px;border:1px solid #d5e3f5;border-radius:12px;background:#fff;text-align:left}
 .schedule-prep .prep-lock-picks button[aria-pressed=true]{background:#eff6ff;border-color:#1373d9;box-shadow:inset 0 0 0 1px #1373d9}

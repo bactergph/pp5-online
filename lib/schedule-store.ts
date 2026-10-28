@@ -17,7 +17,7 @@ export async function loadScheduleConstraints(schoolId: string, yearId: string, 
   const [times, blocks, substitutes] = await Promise.all([
     db.from('school_period_times').select('period').eq('school_id',schoolId).eq('is_break',false),
     db.from('schedule_teacher_blocks').select('teacher_id,day_of_week,period').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',semester),
-    readAll(db.from('schedule_substitute_entries').select('id,substitute_teacher_id,period,schedule_substitute_days!inner(day_of_week)')
+    readAll(db.from('schedule_substitute_entries').select('id,substitute_teacher_id,period,schedule_substitute_days!inner(day_of_week,date)')
       .eq('schedule_substitute_days.school_id',schoolId).eq('schedule_substitute_days.academic_year_id',yearId)
       .eq('schedule_substitute_days.semester',semester).not('substitute_teacher_id','is',null).order('id')),
   ])
@@ -25,9 +25,10 @@ export async function loadScheduleConstraints(schoolId: string, yearId: string, 
   if (blocks.error && !['42P01','PGRST205'].includes(blocks.error.code)) throw new Error(blocks.error.message)
   if (substitutes.error) throw new Error('โหลดคาบสอนแทนเพื่อตรวจครูชนไม่สำเร็จ: '+substitutes.error.message)
   const periodCount = times.data?.length || 6
-  const substituteBlocks=(substitutes.data||[]).flatMap(row=>{const day=Array.isArray(row.schedule_substitute_days)?row.schedule_substitute_days[0]:row.schedule_substitute_days;return row.substitute_teacher_id&&day?[{teacherId:row.substitute_teacher_id,day:day.day_of_week,period:row.period}]:[]})
-  const all=[...(blocks.data || []).map(b=>({teacherId:b.teacher_id,day:b.day_of_week,period:b.period})),...substituteBlocks]
-  return {periodCount, blocks: [...new Map(all.map(block=>[`${block.teacherId}:${block.day}:${block.period}`,block])).values()], blocksSupported:!blocks.error}
+  const substituteReservations=(substitutes.data||[]).flatMap(row=>{const day=Array.isArray(row.schedule_substitute_days)?row.schedule_substitute_days[0]:row.schedule_substitute_days;return row.substitute_teacher_id&&day?[{teacherId:row.substitute_teacher_id,day:day.day_of_week,period:row.period,date:day.date||''}]:[]})
+  const manualBlocks=(blocks.data || []).map(b=>({teacherId:b.teacher_id,day:b.day_of_week,period:b.period}))
+  const all=[...manualBlocks,...substituteReservations.map(({teacherId,day,period})=>({teacherId,day,period}))]
+  return {periodCount, blocks: [...new Map(all.map(block=>[`${block.teacherId}:${block.day}:${block.period}`,block])).values()], manualBlocks,substituteReservations,blocksSupported:!blocks.error}
 }
 import { LEARNER_DEVELOPMENT_KEY, LEARNER_DEVELOPMENT_NAME } from '@/lib/schedule-activity'
 

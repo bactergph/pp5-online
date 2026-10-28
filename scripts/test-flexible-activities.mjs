@@ -2,10 +2,11 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import assert from 'node:assert/strict'
+import pathModule from 'node:path'
 
 function load(path,deps={}) {
   const exports={}
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:name=>deps[name]||(name==='./schedule-joint-teaching'?load('lib/schedule-joint-teaching.ts'):{})})
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:name=>deps[name]||(name.startsWith('.')?load(pathModule.resolve(pathModule.dirname(path),name+'.ts')):{})})
   return exports
 }
 const solver=load('lib/schedule-solver.ts')

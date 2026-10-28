@@ -36,7 +36,7 @@ export async function preparation(year:string,term:number){
  }),plan)
  // Keep all existing slots/lessons for outside-scope teacher and venue conflicts,
  // but only offer non-kindergarten classrooms for import, activities and generation.
- return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
+ return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,manualBlocks:constraints.manualBlocks,substituteReservations:constraints.substituteReservations,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
 /** Labels and grid configuration from the exact snapshot used to calculate a draft. */
@@ -177,7 +177,7 @@ function input(data:Preparation,scope:string[],clear:boolean,year:string){
   const lesson=byId.get(id)
   if(lesson&&(scope.includes(lesson.classroomId)||item.group.mode==='joint'&&item.group.roomIds.some(roomId=>scope.includes(roomId))))autoIds.add(id)
  }
- const retained=[...data.slots.filter(s=>!pinned.has(cellKey(s))&&(s.locked||!clear||s.activity_id&&!autoIds.has(lessonKey(s)||'')||!scope.includes(s.classroom_id)&&!autoIds.has(lessonKey(s)||''))),...placed.slots]
+ const retained=[...data.slots.filter(s=>!pinned.has(cellKey(s))&&(s.locked||!autoIds.has(lessonKey(s)||'')&&(!clear||!!s.activity_id||!scope.includes(s.classroom_id)))),...placed.slots]
  const lessons=allLessons.map(l=>{const active=scope.includes(l.classroomId)&&!l.activity||autoIds.has(l.id);const count=active?(placed.flexible.get(l.id)?.count??l.count):retained.filter(s=>lessonKey(s)===l.id).length;return {...l,...placed.patch.get(l.id),count,fixedOnly:!active,pattern:active?(l.activity?Array(count).fill(1):l.pattern):undefined,teacherOptional:!active||l.teacherOptional,preferMorning:active&&!l.activity&&lessonPrefersMorning(l)}})
  return {retained,lessons,offerings:placed.offerings,unlock:placed.unlock}
 }

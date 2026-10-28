@@ -133,7 +133,7 @@ export function prepareDeviceDraft(data: DeviceSnapshot, year: string, scope: st
     const lesson = allLessons.find(row => row.id === id)
     if (lesson && (scope.includes(lesson.classroomId) || item.joint && item.roomIds.some(room => scope.includes(room)))) autoIds.add(id)
   }
-  const retained = [...data.slots.filter(slot => !pinned.has(cellKey(slot)) && (slot.locked || !clear || slot.activity_id && !autoIds.has(lessonKey(slot) || '') || !scope.includes(slot.classroom_id) && !autoIds.has(lessonKey(slot) || ''))), ...placed.slots]
+  const retained = [...data.slots.filter(slot => !pinned.has(cellKey(slot)) && (slot.locked || !autoIds.has(lessonKey(slot) || '') && (!clear || !!slot.activity_id || !scope.includes(slot.classroom_id)))), ...placed.slots]
   const lessons = allLessons.map(lesson => {
     const active = scope.includes(lesson.classroomId) && !lesson.activity || autoIds.has(lesson.id)
     const count = active ? (placed.flexible.get(lesson.id)?.count ?? lesson.count) : retained.filter(slot => lessonKey(slot) === lesson.id).length
