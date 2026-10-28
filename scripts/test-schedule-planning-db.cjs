@@ -334,6 +334,8 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   console.log('PASS: 089 repeatable; atomic joint locks, synchronized classrooms, stale snapshots and implicit unlock rejection, explicit unlock/clear, service-only RPC');
 
   const sessionsSql=fs.readFileSync('supabase/migrations/090_schedule_joint_sessions.sql','utf8');await db.exec(sessionsSql);await db.exec(sessionsSql);
+  const batchCommitSql=fs.readFileSync('supabase/migrations/095_schedule_batch_commit_performance.sql','utf8');await db.exec(batchCommitSql);await db.exec(batchCommitSql);
+  assert.equal((await db.query("select has_function_privilege('authenticated','schedule_joint_event_map(jsonb)','execute') allowed")).rows[0].allowed,false);
   const reservation={...jointRows[0],class_subject_id:null,day_of_week:5,period:6,locked:true,note:'keep reservation'};
   await saveJointRows([],[reservation]);
   const sessionConfig={...jointConfig,rules:{...jointConfig.rules,[id(9051)]:{...jointConfig.rules[id(9051)],count:3,pattern:[1,1,1]}},teachingGroups:[{id:id(9080),lessonIds:[id(9050),id(9051)],cells:[{day:4,period:1},{day:4,period:2}]}]};
@@ -399,6 +401,24 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   const movedActivity={...addedTeacher,cells:[{day:4,period:2},{day:5,period:2}]};await assert.rejects(editActivity(movedActivity),/ต้องยืนยันแทนที่คาบล็อก/);assert.deepEqual(await editRaw(),beforeEdit);await editActivity(movedActivity,true);assert.ok((await editRaw()).some(row=>row.class_subject_id===id(9307)&&row.locked),'Moving activity never deletes unrelated ordinary course cells');
   assert.equal((await db.query("select has_function_privilege('authenticated','save_schedule_activity_team(uuid,uuid,integer,text,jsonb,boolean,boolean,boolean)','execute') allowed")).rows[0].allowed,false);
   console.log('PASS: reproduced production locked-subject deletion; 093 repeatable, teacher-only flexible activities retain all slots/locks, extra teacher appears immediately, null-safe move preserves unrelated subjects, stale/blocked teacher rollback and service-only RPC');
+  // Full-school draft commits use the same CAS/validation path as the browser.
+  await db.query('insert into academic_years(id,school_id) values($1,$2)',[id(9500),id(1)]);
+  const largeRows=[],largeRules={};
+  for(let room=0;room<63;room++){
+    const roomId=id(9600+room),teacher=id(9700+room);await db.query('insert into classrooms(id,school_id,academic_year_id) values($1,$2,$3)',[roomId,id(1),id(9500)]);await db.query('insert into users(id,school_id) values($1,$2)',[teacher,id(1)]);
+    for(let period=1;period<=7;period++){const lessonId=id(10000+room*7+period);await db.query('insert into class_subjects(id,classroom_id,academic_year_id,subject_id,teacher_id) values($1,$2,$3,$4,$5)',[lessonId,roomId,id(9500),id(40),teacher]);largeRules[lessonId]={count:5,pattern:[1,1,1,1,1],roomId:null,morning:false,spread:true};for(let day=1;day<=5;day++)largeRows.push({classroom_id:roomId,academic_year_id:id(9500),day_of_week:day,period,class_subject_id:lessonId,activity_id:null,note:null,locked:false})}
+  }
+  await db.query('insert into schedule_plans(school_id,academic_year_id,semester,config) values($1,$2,2,$3::jsonb)',[id(1),id(9500),JSON.stringify({days:[1,2,3,4,5],rooms:[],rules:largeRules,activityGroups:[],teachingGroups:[]})]);
+  const largeHash=async()=>(await db.query('select schedule_snapshot($1,$2,2) h',[id(1),id(9500)])).rows[0].h;
+  const largeDraft=id(9900);await db.query("insert into schedule_drafts(id,school_id,academic_year_id,semester,actor_id,base_hash,before_rows,after_rows) values($1,$2,$3,2,$4,$5,'[]'::jsonb,$6::jsonb)",[largeDraft,id(1),id(9500),id(30),await largeHash(),JSON.stringify(largeRows)]);
+  const started=performance.now();await confirm(largeDraft);const commitMs=Math.round(performance.now()-started);assert.equal((await db.query('select count(*)::int n from class_schedule_slots where academic_year_id=$1',[id(9500)])).rows[0].n,2205);assert.equal((await confirm(largeDraft)).rows[0].done,false,'Double click is idempotent');
+  const largeSave=(before,after)=>db.query('select save_school_schedule_term($1,$2,$3::jsonb,$4::jsonb,false,2)',[id(1),id(9500),JSON.stringify(before),JSON.stringify(after)]);
+  await largeSave(largeRows,largeRows);
+  await assert.rejects(largeSave([],largeRows),/ตารางถูกแก้ไข/);
+  await assert.rejects(largeSave(largeRows,[...largeRows,{...largeRows[0],class_subject_id:null}]),/คาบซ้ำ/);
+  await assert.rejects(largeSave(largeRows,largeRows.map((row,index)=>index===0?{...row,class_subject_id:id(19000)}:row)),/ไม่ถูกต้อง/);
+  const stableLarge=await largeHash();await db.query('insert into class_subjects(id,classroom_id,academic_year_id,subject_id,teacher_id) values($1,$2,$3,$4,$5)',[id(11000),id(9601),id(9500),id(40),id(9700)]);const largeConflictingRows=largeRows.map((row,index)=>index===35?{...row,class_subject_id:id(11000)}:row);await assert.rejects(largeSave(largeRows,largeConflictingRows),/ชนกัน/);assert.ok(stableLarge!==await largeHash());
+  console.log('PASS: 095 repeatable; full 63-room / 2205-cell draft commit '+commitMs+' ms; idempotence, stale snapshots, duplicates, foreign offerings, teacher collisions, shared sessions, venues, locks, patterns and extra activity teachers preserved');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})

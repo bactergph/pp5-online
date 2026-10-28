@@ -5,6 +5,7 @@ import { solveBlockRepair } from './schedule-block-repair'
 import type {JointTeachingGroup} from './schedule-joint-teaching'
 import {solveJointTeachingSchedule} from './schedule-joint-solver'
 import { subjectDayIssue } from './schedule-subject-days'
+import { spreadSubjectFamilies } from './schedule-subject-families'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
 export type TimePreference = 'any' | 'morning' | 'afternoon'
@@ -601,7 +602,7 @@ export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   const started=Date.now(),requestedTimeLimitMs=timeLimitMs
   let repairNodes=0
   const finish=(result:PlannedScheduleResult):PlannedScheduleResult=>({...result,
-    assignments:result.status==='complete'?balanceTeacherSessions(lessons,fixed,improveMorningAssignments(lessons,fixed,result.assignments,plan.days,times,unavailable,plan),plan.days,times,unavailable,plan):result.assignments,
+    assignments:result.status==='complete'?spreadSubjectFamilies(lessons,fixed,balanceTeacherSessions(lessons,fixed,improveMorningAssignments(lessons,fixed,result.assignments,plan.days,times,unavailable,plan),plan.days,times,unavailable,plan),plan.days,times,unavailable,plan):result.assignments,
     nodes:result.nodes+repairNodes,elapsedMs:Date.now()-started,timeLimitMs:requestedTimeLimitMs})
   const issues=checkPlanning(lessons,fixed,plan.days,times,unavailable)
   if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,assignments:[] as PlannedSlot[],issues,nodes:0}
