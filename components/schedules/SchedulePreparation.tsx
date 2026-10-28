@@ -85,7 +85,7 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  const latest=await fetchPreparation(yearId,semester);if(latest.error||!latest.data)throw Error(latest.error||'โหลดคาบที่ล็อกไม่สำเร็จ');const fresh=latest.data
  // Joint lock edits change both slots and grouping metadata. Keep unsaved plan
  // settings while refreshing the saved groups and their teacher-load keys.
- setData(current=>current?{...current,hash:fresh.hash,slots:fresh.slots,blocks:fresh.blocks,lessons:fresh.lessons,plan:{...current.plan,teachingGroups:fresh.plan.teachingGroups}}:fresh);setDraft(null);setIssues(null)
+ setData(current=>current?{...current,hash:fresh.hash,slots:fresh.slots,blocks:fresh.blocks,manualBlocks:fresh.manualBlocks,substituteReservations:fresh.substituteReservations,lessons:fresh.lessons,plan:{...current.plan,teachingGroups:fresh.plan.teachingGroups}}:fresh);setDraft(null);setIssues(null)
  }
  async function saveWorkload(change:WorkloadChange){
  if(!data||runLock.current)throw Error('กำลังบันทึก กรุณารอให้เสร็จก่อน')
