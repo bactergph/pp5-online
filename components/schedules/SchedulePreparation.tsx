@@ -12,6 +12,7 @@ import ActivityTeamEditor from './ActivityTeamEditor'
 import WorkloadEditor, { type WorkloadChange } from './WorkloadEditor'
 import ClassroomLevelEditor from './ClassroomLevelEditor'
 import SchedulePeriodBudget from './SchedulePeriodBudget'
+import { confirmScheduleClear } from './confirmScheduleClear'
 import {schedulePeriodBudget} from '@/lib/schedule-period-budget'
 import './schedule-preparation.css'
 import { FiArrowLeft, FiArrowRight, FiCheck, FiZap } from 'react-icons/fi'
@@ -19,7 +20,7 @@ const titles=['วันและเวลา','กำหนดชั้น','�
 const descriptions=['ตั้งวันเรียนและตรวจช่วงพัก','เลือกชั้นที่เปิดสอน จำนวนห้อง และชื่อห้อง','เลือกครูหรือวางรายชื่อจาก Excel','กำหนดกิจกรรม ชั้น/ห้อง และทีมครูก่อนรายวิชา','เตรียมรายวิชาให้พอดีกับคาบที่เหลือหลังหักกิจกรรม','กำหนดครู คาบต่อสัปดาห์ และล็อกคาบที่ไม่ให้จัดตารางย้าย','ตรวจข้อขัดแย้งและสร้างฉบับร่าง']
 const alert=Swal.mixin({confirmButtonColor:'#245bdb',cancelButtonText:'ยกเลิก',confirmButtonText:'ยืนยัน',reverseButtons:true})
 export default function SchedulePreparation({yearId,semester,initialRooms,initialStep=1,onChanged,onUnsavedChange,onBusyChange}:{yearId:string;semester:number;initialRooms?:string[];initialStep?:number;onChanged:()=>void;onUnsavedChange?:(value:boolean)=>void;onBusyChange?:(value:boolean)=>void}){
-  const { clearScheduleScope, fetchPreparation, saveScheduleTeachingAssignments, savePreparation, checkPreparation, createScheduleDraft, confirmScheduleDraft, discardScheduleDraft, savePeriodTimes, removeScheduleSubjectCell, editTeacherScheduleCell, saveClassScheduleCell, setTeacherAvailabilityBlock, toggleScheduleCellLock, setJointTeachingScheduleCell } = useScheduleOperations()
+  const { clearScheduleScope, previewScheduleClear, fetchPreparation, saveScheduleTeachingAssignments, savePreparation, checkPreparation, createScheduleDraft, confirmScheduleDraft, discardScheduleDraft, savePeriodTimes, removeScheduleSubjectCell, editTeacherScheduleCell, saveClassScheduleCell, setTeacherAvailabilityBlock, toggleScheduleCellLock, setJointTeachingScheduleCell } = useScheduleOperations()
 
  const [data,setData]=useState<Preparation|null>(null),[step,setStep]=useState(initialStep),[error,setError]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[message,setMessage]=useState('')
  const [rooms,setRooms]=useState<string[]>(initialRooms||[]),[clear,setClear]=useState(false),[issues,setIssues]=useState<PlanningIssue[]|null>(null),[draft,setDraft]=useState<ScheduleDraftView|null>(null)
@@ -59,12 +60,19 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  const result=await createScheduleDraft(yearId,semester,rooms,clear);if(result.error||!result.data)throw Error(result.error||'สร้างฉบับร่างไม่สำเร็จ');setDraft(result.data);setIssues(result.data.issues)
  },'กำลังตรวจคาบเรียนและจัดตารางอัตโนมัติ…')
  }
- async function clearPlacedSubjects(){
+ async function clearPlacedSubjects(kind:'subjects'|'activities'='subjects'){
   if(!data||busy||runLock.current||!rooms.length)return
   if(dirty||timeDirty||hasUnsavedInput){setError('บันทึกการตั้งค่าที่กำลังแก้ก่อนล้างคาบรายวิชา');return}
   const selected=[...rooms],names=selected.map(id=>{const room=data.classrooms.find(room=>room.id===id);return room?room.level+'/'+room.name:id})
-  if(!(await alert.fire({icon:'warning',title:'ล้างเฉพาะคาบรายวิชา?',text:names.slice(0,6).join(' · ')+(names.length>6?' และอีก '+(names.length-6)+' ห้อง':'')+' · นำเฉพาะรายวิชาที่ไม่ล็อกออก เก็บกิจกรรม คาบล็อก และคาบว่างครูทั้งหมด รายวิชาและภาระสอนยังอยู่',showCancelButton:true,confirmButtonText:'ยืนยันล้างรายวิชา',confirmButtonColor:'#be3340'})).isConfirmed)return
-  await run(async()=>{const result=await clearScheduleScope(yearId,semester,'selected',selected[0],selected);if(result.error)throw Error(result.error);await reload();setMessage('ล้างคาบรายวิชาแล้ว '+(result.data?.removed||0)+' คาบ · เก็บกิจกรรมและคาบล็อกไว้ครบ')},'กำลังล้างเฉพาะคาบรายวิชา…')
+  await run(async()=>{
+    const preview=await previewScheduleClear(yearId,semester,'selected',selected[0],selected,{kind,includeLocked:true})
+    if(preview.error||!preview.data)throw Error(preview.error||'ตรวจข้อมูลก่อนล้างไม่สำเร็จ')
+    const choice=await confirmScheduleClear(kind,names.slice(0,6).join(' · ')+(names.length>6?' และอีก '+(names.length-6)+' ห้อง':''),preview.data)
+    if(!choice)return
+    const result=await clearScheduleScope(yearId,semester,'selected',selected[0],selected,{kind,...choice,expectedHash:preview.data.hash})
+    if(result.error)throw Error(result.error)
+    await reload();setMessage('ล้างคาบ'+(kind==='activities'?'กิจกรรม':'รายวิชา')+'แล้ว '+(result.data?.removed||0)+' คาบ'+(choice.includeLocked?' · รวมคาบที่ล็อก':' · เก็บคาบที่ล็อกไว้'))
+  },'กำลังตรวจและล้างคาบตาราง…')
  }
  async function reload(){const r=await fetchPreparation(yearId,semester);if(r.error||!r.data)throw Error(r.error||'โหลดไม่สำเร็จ');setData(r.data);setDirty(false);setTimeDirty(false);setTeacherAssignments({});setIssues(null);setDraft(null);onChanged()}
  async function saveTeachingGroups(groups:NonNullable<Preparation['plan']['teachingGroups']>){
@@ -131,6 +139,7 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  {step===7&&<ScheduleReviewStep data={data} rooms={rooms} clear={clear} issues={issues} draft={draft} blocked={hasUnsavedInput} workingLabel={busy?workingLabel:undefined}
  onRooms={next=>{setRooms(next);setIssues(null);setDraft(null)}} onClear={next=>{setClear(next);setIssues(null);setDraft(null)}} onFix={setStep}
  onClearSubjects={()=>void clearPlacedSubjects()}
+ onClearActivities={()=>void clearPlacedSubjects('activities')}
  onCheck={()=>void run(async()=>{setDraft(null);setIssues(null);if(dirty||timeDirty)await save();const result=await checkPreparation(yearId,semester,rooms,clear);if(result.error)throw Error(result.error);setIssues(result.data)},'กำลังตรวจความพร้อม…')}
  onGenerate={()=>void generateDraft()}
  onConfirm={()=>void run(async()=>{if(!draft?.id||dirty||timeDirty||hasUnsavedInput)throw Error('ข้อมูลเตรียมตารางเปลี่ยนแล้ว กรุณาบันทึกและสร้างฉบับร่างใหม่');const locked=draft.locked||0;const outside=draft.affectedRooms||[];if(!(await alert.fire({icon:'question',title:'ยืนยันใช้ฉบับร่างนี้?',text:`บันทึกตารางเป็นชุดเดียว${outside.length?` รวมกิจกรรมร่วมในห้องนอกขอบเขตอีก ${outside.length} ห้อง`:''}${locked?` และแทนที่คาบล็อก ${locked} ช่อง`:''} ระบบจะตรวจว่าข้อมูลล่าสุดยังตรงกับฉบับร่าง`,showCancelButton:true})).isConfirmed)return;const result=await confirmScheduleDraft(draft.id,locked>0);if(result.error)throw Error(result.error);setDraft(null);await reload();setMessage('บันทึกใช้ตารางแล้ว');await alert.fire({icon:'success',title:'บันทึกตารางแล้ว',text:result.data?.committed?'ตารางเรียนและตารางครูใช้ข้อมูลชุดนี้แล้ว':'ฉบับร่างนี้ถูกบันทึกใช้ไปแล้ว ไม่มีการบันทึกซ้ำ'})},'กำลังตรวจข้อมูลล่าสุดและบันทึกตาราง…')}

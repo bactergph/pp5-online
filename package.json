@@ -30,7 +30,8 @@
     "test:schedule-central-subjects": "node scripts/test-schedule-central-subjects.cjs && node scripts/test-schedule-central-subjects-ui.mjs",
     "test:schedule-real-worker": "node scripts/test-schedule-real-worker.mjs",
     "test:schedule-subject-details": "node scripts/test-schedule-subject-details.cjs && node scripts/test-schedule-subject-details-ui.mjs",
-    "test:schedule-substitutes": "node scripts/test-substitute-availability.cjs && node scripts/test-substitute-services.cjs && node scripts/test-substitute-roster.cjs && node scripts/test-substitute-history.cjs && node scripts/test-substitute-history-server.cjs && node scripts/test-substitute-roster-db.cjs && node scripts/test-substitute-roster-ui.mjs && node scripts/test-free-schedule-ui.mjs --substitute-only"
+    "test:schedule-substitutes": "node scripts/test-substitute-availability.cjs && node scripts/test-substitute-services.cjs && node scripts/test-substitute-roster.cjs && node scripts/test-substitute-history.cjs && node scripts/test-substitute-history-server.cjs && node scripts/test-substitute-roster-db.cjs && node scripts/test-substitute-roster-ui.mjs && node scripts/test-free-schedule-ui.mjs --substitute-only",
+    "test:schedule-clear": "node scripts/test-schedule-clear.cjs && node scripts/test-free-schedule-ui.mjs --clear-only"
   },
   "dependencies": {
     "@sparticuz/chromium": "^149.0.0",

@@ -18,6 +18,7 @@ import ScheduleQuotaPanel from '@/components/schedules/ScheduleQuotaPanel'
 import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 import SchedulePreparation from './SchedulePreparation'
 import SchedulePlacesEntry from './SchedulePlacesEntry'
+import { confirmScheduleClear } from './confirmScheduleClear'
 import { FiZap, FiGrid, FiUsers, FiCalendar, FiDownload, FiMapPin, FiSettings } from 'react-icons/fi'
 import './schedule-workspace.css'
 
@@ -53,7 +54,9 @@ function setAlert(alert: {type:'success'|'error';title:string;message?:string}) 
 }
 
 export default function ClassScheduleEntry({ mode, initialWorkspace='class', initialStep=1, onSchoolSettings, schoolSettingsDisabled }: Props) {
-  const { fetchScheduleDays, fetchClassScheduleBundle, fetchSchedulePdfGrids, fetchScheduleExportContext, fetchScheduleClassrooms, fetchScheduleInit, saveClassScheduleCell, moveClassScheduleCell, clearScheduleScope, copyClassSchedule, fetchPeriodTimes, fetchScheduleQuotas, getTeacherConflictAt, toggleScheduleCellLock } = useScheduleOperations()
+  const { fetchScheduleDays, fetchClassScheduleBundle, fetchSchedulePdfGrids, fetchScheduleExportContext, fetchScheduleClassrooms, fetchScheduleInit, saveClassScheduleCell, moveClassScheduleCell, clearScheduleScope, previewScheduleClear, copyClassSchedule, fetchPeriodTimes, fetchScheduleQuotas, getTeacherConflictAt, toggleScheduleCellLock } = useScheduleOperations()
+  const [toolsClearScope,setToolsClearScope]=useState<'room'|'level'|'school'>('room')
+  const [clearRefresh,setClearRefresh]=useState(0)
 
   const [dragLesson,setDragLesson] = useState<{id:string;from?:{day:number;period:number};context:string}|null>(null)
   const [dropKey,setDropKey] = useState<string|null>(null)
@@ -362,16 +365,19 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
 
   function handleAutoSchedule(whole=false) { setPreparationRooms(whole?undefined:[selectedClass]);setPreparationStep(7);setWorkspace('prepare') }
 
-  async function handleClear(scope:'room'|'level'|'school'='room') {
-    if(blocked)return
+  async function handleClear(scope:'room'|'level'|'school'='room',kind:'subjects'|'activities'='subjects') {
+    if(blocked||preparationBusy||preparationDirty)return
     const label=scope==='school'?'ทั้งโรงเรียน':scope==='level'?`ระดับชั้น ${selectedClassroom?.level}`:`ห้อง ${selectedClassroom?.label}`
-    const roomCount=scope==='school'?classrooms.length:scope==='level'?classrooms.filter(c=>c.level===selectedClassroom?.level).length:1
-    if (!(await scheduleAlert.fire({icon:'warning',title:`ล้างตาราง${label}?`,text:`ปีการศึกษา ${selectedYearObj?.year_be} ภาคเรียนที่ ${semester} · ${roomCount} ห้อง นำเฉพาะคาบรายวิชาที่ไม่ล็อกออก เก็บกิจกรรม คาบล็อก และคาบว่างครูทั้งหมด`,showCancelButton:true,confirmButtonText:'ยืนยันล้างตาราง',confirmButtonColor:'#be3340'})).isConfirmed) return
     setBusyAction('clear')
     try {
-      const result = await clearScheduleScope(selectedYear,semester,scope,selectedClass)
+      const preview=await previewScheduleClear(selectedYear,semester,scope,selectedClass,undefined,{kind,includeLocked:true})
+      if(preview.error||!preview.data)throw Error(preview.error||'ตรวจข้อมูลก่อนล้างไม่สำเร็จ')
+      const choice=await confirmScheduleClear(kind,`${label} · ปี ${selectedYearObj?.year_be} ภาคเรียน ${semester}`,preview.data)
+      if(!choice)return
+      const result = await clearScheduleScope(selectedYear,semester,scope,selectedClass,undefined,{kind,...choice,expectedHash:preview.data.hash})
       if (result.error) throw new Error(result.error)
       await loadGrid()
+      setClearRefresh(value=>value+1)
       setAlert({ type: 'success', title: 'ล้างตารางสำเร็จ',message:`${label} · ${result.data?.rooms} ห้อง · นำออก ${result.data?.removed} คาบ` })
     } catch (e) {
       setAlert({ type: 'error', title: 'ล้างไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
@@ -440,6 +446,19 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
           <button type="button" aria-pressed={workspace==='places'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>setWorkspace('places'))}><FiMapPin aria-hidden="true"/>สถานที่</button>
           <button type="button" className="schedule-wizard-entry" aria-pressed={workspace==='prepare'} disabled={savingKey||!!busyAction||preparationBusy} onClick={()=>void leavePreparation(()=>{setPreparationRooms(undefined);setPreparationStep(1);setWorkspace('prepare')})}><FiZap aria-hidden="true"/>จัดตาราง</button>
           {onSchoolSettings && <button type="button" className="device-school-settings-button" disabled={schoolSettingsDisabled||!!savingKey||!!busyAction||preparationBusy||preparationDirty} onClick={onSchoolSettings}><FiSettings aria-hidden="true" />ตั้งค่าเบื้องต้น</button>}
+          <details className="schedule-workspace-tools" onClick={event=>{if((event.target as HTMLElement).closest('button'))event.currentTarget.removeAttribute('open')}}>
+            <summary aria-label="เครื่องมือเพิ่มเติม">เครื่องมือเพิ่มเติม ▾</summary>
+            <div className="schedule-tools-menu">
+              {workspace==='class'&&<button type="button" disabled={blocked||preparationBusy||preparationDirty||copySourceClassrooms.length===0} onClick={()=>{setCopyFromClass(copySourceClassrooms[0]?.id||'');setCopyOpen(true)}}>คัดลอกจากห้องอื่น</button>}
+              <label htmlFor="schedule-clear-scope">ขอบเขตการล้างตาราง</label>
+              <select id="schedule-clear-scope" value={toolsClearScope} disabled={blocked||preparationBusy||preparationDirty} onChange={event=>setToolsClearScope(event.target.value as 'room'|'level'|'school')}>
+                <option value="room">ห้อง {selectedClassroom?.label}</option><option value="level">ระดับชั้น {selectedClassroom?.level}</option><option value="school">ทั้งโรงเรียน</option>
+              </select>
+              <button type="button" className="schedule-tools-danger" disabled={blocked||preparationBusy||preparationDirty} onClick={()=>void handleClear(toolsClearScope,'subjects')}>ล้างคาบรายวิชา…</button>
+              <button type="button" className="schedule-tools-danger" disabled={blocked||preparationBusy||preparationDirty} onClick={()=>void handleClear(toolsClearScope,'activities')}>ล้างคาบกิจกรรม…</button>
+              <p>{preparationDirty?'บันทึกข้อมูลหรือปิดฉบับร่างก่อนใช้เครื่องมือล้างตาราง':'แยกล้างวิชาและกิจกรรมได้ ระบบจะถามยืนยันและให้เลือกว่าจะรวมคาบล็อกด้วยไหม'}</p>
+            </div>
+          </details>
         </nav>}
         <div className={`schedule-workspace-filters grid gap-4 border bg-white ${workspace!=='class'?'sm:grid-cols-2':'sm:grid-cols-3'}`}>
           <div className="grid min-w-0 gap-2 [&_label]:text-xs [&_label]:font-semibold [&_label]:text-stone-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border [&_select]:border-stone-300 [&_select]:bg-white [&_select]:px-3 [&_select]:text-sm">
@@ -478,24 +497,16 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
                 <span>{savingKey ? 'กำลังบันทึก...' : busyAction ? 'กำลังดำเนินการ...' : gridLoading ? 'กำลังโหลด...' : blocked ? 'รอข้อมูลตาราง' : 'บันทึกอัตโนมัติ'}</span>
               </p>
             </div>
-            <details className="relative">
-              <summary className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50">เครื่องมือเพิ่มเติม ▾</summary>
-              <div className="schedule-tools-menu absolute right-0 top-14 z-20 grid w-80 gap-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xl [&_label]:flex [&_label]:gap-2 [&_label]:text-sm [&_input]:accent-blue-700 [&_p]:text-xs [&_p]:leading-6 [&_p]:text-stone-500">
-                <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50" disabled={blocked || copySourceClassrooms.length === 0} onClick={() => { setCopyFromClass(copySourceClassrooms[0]?.id || ''); setCopyOpen(true) }}>คัดลอกจากห้องอื่น</button>
-                <button type="button" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-50 border-rose-200! text-rose-700! hover:bg-rose-50!" disabled={blocked} onClick={()=>handleClear('room')}>{busyAction === 'clear' ? 'กำลังล้าง...' : 'ล้างเฉพาะรายวิชาของห้องนี้'}</button>
-                <button type="button" className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={blocked} onClick={()=>handleClear('level')}>ล้างเฉพาะรายวิชาทั้งระดับชั้น {selectedClassroom?.level}</button>
-                <button type="button" className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 disabled:opacity-50" disabled={blocked} onClick={()=>handleClear('school')}>ล้างเฉพาะรายวิชาทั้งโรงเรียน</button>
-              </div>
-            </details>
+
           </div>
         )}
 
 
-        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} initialRooms={preparationRooms} initialStep={workspace==='activity'?4:preparationStep} onChanged={refreshPreparation} />}
+        {(workspace==='activity'||workspace==='prepare')&&selectedYear&&<SchedulePreparation key={`${selectedYear}:${semester}:${workspace}:${clearRefresh}`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} initialRooms={preparationRooms} initialStep={workspace==='activity'?4:preparationStep} onChanged={refreshPreparation} />}
         {workspace==='places'&&selectedYear&&isManage&&canEdit&&<SchedulePlacesEntry key={`${selectedYear}:${semester}:places`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} onChanged={()=>void loadGrid()} />}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
-        {(workspace==='activity'||workspace==='prepare'||workspace==='places')?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
+        {(workspace==='activity'||workspace==='prepare'||workspace==='places')?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${clearRefresh}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">ไม่พบห้องเรียนในปีการศึกษานี้</div>
         ) : subjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">

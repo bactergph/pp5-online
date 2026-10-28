@@ -4,6 +4,7 @@ type Actions = typeof import('@/app/schedules/actions') & typeof import('@/app/s
 export type ScheduleOperations = Omit<Pick<Actions,
   'checkPreparation' |
   'clearScheduleScope' |
+  'previewScheduleClear' |
   'clearTeacherSchedule' |
   'confirmScheduleDraft' |
   'copyClassSchedule' |

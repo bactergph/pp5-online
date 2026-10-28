@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),path=require('path'),ts=require('typescr
 const planning=load('lib/schedule-planning.ts'),verify=load('lib/schedule-verification.ts').verifyCompleteSchedule;
 const times=[1,2,0,3,4].map((period,i)=>({period,start_time:String(8+i).padStart(2,'0')+':00',end_time:String(9+i).padStart(2,'0')+':00',is_break:!period,sort_order:i+1})),days=[1,2,3,4,5],row=(id,day,period,room='A')=>({lessonId:id,classroomId:room,day,period}),lesson=(id,teacher='T',extra={})=>({id,label:id,name:'วิชา '+id,teacherId:teacher,classroomId:'A',count:1,pattern:[1],...extra});
 const counts=(lessons,rows,teacher='T')=>days.map(day=>new Set(rows.filter(row=>{const l=lessons.find(l=>l.id===row.lessonId);return row.day===day&&(l?.teacherIds||[l?.teacherId]).includes(teacher)}).map(row=>row.period)).size);
-function balance(lessons,fixed,rows,blocks=[],prefs={}){const original=JSON.stringify({lessons,fixed,rows,blocks}),beforeAm=rows.filter(row=>row.period<3).length;const result=planning.balanceTeacherSessions(lessons,fixed,rows,days,times,blocks,prefs,'daily');assert.equal(JSON.stringify({lessons,fixed,rows,blocks}),original);assert.equal(result.length,rows.length);assert.equal(result.filter(row=>row.period<3).length,beforeAm);assert.equal(verify(lessons,[...fixed,...result],days,times,blocks).length,0);return result}
+function balance(lessons,fixed,rows,blocks=[],prefs={}){const original=JSON.stringify({lessons,fixed,rows,blocks});const result=planning.balanceTeacherSessions(lessons,fixed,rows,days,times,blocks,prefs,'daily');assert.equal(JSON.stringify({lessons,fixed,rows,blocks}),original);assert.equal(result.length,rows.length);assert.equal(verify(lessons,[...fixed,...result],days,times,blocks).length,0);return result}
 let lessons=Array.from({length:10},(_,i)=>lesson('S'+i)),rows=lessons.map((l,i)=>row(l.id,Math.floor(i/4)+1,i%4+1));let result=balance(lessons,[],rows);assert.deepEqual(counts(lessons,result),[2,2,2,2,2]);
 const doubleLessons=Array.from({length:5},(_,i)=>lesson('D'+i,'T',{count:2,pattern:[2]})),doubleRows=doubleLessons.flatMap((l,i)=>[1,2].map(n=>row(l.id,Math.floor(i/2)+1,i%2===0?n:n+2)));result=balance(doubleLessons,[],doubleRows);assert.deepEqual(counts(doubleLessons,result),[2,2,2,2,2]);
 const blocked=[1,2,3,4].map(period=>({teacherId:'T',day:1,period}));lessons=lessons.slice(0,6);rows=lessons.map((l,i)=>row(l.id,Math.floor(i/4)+2,i%4+1));result=balance(lessons,[],rows,blocked);const available=counts(lessons,result).slice(1);assert.equal(counts(lessons,result)[0],0);assert.ok(Math.max(...available)-Math.min(...available)<=1);
@@ -12,6 +12,16 @@ const explicit=Array.from({length:6},(_,i)=>lesson('E'+i,'T',{timePreference:'mo
 const fullLessons=[...Array.from({length:4},(_,i)=>lesson('a'+i,'A')),...Array.from({length:4},(_,i)=>lesson('b'+i,'B'))],full=fullLessons.map((l,i)=>row(l.id,i<4?1:2,i%4+1));result=balance(fullLessons,[],full);assert.ok(Math.max(...counts(fullLessons,result,'A'))<4);assert.ok(Math.max(...counts(fullLessons,result,'B'))<4);
 const solved=planning.solvePlannedSchedule(fullLessons,[],{...planning.emptyPlan(),days},times,[]);assert.equal(solved.status,'complete');assert.equal(verify(fullLessons,solved.assignments,days,times,[]).length,0);
 console.log('PASS: daily teacher loads 4/4/2/0/0 → 2/2/2/2/2, whole doubles, fully blocked day, pinned co-teacher activities, shared teaching, venues, explicit sessions, per-teacher nonregression, immutable input and real solver integration');
+
+// Small-school teacher: 15 teaching periods, five free periods, with eight
+// retained morning lessons. Reaching one free period/day requires a session move.
+const smallLessons=Array.from({length:15},(_,i)=>lesson('small'+i));
+const smallAll=smallLessons.map((l,i)=>row(l.id,Math.floor(i/4)+1,i%4+1));
+const smallFixed=smallAll.filter(r=>r.period<=2),smallMovable=smallAll.filter(r=>r.period>2);
+const smallBalanced=balance(smallLessons,smallFixed,smallMovable);
+assert.deepEqual(counts(smallLessons,[...smallFixed,...smallBalanced]),[3,3,3,3,3]);
+assert.ok(smallBalanced.some(r=>r.day===5&&r.period<=2),'Must cross sessions to spread the fifth free period');
+console.log('PASS: small-school teacher with five weekly free periods now gets one per day despite eight retained morning periods');
 
 const fixture=JSON.parse(fs.readFileSync('scripts/fixtures/schedule-dense-school-63.json','utf8'));
 const largeLessons=fixture.lessons.map(([room,teacher,count,priority,fixed,activity,group,spread,venue],index)=>({id:'L'+index,classroomId:'R'+room,teacherId:teacher<0?null:'T'+teacher,count,label:'L'+index,name:priority===2?'คณิตศาสตร์':priority===1?'ภาษาอังกฤษ':'ศิลปะ',fixedOnly:!!fixed,activity:!!activity,teacherOptional:!!activity,activityGroupId:group<0?undefined:'G'+group,spread:!!spread,roomId:venue<0?null:'V'+venue,pattern:fixed?undefined:Array(count).fill(1)}));

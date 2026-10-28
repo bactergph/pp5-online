@@ -6,7 +6,8 @@ import { createServerClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/audit'
 import { SCHEDULE_EDIT_ROLES } from '@/lib/schedules'
 import { lessonColumns, lessonKey, loadSchedule, loadScheduleConstraints, persistSchedule, requireScheduleClass, type ScheduleSlot } from '@/lib/schedule-store'
-import { generate, confirmDraft, cancelDraft } from '@/lib/schedule-preparation'
+import { generate, confirmDraft, cancelDraft, preparation } from '@/lib/schedule-preparation'
+import { planScheduleClear, scheduleClearRooms, type ScheduleClearOptions, type ScheduleClearScope } from './schedule-clear'
 import { LEARNER_DEVELOPMENT_KEY } from '@/lib/schedule-activity'
 
 async function context(yearId: string, semester = 1) {
@@ -131,7 +132,22 @@ export async function clearRoom(roomId: string, year: string, semester = 1) {
   await commit(ctx, year, ctx.data.slots.filter(s => s.classroom_id !== roomId || s.locked || !s.class_subject_id || !!s.activity_id), 'ล้างคาบรายวิชาที่ไม่ล็อกในห้องเรียน')
   return { ok: true }
 }
-export async function clearScope(year:string,semester:number,scope:'room'|'level'|'school'|'selected',roomId:string,selectedRooms?:string[]) {
+export async function previewClearScope(year:string,semester:number,scope:ScheduleClearScope,roomId:string,selectedRooms?:string[],options:ScheduleClearOptions={}) {
+  const data=await preparation(year,semester),rooms=scheduleClearRooms(data,scope,roomId,selectedRooms),result=planScheduleClear(data,rooms,options)
+  return {hash:data.hash,rooms:result.rooms,removed:result.removed,unlockedRemoved:planScheduleClear(data,rooms,{...options,includeLocked:false}).removed,locked:result.locked,extraRooms:result.extraRooms.map(id=>{const room=data.classrooms.find(item=>item.id===id);return room?`${room.level}/${room.name||room.room}`:id})}
+}
+export async function clearScope(year:string,semester:number,scope:ScheduleClearScope,roomId:string,selectedRooms?:string[],options?:ScheduleClearOptions) {
+  if(options){
+    const session=await getSession()
+    if(!session?.schoolId||session.mustChangePassword||!SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number]))throw Error('ไม่มีสิทธิ์แก้ไขตารางเรียน')
+    const data=await preparation(year,semester)
+    if(!options.expectedHash||data.hash!==options.expectedHash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาเปิดหน้าต่างล้างตารางและตรวจสอบใหม่')
+    const result=planScheduleClear(data,scheduleClearRooms(data,scope,roomId,selectedRooms),options)
+    const saved=await createServerClient().rpc('clear_schedule_placements',{p_school:session.schoolId,p_year:year,p_term:semester,p_hash:data.hash,p_rows:result.rows,p_config:result.plan,p_unlock:options.includeLocked===true})
+    if(saved.error)throw Error(saved.error.code==='PGRST202'?'กรุณาติดตั้งฐานข้อมูล 097_schedule_clear_placements.sql ก่อนใช้งาน':saved.error.message)
+    await logActivity({actor:session,schoolId:session.schoolId,action:'update',module:'schedules',targetType:'class_schedule',description:`ล้างคาบ${options.kind==='activities'?'กิจกรรม':'รายวิชา'} ${result.rooms} ห้อง · ${result.removed} คาบ · รวมคาบล็อก ${options.includeLocked===true?'ใช่':'ไม่'}`})
+    return {rooms:result.rooms,removed:result.removed}
+  }
   const ctx=await context(year,semester)
   if(!['room','level','school','selected'].includes(scope))throw new Error('ขอบเขตการล้างไม่ถูกต้อง')
   const room=requireScheduleClass(ctx.data,roomId)

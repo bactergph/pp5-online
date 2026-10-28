@@ -306,8 +306,11 @@ export async function clearClassSchedule(classroomId: string, yearId: string, se
   const mod = await import('./extended-actions')
   return scheduleResult(() => mod.clearClassSchedule(classroomId, yearId, semester))
 }
-export async function clearScheduleScope(yearId:string,semester:number,scope:'room'|'level'|'school'|'selected',classroomId:string,selectedRooms?:string[]) {
-  return scheduleResult(()=>scheduleOps.clearScope(yearId,semester,scope,classroomId,selectedRooms))
+export async function previewScheduleClear(yearId:string,semester:number,scope:'room'|'level'|'school'|'selected',classroomId:string,selectedRooms?:string[],options?:import('@/lib/schedule-clear').ScheduleClearOptions) {
+  return scheduleResult(()=>scheduleOps.previewClearScope(yearId,semester,scope,classroomId,selectedRooms,options))
+}
+export async function clearScheduleScope(yearId:string,semester:number,scope:'room'|'level'|'school'|'selected',classroomId:string,selectedRooms?:string[],options?:import('@/lib/schedule-clear').ScheduleClearOptions) {
+  return scheduleResult(()=>scheduleOps.clearScope(yearId,semester,scope,classroomId,selectedRooms,options))
 }
 export async function clearTeacherSchedule(yearId:string,semester:number,teacherId:string) {
   return scheduleResult(()=>scheduleOps.clearTeacher(yearId,semester,teacherId))

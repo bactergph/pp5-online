@@ -22,6 +22,7 @@ import { SCHEDULE_DAYS } from './schedules'
 import { verifyCompleteSchedule } from './schedule-verification'
 import { applySchedulePlaceChange } from './schedule-places'
 import { prepareSubjectDetails } from './schedule-subject-details'
+import { planScheduleClear, scheduleClearRooms } from './schedule-clear'
 
 type Options = { read:()=>LocalScheduleBundle; write:(bundle:LocalScheduleBundle)=>Promise<boolean>; onComputing?:(controller:AbortController|null)=>void; teacherLimit?:number|(()=>number) }
 type Plan = LocalScheduleBundle['terms'][1]
@@ -298,7 +299,21 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     toggleScheduleCellLock:(room,year,day,period,term=1)=>outcome(()=>mutate(year,term,async current=>{const next=lockDeviceCell(current,room,day,period);await put(year,term,next);return {locked:!!next.timetable.find(cell=>cell.classroomId===room&&cell.day===day&&cell.period===period)?.locked}})),
     setTeacherAvailabilityBlock:(year,term,teacher,day,period,blocked)=>outcome(()=>mutate(year,term,async current=>{await put(year,term,blockDeviceTeacher(current,teacher,day,period,blocked));return {ok:true}})),
     editTeacherScheduleCell:(year,term,teacher,room,day,period,expected,lesson)=>outcome(()=>mutate(year,term,async current=>{if(lesson&&!current.subjects.some(subject=>subject.id===lesson&&subject.teacherId===teacher&&subject.roomId===room))throw Error('วิชานี้ไม่ใช่ภาระของครูที่เลือก');await put(year,term,changeDeviceCell(current,room,day,period,lesson,expected));return {ok:true}})),
-    clearScheduleScope:(year,term,kind,room,selectedRooms)=>outcome(()=>mutate(year,term,async current=>{
+    previewScheduleClear:async(year,term,scope,room,selectedRooms,options)=>outcome(async()=>{
+      const data=devicePreparation(plan(year,term)),result=planScheduleClear(data,scheduleClearRooms(data,scope,room,selectedRooms),options)
+      return {hash:data.hash,rooms:result.rooms,removed:result.removed,unlockedRemoved:planScheduleClear(data,scheduleClearRooms(data,scope,room,selectedRooms),{...options,includeLocked:false}).removed,locked:result.locked,extraRooms:result.extraRooms.map(id=>plan(year,term).rooms.find(room=>room.id===id)?.label||id)}
+    }),
+    clearScheduleScope:(year,term,kind,room,selectedRooms,options)=>outcome(()=>mutate(year,term,async current=>{
+      if(options){
+        if(!options.expectedHash)throw Error('กรุณาตรวจสอบข้อมูลก่อนล้างตาราง')
+        stale(current,options.expectedHash)
+        const data=devicePreparation(current),result=planScheduleClear(data,scheduleClearRooms(data,kind,room,selectedRooms),options),retained=new Set(result.rows.map(row=>`${row.classroom_id}:${row.day_of_week}:${row.period}`))
+        const isActivity=options.kind==='activities'
+        const timetable=current.timetable.filter(cell=>retained.has(`${cell.classroomId}:${cell.day}:${cell.period}`))
+        const activities=isActivity?current.activities.map(activity=>({...activity,cells:result.plan.activityGroups?.find(group=>group.id===activity.id)?.cells||activity.cells})):current.activities
+        await put(year,term,{...current,timetable,activities,teachingGroups:result.plan.teachingGroups})
+        return {rooms:result.rooms,removed:result.removed}
+      }
       if(!['room','level','school','selected'].includes(kind))throw Error('ขอบเขตการล้างไม่ถูกต้อง')
       const selected=current.rooms.find(item=>item.id===room);if(!selected)throw Error('เลือกห้องเรียนก่อนล้างตาราง')
       if(kind==='selected'&&(!Array.isArray(selectedRooms)||!selectedRooms.length||selectedRooms.some(id=>!current.rooms.some(room=>room.id===id))))throw Error('เลือกห้องเรียนในเครื่องนี้ก่อนล้างรายวิชา')

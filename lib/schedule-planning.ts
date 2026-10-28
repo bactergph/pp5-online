@@ -238,8 +238,10 @@ export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot
     const table=daily.get(teacher);if(!table)return 0
     const delta=new Map<number,number>()
     for(const [row,next]of changes||[]){if(!lessonTeachers(byId.get(row.lessonId!)!).includes(teacher))continue;delta.set(row.day,(delta.get(row.day)||0)-1);delta.set(next.day,(delta.get(next.day)||0)+1)}
-    let total=0;for(const [day,stat]of table)total+=(stat.used+(delta.get(day)||0)-stat.target)**2
-    return total
+    let total=0,free=0;for(const [day,stat]of table){total+=(stat.used+(delta.get(day)||0)-stat.target)**2;free+=stat.capacity-stat.used}
+    // A teacher with only five free periods needs the daily spread more than a
+    // lightly loaded teacher with many free periods. Keep the objective per person.
+    return total*(1+2/(1+Math.max(0,free)/Math.max(1,days.length)))
   }
   // Equalise free capacity, counting simultaneous shared lessons once. Locked
   // absences are unavailable, and pinned teaching caps how many periods can be
@@ -288,7 +290,7 @@ export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot
       let best:{changes:Map<PlannedSlot,{day:number;period:number}>;deltas:Map<string,number>}|undefined,bestDelta=-1e-6
       for(const destination of choices.get(length)||[]){
         if(Date.now()>=deadline)return result
-        if((objective==='daily'?(destination.day===from.day||morningPeriods.has(destination.periods[0])!==am):morningPeriods.has(destination.periods[0])===am)||destination.periods.some(period=>retained.has(key(from.classroomId,destination.day,period))))continue
+        if((objective==='daily'?destination.day===from.day:morningPeriods.has(destination.periods[0])===am)||destination.periods.some(period=>retained.has(key(from.classroomId,destination.day,period))))continue
         const targets=destination.periods.map(period=>occupied.get(key(from.classroomId,destination.day,period))),present=targets.filter((row):row is PlannedSlot=>!!row),other=present.length?owner.get(present[0]):undefined
         if(present.length&&(!other||other===unit||present.length!==length||other.rows.length!==length||present.some(row=>owner.get(row)!==other)))continue
         if(from.day!==destination.day&&((dayCount.get(key(unit.lesson.id,destination.day,0))||0)>0||other&&(dayCount.get(key(other.lesson.id,from.day,0))||0)>0))continue
@@ -301,6 +303,13 @@ export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot
         for(const [row,next]of changes){const lesson=byId.get(row.lessonId!)!,change=Number(morningPeriods.has(next.period))-Number(morningPeriods.has(row.period)),request=lesson.timePreference==='morning'||!lesson.timePreference&&lesson.morning?true:lesson.timePreference==='afternoon'?false:undefined;if(request!==undefined){const before=morningPeriods.has(row.period)===request,after=morningPeriods.has(next.period)===request;if(before&&!after)violatesRequest=true;if(!before&&after)explicitGain++}delta-=lessonMorningPriority(lesson)*change;for(const teacher of lessonTeachers(lesson))deltas.set(teacher,(deltas.get(teacher)||0)+change)}
         let balanceDelta=0
         for(const [teacher,change]of deltas){const difference=objective==='daily'?dailyScore(teacher,changes)-dailyScore(teacher):penalty(teacher,stats.get(teacher)!.morning+change)-penalty(teacher);if(objective==='daily'&&difference>1e-6)violatesRequest=true;balanceDelta+=difference}
+        if(objective==='daily'){
+          if(balanceDelta>=-1e-6)continue
+          // Daily free time can cross sessions when no explicit session is lost.
+          // Allow up to two periods around the weekly morning target, while
+          // never turning a mixed teacher timetable into all mornings/afternoons.
+          for(const [teacher,change]of deltas){const stat=stats.get(teacher)!,next=stat.morning+change;if(Math.abs(next-stat.target)>Math.max(2,Math.abs(stat.morning-stat.target))+1e-6||stat.total>=4&&stat.morning>0&&stat.morning<stat.total&&(next===0||next===stat.total))violatesRequest=true;delta+=.15*(penalty(teacher,next)-penalty(teacher))}
+        }
         if(objective==='daily'&&worsensFamilies(changes))continue
         if(violatesRequest||balanceDelta>1e-6&&!explicitGain)continue
         delta+=balanceDelta-explicitGain*1000

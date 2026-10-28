@@ -419,6 +419,26 @@ const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`
   await assert.rejects(largeSave(largeRows,largeRows.map((row,index)=>index===0?{...row,class_subject_id:id(19000)}:row)),/ไม่ถูกต้อง/);
   const stableLarge=await largeHash();await db.query('insert into class_subjects(id,classroom_id,academic_year_id,subject_id,teacher_id) values($1,$2,$3,$4,$5)',[id(11000),id(9601),id(9500),id(40),id(9700)]);const largeConflictingRows=largeRows.map((row,index)=>index===35?{...row,class_subject_id:id(11000)}:row);await assert.rejects(largeSave(largeRows,largeConflictingRows),/ชนกัน/);assert.ok(stableLarge!==await largeHash());
   console.log('PASS: 095 repeatable; full 63-room / 2205-cell draft commit '+commitMs+' ms; idempotence, stale snapshots, duplicates, foreign offerings, teacher collisions, shared sessions, venues, locks, patterns and extra activity teachers preserved');
+
+  const clearSql=fs.readFileSync('supabase/migrations/097_schedule_clear_placements.sql','utf8');await db.exec(clearSql);await db.exec(clearSql);
+  const clearRows=(year,hash,rows,cfg,unlock=false)=>db.query('select clear_schedule_placements($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7)',[id(1),year,year===id(9500)?2:1,hash,JSON.stringify(rows),JSON.stringify(cfg),unlock]);
+  const largeConfig=(await db.query('select config from schedule_plans where school_id=$1 and academic_year_id=$2 and semester=2',[id(1),id(9500)])).rows[0].config;
+  await db.query('update class_schedule_slots set locked=true where classroom_id=$1 and academic_year_id=$2 and semester=2 and day_of_week=1 and period=1',[id(9600),id(9500)]);
+  const clearBase=await largeHash(),clearedLarge=largeRows.slice(1);
+  await assert.rejects(clearRows(id(9500),clearBase,clearedLarge,largeConfig),/ติ๊กยืนยัน/);assert.equal(await largeHash(),clearBase);
+  await assert.rejects(clearRows(id(9500),'stale',clearedLarge,largeConfig,true),/เปลี่ยน/);
+  await assert.rejects(clearRows(id(9500),clearBase,clearedLarge,{...largeConfig,days:[1]},true),/ต้องไม่เปลี่ยน/);
+  const clearStart=performance.now();await clearRows(id(9500),clearBase,clearedLarge,largeConfig,true);const clearMs=Math.round(performance.now()-clearStart);
+  assert.equal((await db.query('select count(*)::int n from class_schedule_slots where academic_year_id=$1 and semester=2',[id(9500)])).rows[0].n,2204);
+  await assert.rejects(clearRows(id(9500),clearBase,clearedLarge,largeConfig,true),/เปลี่ยน/);
+  const addRow={...largeRows[0],locked:false};await assert.rejects(clearRows(id(9500),await largeHash(),[...clearedLarge,addRow],largeConfig,true),/เพิ่มหรือแก้ไข/);
+  const currentActivityConfig=(await db.query('select config from schedule_plans where school_id=$1 and academic_year_id=$2 and semester=1',[id(1),id(9300)])).rows[0].config;
+  const beforeActivityClear=await editRaw(),afterActivityClear=beforeActivityClear.filter(row=>!row.activity_id);
+  await clearRows(id(9300),await activityEditHash(),afterActivityClear,{...currentActivityConfig,activityGroups:currentActivityConfig.activityGroups.map(group=>({...group,cells:[]}))},true);
+  assert.deepEqual(await editRaw(),afterActivityClear,'Activity clearing preserves all subjects and their locks');
+  const keptActivity=(await db.query('select config from schedule_plans where school_id=$1 and academic_year_id=$2 and semester=1',[id(1),id(9300)])).rows[0].config.activityGroups[0];assert.equal(keptActivity.cells.length,0);assert.deepEqual(keptActivity.teacherIds,currentActivityConfig.activityGroups[0].teacherIds);
+  assert.equal((await db.query("select has_function_privilege('authenticated','clear_schedule_placements(uuid,uuid,integer,text,jsonb,jsonb,boolean)','execute') allowed")).rows[0].allowed,false);
+  console.log('PASS: 097 repeatable; 63-room clear '+clearMs+' ms; locked opt-in, stale/invalid rollback, deletion-only RPC, atomic activity-time clearing, preserved subjects/teams and service-role-only access');
   await db.close()
   console.log('PASS: atomic schedules, no-teacher activity, one-period quota, substitute batch rollback and stale protection')
 })().catch(e=>{console.error(e);process.exitCode=1})
