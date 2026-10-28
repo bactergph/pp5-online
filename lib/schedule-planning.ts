@@ -5,7 +5,7 @@ import { solveBlockRepair } from './schedule-block-repair'
 import type {JointTeachingGroup} from './schedule-joint-teaching'
 import {solveJointTeachingSchedule} from './schedule-joint-solver'
 import { subjectDayIssue } from './schedule-subject-days'
-import { spreadSubjectFamilies } from './schedule-subject-families'
+import { spreadSubjectFamilies, subjectFamily } from './schedule-subject-families'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
 export type TimePreference = 'any' | 'morning' | 'afternoon'
@@ -201,19 +201,22 @@ export function improveMorningAssignments(lessons:PlannedLesson[],fixed:PlannedS
   }
   return result
 }
-/** Improve teacher session equity after feasibility is established. Whole subject
+/** Improve teacher session or daily free-period equity after feasibility is established. Whole subject
  * blocks move together; retained cells, activities, shared teaching and explicit
  * morning/afternoon requests never move to the other session. This bounded
- * pass never reruns search. */
-export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot[],assignments:PlannedSlot[],days:number[],times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],preferences:{reduceGaps?:boolean;maxContinuous?:number}={}) {
+ * pass never reruns search. Daily moves stay within the original session and
+ * cannot worsen another teacher's daily balance or subject-family distribution. */
+export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot[],assignments:PlannedSlot[],days:number[],times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],preferences:{reduceGaps?:boolean;maxContinuous?:number}={},objective:'session'|'daily'='session') {
   const result=assignments.map(row=>({...row})),byId=new Map(lessons.map(lesson=>[lesson.id,lesson]))
   const key=(id:string,day:number,period:number)=>id+':'+day+':'+period
   const occupied=new Map<string,PlannedSlot>(),teacherBusy=new Map<string,Set<PlannedSlot>>(),venueBusy=new Map<string,Set<PlannedSlot>>(),dayCount=new Map<string,number>()
   const blocked=new Set(unavailable.map(row=>key(row.teacherId,row.day,row.period))),retained=new Set(fixed.map(row=>key(row.classroomId,row.day,row.period)))
+  const familyDays=new Map<string,Map<string,number>>()
   const register=(row:PlannedSlot,add:boolean)=>{
     const position=key(row.classroomId,row.day,row.period),lesson=row.lessonId?byId.get(row.lessonId):undefined
     if(add)occupied.set(position,row);else occupied.delete(position)
     if(!lesson)return
+    if(objective==='daily'){const family=subjectFamily(lesson);if(family){const k=key(row.classroomId+':'+family,row.day,0),counts=familyDays.get(k)||new Map<string,number>(),n=(counts.get(lesson.id)||0)+(add?1:-1);if(n)counts.set(lesson.id,n);else counts.delete(lesson.id);familyDays.set(k,counts)}}
     const day=key(lesson.id,row.day,0);dayCount.set(day,(dayCount.get(day)||0)+(add?1:-1))
     for(const [map,id]of [...lessonTeachers(lesson).map(id=>[teacherBusy,id]as const),[venueBusy,lesson.roomId]as const])if(id){
       const k=key(id,row.day,row.period),rows=map.get(k)||new Set<PlannedSlot>();if(add)rows.add(row);else rows.delete(row)
@@ -222,7 +225,7 @@ export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot
   }
   for(const row of [...fixed,...result])register(row,true)
   const teaching=times.filter(time=>!time.is_break),morningPeriods=new Set(teaching.filter(time=>isMorningPeriod(time.period,times)).map(time=>time.period))
-  if(!morningPeriods.size||morningPeriods.size===teaching.length)return assignments
+  if(objective==='session'&&(!morningPeriods.size||morningPeriods.size===teaching.length))return assignments
   const stats=new Map<string,{morning:number;total:number;target:number;both:boolean}>()
   for(const teacher of new Set(lessons.flatMap(lessonTeachers))){
     let morning=0,total=0,availableMorning=0,available=0
@@ -230,6 +233,30 @@ export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot
     stats.set(teacher,{morning,total,target:available?total*availableMorning/available:0,both:availableMorning>0&&availableMorning<available})
   }
   const penalty=(teacher:string,morning?:number)=>{const stat=stats.get(teacher)!;if(stat.total<2||!stat.both)return 0;const m=morning??stat.morning;return 8*(m-stat.target)**2/stat.total+(stat.total>=4&&(m===0||m===stat.total)?2:0)}
+  const daily=new Map<string,Map<number,{used:number;capacity:number;target:number}>>()
+  const dailyScore=(teacher:string,changes?:Map<PlannedSlot,{day:number;period:number}>)=>{
+    const table=daily.get(teacher);if(!table)return 0
+    const delta=new Map<number,number>()
+    for(const [row,next]of changes||[]){if(!lessonTeachers(byId.get(row.lessonId!)!).includes(teacher))continue;delta.set(row.day,(delta.get(row.day)||0)-1);delta.set(next.day,(delta.get(next.day)||0)+1)}
+    let total=0;for(const [day,stat]of table)total+=(stat.used+(delta.get(day)||0)-stat.target)**2
+    return total
+  }
+  // Equalise free capacity, counting simultaneous shared lessons once. Locked
+  // absences are unavailable, and pinned teaching caps how many periods can be
+  // free on that day. Water-filling gives a reachable target for uneven days.
+  if(objective==='daily')for(const teacher of stats.keys()){
+    const table=new Map<number,{used:number;capacity:number;target:number}>(),limits=new Map<number,number>();let free=0
+    for(const day of days){let capacity=0,used=0,pinned=0;for(const time of teaching){const cell=key(teacher,day,time.period),rows=[...teacherBusy.get(cell)||[]];if(!blocked.has(cell))capacity++;if(rows.length)used++;if(rows.some(row=>retained.has(key(row.classroomId,row.day,row.period))||(()=>{const lesson=byId.get(row.lessonId!)!;return lesson.activity||lesson.fixedOnly||lesson.activityGroupId||Object.keys(lesson.jointTeachingCells||{}).length})()))pinned++}table.set(day,{used,capacity,target:0});limits.set(day,Math.max(0,capacity-pinned));free+=capacity-used}
+    let low=0,high=teaching.length;for(let i=0;i<32;i++){const middle=(low+high)/2,available=[...limits.values()].reduce((sum,limit)=>sum+Math.min(limit,middle),0);if(available<free)low=middle;else high=middle}
+    for(const [day,stat]of table)stat.target=stat.capacity-Math.min(limits.get(day)!,high)
+    daily.set(teacher,table)
+  }
+  const familyScore=(counts:Map<string,number>)=>{const values=[...counts.values()];let score=0;for(let i=0;i<values.length;i++)for(let j=i+1;j<values.length;j++)if(values[i]===1||values[j]===1)score++;return score}
+  const worsensFamilies=(changes:Map<PlannedSlot,{day:number;period:number}>)=>{
+    const next=new Map<string,Map<string,number>>()
+    for(const [row,target]of changes){const lesson=byId.get(row.lessonId!)!,family=subjectFamily(lesson);if(!family)continue;for(const [day,delta]of [[row.day,-1],[target.day,1]]){const k=key(row.classroomId+':'+family,day,0),counts=next.get(k)||new Map(familyDays.get(k)||[]),n=(counts.get(lesson.id)||0)+delta;if(n)counts.set(lesson.id,n);else counts.delete(lesson.id);next.set(k,counts)}}
+    let delta=0;for(const [k,counts]of next)delta+=familyScore(counts)-familyScore(familyDays.get(k)||new Map());return delta>0
+  }
   type Unit={lesson:PlannedLesson;rows:PlannedSlot[]}
   const grouped=new Map<string,PlannedSlot[]>()
   for(const row of result){const lesson=row.lessonId?byId.get(row.lessonId):undefined;if(!lesson||lesson.activity||lesson.fixedOnly||lesson.activityGroupId||Object.keys(lesson.jointTeachingCells||{}).length)continue;const k=key(lesson.id,row.day,0);grouped.set(k,[...grouped.get(k)||[],row])}
@@ -254,14 +281,14 @@ export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot
   const deadline=Date.now()+200
   for(let pass=0;pass<4;pass++){
     let improved=false
-    units.sort((a,b)=>Math.max(0,...lessonTeachers(b.lesson).map(teacher=>penalty(teacher)))-Math.max(0,...lessonTeachers(a.lesson).map(teacher=>penalty(teacher))))
+    units.sort((a,b)=>Math.max(0,...lessonTeachers(b.lesson).map(teacher=>objective==='daily'?dailyScore(teacher):penalty(teacher)))-Math.max(0,...lessonTeachers(a.lesson).map(teacher=>objective==='daily'?dailyScore(teacher):penalty(teacher))))
     for(const unit of units){
       if(Date.now()>=deadline)return result
       const from=unit.rows[0],am=morningPeriods.has(from.period),length=unit.rows.length
       let best:{changes:Map<PlannedSlot,{day:number;period:number}>;deltas:Map<string,number>}|undefined,bestDelta=-1e-6
       for(const destination of choices.get(length)||[]){
         if(Date.now()>=deadline)return result
-        if(morningPeriods.has(destination.periods[0])===am||destination.periods.some(period=>retained.has(key(from.classroomId,destination.day,period))))continue
+        if((objective==='daily'?(destination.day===from.day||morningPeriods.has(destination.periods[0])!==am):morningPeriods.has(destination.periods[0])===am)||destination.periods.some(period=>retained.has(key(from.classroomId,destination.day,period))))continue
         const targets=destination.periods.map(period=>occupied.get(key(from.classroomId,destination.day,period))),present=targets.filter((row):row is PlannedSlot=>!!row),other=present.length?owner.get(present[0]):undefined
         if(present.length&&(!other||other===unit||present.length!==length||other.rows.length!==length||present.some(row=>owner.get(row)!==other)))continue
         if(from.day!==destination.day&&((dayCount.get(key(unit.lesson.id,destination.day,0))||0)>0||other&&(dayCount.get(key(other.lesson.id,from.day,0))||0)>0))continue
@@ -273,7 +300,8 @@ export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot
         let delta=0,explicitGain=0,violatesRequest=false
         for(const [row,next]of changes){const lesson=byId.get(row.lessonId!)!,change=Number(morningPeriods.has(next.period))-Number(morningPeriods.has(row.period)),request=lesson.timePreference==='morning'||!lesson.timePreference&&lesson.morning?true:lesson.timePreference==='afternoon'?false:undefined;if(request!==undefined){const before=morningPeriods.has(row.period)===request,after=morningPeriods.has(next.period)===request;if(before&&!after)violatesRequest=true;if(!before&&after)explicitGain++}delta-=lessonMorningPriority(lesson)*change;for(const teacher of lessonTeachers(lesson))deltas.set(teacher,(deltas.get(teacher)||0)+change)}
         let balanceDelta=0
-        for(const [teacher,change]of deltas)balanceDelta+=penalty(teacher,stats.get(teacher)!.morning+change)-penalty(teacher)
+        for(const [teacher,change]of deltas){const difference=objective==='daily'?dailyScore(teacher,changes)-dailyScore(teacher):penalty(teacher,stats.get(teacher)!.morning+change)-penalty(teacher);if(objective==='daily'&&difference>1e-6)violatesRequest=true;balanceDelta+=difference}
+        if(objective==='daily'&&worsensFamilies(changes))continue
         if(violatesRequest||balanceDelta>1e-6&&!explicitGain)continue
         delta+=balanceDelta-explicitGain*1000
         if(delta>=bestDelta)continue
@@ -281,7 +309,7 @@ export function balanceTeacherSessions(lessons:PlannedLesson[],fixed:PlannedSlot
         if(preferences.reduceGaps||preferences.maxContinuous)for(const teacher of deltas.keys())for(const day of new Set([from.day,destination.day])){const before=dayPenalty(teacher,day,new Map()),after=dayPenalty(teacher,day,changes);if(preferences.reduceGaps&&after.gaps>before.gaps||preferences.maxContinuous&&Math.max(0,after.longest-preferences.maxContinuous)>Math.max(0,before.longest-preferences.maxContinuous))worsens=true}
         if(!worsens){best={changes,deltas};bestDelta=delta}
       }
-      if(best){for(const row of best.changes.keys())register(row,false);for(const [row,next]of best.changes){row.day=next.day;row.period=next.period}for(const row of best.changes.keys())register(row,true);for(const [teacher,change]of best.deltas)stats.get(teacher)!.morning+=change;improved=true}
+      if(best){if(objective==='daily')for(const [row,next]of best.changes)for(const teacher of lessonTeachers(byId.get(row.lessonId!)!)){const table=daily.get(teacher)!;table.get(row.day)!.used--;table.get(next.day)!.used++}for(const row of best.changes.keys())register(row,false);for(const [row,next]of best.changes){row.day=next.day;row.period=next.period}for(const row of best.changes.keys())register(row,true);for(const [teacher,change]of best.deltas)stats.get(teacher)!.morning+=change;improved=true}
     }
     if(!improved)break
   }
@@ -601,9 +629,16 @@ function solveFlexibleActivities(lessons:PlannedLesson[],fixed:PlannedSlot[],pla
 export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],maxNodes=SCHEDULE_SEARCH_MAX_NODES,timeLimitMs=SCHEDULE_SEARCH_TIME_LIMIT_MS):PlannedScheduleResult{
   const started=Date.now(),requestedTimeLimitMs=timeLimitMs
   let repairNodes=0
-  const finish=(result:PlannedScheduleResult):PlannedScheduleResult=>({...result,
-    assignments:result.status==='complete'?spreadSubjectFamilies(lessons,fixed,balanceTeacherSessions(lessons,fixed,improveMorningAssignments(lessons,fixed,result.assignments,plan.days,times,unavailable,plan),plan.days,times,unavailable,plan),plan.days,times,unavailable,plan):result.assignments,
-    nodes:result.nodes+repairNodes,elapsedMs:Date.now()-started,timeLimitMs:requestedTimeLimitMs})
+  const finish=(result:PlannedScheduleResult):PlannedScheduleResult=>{
+    let assignments=result.assignments
+    if(result.status==='complete'){
+      assignments=improveMorningAssignments(lessons,fixed,assignments,plan.days,times,unavailable,plan)
+      assignments=balanceTeacherSessions(lessons,fixed,assignments,plan.days,times,unavailable,plan)
+      assignments=spreadSubjectFamilies(lessons,fixed,assignments,plan.days,times,unavailable,plan)
+      assignments=balanceTeacherSessions(lessons,fixed,assignments,plan.days,times,unavailable,plan,'daily')
+    }
+    return {...result,assignments,nodes:result.nodes+repairNodes,elapsedMs:Date.now()-started,timeLimitMs:requestedTimeLimitMs}
+  }
   const issues=checkPlanning(lessons,fixed,plan.days,times,unavailable)
   if(issues.some(i=>i.severity==='error'))return {status:'invalid' as const,assignments:[] as PlannedSlot[],issues,nodes:0}
   if(lessons.some(lesson=>!lesson.activity&&(lesson.activityGroupId||Object.keys(lesson.jointTeachingCells||{}).length))){
