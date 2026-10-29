@@ -1,11 +1,11 @@
+import * as substituteDocuments from '@/lib/substitute-documents'
 import 'server-only'
 import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import * as scheduleOps from '@/lib/schedule-operations'
 import { summarizeScheduleWorkload } from '@/lib/schedule-workload'
 import { substituteTimetableForDay, substituteWeekday } from '@/lib/schedule-substitute'
-import {substituteRosterSnapshot, validateSubstituteRoster, validateSubstituteAcknowledgements, type SubstituteRosterEntry, type SubstituteBusy} from '@/lib/substitute-roster'
-import {lessonTeachers} from '@/lib/schedule-activity-teams'
-import {SUBSTITUTE_HISTORY_PAGE_DAYS,pageSubstituteHistory,validateSubstituteHistoryScope,type SubstituteHistoryDay,type SubstituteHistoryPage} from '@/lib/substitute-history'
+import {type SubstituteRosterEntry} from '@/lib/substitute-roster'
+import type {SubstituteHistoryPage} from '@/lib/substitute-history'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
@@ -202,92 +202,9 @@ export async function fetchScheduleExportContext() {
   return { school: school ? { ...school, director_position: 'ผู้อำนวยการสถานศึกษา' } : null, periodTimes: periodTimes.times }
 }
 
-export async function fetchSubstituteHistory(yearId:string,semester=1,before?:string):Promise<SubstituteHistoryPage> {
-  const session=await requireScheduleSession()
-  if(!session.schoolId||!canEdit(session))throw Error('ไม่มีสิทธิ์')
-  validateSubstituteHistoryScope(yearId,semester,before)
-  const db=createServerClient()
-  const owner=await db.from('academic_years').select('id').eq('id',yearId).eq('school_id',session.schoolId).maybeSingle()
-  if(owner.error||!owner.data)throw Error('ไม่พบปีการศึกษาของโรงเรียนนี้')
-  let query=db.from('schedule_substitute_days').select(`id,date,entries:schedule_substitute_entries!inner(
-    id,absent_teacher_id,period,class_subject_id,classroom_id,subject_label,room_label,substitute_teacher_id,leave_type,note,override_conflicts,conflict_details,conflict_confirmed_at
-  )`).eq('school_id',session.schoolId).eq('academic_year_id',yearId).eq('semester',semester).order('date',{ascending:false}).limit(SUBSTITUTE_HISTORY_PAGE_DAYS+1)
-  if(before)query=query.lt('date',before)
-  const result=await query
-  if(result.error)throw Error('โหลดรายการสอนแทนที่บันทึกแล้วไม่สำเร็จ')
-  const page=pageSubstituteHistory((result.data||[]) as SubstituteHistoryDay[],before)
-  const ids=[...new Set(page.days.flatMap(day=>day.entries.flatMap(row=>[row.absent_teacher_id,...row.substitute_teacher_id?[row.substitute_teacher_id]:[]])))]
-  const names=ids.length?await db.from('users').select('id,prefix,full_name').eq('school_id',session.schoolId).in('id',ids):{data:[],error:null}
-  if(names.error)throw Error('โหลดชื่อครูในรายการที่บันทึกแล้วไม่สำเร็จ')
-  return {...page,teacher_names:Object.fromEntries((names.data||[]).map(row=>[row.id,`${row.prefix||''}${row.full_name}`]))}
-}
+export async function fetchSubstituteHistory(yearId:string,semester=1,before?:string):Promise<SubstituteHistoryPage>{return substituteDocuments.documentHistory(yearId,semester,before)}
 
-export async function fetchSubstituteDay(date: string, yearId: string, semester = 1) {
-  const session = await requireScheduleSession()
-  if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  const schedule = await loadSchedule(session.schoolId, yearId, semester)
-  const dayOfWeek = substituteWeekday(date)
-  const db = createServerClient()
-
-  let dayQuery = db.from('schedule_substitute_days')
-    .select('id, date, day_of_week, note')
-    .eq('school_id', session.schoolId)
-    .eq('date', date)
-  if (schedule.semesterSupported !== false) dayQuery = dayQuery.eq('semester', semester)
-  const dayResult = await dayQuery.maybeSingle()
-  if (dayResult.error) throw new Error(dayResult.error.message)
-  let dayRow = dayResult.data
-  if (dayRow) {
-    const { data: owner } = await db.from('schedule_substitute_days').select('academic_year_id').eq('id', dayRow.id).single()
-    if (owner?.academic_year_id !== yearId) throw new Error('วันที่นี้มีตารางสอนแทนอยู่ในปีการศึกษาอื่น')
-  }
-
-  if (!dayRow) {
-    const { data: created, error } = await db.from('schedule_substitute_days')
-      .upsert({
-        school_id: session.schoolId,
-        academic_year_id: yearId,
-        ...(schedule.semesterSupported === false ? {} : { semester }),
-        date,
-        day_of_week: dayOfWeek,
-      }, { onConflict: schedule.semesterSupported === false ? 'school_id,date' : 'school_id,date,semester', ignoreDuplicates: true })
-      .select('id, date, day_of_week, note')
-      .maybeSingle()
-    if (error) throw new Error(error.message)
-    dayRow = created
-    if (!dayRow) {
-      let retryQuery = db.from('schedule_substitute_days').select('id,date,day_of_week,note,academic_year_id').eq('school_id', session.schoolId).eq('date', date)
-      if (schedule.semesterSupported !== false) retryQuery = retryQuery.eq('semester', semester)
-      const retry = await retryQuery.single()
-      if (retry.error || retry.data.academic_year_id !== yearId) throw new Error('โหลดวันที่ไม่สำเร็จ กรุณาลองใหม่')
-      dayRow = retry.data
-    }
-  }
-
-  const { data: entries, error: entriesError } = await db.from('schedule_substitute_entries')
-    .select(`
-      id, absent_teacher_id, period, class_subject_id, classroom_id,
-      subject_label, room_label, substitute_teacher_id, leave_type, note, override_conflicts, conflict_details, conflict_confirmed_at
-    `)
-    .eq('substitute_day_id', dayRow!.id)
-    .order('period')
-  if (entriesError) throw new Error(entriesError.message)
-
-  // Recurring blocks only: loadScheduleConstraints also includes substitutes
-  // from every date, including this assignment itself, and would mark it busy.
-  const blocks = await db.from('schedule_teacher_blocks').select('teacher_id,period')
-    .eq('school_id', session.schoolId).eq('academic_year_id', yearId).eq('semester', semester).eq('day_of_week', dayOfWeek)
-  if (blocks.error) throw new Error('โหลดคาบไม่ว่างไม่สำเร็จ: ' + blocks.error.message)
-  return {
-    day: dayRow,
-    day_label: SCHEDULE_DAYS.find(d => d.value === dayRow!.day_of_week)?.label || '',
-    teacher_names:schedule.teacherNames,
-    classrooms:schedule.classrooms.map(room=>({id:room.id,label:`${room.level}/${room.room}`})),
-    busy: [...(blocks.data || []).map(b => ({teacherId:b.teacher_id,period:b.period,kind:'block' as const})),
-      ...substituteTimetableForDay(schedule, dayOfWeek).flatMap(slot => slot.teacherIds.map(teacherId => ({teacherId,period:slot.period,kind:slot.activity?'activity' as const:'lesson' as const,label:slot.subject_label,roomLabel:slot.room_label})))] as SubstituteBusy[],
-    entries: entries || [],
-  }
-}
+export async function fetchSubstituteDay(date:string,yearId:string,semester=1){return substituteDocuments.documentDay(date,yearId,semester)}
 
 export async function loadSubstituteSlotsForTeacher(
   date: string,
@@ -315,89 +232,11 @@ export async function loadSubstituteRosterSlots(date:string,yearId:string,teache
 }
 
 /** All adds/edits/deletions commit together. The timetable is never rewritten. */
-export async function saveSubstituteRoster(dayId:string,expected:SubstituteRosterEntry[],rows:SubstituteRosterEntry[]) {
-  const session=await requireScheduleSession()
-  if(!session.schoolId||!canEdit(session))throw Error('ไม่มีสิทธิ์')
-  const db=createServerClient()
-  const {data:day,error:dayError}=await db.from('schedule_substitute_days').select('id,date,academic_year_id,semester,day_of_week').eq('id',dayId).eq('school_id',session.schoolId).maybeSingle()
-  if(dayError||!day)throw Error('ไม่พบตารางสอนแทนของโรงเรียนนี้')
-  const term=day.semester||1
-  // Read the fingerprint before dependent reads; the writer rechecks it under
-  // the same school/year lock used by timetable and teacher-block writers.
-  const snapshot=await db.rpc('schedule_snapshot',{p_school:session.schoolId,p_year:day.academic_year_id,p_term:term})
-  if(snapshot.error||!snapshot.data)throw Error('ตรวจข้อมูลตารางเรียนล่าสุดไม่สำเร็จ')
-  const [schedule,blockResult,periodResult]=await Promise.all([
-    loadSchedule(session.schoolId,day.academic_year_id,term),
-    db.from('schedule_teacher_blocks').select('teacher_id,period').eq('school_id',session.schoolId).eq('academic_year_id',day.academic_year_id).eq('semester',term).eq('day_of_week',day.day_of_week),
-    fetchPeriodTimes(),
-  ])
-  if(blockResult.error)throw Error('โหลดคาบไม่ว่างไม่สำเร็จ')
-  const normalized=rows.map(row=>({...row,subject_label:row.subject_label?.trim()||null,note:row.note?.trim()||null,
-    room_label:schedule.classrooms.filter(room=>room.id===row.classroom_id).map(room=>`${room.level}/${room.room}`)[0]||null}))
-  validateSubstituteRoster(normalized,new Set(Object.keys(schedule.teacherNames)),new Set(schedule.classrooms.map(room=>room.id)),new Set(periodResult.times.filter(row=>!row.is_break).map(row=>row.period)))
-  for(const row of normalized)if(row.class_subject_id&&!schedule.lessons.some(lesson=>lesson.id===row.class_subject_id&&lesson.classroomId===row.classroom_id&&lessonTeachers(lesson).includes(row.absent_teacher_id)))throw Error('รายวิชาไม่ตรงกับครู ห้อง หรือภาคเรียน กรุณาตรวจรายการที่แก้ไข')
-  const busy:SubstituteBusy[]=[...(blockResult.data||[]).map(row=>({teacherId:row.teacher_id,period:row.period,kind:'block' as const})),
-    ...substituteTimetableForDay(schedule,day.day_of_week).flatMap(slot=>slot.teacherIds.map(teacherId=>({teacherId,period:slot.period,kind:slot.activity?'activity' as const:'lesson' as const,label:slot.subject_label,roomLabel:slot.room_label})))]
-  const checked=validateSubstituteAcknowledgements(normalized,busy,schedule.teacherNames)
-  const {error}=await db.rpc('save_substitute_roster',{p_school_id:session.schoolId,p_day_id:dayId,p_expected:substituteRosterSnapshot(expected),p_rows:substituteRosterSnapshot(checked),p_snapshot:snapshot.data,p_actor:session.userId})
-  if(error)throw Error(error.code==='PGRST202'?'กรุณารันฐานข้อมูล 094_substitute_roster.sql ก่อนใช้งาน':error.message)
-  return {ok:true}
-}
+export async function saveSubstituteRoster(dayId:string,expected:SubstituteRosterEntry[],rows:SubstituteRosterEntry[]){return substituteDocuments.saveDocument(dayId,expected,rows)}
 
-export async function saveSubstituteTeacher(
-  substituteDayId: string,
-  entryId: string | null,
-  payload: {
-    absent_teacher_id: string
-    period: number
-    class_subject_id: string | null
-    classroom_id: string | null
-    subject_label: string
-    room_label: string
-    substitute_teacher_id: string | null
-    leave_type: string
-    note: string | null
-  },
-) {
-  const session = await requireScheduleSession()
-  if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  const db = createServerClient()
+export async function saveSubstituteTeacher(substituteDayId:string,entryId:string|null,payload:{absent_teacher_id:string;period:number;class_subject_id:string|null;classroom_id:string|null;subject_label:string;room_label:string;substitute_teacher_id:string|null;leave_type:string;note:string|null}){return substituteDocuments.changeDocumentTeacher(substituteDayId,entryId,payload)}
 
-  if (entryId) {
-    const { data: day } = await db.from('schedule_substitute_days').select('id').eq('id', substituteDayId).eq('school_id', session.schoolId || '').maybeSingle()
-    if (!day) throw new Error('ไม่พบตารางสอนแทนของโรงเรียนนี้')
-    const { data, error } = await db.from('schedule_substitute_entries').update({
-      substitute_teacher_id: payload.substitute_teacher_id,
-      leave_type: payload.leave_type,
-      note: payload.note,
-    }).eq('id', entryId).eq('substitute_day_id', substituteDayId).select('id').maybeSingle()
-    if (error) throw new Error(error.message)
-    if (!data) throw new Error('ไม่พบคาบสอนแทน')
-  } else {
-    throw new Error('กรุณานำเข้าคาบจากตารางเรียนก่อนกำหนดครูสอนแทน')
-  }
-  return { ok: true }
-}
-
-export async function importSubstituteFromSchedule(
-  substituteDayId: string,
-  date: string,
-  yearId: string,
-  absentTeacherId: string,
-  leaveType: string, semester = 1
-) {
-  const session = await requireScheduleSession()
-  if (!canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  const slots = await loadSubstituteSlotsForTeacher(date, yearId, absentTeacherId, semester)
-  const db = createServerClient()
-  if (!slots.length) throw new Error('ครูท่านนี้ไม่มีคาบสอนในวันที่และภาคเรียนที่เลือก กรุณาตรวจวันที่และภาคเรียน')
-  const { data: day } = await db.from('schedule_substitute_days').select('*').eq('id', substituteDayId).eq('school_id', session.schoolId || '').eq('academic_year_id', yearId).eq('date', date).maybeSingle()
-  if (day && (day.semester || 1) !== semester) throw new Error('ภาคเรียนของตารางสอนแทนไม่ตรงกัน')
-  if (!day) throw new Error('วันหรือปีการศึกษาของตารางสอนแทนไม่ตรงกัน')
-  const { error } = await db.rpc('replace_substitute_slots', { p_school_id: session.schoolId, p_day_id: substituteDayId, p_teacher_id: absentTeacherId, p_leave_type: leaveType, p_rows: slots })
-  if (error) throw new Error(error.message)
-  return { ok: true, count: slots.length }
-}
+export async function importSubstituteFromSchedule(substituteDayId:string,date:string,yearId:string,absentTeacherId:string,leaveType:string,semester=1){return substituteDocuments.importDocumentSlots(substituteDayId,date,yearId,absentTeacherId,leaveType,semester)}
 
 export async function getTeacherConflictAt(
   yearId: string,
@@ -425,13 +264,8 @@ export async function getTeacherConflictAt(
 }
 
 export type SubstituteChange = { id: string; substitute_teacher_id: string | null; leave_type: string; note: string | null }
-export async function saveSubstituteDay(substituteDayId: string, expected: SubstituteChange[], rows: SubstituteChange[]) {
-  const session = await requireScheduleSession()
-  if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  const { error } = await createServerClient().rpc('save_substitute_day', { p_school_id: session.schoolId, p_day_id: substituteDayId, p_expected: expected, p_rows: rows })
-  if (error) throw new Error(error.code === 'PGRST202' ? 'กรุณารันไฟล์ฐานข้อมูล 055_substitute_batch_save.sql ก่อนบันทึก' : error.message)
-  return { ok: true }
-}
+export async function saveSubstituteDay(substituteDayId:string,expected:SubstituteChange[],rows:SubstituteChange[]){return substituteDocuments.changeDocumentEntries(substituteDayId,expected,rows)}
+
 export async function fetchSubstitutePdfContext() {
   const session = await requireScheduleSession()
   if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
@@ -439,21 +273,6 @@ export async function fetchSubstitutePdfContext() {
   return { ...context, academicHead: context.school?.academic_head_name || '' }
 }
 
-export async function deleteSubstituteEntries(dayId: string, expected: SubstituteChange[], ids: string[]) {
-  const session = await requireScheduleSession()
-  if (!session.schoolId || !canEdit(session)) throw new Error('ไม่มีสิทธิ์')
-  const {error} = await createServerClient().rpc('delete_substitute_entries', {
-    p_school_id: session.schoolId, p_day_id: dayId, p_expected: expected, p_ids: ids,
-  })
-  if (error) throw new Error(error.code === 'PGRST202' ? 'กรุณารันไฟล์ฐานข้อมูล 083_substitute_delete.sql ก่อนลบ' : error.message)
-  return {ok: true}
-}
+export async function deleteSubstituteEntries(dayId:string,expected:SubstituteChange[],ids:string[]){return substituteDocuments.changeDocumentEntries(dayId,expected,expected,ids)}
 
-export async function deleteSubstituteRosterEntries(dayId:string,expected:SubstituteRosterEntry[],ids:string[]) {
-  const session=await requireScheduleSession()
-  if(!session.schoolId||!canEdit(session))throw Error('ไม่มีสิทธิ์')
-  if(!Array.isArray(expected)||expected.length>2000||!Array.isArray(ids)||!ids.length||new Set(ids).size!==ids.length||ids.some(id=>!expected.some(row=>row.id===id)))throw Error('ไม่พบรายการสอนแทนที่ต้องการลบ')
-  const result=await createServerClient().rpc('delete_substitute_roster_entries',{p_school_id:session.schoolId,p_day_id:dayId,p_expected:substituteRosterSnapshot(expected),p_ids:ids,p_actor:session.userId})
-  if(result.error)throw Error(result.error.code==='PGRST202'?'กรุณารันฐานข้อมูล 096_substitute_saved_record_delete.sql ก่อนลบรายการ':result.error.message)
-  return {deleted:result.data as number}
-}
+export async function deleteSubstituteRosterEntries(dayId:string,expected:SubstituteRosterEntry[],ids:string[]){return substituteDocuments.deleteDocumentEntries(dayId,expected,ids)}

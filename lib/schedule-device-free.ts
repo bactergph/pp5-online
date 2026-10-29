@@ -312,10 +312,7 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
     classrooms: plan.rooms.filter(room => isTimetableClassroom(room.label.split('/')[0])).map(room => ({ id: room.id, level: room.label, room: 0 })),
     lessons: withJointTeachingGroups([...lessons, ...activityLessons],plan),
     slots: plan.timetable.map(cell => ({ classroom_id: cell.classroomId, academic_year_id: 'local', day_of_week: cell.day, period: cell.period, class_subject_id: cell.subjectId || null, activity_id: cell.activityId ? `${cell.activityId}:${cell.classroomId}` : null, note: null, locked: !!cell.locked })),
-    blocks: [...plan.blocks,...Object.entries(plan.substitutes||{}).flatMap(([date,entries])=>{
-      const day=new Date(date+'T12:00:00+07:00').getUTCDay()||7
-      return Number.isNaN(Date.parse(date))?[]:entries.filter(entry=>entry.substituteTeacherId).map(entry=>({teacherId:entry.substituteTeacherId!,day,period:entry.period}))
-    })],
+    blocks: plan.blocks.map(block=>({...block})),
     activities: deviceActivityCatalog(plan),
     teachers: plan.teachers.map(teacher => ({ id: teacher.id, full_name: teacher.name })),
   }

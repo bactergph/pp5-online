@@ -24,15 +24,15 @@ assert.ok(planning.checkPlanning([{...lesson,id:'first',count:2,roomId:'lab'},{.
 const lockedOther={id:'other',classroomId:'A',teacherId:'Other',count:1,label:'Other',fixedOnly:true}
 assert.ok(planning.checkPlanning([lesson,lockedOther],[slot('other',1,1)],[1],periods,[]).some(i=>i.message.includes('ไม่มีช่วงว่างต่อเนื่อง')))
 
-// Substitution reservations are scoped, paginated and deduplicated with blocks.
+// Substitute documents must never be queried or converted to recurring blocks.
 const substitutionRows=Array.from({length:1001},(_,index)=>({id:index,substitute_teacher_id:'T',period:index%3+1,schedule_substitute_days:{school_id:'school',academic_year_id:'year',semester:2,day_of_week:1}}))
 substitutionRows.push({id:1002,substitute_teacher_id:'Foreign',period:1,schedule_substitute_days:{school_id:'other-school',academic_year_id:'year',semester:2,day_of_week:1}},{id:1003,substitute_teacher_id:'Term1',period:1,schedule_substitute_days:{school_id:'school',academic_year_id:'year',semester:1,day_of_week:1}})
 let pages=0
 const db={from(table){const filters=[];const query={select(){return query},order(){return query},eq(key,value){filters.push([key,value]);return query},not(){return query},then(resolve){return Promise.resolve({data:table==='school_period_times'?[{period:1},{period:2},{period:3}]:[{teacher_id:'T',day_of_week:1,period:1}],error:null}).then(resolve)},async range(from,to){pages++;const rows=substitutionRows.filter(row=>filters.every(([key,value])=>key.split('.').reduce((current,part)=>current?.[part],row)===value));return {data:rows.slice(from,to+1),error:null}}};return query}}
 const store=load('lib/schedule-store.ts',{'@/lib/supabase':{createServerClient:()=>db}})
 const constraints=await store.loadScheduleConstraints('school','year',2)
-assert.equal(pages,3)
-assert.equal(constraints.blocks.length,3)
+assert.equal(pages,0)
+assert.equal(constraints.blocks.length,1)
 assert.ok(constraints.blocks.every(block=>block.teacherId==='T'))
 
 const helper=load('lib/schedule-helpers.ts',{'@/lib/schedules':{SCHEDULE_DAYS:[]}})

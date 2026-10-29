@@ -108,8 +108,8 @@ assert.equal(years.deviceSchoolYear(new Date('2027-01-01T00:00:00Z')),'2569')
 assert.throws(()=>years.switchDeviceYear(existing,'bad'),/ปีการศึกษา/)
 assert.equal(ops.lockDeviceCell(emptyLock,'r1',2,2).timetable.length,0,'Unlocking an empty cell releases its capacity')
 const subPlan={...plan,substitutes:{'2026-10-26':[{substituteTeacherId:'t1',period:2}]}}
-assert.ok(free.toDeviceSnapshot(subPlan,['r1']).blocks.some(block=>block.teacherId==='t1'&&block.day===1&&block.period===2),'Saved substitute assignments also reserve the teacher in auto generation')
-console.log('PASS: academic-year isolation, year backup roundtrip, school year rollover, empty lock capacity and substitute reservation in shared solver')
+assert.ok(!free.toDeviceSnapshot(subPlan,['r1']).blocks.some(block=>block.teacherId==='t1'&&block.day===1&&block.period===2),'Printable substitute documents do not reserve teachers in automatic generation')
+console.log('PASS: academic-year isolation, year backup roundtrip, school year rollover, empty lock capacity and substitute-document isolation from shared solver')
 
 const custom=free.normalizePlan({...plan,subjects:[{...plan.subjects[0],periods:3,pattern:[3]}]})
 assert.equal(custom.subjects[0].pattern.join('+'),'3','Custom shared lesson patterns survive reload')

@@ -32,7 +32,8 @@
     "test:schedule-subject-details": "node scripts/test-schedule-subject-details.cjs && node scripts/test-schedule-subject-details-ui.mjs",
     "test:schedule-substitutes": "node scripts/test-substitute-availability.cjs && node scripts/test-substitute-services.cjs && node scripts/test-substitute-roster.cjs && node scripts/test-substitute-history.cjs && node scripts/test-substitute-history-server.cjs && node scripts/test-substitute-roster-db.cjs && node scripts/test-substitute-roster-ui.mjs && node scripts/test-free-schedule-ui.mjs --substitute-only",
     "test:schedule-clear": "node scripts/test-schedule-clear.cjs && node scripts/test-free-schedule-ui.mjs --clear-only",
-    "test:schedule-activity-locks": "node scripts/test-schedule-activity-locks.cjs && node scripts/test-schedule-preparation.cjs && node scripts/test-free-schedule-ui.mjs --activity-locks-only"
+    "test:schedule-activity-locks": "node scripts/test-schedule-activity-locks.cjs && node scripts/test-schedule-preparation.cjs && node scripts/test-free-schedule-ui.mjs --activity-locks-only",
+    "test:substitute-isolation": "node scripts/test-substitute-document-services.cjs && node scripts/test-substitute-device-isolation.cjs && node scripts/test-substitute-isolation-db.cjs && node scripts/test-free-schedule-ui.mjs --substitute-documents-only"
   },
   "dependencies": {
     "@sparticuz/chromium": "^149.0.0",

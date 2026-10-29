@@ -36,7 +36,7 @@ export async function preparation(year:string,term:number){
  }),plan)
  // Keep all existing slots/lessons for outside-scope teacher and venue conflicts,
  // but only offer non-kindergarten classrooms for import, activities and generation.
- return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,manualBlocks:constraints.manualBlocks,substituteReservations:constraints.substituteReservations,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
+ return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,manualBlocks:constraints.manualBlocks,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
 /** Labels and grid configuration from the exact snapshot used to calculate a draft. */

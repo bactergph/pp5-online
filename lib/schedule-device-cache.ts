@@ -1,5 +1,7 @@
+import {splitDeviceDocuments,joinDeviceDocuments,type DeviceDocumentStore} from './schedule-device-document-storage'
 const DB_NAME = 'pp5-schedule-device'
 const STORE = 'snapshots'
+const DOCUMENT_STORE = 'substitute-documents'
 const FREE_KEY = 'free-plan'
 
 // Signup school details contain no login credentials and stay on this device.
@@ -31,9 +33,18 @@ export async function readRegistrationSchool(userId?: string) {
 
 function openCache() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE)
-    request.onsuccess = () => resolve(request.result)
+    let blocked=false
+    const request = indexedDB.open(DB_NAME, 2)
+    request.onupgradeneeded = () => {
+      const db=request.result
+      if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE)
+      if(!db.objectStoreNames.contains(DOCUMENT_STORE))db.createObjectStore(DOCUMENT_STORE)
+      const transaction=request.transaction!
+      const existing=transaction.objectStore(STORE).get(FREE_KEY)
+      existing.onsuccess=()=>{if(!existing.result)return;const {schedule,documents}=splitDeviceDocuments(existing.result.data);transaction.objectStore(STORE).put({...existing.result,data:schedule},FREE_KEY);transaction.objectStore(DOCUMENT_STORE).put(documents,FREE_KEY)}
+    }
+    request.onblocked=()=>{blocked=true;reject(Error('ปิดแท็บจารย์เสกอื่นแล้วเปิดใหม่ เพื่ออัปเดตฐานข้อมูลเอกสารบนเครื่อง'))}
+    request.onsuccess = () => {if(blocked)request.result.close();else resolve(request.result)}
     request.onerror = () => reject(request.error)
   })
 }
@@ -65,13 +76,12 @@ export async function readFreePlanRecord<T>(strict = false) {
   }
   try {
     const db = await openCache()
-    const row = await new Promise<{ savedAt: string; data: T; uploadedHash?: string } | undefined>((resolve, reject) => {
-      const request = db.transaction(STORE).objectStore(STORE).get(FREE_KEY)
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => reject(request.error)
-    })
-    db.close()
-    return row || null
+    try{
+      const transaction=db.transaction([STORE,DOCUMENT_STORE])
+      const read=<R,>(store:string)=>new Promise<R|undefined>((resolve,reject)=>{const request=transaction.objectStore(store).get(FREE_KEY);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})
+      const [row,documents]=await Promise.all([read<{savedAt:string;data:T;uploadedHash?:string}>(STORE),read<DeviceDocumentStore>(DOCUMENT_STORE)])
+      return row?{...row,data:joinDeviceDocuments(row.data,documents)}:null
+    }finally{db.close()}
   } catch (error) {
     if (strict) throw error
     return null
@@ -84,7 +94,7 @@ export async function markFreePlanUploaded(hash: string) {
   try {
     const db = await openCache()
     await new Promise<void>((resolve, reject) => {
-      const request = db.transaction(STORE, 'readwrite').objectStore(STORE).put({ ...row, uploadedHash: hash }, FREE_KEY)
+      const request = db.transaction(STORE, 'readwrite').objectStore(STORE).put({ ...row,data:splitDeviceDocuments(row.data).schedule, uploadedHash: hash }, FREE_KEY)
       request.onsuccess = () => resolve()
       request.onerror = () => reject(request.error)
     })
@@ -99,7 +109,7 @@ export async function writeFreePlan(data: unknown, savedAt = new Date().toISOStr
   const db = await openCache()
   try {
     await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(STORE, 'readwrite')
+      const transaction = db.transaction([STORE,DOCUMENT_STORE], 'readwrite')
       const store = transaction.objectStore(STORE)
       let conflict = false
       transaction.oncomplete = () => resolve()
@@ -108,7 +118,9 @@ export async function writeFreePlan(data: unknown, savedAt = new Date().toISOStr
       const request = store.get(FREE_KEY)
       request.onsuccess = () => {
         if (expectedSavedAt !== undefined && (request.result?.savedAt || '') !== expectedSavedAt) { conflict = true; transaction.abort(); return }
-        store.put({ savedAt, data }, FREE_KEY)
+        const {schedule,documents}=splitDeviceDocuments(data)
+        store.put({ savedAt, data:schedule }, FREE_KEY)
+        transaction.objectStore(DOCUMENT_STORE).put(documents,FREE_KEY)
       }
     })
   } finally {

@@ -10,13 +10,14 @@ import { isTimetableClassroom } from './schedules'
 export function deviceDataKey(value:unknown) {
   return JSON.stringify(value,(_key,item)=>item && typeof item==='object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))) : item)
 }
+/** Printing a substitute document never invalidates a normal timetable draft. */
+export function deviceScheduleKey(plan:FreeWizardPlan){const schedule={...plan};delete schedule.substitutes;return deviceDataKey(schedule)}
 
 /** Pure adapters for the same presentation components used by the online wizard. */
 export function devicePreparation(plan: FreeWizardPlan): Preparation {
   const snapshot = toDeviceSnapshot(plan, plan.rooms.map(room => room.id))
   return {
-    ...snapshot, hash:deviceDataKey(plan), blocksSupported: true,manualBlocks:plan.blocks,
-    substituteReservations:Object.entries(plan.substitutes||{}).flatMap(([date,entries])=>entries.filter(entry=>entry.substituteTeacherId).map(entry=>({teacherId:entry.substituteTeacherId!,date,day:new Date(date+'T12:00:00+07:00').getUTCDay()||7,period:entry.period}))),
+    ...snapshot, hash:deviceScheduleKey(plan), blocksSupported: true,manualBlocks:plan.blocks,
     classrooms: plan.rooms.filter(room=>isTimetableClassroom(room.label.split('/')[0])).map(room => {
       const [level, ...rest] = room.label.split('/')
       return { id: room.id, level, room: plan.rooms.filter(item=>item.label.split('/')[0]===level).findIndex(item=>item.id===room.id)+1, name: rest.join('/') || '1' }

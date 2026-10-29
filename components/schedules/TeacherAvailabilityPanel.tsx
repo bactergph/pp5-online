@@ -5,7 +5,6 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 import {useCallback, useEffect, useRef, useState} from 'react'
 import {type PeriodTimeRow} from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
-import ScheduleLink from './ScheduleLink'
 
 type Availability = Awaited<ReturnType<import('./ScheduleServices').ScheduleOperations['fetchTeacherAvailability']>>
 export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded,onChanged}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean;onChanged?:()=>Promise<void>}) {
@@ -79,8 +78,6 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       return
     }
     if(busy?.activity){await Swal.fire({icon:'info',title:'ติดกิจกรรม '+busy.label,text:busy.activityFixed?'กิจกรรมนี้กำหนดวันและคาบไว้ แก้เวลาได้ที่ “กิจกรรมและครู”':busy.locked?'คาบกิจกรรมนี้ถูกล็อกไว้ในตาราง จึงยังคงเวลาเดิม ต้องนำคาบล็อกออกหรือแก้ที่ “กิจกรรมและครู” ก่อนจัดใหม่':'คาบกิจกรรมที่ระบบจัดอัตโนมัติ เมื่อสร้างฉบับร่างใหม่ระบบเลือกเวลาให้ได้ ถ้าต้องการเปลี่ยนครูหรือจำนวนคาบ ให้แก้ที่ “กิจกรรมและครู”',confirmButtonText:'เข้าใจแล้ว',confirmButtonColor:'#245bdb'});return}
-    const substitutes=(data.substituteReservations||[]).filter(row=>row.teacherId===teacher&&row.day===day&&row.period===period)
-    if(substitutes.length&&!busy){await Swal.fire({icon:'info',title:'มีรายการสอนแทนเฉพาะวันที่',text:`${[...new Set(substitutes.map(row=>row.date||'วันที่ตามรายการ'))].join(' · ')} · รายการนี้ไม่ได้ล็อกคาบว่างเอง หากต้องการยกเลิก ให้แก้หรือลบจากเมนูตารางสอนแทน`,confirmButtonText:'เข้าใจแล้ว',confirmButtonColor:'#245bdb'});return}
     if(busy?.locked){
       const decision=await Swal.fire({icon:'question',title,text:'คาบเรียนนี้ล็อกอยู่ ต้องการปลดล็อกก่อนแก้ไขไหม?',showCancelButton:true,confirmButtonText:'ปลดล็อกคาบเรียน',cancelButtonText:'ยกเลิก',confirmButtonColor:'#245bdb'})
       if(decision.isConfirmed)await editCell(day,period,'',false,true)
@@ -139,7 +136,6 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       {error&&<p role="alert" className="text-sm text-rose-700">{error} <button type="button" className="ml-2 min-h-11 underline" onClick={()=>void load(true)}>โหลดข้อมูลล่าสุด</button></p>}
       {notice&&<p role="status" className="text-sm text-emerald-700">{notice}</p>}
       <p>กดคาบเพื่อเลือกวิชา นำวิชาออก หรือล็อกคาบว่าง การแก้ไขจะปรับตารางเรียนของห้องให้ตรงกันด้วย</p>
-      {data?.substituteReservations?.some(row=>row.teacherId===teacher)&&<p className="availability-substitute-note">มีรายการสอนแทนเฉพาะวันที่: {[...new Set(data.substituteReservations.filter(row=>row.teacherId===teacher).map(row=>`${row.date||'วันที่ตามรายการ'} คาบ ${row.period}`))].join(' · ')} · <ScheduleLink href="/schedules/substitute">ดูหรือแก้รายการสอนแทน</ScheduleLink></p>}
       {!data?<p>กำลังโหลด...</p>:<>
         {!data.supported&&<p role="alert">ยังไม่เปิดใช้การล็อกคาบครู กรุณารันฐานข้อมูล 058_schedule_eight_periods_teacher_blocks.sql</p>}
         <div className="flex flex-wrap items-end gap-3">
@@ -167,9 +163,8 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
           const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const selected=editing?.day===day&&editing?.period===period
-          const substitute=(data.substituteReservations||[]).filter(row=>row.teacherId===teacher&&row.day===day&&row.period===period)
           const loading=pending.includes(`${teacher}:${day}:${period}`)
-          return <button type="button" className={`availability-cell ${busy?.activity?'is-activity':blocked?'is-blocked':busy?'is-busy':substitute.length?'is-substitute':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${busy?.activity?'ติดกิจกรรม':blocked?'ล็อกคาบว่าง':busy?'มีสอน':substitute.length?'มีสอนแทน':'ว่าง'}`} disabled={disabled||clearing||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-blue-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{busy?.activity?'ติดกิจกรรม':blocked?'ล็อกคาบว่าง':busy?'มีสอน':substitute.length?'มีสอนแทน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อก':'กดเพื่อเลือกวิชาหรือล็อก'}</span>{busy?.activity&&<span>{busy.activityFixed?'กำหนดวัน/คาบไว้':busy.locked?'ล็อกคาบกิจกรรมไว้':'ระบบจัดเวลาอัตโนมัติ'}{blocked?' · มีคาบว่างที่ล็อกไว้ด้วย':''}</span>}{!!substitute.length&&<span className="availability-substitute-tag">สอนแทนเฉพาะวันที่ {substitute.map(row=>row.date||'ตามรายการ').join(', ')}</span>}</>}</button>
+          return <button type="button" className={`availability-cell ${busy?.activity?'is-activity':blocked?'is-blocked':busy?'is-busy':''} ${selected?'is-selected':''}`} aria-pressed={selected} aria-busy={loading} aria-label={`วัน${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} คาบ ${period} ${busy?.activity?'ติดกิจกรรม':blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}`} disabled={disabled||clearing||loading||!teacher} onClick={()=>void chooseCell(day,period)}>{loading?<><span className="inline-block size-5 animate-spin rounded-full border-2 border-stone-300 border-t-blue-700" aria-hidden="true"/><strong>กำลังบันทึก...</strong></>:<>{selected&&<span className="selected-label">กำลังเลือก · คาบ {period}</span>}<strong>{busy?.activity?'ติดกิจกรรม':blocked?'ล็อกคาบว่าง':busy?'มีสอน':'ว่าง'}</strong><span>{busy?busy.label:blocked?'กดเพื่อปลดล็อก':'กดเพื่อเลือกวิชาหรือล็อก'}</span>{busy?.activity&&<span>{busy.activityFixed?'กำหนดวัน/คาบไว้':busy.locked?'ล็อกคาบกิจกรรมไว้':'ระบบจัดเวลาอัตโนมัติ'}{blocked?' · มีคาบว่างที่ล็อกไว้ด้วย':''}</span>}</>}</button>
         }}/></div>
       </>}
     </div>

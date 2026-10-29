@@ -1,7 +1,6 @@
 import type {ActivityTeam} from './schedule-activity-teams'
 import {activityTeachers} from './schedule-activity-teams'
 
-export type SubstituteReservation={teacherId:string;day:number;period:number;date:string}
 type ActivityLesson={id:string;classroomId:string;subjectId:string;name?:string;activity?:boolean;teacherId:string|null;teacherIds?:string[]}
 type Slot={classroom_id:string;day_of_week:number;period:number;activity_id:string|null;locked:boolean}
 export function activityLockCells(groups:ActivityTeam[],lessons:ActivityLesson[],slots:Slot[]){
