@@ -34,6 +34,7 @@
     "test:schedule-clear": "node scripts/test-schedule-clear.cjs && node scripts/test-free-schedule-ui.mjs --clear-only",
     "test:schedule-activity-locks": "node scripts/test-schedule-activity-locks.cjs && node scripts/test-schedule-preparation.cjs && node scripts/test-free-schedule-ui.mjs --activity-locks-only",
     "test:schedule-resource-capacity": "node scripts/test-schedule-resource-capacity.cjs && node scripts/test-schedule-tight-repair.cjs",
+    "test:schedule-teacher-details": "node scripts/test-schedule-teacher-details.cjs && node scripts/test-schedule-teacher-details-ui.mjs",
     "test:substitute-isolation": "node scripts/test-substitute-document-services.cjs && node scripts/test-substitute-device-isolation.cjs && node scripts/test-substitute-isolation-db.cjs && node scripts/test-free-schedule-ui.mjs --substitute-documents-only"
   },
   "dependencies": {

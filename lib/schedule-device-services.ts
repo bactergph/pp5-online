@@ -21,6 +21,7 @@ import { SCHEDULE_DAYS } from './schedules'
 import { verifyCompleteSchedule } from './schedule-verification'
 import { applySchedulePlaceChange } from './schedule-places'
 import { prepareSubjectDetails } from './schedule-subject-details'
+import { prepareTeacherDetails } from './schedule-teacher-details'
 import { planScheduleClear, scheduleClearRooms } from './schedule-clear'
 import {activityLockCells} from './schedule-lock-state'
 import {substituteDocumentNames,prepareSubstituteDocument} from './substitute-document-model'
@@ -191,6 +192,19 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
         return level.names.map((name,index)=>({id:previous[index]?.id||newId(),label:`${level.level}/${name.trim()}`}))
       })
       await put(year,term,{...current,rooms});return {created:rooms.filter(room=>!current.rooms.some(item=>item.id===room.id)).length,deleted:current.rooms.filter(room=>!rooms.some(item=>item.id===room.id)).length}
+    })),
+    saveScheduleTeacherDetails:(year,term,id,input)=>outcome(()=>mutate(year,term,async current=>{
+      const teacher=current.teachers.find(teacher=>teacher.id===id)
+      if(!teacher)throw Error('ไม่พบครูในเครื่องนี้')
+      const previous=devicePreparation(current).teachers.find(teacher=>teacher.id===id)!
+      const profile=prepareTeacherDetails({prefix:previous.prefix||'',name:previous.full_name,position:previous.position||''},input)
+      const bundle=read(),active=year===deviceYear(bundle),workspace=active?bundle:bundle.archives?.[year]
+      if(!workspace)throw Error('ไม่พบปีการศึกษา')
+      const rename=(plan:Plan)=>({...plan,teachers:plan.teachers.map(item=>item.id===id?{...item,name:`${profile.prefix} ${profile.name}`.trim(),prefix:profile.prefix,fullName:profile.name,position:profile.position}:item)})
+      const terms={1:rename(workspace.terms[1]),2:rename(workspace.terms[2])}
+      const next=active?{...bundle,terms}:{...bundle,archives:{...bundle.archives,[year]:{...workspace,terms}}}
+      if(!await write(next))throw Error('ยังไม่ได้บันทึกชื่อครูลงเครื่อง กรุณาลองอีกครั้ง')
+      return {id}
     })),
     saveScheduleInputTeachers:(year,term,rows)=>outcome(()=>mutate(year,term,async current=>{
       const teachers=[...current.teachers],results:{key:string;id:string;error?:string}[]=[]

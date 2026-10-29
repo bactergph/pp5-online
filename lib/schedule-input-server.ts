@@ -6,6 +6,26 @@ import { saveStaffRows } from './staff-table'
 import { preparation, type Preparation } from './schedule-preparation'
 import { validateSubjectInputs, type SubjectInputRow } from './schedule-input'
 import { prepareSubjectDetails, type SubjectDetailsInput } from './schedule-subject-details'
+import { prepareTeacherDetails, type TeacherDetailsInput } from './schedule-teacher-details'
+import { staffAccessError } from './staff-permissions'
+
+export async function saveTeacherDetails(year: string, term: number, id: string, input: TeacherDetailsInput) {
+  const session = await getSession()
+  if (!session?.schoolId || staffAccessError(session)) throw Error('ไม่มีสิทธิ์แก้ไขชื่อบุคลากร')
+  const current = await preparation(year, term)
+  if (!current.teachers.some(teacher => teacher.id === id)) throw Error('ไม่พบครูในโรงเรียนนี้')
+  const db = createServerClient()
+  const { data: teacher, error: readError } = await db.from('users').select('id,school_id,role,prefix,full_name,position').eq('id', id).eq('school_id', session.schoolId).maybeSingle()
+  failWrite(readError, 'โหลดชื่อครูไม่สำเร็จ')
+  if (staffAccessError(session, teacher)) throw Error('ไม่พบครูที่แก้ไขได้ในโรงเรียนนี้')
+  const profile = prepareTeacherDetails({ prefix: teacher!.prefix || '', name: teacher!.full_name, position: teacher!.position || '' }, input)
+  let query = db.from('users').update({ prefix: profile.prefix, full_name: profile.name, position: profile.position }).eq('id', id).eq('school_id', session.schoolId)
+  for (const field of ['prefix', 'full_name', 'position'] as const) query = teacher![field] === null ? query.is(field, null) : query.eq(field, teacher![field])
+  const saved = await query.select('id').maybeSingle()
+  failWrite(saved.error, 'บันทึกชื่อครูไม่สำเร็จ')
+  if (!saved.data) throw Error('ชื่อครูเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
+  return { id }
+}
 
 export async function saveSubjectDetails(year:string,term:number,hash:string,lessonId:string,input:SubjectDetailsInput){
   const session=await getSession()

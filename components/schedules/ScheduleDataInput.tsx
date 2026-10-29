@@ -10,6 +10,7 @@ import LocalScheduleTeachers from './LocalScheduleTeachers'
 import { teacherImportCapacity } from '@/lib/schedule-teacher-capacity'
 import ScheduleCentralSubjects from './ScheduleCentralSubjects'
 import ScheduleSubjectEditor from './ScheduleSubjectEditor'
+import ScheduleTeacherEditor from './ScheduleTeacherEditor'
 
 export default function ScheduleDataInput({ kind, data, year, term, onSaved, onDirty, locked, onBusy, onRoster }: {
   kind: 'teachers' | 'subjects'; data: Preparation; year: string; term: number
@@ -24,6 +25,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
   const [subjectLevel, setSubjectLevel] = useState('')
   const [subjectRoom, setSubjectRoom] = useState('')
   const [editingSubject,setEditingSubject]=useState<string|null>(null)
+  const [editingTeacher,setEditingTeacher]=useState<string|null>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const saving = useRef(false)
@@ -150,11 +152,12 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
     </div>
     {!addOpen && message && <p className="prep-success" role="status">{message}</p>}
     {visibleTeachers.length === 0 ? <p className="prep-teacher-empty">{teachers.length ? 'ไม่พบครูที่ค้นหา' : 'ยังไม่มีครูในโรงเรียน กดเพิ่มครูเพื่อกรอกหรือวางรายชื่อ'}</p> : <div className="prep-teacher-grid">
-      {visibleTeachers.map(teacher => <label key={teacher.id} className={selectedTeachers.includes(teacher.id) ? 'prep-teacher-card is-on' : 'prep-teacher-card'}>
+      {visibleTeachers.map(teacher => <div key={teacher.id} data-teacher={teacher.id} className={`prep-teacher-item${selectedTeachers.includes(teacher.id)?' is-on':''}`}><label className={selectedTeachers.includes(teacher.id) ? 'prep-teacher-card is-on' : 'prep-teacher-card'}>
         <input type="checkbox" disabled={busy} checked={selectedTeachers.includes(teacher.id)} onChange={() => toggleTeacher(teacher.id)} />
         <span><strong>{teacherLabel(teacher.id)}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'} · {lessonCount.get(teacher.id) || 0} รายวิชา</small></span>
-      </label>)}
+      </label><button type="button" className="prep-teacher-rename" disabled={busy||locked} aria-label={`แก้ไขชื่อ ${teacher.name}`} onClick={()=>setEditingTeacher(teacher.id)}>แก้ไขชื่อ</button></div>)}
     </div>}
+    {editingTeacher&&data.teachers.some(teacher=>teacher.id===editingTeacher)&&<ScheduleTeacherEditor key={editingTeacher} teacher={data.teachers.find(teacher=>teacher.id===editingTeacher)!} year={year} term={term} onClose={()=>setEditingTeacher(null)} onSaved={onSaved} onBusy={onBusy} onDirty={value=>onDirty(value||rows.some(row=>row.some(Boolean)))}/>}
     <dialog ref={dialogRef} className="prep-team-dialog prep-teacher-dialog" aria-labelledby="add-teacher-title" onCancel={event => { event.preventDefault(); closeAdd() }}>
       <header>
         <h2 id="add-teacher-title">เพิ่มครู</h2>

@@ -54,6 +54,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'saveScheduleInputSubjects' |
   'saveScheduleSubjectDetails' |
   'saveScheduleInputTeachers' |
+  'saveScheduleTeacherDetails' |
   'saveScheduleTeachingAssignments' |
   'saveSubstituteDay' |
   'saveSubstituteRoster' |
