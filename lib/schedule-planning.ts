@@ -5,7 +5,7 @@ import { solveBlockRepair } from './schedule-block-repair'
 import type {JointTeachingGroup} from './schedule-joint-teaching'
 import {solveJointTeachingSchedule} from './schedule-joint-solver'
 import { subjectDayIssue } from './schedule-subject-days'
-import { remainingSlotCapacityIssues } from './schedule-resource-capacity'
+import { remainingSlotCapacityIssues, type SlotCapacityHelp } from './schedule-resource-capacity'
 import { spreadSubjectFamilies, subjectFamily } from './schedule-subject-families'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
@@ -34,7 +34,7 @@ function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
 }
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
 export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota' | 'fixed_joint_mismatch' | 'subject_day'
-export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; manageStep?:number; code?: FixedScheduleIssueCode; details?: string[] }
+export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; manageStep?:number; code?: FixedScheduleIssueCode; details?: string[]; capacity?: SlotCapacityHelp }
 export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking'|'block_repair';elapsedMs?:number;timeLimitMs?:number}
 export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
 export const SCHEDULE_SEARCH_TIME_LIMIT_MS = 45_000

@@ -55,10 +55,11 @@ function numberRange(values: number[]) {
   return min === max ? number(min) : `${number(min)}–${number(max)}`
 }
 
-export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachingGroupsChange, classrooms, lessons, activityLessons=[],activityGroups=[],onEditActivities,teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh, operations }: {
+export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachingGroupsChange, classrooms, lessons, activityLessons=[],activityGroups=[],onEditActivities,initialTeacherId,teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh, operations }: {
   activityLessons?:ScheduleLesson[]
   activityGroups?:ActivityTeam[]
   onEditActivities?:()=>void
+  initialTeacherId?:string
   snapshotHash?:string
   teachingGroups:JointTeachingGroup[]
   onTeachingGroupsChange:(groups:JointTeachingGroup[])=>Promise<void>
@@ -93,8 +94,8 @@ export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachin
   const dialog = useRef<HTMLDialogElement>(null), addDialog = useRef<HTMLDialogElement>(null), codeDialog = useRef<HTMLDialogElement>(null), lockDialog = useRef<HTMLDialogElement>(null)
   const codeOptionsDialog = useRef<HTMLDialogElement>(null), codeSaveButton = useRef<HTMLButtonElement>(null)
   const codePlaceDialog = useRef<HTMLDialogElement>(null), codeAddPlaceButton = useRef<HTMLButtonElement>(null)
-  const [view, setView] = useState<'room' | 'teacher' | 'code' | 'lock'>('room')
-  const [lockMode, setLockMode] = useState<'room' | 'teacher'>('room')
+  const [view, setView] = useState<'room' | 'teacher' | 'code' | 'lock'>(initialTeacherId?'lock':'room')
+  const [lockMode, setLockMode] = useState<'room' | 'teacher'>(initialTeacherId?'teacher':'room')
   const [lockCell, setLockCell] = useState<{ day: number; period: number } | null>(null)
   const [lockPick, setLockPick] = useState('')
   const [lockingKey, setLockingKey] = useState('')
@@ -102,7 +103,7 @@ export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachin
   const lockQueue = useRef(Promise.resolve())
   const queuedLocks = useRef(new Set<string>())
   const [level, setLevel] = useState(''), [roomId, setRoomId] = useState(''), [query, setQuery] = useState('')
-  const [teacherId, setTeacherId] = useState(''), [teacherQuery, setTeacherQuery] = useState(''), [codeQuery, setCodeQuery] = useState(''), [codeTeacher, setCodeTeacher] = useState('')
+  const [teacherId, setTeacherId] = useState(initialTeacherId&&teachers.some(teacher=>teacher.id===initialTeacherId)?initialTeacherId:''), [teacherQuery, setTeacherQuery] = useState(''), [codeQuery, setCodeQuery] = useState(''), [codeTeacher, setCodeTeacher] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null), [placeName, setPlaceName] = useState('')
   const [draftPlaces, setDraftPlaces] = useState<Place[]>([])
   const saveLock = useRef(false)

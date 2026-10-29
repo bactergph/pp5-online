@@ -1,8 +1,14 @@
 import type { PlannedLesson, PlannedSlot, PlanningIssue } from './schedule-planning'
 import type { PeriodTimeRow } from './schedule-helpers'
+import { teachingQuotaParts } from './schedule-joint-teaching'
 
 type SlotDemand = { count: number; slots: number[] }
 export type SlotBottleneck = { indices: number[]; need: number; slots: number[] }
+export type SlotCapacityHelp = {
+  kind: 'teacher' | 'class' | 'venue'; label: string; rooms: string[]; needed: number; available: number; teacherId?: string
+  weekly?: { subjects: number; activities: number; total: number; slots: number }
+  suggestion?: { lesson: string; day: number; period: number }
+}
 
 /** Match every remaining period to a distinct slot. An alternating path from
  * unmatched periods gives a Hall witness: a subset needs more slots than its
@@ -89,9 +95,43 @@ export function remainingSlotCapacityIssues(lessons: PlannedLesson[], fixed: Pla
     const named = taught.find(lesson => teachers(lesson).length === 1 && lesson.teacherName)?.teacherName
     const team = taught.find(lesson => lesson.teacherName?.split(/[,、]/).length === teachers(lesson).length)
     const teacherName = named || (team ? team.teacherName!.split(/[,、]/)[teachers(team).indexOf(id)]?.trim() : undefined)
-    const label = kind === 'teacher' ? `ครู ${teacherName || `รหัส ${id}`}` : kind === 'venue' ? 'สถานที่ร่วม' : `ห้อง ${affected[0].members.find(lesson => lesson.classroomId === id)?.label.split(' · ')[0] || id}`
+    const label = kind === 'teacher' ? teacherName || `ครูรหัส ${id}` : kind === 'venue' ? 'สถานที่ร่วม' : `ห้อง ${affected[0].members.find(lesson => lesson.classroomId === id)?.label.split(' · ')[0] || id}`
     const dayNames = ['', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์']
+    const help: SlotCapacityHelp = {
+      kind: kind as SlotCapacityHelp['kind'], label,
+      rooms: [...new Set(affected.flatMap(unit => unit.members.map(lesson => lesson.label.split(' · ')[0])))].sort((a,b)=>a.localeCompare(b,'th',{numeric:true})),
+      needed: bottleneck.need, available: bottleneck.slots.length,
+    }
+    if (kind === 'teacher') {
+      help.teacherId = id
+      const quota = new Map<string, { count: number; activity: boolean }>()
+      for (const lesson of taught) for (const part of teachingQuotaParts(lesson)) {
+        const previous = quota.get(part.id)
+        quota.set(part.id, { count: Math.max(previous?.count || 0, part.count), activity: !!lesson.activity })
+      }
+      const subjects = [...quota.values()].filter(part => !part.activity).reduce((sum, part) => sum + part.count, 0)
+      const activities = [...quota.values()].filter(part => part.activity).reduce((sum, part) => sum + part.count, 0)
+      help.weekly = { subjects, activities, total: subjects + activities, slots: cells.length }
+      const affectedRooms = new Set(affected.flatMap(unit => unit.members.map(lesson => lesson.classroomId)))
+      // Offer a starting point, not a promise of a complete timetable. Test that
+      // moving a lesson in another classroom removes this subset's shortage.
+      // Never suggest splitting a joint session or moving a configured activity.
+      for (const row of [...fixed].sort((a, b) => a.day - b.day || a.period - b.period)) {
+        const lesson = row.lessonId ? byId.get(row.lessonId) : undefined
+        if (!lesson || lesson.activity || lesson.activityGroupId || Object.keys(lesson.jointTeachingCells || {}).length || !teachers(lesson).includes(id) || affectedRooms.has(lesson.classroomId)) continue
+        const index = cells.findIndex(cell => cell.day === row.day && cell.period === row.period)
+        if (index < 0 || bottleneck.slots.includes(index)) continue
+        const expanded = affected.map(unit => ({ count: unit.count, slots: [...unit.slots, ...(
+          unit.members.every(member => !occupied.has(key(member.classroomId, row.day, row.period)) &&
+            teachers(member).every(teacher => teacher === id || !busy.has(key(teacher, row.day, row.period))) &&
+            (!member.roomId || !venues.has(key(member.roomId, row.day, row.period))) &&
+            (member.activity || member.pattern?.some(size => size > 1) || !retained.get(member.id)?.some(slot => slot.day === row.day))) ? [index] : []
+        )] }))
+        if (!findSlotBottleneck(expanded)) { help.suggestion = { lesson: lesson.label, day: row.day, period: row.period }; break }
+      }
+    }
     return [{ severity: 'error', step: 6, manageStep: 6,
+      capacity: help,
       message: `${label}: กลุ่มรายวิชาที่ยังต้องจัดต้องใช้ ${bottleneck.need} คาบ แต่มีช่องร่วมที่ลงได้เพียง ${bottleneck.slots.length} ช่อง`,
       details: [
         'ตรวจพบข้อขัดกันจากคาบล็อก กิจกรรม และเวลาว่างที่กำหนด โดยยังไม่ได้ลองย้ายคาบใด',

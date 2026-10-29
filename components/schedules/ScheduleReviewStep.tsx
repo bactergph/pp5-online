@@ -21,10 +21,28 @@ export type ScheduleDraftView = {
 type Props = {
   data:Preparation; rooms:string[]; clear:boolean; issues:PlanningIssue[]|null; draft:ScheduleDraftView|null; blocked:boolean
   onRooms:(rooms:string[])=>void; onClear:(clear:boolean)=>void; onCheck:()=>void; onGenerate:()=>void
-  onConfirm:()=>void; onDiscard:()=>void; onFix:(step:number)=>void; onClearSubjects?:()=>void; onClearActivities?:()=>void
+  onConfirm:()=>void; onDiscard:()=>void; onFix:(step:number,teacherId?:string)=>void; onClearSubjects?:()=>void; onClearActivities?:()=>void
   workingLabel?:string
 }
 const steps:Record<number,string>={1:'วันและเวลา',2:'กำหนดชั้น',3:'กำหนดครู',4:'กิจกรรม',5:'รายวิชา',6:'ภาระสอนและล็อกคาบ',7:'ตรวจและจัดตาราง'}
+
+function CapacityIssue({issue,onFix}:{issue:PlanningIssue;onFix:(step:number,teacherId?:string)=>void}) {
+  const help=issue.capacity
+  if(!help)return null
+  const missing=help.needed-help.available,suggestion=help.suggestion
+  const day=suggestion?SCHEDULE_DAYS.find(day=>day.value===suggestion.day)?.label||`วันที่ ${suggestion.day}`:''
+  return <article className="prep-capacity-help">
+    <header><span className="prep-capacity-shortage">ยังขาดเวลาที่ว่างตรงกัน {missing} คาบ</span><h3>{help.label}</h3></header>
+    {help.weekly&&<div className="prep-capacity-weekly"><span>ภาระสอนที่นำมาตรวจ</span><p>รายวิชา <b>{help.weekly.subjects}</b> + กิจกรรม <b>{help.weekly.activities}</b> = <strong>{help.weekly.total} คาบ/สัปดาห์</strong></p>{help.weekly.total<=help.weekly.slots&&<small>รวมแล้วไม่เกิน {help.weekly.slots} คาบ แต่บางช่วงครูกับห้องเรียนว่างไม่ตรงกัน</small>}</div>}
+    <p className="prep-capacity-explanation">ยังต้องลงคาบให้ <strong>{help.rooms.join(' · ')}</strong> อีก <strong>{help.needed} คาบ</strong> แต่{help.kind==='venue'?'สถานที่กับห้องเรียน':'ครูกับห้องเรียน'}ว่างตรงกันเพียง <strong>{help.available} คาบ</strong></p>
+    <p className="prep-capacity-note"><FiInfo aria-hidden="true"/>{help.kind==='venue'?'การลงคาบต้องมีทั้งครู ห้องเรียน และสถานที่สอนว่างพร้อมกัน':'ช่อง “ว่าง” ในตารางครู หมายถึงครูว่าง ห้องที่จะไปสอนอาจติดวิชาอื่นอยู่'}</p>
+    <section className="prep-capacity-next"><h4>แก้ตรงไหนดี?</h4>
+      {suggestion?<><p>เริ่มตรวจคาบ <strong>{suggestion.lesson} · วัน{day} คาบ {suggestion.period}</strong></p><p>หากย้ายคาบนี้ได้ ให้ปลดล็อคโดยเก็บรายวิชาไว้ แล้วเลือก “จัดวิชาที่ไม่ล็อกใหม่” เพื่อให้ระบบหาคาบอื่นแทน</p><small>คาบนี้ช่วยเพิ่มทางเลือกให้กลุ่มที่ติดอยู่ จากนั้นต้องตรวจและจัดตารางใหม่อีกครั้ง</small></>:<p>ตรวจคาบที่ล็อคไว้ของครูและห้องเหล่านี้ ปลดล็อคเฉพาะคาบที่ย้ายได้ แล้วเลือก “จัดวิชาที่ไม่ล็อกใหม่”</p>}
+      <button type="button" onClick={()=>onFix(issue.manageStep||issue.step,help.teacherId)}>{help.teacherId?'ไปดูคาบล็อคของครูท่านนี้':'ไปดูภาระสอนและล็อคคาบ'}<FiChevronRight aria-hidden="true"/></button>
+    </section>
+    {!!issue.details?.length&&<details className="prep-capacity-details"><summary>ดูรายวิชาและเวลาที่ใช้คำนวณ</summary><ul>{issue.details.map((detail,i)=><li key={i}>{detail}</li>)}</ul></details>}
+  </article>
+}
 
 export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocked,onRooms,onClear,onCheck,onGenerate,onConfirm,onDiscard,onFix,onClearSubjects,onClearActivities,workingLabel}:Props) {
   const resultRef=useRef<HTMLDivElement>(null)
@@ -125,11 +143,11 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
     <div ref={resultRef} className="prep-result" tabIndex={-1} aria-label="ผลตรวจและฉบับร่าง">
       {!draft&&!issues&&!workingLabel&&<div className="prep-review-empty"><FiGrid aria-hidden="true"/><h3>ตารางฉบับร่างจะแสดงที่นี่</h3><p>กดสร้างฉบับร่าง ระบบจะตรวจข้อมูลและจัดตารางให้ห้องที่เลือก</p></div>}
       {issues&&<div className="prep-review-check-result" aria-live="polite">
-        <div className={`prep-review-status ${errors.length?'is-error':'is-success'}`}>{errors.length?<FiAlertCircle aria-hidden="true"/>:<FiCheckCircle aria-hidden="true"/>}<div><strong>{errors.length?`ต้องแก้ ${errors.length} รายการก่อนจัดตาราง`:'ผ่านการตรวจเบื้องต้น'}</strong><p>{errors.length?'แยกตามขั้นตอนด้านล่าง กดไปแก้ข้อมูลแล้วกลับมาตรวจใหม่':'การตรวจเบื้องต้นไม่รับประกันว่าจะค้นหาตารางที่ตรงทุกเงื่อนไขได้เสมอ'}</p></div></div>
+        <div className={`prep-review-status ${errors.length?'is-error':'is-success'}`}>{errors.length?<FiAlertCircle aria-hidden="true"/>:<FiCheckCircle aria-hidden="true"/>}<div><strong>{errors.length?`ต้องแก้ ${errors.length} รายการก่อนจัดตาราง`:'ผ่านการตรวจเบื้องต้น'}</strong><p>{errors.length?'อ่านสาเหตุและวิธีแก้ด้านล่าง แล้วกดตรวจข้อมูลล่าสุดอีกครั้ง':'การตรวจเบื้องต้นไม่รับประกันว่าจะค้นหาตารางที่ตรงทุกเงื่อนไขได้เสมอ'}</p></div></div>
         {byStep.map(({step,items})=><details key={step} className="prep-review-issues" open={errors.length<=12}>
           <summary>ขั้น {step} · {steps[step]||'ตรวจข้อมูล'}<span>{items.length} รายการ</span></summary>
-          <ul>{items.slice(0,limits[step]||12).map((issue,index)=><li key={index}>{issue.message}{!!issue.details?.length&&<details open={draft?.status==='conflict'}><summary>{draft?.status==='conflict'?'ดูรายละเอียดเงื่อนไขที่ขัดกัน':'ดูรายวิชาและกิจกรรมที่นับภาระสอน'}</summary><ul>{issue.details.map((detail,i)=><li key={i}>{detail}</li>)}</ul></details>}</li>)}</ul>
-          <div className="prep-review-issue-actions"><button type="button" onClick={()=>onFix(step)}>ไปแก้{steps[step]||'ข้อมูล'}<FiChevronRight aria-hidden="true"/></button>{items.length>(limits[step]||12)&&<button type="button" onClick={()=>setLimits(current=>({...current,[step]:(current[step]||12)+50}))}>แสดงเพิ่มอีก {Math.min(50,items.length-(limits[step]||12))} รายการ</button>}</div>
+          <ul className="prep-review-issue-list">{items.slice(0,limits[step]||12).map((issue,index)=><li key={index} className={issue.capacity?'prep-capacity-item':undefined}>{issue.capacity?<CapacityIssue issue={issue} onFix={onFix}/>:<>{issue.message}{!!issue.details?.length&&<details open={draft?.status==='conflict'}><summary>{draft?.status==='conflict'?'ดูรายละเอียดเงื่อนไขที่ขัดกัน':'ดูรายวิชาและกิจกรรมที่นับภาระสอน'}</summary><ul>{issue.details.map((detail,i)=><li key={i}>{detail}</li>)}</ul></details>}</>}</li>)}</ul>
+          <div className="prep-review-issue-actions">{items.some(issue=>!issue.capacity)&&<button type="button" onClick={()=>onFix(step)}>ไปแก้{steps[step]||'ข้อมูล'}<FiChevronRight aria-hidden="true"/></button>}{items.length>(limits[step]||12)&&<button type="button" onClick={()=>setLimits(current=>({...current,[step]:(current[step]||12)+50}))}>แสดงเพิ่มอีก {Math.min(50,items.length-(limits[step]||12))} รายการ</button>}</div>
         </details>)}
         {!!warnings.length&&<details className="prep-review-warnings"><summary>คำเตือน {warnings.length} รายการ</summary><ul>{warnings.map((issue,index)=><li key={index}><span>{issue.message}</span><button type="button" onClick={()=>onFix(issue.step)}>ไปตรวจข้อมูล<FiChevronRight aria-hidden="true"/></button></li>)}</ul></details>}
       </div>}

@@ -156,3 +156,32 @@
 @media(prefers-reduced-motion:reduce){.schedule-prep .prep-review-working>svg{animation:none}}
 .schedule-prep .prep-review-actions .prep-review-clear-subjects{color:#b42336;border-color:#f0c8ce;background:#fff8f8}
 .schedule-prep .prep-review-actions .prep-review-clear-subjects:hover:not(:disabled){background:#ffedf0}
+.schedule-prep .prep-review-issues>.prep-review-issue-list{list-style:none;margin:0;padding:0}
+.schedule-prep .prep-review-issues>.prep-review-issue-list>li{margin:12px 0;padding:0}
+.schedule-prep .prep-capacity-help{min-width:0;max-width:900px;color:#253d58;line-height:1.7}
+.schedule-prep .prep-capacity-help h3{margin:8px 0 14px;font-size:20px;line-height:1.5;color:#183451}
+.schedule-prep .prep-capacity-shortage{display:inline-block;padding:5px 11px;border:1px solid #fecdd3;border-radius:999px;background:#fff1f2;color:#a31332;font-size:13px;font-weight:700}
+.schedule-prep .prep-capacity-weekly{padding:12px 16px;border:1px solid #d9e5f4;border-radius:12px;background:#f5f9ff}
+.schedule-prep .prep-capacity-weekly>span{font-size:12px;color:#52647c}
+.schedule-prep .prep-capacity-weekly p{margin:4px 0;line-height:1.8}
+.schedule-prep .prep-capacity-weekly strong{color:#144fa3}
+.schedule-prep .prep-capacity-weekly small{font-size:13px;color:#52647c}
+.schedule-prep .prep-capacity-explanation{margin:16px 0 10px;font-size:16px;line-height:1.9}
+.schedule-prep .prep-capacity-note{display:flex;align-items:flex-start;gap:8px;margin:0 0 16px;font-size:13px;color:#52647c}
+.schedule-prep .prep-capacity-note svg{flex:none;margin-top:4px;width:16px;height:16px}
+.schedule-prep .prep-capacity-next{padding:16px;border:1px solid #b9d4fa;border-left:4px solid #245bdb;border-radius:12px;background:#f0f6ff}
+.schedule-prep .prep-capacity-next h4{margin:0 0 8px;color:#164c9a;font-size:16px}
+.schedule-prep .prep-capacity-next p{margin:6px 0;line-height:1.8;font-size:14px}
+.schedule-prep .prep-capacity-next small{display:block;margin-top:8px;font-size:12px;color:#52647c}
+.schedule-prep .prep-capacity-next button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;height:auto;margin-top:14px;padding:10px 14px;white-space:normal;text-align:left;background:#245bdb;border-color:#245bdb;color:#fff}
+.schedule-prep .prep-capacity-next button:hover:not(:disabled){background:#1849b9;color:#fff}
+.schedule-prep .prep-capacity-details{margin-top:16px;border-top:1px solid #e3eaf3}
+.schedule-prep .prep-capacity-details>summary{color:#52647c;font-size:13px}
+.schedule-prep .prep-capacity-details ul{padding-left:20px;font-size:13px;color:#52647c;line-height:1.8}
+@media(max-width:640px){
+ .schedule-prep .prep-capacity-help h3{font-size:18px}
+ .schedule-prep .prep-capacity-weekly,.schedule-prep .prep-capacity-next{padding:12px}
+ .schedule-prep .prep-capacity-weekly p{font-size:14px}
+ .schedule-prep .prep-capacity-explanation{font-size:15px}
+ .schedule-prep .prep-capacity-next button{width:100%;font-size:14px}
+}

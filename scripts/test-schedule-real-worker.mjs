@@ -47,7 +47,21 @@ try{
     const released=await page.evaluate(()=>window.check('release-pe'));assert.equal(released.status,'complete');assert.equal(released.rows,178);assert.equal(released.locksPreserved,true);assert.equal(released.unchanged,true);assert.deepEqual(released.verification,[]);assert.ok(released.ms<5000);assert.ok(released.ticks>0)
     await page.evaluate(()=>window.mount());await page.waitForSelector('.prep-review-actions .prep-primary')
     await page.evaluate(()=>[...document.querySelectorAll('button')].find(button=>button.textContent.includes('ตรวจข้อมูลล่าสุด')).click())
-    await page.waitForFunction(()=>document.body.textContent.includes('12 คาบ')&&document.body.textContent.includes('11 ช่อง'),{timeout:10000})
+    await page.waitForSelector('.prep-capacity-help')
+    const copy=await page.$eval('.prep-capacity-help',card=>card.textContent)
+    assert.ok(copy.includes('รายวิชา 26 + กิจกรรม 3 = 29 คาบ/สัปดาห์'))
+    assert.ok(copy.includes('ห้องที่จะไปสอนอาจติดวิชาอื่นอยู่'));assert.ok(copy.includes('อังคาร คาบ 4'))
+    assert.equal(await page.$eval('.prep-capacity-details',details=>details.open),false)
+    for(const width of [320,390,1440]){
+      await page.setViewport({width,height:1000})
+      const bounds=await page.$eval('.prep-capacity-help',card=>{const r=card.getBoundingClientRect();return {left:r.left,right:r.right}})
+      assert.ok(bounds.left>=0&&bounds.right<=width,'Capacity help fits viewport '+width)
+      await (await page.$('.prep-capacity-help')).screenshot({path:path.join(out,'capacity-help-'+width+'.png')})
+    }
+    await page.click('.prep-capacity-next button');await page.waitForSelector('.prep-lock-grid')
+    const selected=await page.$eval('.prep-activity-teachers button[aria-pressed=true]',button=>button.textContent)
+    const teacher=input.data.terms[input.data.semester].teachers.find(teacher=>teacher.id===rejected.issues[0].capacity.teacherId)
+    assert.ok(selected.includes(teacher.fullName||teacher.name),'Open the reported teacher directly in the lock grid')
     assert.equal(await page.evaluate(()=>window.writes),0);assert.equal(await page.evaluate(()=>window.workerCount),2);assert.deepEqual(errors,[])
     console.log('PASS: real Worker detects 12-period/11-slot subset in '+Math.round(rejected.ms)+'ms; simulated PE release gives 178 verified cells in '+Math.round(released.ms)+'ms; wizard preflight shows the shortage with zero data writes')
   }else{

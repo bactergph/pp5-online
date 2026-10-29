@@ -45,6 +45,12 @@ assert.ok(issues.some(issue => issue.message.includes('12 คาบ') && issue.m
 assert.ok(issues.some(issue => issue.message.includes('ทดสอบ 4')), 'Identify the teacher with the subset shortage')
 assert.ok(issues.some(issue => issue.details?.filter(line => line.includes('ยังต้องจัด')).length === 9))
 assert.ok(issues.some(issue => issue.details?.some(line => line.includes('ไม่ใช่ภาระสอนรวมทั้งหมด'))))
+const help = issues.find(issue => issue.capacity)?.capacity
+assert.ok(help); assert.equal(help.kind, 'teacher'); assert.equal(help.needed, 12); assert.equal(help.available, 11)
+assert.equal(help.weekly.subjects, 26); assert.equal(help.weekly.activities, 3); assert.equal(help.weekly.total, 29)
+assert.equal(help.weekly.slots, 30); assert.equal(help.rooms.length, 3)
+assert.equal(help.suggestion.day, 2); assert.equal(help.suggestion.period, 4)
+assert.ok(help.suggestion.lesson.startsWith('R3 · '), 'Suggest the movable PE period in another classroom, never a shared session or configured activity')
 const rejected = planning.solvePlannedSchedule(original.lessons, original.fixed, original.plan, original.fixture.periods, [])
 assert.equal(rejected.status, 'invalid'); assert.equal(rejected.assignments.length, 0)
 assert.ok(Date.now() - started < 1000, 'Detect this subset during preflight without the 45-second search')
