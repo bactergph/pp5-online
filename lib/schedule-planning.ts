@@ -5,6 +5,7 @@ import { solveBlockRepair } from './schedule-block-repair'
 import type {JointTeachingGroup} from './schedule-joint-teaching'
 import {solveJointTeachingSchedule} from './schedule-joint-solver'
 import { subjectDayIssue } from './schedule-subject-days'
+import { remainingSlotCapacityIssues } from './schedule-resource-capacity'
 import { spreadSubjectFamilies, subjectFamily } from './schedule-subject-families'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
@@ -119,6 +120,7 @@ export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], da
   for(const venue of new Set(lessons.flatMap(l=>l.roomId?[l.roomId]:[]))){const uses=lessons.filter(l=>l.roomId===venue),events=new Map<string,number>();for(const l of uses)for(const part of teachingQuotaParts(l))events.set(part.id,Math.max(events.get(part.id)||0,part.count));const need=[...events.values()].reduce((a,b)=>a+b,0);if(need>capacity)err(`สถานที่ของ ${uses[0]?.label} ต้องใช้ ${need} คาบ แต่มี ${capacity} ช่อง`,5)}
 
   for(const message of jointTeachingSlotErrors(lessons.map(lesson=>({...lesson,activityGroupId:undefined})),fixed))issues.push({severity:'error',message,step:6,code:'fixed_joint_mismatch'})
+  if(!issues.some(issue=>issue.severity==='error'))issues.push(...remainingSlotCapacityIssues(lessons,fixed,days,times,unavailable))
   return issues
 }
 /** Improve a complete answer; never move retained cells, activities or multi-period blocks. */
