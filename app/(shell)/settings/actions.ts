@@ -1,4 +1,5 @@
 'use server'
+import { centralSubjectLevel } from '@/lib/schedule-central-subjects'
 import { randomUUID } from 'crypto'
 import { createServerClient } from '@/lib/supabase'
 import { getSession, createSession } from '@/lib/session'
@@ -2966,6 +2967,7 @@ export async function saveScoreConfigs(rows: {
 // เพิ่มหลายวิชาทีเดียว (วางจากโครงสร้าง Excel) — upsert ตาม (school_id, code)
 export async function bulkUpsertSubjects(rows: {
   code: string; name: string; short_name?: string | null
+  level?:string|null
   subject_group: string; type: string; hours_per_year: number; credits: number; max_score: number
   semester?: SubjectSemester
 }[]) {
@@ -2992,13 +2994,14 @@ export async function bulkUpsertSubjects(rows: {
   const school = await getSchoolShell(session.schoolId)
   let payload
   try {
-    payload = rows.map(r => ({ ...r, level: null, ...(school?.education_type === 'secondary' ? { hours_per_year: secondaryCreditHours(r.credits).annual } : {}), school_id: session.schoolId }))
+    payload = rows.map(r => ({ ...r, level: r.level||null, ...(school?.education_type === 'secondary' ? { hours_per_year: secondaryCreditHours(r.credits).annual } : {}), school_id: session.schoolId }))
   } catch { return { error: 'รายวิชามัธยมต้องมีหน่วยกิตตั้งแต่ 0.5 และเพิ่มครั้งละ 0.5 กรุณาตรวจรายการนำเข้า', count: 0 } }
   let saved = await db.from('subjects').upsert(payload, { onConflict: 'school_id,code,level' }).select('id')
   if (saved.error && /semester/i.test(saved.error.message) && /does not exist|schema cache/i.test(saved.error.message)) {
     return { error: 'ยังบันทึกภาคเรียนไม่ได้ กรุณาติดตั้ง migration 079_subject_catalog_semester.sql แล้วลองใหม่', count: 0 }
   }
   if (saved.error && /unique|constraint|level|schema cache/i.test(saved.error.message)) {
+    if(payload.some(row=>row.level))return {error:'ต้องติดตั้งโครงสร้างรายวิชาแยกชั้น 077_subject_code_per_level.sql ก่อนนำเข้า',count:0}
     saved = await db.from('subjects').upsert(payload.map(({ level: _level, ...row }) => row), { onConflict: 'school_id,code' }).select('id')
   }
   if (!saved.error) {
@@ -3022,7 +3025,7 @@ export async function fetchGlobalSubjectsForSchool() {
   const db = createServerClient()
   const { data, error } = await db
     .from('global_subjects')
-    .select('code,name,short_name,subject_group,type,hours_per_year,credits,max_score')
+    .select('code,name,short_name,subject_group,type,hours_per_year,credits,max_score,level,semester')
     .eq('is_active', true)
     .order('subject_group')
     .order('sort_order')
@@ -3039,12 +3042,15 @@ export async function syncSubjectsFromGlobal() {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', count: 0 }
   if (!session.schoolId) return { error: 'ไม่พบโรงเรียน', count: 0 }
-  const rows = await fetchGlobalSubjectsForSchool()
+  const school=await getSchoolShell(session.schoolId)
+  const rows = (await fetchGlobalSubjectsForSchool()).filter(row=>school?.education_type==='secondary'?centralSubjectLevel(row)?.startsWith('ม.'):school?.education_type==='primary'?centralSubjectLevel(row)?.startsWith('ป.'):true)
   if (!rows.length) {
     return { error: 'ยังไม่มีโครงสร้างรายวิชากลางในระบบ', count: 0 }
   }
   return bulkUpsertSubjects(rows.map(r => ({
     code: r.code,
+    level:r.level,
+    semester:r.semester as SubjectSemester,
     name: r.name,
     short_name: r.short_name,
     subject_group: r.subject_group,

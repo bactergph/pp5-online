@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase'
 import { requireDistrict } from '@/lib/district'
 import { logActivity } from '@/lib/audit'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
+import { centralRoomLevel, centralSubjectLevel } from '@/lib/schedule-central-subjects'
 
 const MISSING_TABLE_MSG = 'ยังไม่มีตารางโครงสร้างรายวิชากลาง — ไปที่ Supabase → SQL Editor แล้วรันไฟล์ supabase/migrations/041_global_subjects.sql'
 
@@ -13,6 +14,8 @@ function mapError(message?: string | null) {
 }
 
 export type GlobalSubject = {
+  level: string
+  semester: number
   id: string
   code: string
   name: string
@@ -27,6 +30,8 @@ export type GlobalSubject = {
 }
 
 export type GlobalSubjectPayload = {
+  level?: string
+  semester?: number
   code: string
   name: string
   short_name?: string | null
@@ -44,12 +49,17 @@ function normalizePayload(payload: GlobalSubjectPayload) {
   const name = String(payload.name || '').trim()
   const subject_group = String(payload.subject_group || '').trim()
   if (!code || !name) return { error: 'กรุณากรอกรหัสและชื่อวิชา' as string }
+  const inferred=centralSubjectLevel({code})
+  const level=payload.level?.trim()?centralRoomLevel(payload.level):inferred?.startsWith('ม.')?inferred:''
+  if(payload.level?.trim()&&!level)return {error:'กรุณาเลือกชั้น ป.1–ป.6 หรือ ม.1–ม.6'}
+  if(payload.semester!==undefined&&![0,1,2].includes(payload.semester))return {error:'ภาคเรียนไม่ถูกต้อง'}
   if (!(SUBJECT_GROUPS as readonly string[]).includes(subject_group)) {
     return { error: 'กลุ่มสาระไม่ถูกต้อง' as string }
   }
   return {
     error: null as string | null,
     row: {
+      level:level||'',semester:payload.semester??0,
       code,
       name,
       short_name: payload.short_name?.trim() || null,
@@ -69,7 +79,7 @@ export async function fetchGlobalSubjects() {
   const db = createServerClient()
   const { data, error } = await db
     .from('global_subjects')
-    .select('id,code,name,short_name,subject_group,type,hours_per_year,credits,max_score,sort_order,is_active')
+    .select('id,code,name,short_name,subject_group,type,hours_per_year,credits,max_score,sort_order,is_active,level,semester')
     .order('subject_group')
     .order('sort_order')
     .order('code')
@@ -143,7 +153,7 @@ export async function bulkUpsertGlobalSubjects(rows: GlobalSubjectPayload[]) {
   const session = await requireDistrict()
   if (!rows.length) return { error: 'ไม่มีข้อมูล', count: 0 }
   const db = createServerClient()
-  const payload: ReturnType<typeof normalizePayload>['row'][] = []
+  const payload: NonNullable<ReturnType<typeof normalizePayload>['row']>[] = []
   for (const r of rows) {
     const parsed = normalizePayload(r)
     if (parsed.error || !parsed.row) return { error: parsed.error || 'ข้อมูลไม่ถูกต้อง', count: 0 }
@@ -151,7 +161,7 @@ export async function bulkUpsertGlobalSubjects(rows: GlobalSubjectPayload[]) {
   }
   const { data, error } = await db
     .from('global_subjects')
-    .upsert(payload, { onConflict: 'code' })
+    .upsert(payload, { onConflict: 'code,level' })
     .select('id')
   if (!error) {
     await logActivity({

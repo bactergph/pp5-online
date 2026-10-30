@@ -26,6 +26,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
   const [subjectRoom, setSubjectRoom] = useState('')
   const [editingSubject,setEditingSubject]=useState<string|null>(null)
   const [editingTeacher,setEditingTeacher]=useState<string|null>(null)
+  const [centralOpen,setCentralOpen]=useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const saving = useRef(false)
@@ -109,6 +110,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
     if (busy) return
     dialogRef.current?.close()
     setAddOpen(false)
+    setCentralOpen(false)
   }
   const lessonCount = new Map<string, number>()
   for (const lesson of timetableLessons) {
@@ -305,16 +307,16 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
         <button type="button" disabled={busy} aria-label="ปิด" onClick={closeAdd}>ปิด</button>
       </header>
       <div className="prep-team-dialog-body">
-        <div className="prep-subject-files">
+        <div className="prep-subject-files" style={{display:centralOpen?'none':undefined}}>
           <button type="button" disabled={busy} onClick={downloadTemplate}>โหลดเทมเพลต</button>
           <button type="button" disabled={busy} onClick={() => fileRef.current?.click()}>อัปโหลด Excel</button>
           <button type="button" disabled={busy} onClick={exportSubjects}>นำออก</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadSubjects(file) }} />
         </div>
-        {addOpen&&<ScheduleCentralSubjects key={activeLevel} rooms={data.classrooms} initialLevel={activeLevel} existing={timetableLessons} staged={rows} disabled={busy||locked} onAppend={incoming=>change([...rows.filter(row=>row.some(Boolean)),...incoming])}/>}
-        <p className="prep-subject-hint">กรอกห้อง รหัส ชื่อ จำนวนคาบ กลุ่มสาระ และประเภท หรือวางจาก Excel ได้หลายแถว ครูผู้สอน การแบ่งคาบ และห้องสถานที่กำหนดในขั้นภาระสอน</p>
-        <p className="prep-subject-mobile-hint">เลื่อนตารางซ้าย–ขวาเพื่อกรอกข้อมูลแต่ละช่อง</p>
-        <fieldset disabled={busy}>
+        {addOpen&&<ScheduleCentralSubjects onOpenChange={setCentralOpen} key={activeLevel} rooms={data.classrooms} initialLevel={activeLevel} existing={timetableLessons} staged={rows} disabled={busy||locked} onAppend={incoming=>change([...rows.filter(row=>row.some(Boolean)),...incoming])}/>}
+        <p className="prep-subject-hint" style={{display:centralOpen?'none':undefined}}>กรอกห้อง รหัส ชื่อ จำนวนคาบ กลุ่มสาระ และประเภท หรือวางจาก Excel ได้หลายแถว ครูผู้สอน การแบ่งคาบ และห้องสถานที่กำหนดในขั้นภาระสอน</p>
+        <p className="prep-subject-mobile-hint" style={{display:centralOpen?'none':undefined}}>เลื่อนตารางซ้าย–ขวาเพื่อกรอกข้อมูลแต่ละช่อง</p>
+        <fieldset disabled={busy} style={{display:centralOpen?'none':undefined}}>
           <ScheduleInputGrid label="ตารางนำเข้ารายวิชา" rows={rows} onChange={change} statuses={statuses} maxRows={SUBJECT_ROW_LIMIT}
             columns={[{ label: 'ห้องนักเรียน', hint: 'เช่น ม.1/1  ม.1/IP', options: rooms.map(c => c.name) }, { label: 'รหัสวิชา', hint: 'เช่น ค21101' }, { label: 'ชื่อวิชา', hint: 'ชื่อเต็มตามหลักสูตร' }, { label: 'คาบต่อสัปดาห์', hint: 'เช่น 3' }, { label: 'กลุ่มสาระ', options: SUBJECT_GROUPS }, { label: 'ประเภท', options: ['พื้นฐาน', 'เพิ่มเติม'], hint: 'พื้นฐาน' }]} />
         </fieldset>
@@ -322,7 +324,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
         {message && <p className="prep-success" role="status">{message}</p>}
         {busy && <div role="status" className="prep-import-progress"><progress aria-label="สถานะบันทึกข้อมูล" max={filled.length || 1} /><span>กำลังตรวจและบันทึกรายวิชาเป็นชุด…</span></div>}
       </div>
-      <footer>
+      <footer style={{display:centralOpen?'none':undefined}}>
         <span>{locked ? 'บันทึกการตั้งค่าด้านบนก่อนนำเข้าข้อมูล' : `${filled.length} แถวพร้อมบันทึก`}</span>
         <button type="button" disabled={busy || locked} onClick={() => void loadExisting(true)}>ดึงรายวิชาเดิมมาแก้</button>
         <Link href="/settings/class-subjects">หน้ารายวิชา</Link>

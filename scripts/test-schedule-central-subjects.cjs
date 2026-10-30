@@ -20,7 +20,7 @@ for(const [label,grade] of [['ชั้นประถมศึกษาปี�
 for(const label of ['ชั้นมัธยมศึกษาปีที่ ๑','อ.1','1','ป.7'])assert.equal(api.primaryRoomGrade(label),null)
 assert.equal(api.centralSubjectPeriods(thai),5);assert.equal(api.centralSubjectPeriods(math),4)
 assert.ok(api.centralSubjectProblem({...thai,hours_per_year:0}));assert.ok(api.centralSubjectProblem({...thai,subject_group:'กิจกรรม'}))
-const preview=api.prepareCentralSubjects(catalog,rooms,rooms.map(room=>room.id),catalog.map(s=>s.code),[{classroomId:'p1a',code:'ท11101'}],[['ป.1/IP','ค11101','ชื่อที่ครูแก้ไว้','7','คณิตศาสตร์','พื้นฐาน']])
+const preview=api.prepareCentralSubjects(catalog.filter(subject=>api.primarySubjectGrade(subject.code)),rooms,rooms.map(room=>room.id),catalog.map(s=>s.code),[{classroomId:'p1a',code:'ท11101'}],[['ป.1/IP','ค11101','ชื่อที่ครูแก้ไว้','7','คณิตศาสตร์','พื้นฐาน']])
 assert.equal(preview.rows.length,3);assert.equal(preview.skipped,2)
 assert.equal(preview.rows.find(row=>row[0]==='ป.1/IP'&&row[1]==='ท11101')[3],'5')
 assert.ok(!preview.rows.some(row=>row[0].startsWith('ม.')||row[1]==='ท21101'))
@@ -38,14 +38,21 @@ async function run(){
   const catalogAction=load('app/schedules/catalog-actions.ts',{
     '@/lib/session':{getSession:async flag=>{identityFlag=flag;return session}},
     '@/lib/schedule-action-result':{scheduleResult:async work=>{try{return {data:await work(),error:null}}catch(e){return {data:null,error:e.message}}}},
-    '@/lib/supabase':{createServerClient:()=>{created++;return {from(table){assert.equal(table,'global_subjects');const query={select(fields){assert.equal(fields,'code,name,subject_group,type,hours_per_year,sort_order');return query},eq(key,value){assert.equal(key,'is_active');assert.equal(value,true);return query},like(key,value){assert.equal(key,'code');assert.equal(value,'_1%');return query},order(key){assert.equal(key,'code');return query},async range(from,to){offsets.push(from);assert.equal(to,from+499);return fail?{error:{message:'private diagnostic'},data:null}:{error:null,data:from===0?Array.from({length:500},(_,i)=>({...thai,code:`ท11${String(i).padStart(3,'0')}`})):[p2,secondary]}}};return query}}}},
+    '@/lib/supabase':{createServerClient:()=>{created++;return {from(table){assert.equal(table,'global_subjects');const query={select(fields){assert.equal(fields,'code,name,subject_group,type,hours_per_year,sort_order,level,credits,semester');return query},eq(key,value){assert.equal(key,'is_active');assert.equal(value,true);return query},like(key,value){assert.equal(key,'code');assert.equal(value,'_1%');return query},order(key){assert.ok(['code','level'].includes(key));return query},async range(from,to){offsets.push(from);assert.equal(to,from+499);return fail?{error:{message:'private diagnostic'},data:null}:{error:null,data:from===0?Array.from({length:500},(_,i)=>({...thai,code:`ท11${String(i).padStart(3,'0')}`})):[p2,secondary]}}};return query}}}},
   })
   assert.ok((await catalogAction.fetchPrimaryScheduleSubjects()).error);assert.equal(created,0,'Anonymous requests never read the database')
   session={userId:'free-user',role:'teacher',schoolId:null};const result=await catalogAction.fetchPrimaryScheduleSubjects()
   assert.equal(result.error,null);assert.equal(identityFlag,true,'Free membership can read shared reference data')
   assert.equal(result.data.length,501);assert.equal(offsets.join(','),'0,500');assert.ok(!result.data.some(s=>s.code==='ท21101'))
+  const general=await catalogAction.fetchScheduleCentralSubjects();assert.ok(general.data.some(subject=>subject.code==='ท21101'),'The new API includes secondary while the compatibility primary API stays filtered');
   session.mustChangePassword=true;const before=created;assert.ok((await catalogAction.fetchPrimaryScheduleSubjects()).error);assert.equal(created,before)
   session.mustChangePassword=false;fail=true;assert.equal((await catalogAction.fetchPrimaryScheduleSubjects()).error,'โหลดโครงสร้างรายวิชากลางไม่สำเร็จ กรุณาลองอีกครั้ง')
   console.log('PASS: primary grade matching, annual hours, multi-room staging, existing/pending duplicate protection, row limit, signed-in Free access, inactive/password guard, paginated read-only catalog and safe errors')
 }
 run().catch(error=>{console.error(error);process.exitCode=1})
+
+const m4={...thai,code:'ศ30212',level:'ม.4',name:'ปฏิบัติเครื่องลม',subject_group:'ศิลปะ',credits:.5},m6={...m4,level:'ม.6',name:'การตกแต่งภายใน',credits:1};
+assert.equal(api.centralRoomLevel('มัธยมศึกษาปีที่ ๔'),'ม.4');assert.equal(api.centralSubjectLevel({code:'ว20222'}),null);assert.equal(api.centralSubjectPeriods(m4),1);assert.equal(api.centralSubjectPeriods(m6),2);
+const secondaryRooms=[{id:'m4',level:'ม.4',name:'1',room:1},{id:'m6',level:'ม.6',name:'1',room:1}];
+const variants=api.prepareCentralSubjects([m4,m6],secondaryRooms,['m4','m6'],[api.centralSubjectKey(m4),api.centralSubjectKey(m6)],[],[]);assert.equal(variants.rows.length,2);assert.equal(variants.rows.find(r=>r[0]==='ม.4/1')[2],m4.name);assert.equal(variants.rows.find(r=>r[0]==='ม.6/1')[3],'2');
+assert.equal(api.prepareCentralSubjects([m4,m6],secondaryRooms,['m4','m6'],[api.centralSubjectKey(m4)],[],[]).rows.length,1);console.log('PASS: secondary grade variants keep distinct names/credits; generic codes require explicit grades; room targeting never crosses levels');

@@ -13,6 +13,8 @@ import {
 
 const empty = {
   id: '',
+  level: '',
+  semester: 0,
   code: '',
   name: '',
   short_name: '',
@@ -77,7 +79,8 @@ function gradeLabelFromCode(code: string): string {
   return `ม.${grade + 3}` // ม.ปลาย เกรด 1–3 → ม.4–6
 }
 
-function gradeLabelFromSubject(s: { code: string; name?: string }): string {
+function gradeLabelFromSubject(s: { code: string; name?: string; level?:string }): string {
+  if(s.level)return s.level
   const fromCode = gradeLabelFromCode(s.code)
   if (fromCode && fromCode !== '—') return fromCode
   const m = String(s.name || '').match(/(\d+)\s*$/)
@@ -186,6 +189,8 @@ export default function DistrictSubjectsPage() {
   function openEdit(s: GlobalSubject) {
     setDraft({
       id: s.id,
+      level: s.level||'',
+      semester:s.semester||0,
       code: s.code,
       name: s.name,
       short_name: s.short_name || '',
@@ -244,6 +249,8 @@ export default function DistrictSubjectsPage() {
     const grade = gradeFromSubjectCode(draft.code)
     const { error } = await saveGlobalSubject(draft.id || null, {
       code: draft.code,
+      level:draft.level,
+      semester:draft.semester,
       name: draft.name,
       short_name: draft.short_name,
       subject_group: draft.subject_group,
@@ -377,6 +384,8 @@ export default function DistrictSubjectsPage() {
           <div className="modal-card" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()}>
             <div className="section-title" style={{ marginBottom: 14 }}>{draft.id ? 'แก้ไขรายวิชากลาง' : 'เพิ่มรายวิชากลาง'}</div>
             <form onSubmit={handleSave} className="form-grid">
+              <div><label className="form-label">ชั้นที่ใช้รายวิชานี้</label><select className="form-input" value={draft.level} onChange={event=>setDraft(d=>({...d,level:event.target.value}))}><option value="">อ่านจากรหัสวิชา</option>{['ป.','ม.'].flatMap(prefix=>[1,2,3,4,5,6].map(grade=><option key={prefix+grade} value={prefix+grade}>{prefix+grade}</option>))}</select></div>
+              <div><label className="form-label">ภาคเรียนอ้างอิง</label><select className="form-input" value={draft.semester} onChange={event=>setDraft(d=>({...d,semester:Number(event.target.value)}))}><option value={0}>ทั้งสองภาคเรียน</option><option value={1}>ภาคเรียน 1</option><option value={2}>ภาคเรียน 2</option></select></div>
               <div>
                 <label className="form-label">รหัสวิชา *</label>
                 <input className="form-input" required value={draft.code}

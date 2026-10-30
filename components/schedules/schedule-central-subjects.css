@@ -36,3 +36,17 @@
 .schedule-prep .prep-subject-dialog .central-subject-panel :is(input,select,button):focus-visible{outline:3px solid #a9c8ff;outline-offset:2px}
 @media(max-width:767px){.schedule-prep .prep-subject-dialog .central-subject-panel{padding:13px;gap:14px}.schedule-prep .prep-subject-dialog .central-subject-options{grid-template-columns:minmax(0,1fr)}.schedule-prep .prep-subject-dialog .central-subject-panel>header{flex-wrap:wrap}.schedule-prep .prep-subject-dialog .central-subject-stage{align-items:stretch;flex-direction:column}.schedule-prep .prep-subject-dialog .central-subject-stage button{width:100%}.schedule-prep .prep-subject-dialog .central-subject-options em{max-width:115px}.schedule-prep .prep-subject-dialog .central-subject-toggle{width:100%}}
 @media(max-width:767px){.schedule-prep .prep-subject-dialog .central-subject-grades{grid-template-columns:repeat(3,minmax(0,1fr))}.schedule-prep .prep-subject-dialog .central-subject-grades>label{padding:9px}}
+.schedule-prep .central-subject-steps{display:flex;list-style:none;gap:10px;padding:0;margin:0}
+.schedule-prep .central-subject-steps li{display:flex;align-items:center;gap:7px;flex:1;color:#60728c;font-size:13px}
+.schedule-prep .central-subject-steps b{display:grid;place-items:center;flex:none;width:26px;height:26px;border-radius:50%;background:#e5ecf6}
+.schedule-prep .central-subject-steps [aria-current=step]{color:#17469f;font-weight:700}
+.schedule-prep .central-subject-steps [aria-current=step] b{background:#245bdb;color:white}
+.schedule-prep .prep-subject-dialog .central-subject-panel legend{font-size:16px}
+.schedule-prep .central-subject-grades span{display:grid}
+.schedule-prep .central-subject-search{width:100%;min-height:44px;margin:12px 0;font-size:16px}
+.schedule-prep .central-subject-room-group{margin:14px 0}
+.schedule-prep .central-subject-room-group>strong{display:block;margin-bottom:8px;color:#244264;font-size:14px}
+.schedule-prep .prep-subject-dialog .central-subject-panel .central-subject-source{padding:10px 12px;background:#fff8e8;border:1px solid #ead9b2;border-radius:10px;color:#75571d}
+.schedule-prep .central-subject-nav{display:flex;gap:8px;flex-wrap:wrap}
+.schedule-prep .central-subject-stage .central-subject-nav button{min-height:44px;height:auto;white-space:normal}
+@media(max-width:480px){.schedule-prep .central-subject-steps{gap:5px}.schedule-prep .central-subject-steps li{font-size:12px;gap:4px}.schedule-prep .central-subject-nav{width:100%;flex-wrap:nowrap}.schedule-prep .central-subject-nav button{flex:1}}

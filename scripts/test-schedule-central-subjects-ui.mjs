@@ -8,11 +8,13 @@ import webpackPackage from 'next/dist/compiled/webpack/webpack.js'
 const {webpack}=webpackPackage,root=process.cwd(),out=path.resolve('tmp/central-subjects-ui');fs.mkdirSync(out,{recursive:true})
 const write=(name,source)=>{const file=path.join(out,name);fs.writeFileSync(file,source);return file}
 const fixture={hash:'fixture',classrooms:[{id:'a',level:'ป.1',name:'1',room:1},{id:'ip',level:'ป.1',name:'IP',room:2},{id:'p2',level:'ป.2',name:'1',room:1},{id:'m1',level:'ม.1',name:'1',room:1}],teachers:[{id:'teacher',full_name:'ครูเดิม',prefix:'',position:'ครู'}],plan:{rules:{old:{count:5,pattern:[1,1,1,1,1],roomId:'venue'}},teacherIds:['teacher'],rooms:[]},lessons:[{id:'old',classroomId:'a',code:'ท11101',name:'ภาษาไทยเดิม',teacherId:'teacher',roomName:'ห้องเดิม',count:5,subjectGroup:'ภาษาไทย',subjectType:'พื้นฐาน'}]}
+fixture.classrooms.push({id:'m4',level:'ม.4',name:'1',room:1},{id:'m6',level:'ม.6',name:'1',room:1});
 fixture.classrooms.push(...[3,4,5,6].map(grade=>({id:'p'+grade,level:'ป.'+grade,name:'1',room:1})))
 const thai={code:'ท11101',name:'ภาษาไทย',subject_group:'ภาษาไทย',type:'พื้นฐาน',hours_per_year:200,sort_order:1}
 const catalog=[thai,{...thai,code:'ค11101',name:'คณิตศาสตร์',subject_group:'คณิตศาสตร์',hours_per_year:160,sort_order:2},{...thai,code:'ว11101',name:'วิทยาศาสตร์ที่ยังไม่กำหนดชั่วโมง',hours_per_year:0,sort_order:3},{...thai,code:'ท12101',name:'ภาษาไทย ป.2'},{...thai,code:'ท21101',name:'มัธยมไม่ควรปรากฏ'}]
+catalog.push({...thai,code:'ศ30212',level:'ม.4',name:'ปฏิบัติเครื่องลม 2',subject_group:'ศิลปะ',credits:.5},{...thai,code:'ศ30212',level:'ม.6',name:'การตกแต่งภายใน 2',subject_group:'ศิลปะ',credits:1});
 catalog.push(...[3,4,5,6].map(grade=>({...thai,code:'ท1'+grade+'101',name:'ภาษาไทย ป.'+grade})))
-const bridge=write('catalog.js',`export async function fetchPrimaryScheduleSubjects(){return fetch('/catalog').then(r=>r.json())}`)
+const bridge=write('catalog.js',`export async function fetchScheduleCentralSubjects(){return fetch('/catalog').then(r=>r.json())}`)
 const navigation=write('navigation.js',`export function usePathname(){return location.pathname}export function useRouter(){return{push:()=>{}}}`)
 const link=write('link.js',`import React from'react';export default function Link({prefetch,children,...props}){return React.createElement('a',props,children)}`)
 const entry=write('entry.js',`import React from'react';import{createRoot}from'react-dom/client';import Input from ${JSON.stringify(path.join(root,'components/schedules/ScheduleDataInput.tsx'))};import{ScheduleServicesProvider}from ${JSON.stringify(path.join(root,'components/schedules/ScheduleServices.tsx'))};const operations={saveScheduleInputSubjects:async(year,term,hash,rows)=>fetch('/save',{method:'POST',body:JSON.stringify({year,term,hash,rows})}).then(r=>r.json())};createRoot(document.getElementById('root')).render(React.createElement(ScheduleServicesProvider,{operations,local:location.search.includes('local')},React.createElement('div',{className:'workspace-theme'},React.createElement('section',{className:'schedule-prep'},React.createElement(Input,{kind:'subjects',data:(location.search.includes('case=empty')?{...${JSON.stringify(fixture)},classrooms:[],lessons:[]}:location.search.includes('case=secondary')?{...${JSON.stringify(fixture)},classrooms:${JSON.stringify(fixture.classrooms.filter(room=>room.level.startsWith('ม.')))},lessons:[]}:${JSON.stringify(fixture)}),year:'year',term:2,onSaved:async()=>{},onDirty:()=>{},onBusy:()=>{},onRoster:()=>{},locked:false})))));`)
@@ -30,58 +32,32 @@ const server=http.createServer(async(req,res)=>{
 })
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser
 try{
-  browser=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true,userDataDir:fs.mkdtempSync(path.join(out,'profile-')),args:['--no-first-run','--disable-gpu']})
-  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);page.setDefaultNavigationTimeout(120000)
-  const chooseOnlyGrade=async grade=>{await page.click('[data-central-grades=clear]');await page.click('.central-subject-grades input[data-grade="'+grade+'"]')}
-  for(const local of [false,true]){
-    const before=saves.length;failCatalog=local
-    await page.setViewport({width:1440,height:1000});await page.goto(`http://127.0.0.1:${server.address().port}/schedules/${local?'device/manage?local=1':'class/manage'}`,{waitUntil:'networkidle0'})
-    await page.click('.prep-subject-tools .prep-primary');await page.waitForSelector('.prep-subject-dialog[open]')
-    const pending=['ป.1/IP','ค11101','ชื่อที่กรอกไว้','7','คณิตศาสตร์','พื้นฐาน']
-    for(let col=0;col<6;col++)await page.type(`.prep-sheet input[data-row="0"][data-col="${col}"]`,pending[col])
-    await page.click('.central-subject-toggle')
-    if(local){await page.waitForSelector('.central-subject-panel .prep-error');await page.click('.central-subject-panel .prep-error button')}
-    await page.waitForSelector('.central-subject-options input');assert.equal(saves.length,before,'Catalog browsing is read-only')
-    assert.equal(await page.$eval('.central-subject-stage',el=>el.textContent.includes('เพิ่มใหม่ 2 รายการ · ข้ามรายการซ้ำ 2 รายการ')),true)
-    assert.equal(await page.$eval('.central-subject-options label:last-child input',el=>el.disabled),true,'Missing annual hours cannot silently create a period')
-    await chooseOnlyGrade(2);assert.equal(await page.$eval('.central-subject-options',el=>el.textContent.includes('ภาษาไทย ป.2')),true);assert.equal(await page.$eval('.central-subject-options',el=>el.textContent.includes('มัธยม')),false)
-    await chooseOnlyGrade(1)
-    await page.click('.central-subject-rooms label:first-child input');assert.equal(await page.$eval('.central-subject-stage',el=>el.textContent.includes('เพิ่มใหม่ 1 รายการ · ข้ามรายการซ้ำ 1 รายการ')),true)
-    await page.click('[data-central-rooms=all]');await page.click('.central-subject-options label:nth-child(2) input');assert.equal(await page.$eval('.central-subject-stage',el=>el.textContent.includes('เพิ่มใหม่ 1 รายการ · ข้ามรายการซ้ำ 1 รายการ')),true)
-    await page.click('.central-subject-options label:nth-child(2) input')
-    for(const width of [360,390,768,1440]){
-      await page.setViewport({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
-      assert.equal(await page.$eval('.prep-subject-dialog',el=>el.scrollWidth>el.clientWidth+1),false,'Dialog overflow '+width)
-      assert.equal(await page.$eval('.central-subject-panel',el=>el.scrollWidth>el.clientWidth+1),false,'Catalog panel overflow '+width);if(width<768){assert.ok(await page.$eval('.prep-sheet table',el=>el.getBoundingClientRect().width>=960),'Spreadsheet keeps readable columns');assert.ok(await page.$eval('.prep-sheet .prep-scroll',el=>el.scrollWidth>el.clientWidth),'Spreadsheet scroll stays inside the dialog')}
-      if(width===390||width===1440)await page.screenshot({path:path.join(out,`catalog-${local?'free':'online'}-${width}.png`)})
-    }
-    await page.click('.central-subject-stage .prep-primary');await page.waitForSelector('.central-subject-panel',{hidden:true})
-    assert.equal(await page.$eval('.prep-sheet input[data-row="0"][data-col="2"]',el=>el.value),'ชื่อที่กรอกไว้')
-    assert.equal(await page.$eval('.prep-sheet input[data-row="0"][data-col="3"]',el=>el.value),'7')
-    const count=await page.$('.prep-sheet input[data-row="1"][data-col="3"]');await count.focus();await page.keyboard.down('Control');await page.keyboard.press('A');await page.keyboard.up('Control');await page.keyboard.type('3');assert.equal(await count.evaluate(el=>el.value),'3')
-    assert.equal(saves.length,before,'Staging does not save automatically')
-    await page.click('.prep-subject-dialog>footer .prep-primary');try{await page.waitForSelector('.prep-subject-dialog[open]',{hidden:true})}catch(error){console.log(await page.$$eval('.prep-error',els=>els.map(el=>el.textContent)));console.log('Runtime errors:',errors);await page.screenshot({path:path.join(out,'save-failure.png')});throw error}
-    const saved=saves.at(-1);assert.equal(saves.length,before+1);assert.equal(saved.year,'year');assert.equal(saved.term,2);assert.equal(saved.hash,'fixture');assert.equal(saved.rows.length,3)
-    assert.ok(!saved.rows.some(row=>row.classroomId==='a'&&row.code==='ท11101'),'Existing teacher/venue assignment was not submitted for overwrite')
-    assert.equal(saved.rows.find(row=>row.classroomId==='a'&&row.code==='ค11101').count,3)
-    assert.equal(saved.rows.find(row=>row.classroomId==='ip'&&row.code==='ค11101').count,7)
-    assert.equal(saved.rows.find(row=>row.classroomId==='ip'&&row.code==='ท11101').count,5)
-    if(!local){
-      await page.click('.prep-subject-levels button:nth-of-type(2)')
-      for(let attempt=0;attempt<2;attempt++){
-        await page.click('.prep-subject-tools .prep-primary');await page.click('.central-subject-toggle');await page.waitForSelector('.central-subject-options input')
-        assert.equal(await page.$eval('.central-subject-grades input[data-grade="2"]',el=>el.checked),true,'Reopening defaults to the classroom grade currently being edited')
-        await chooseOnlyGrade(1);await page.click('.prep-subject-dialog>header button')
-      }
-    }
-  }
-  for(const local of [false,true]){
-    const before=saves.length;await page.setViewport({width:1440,height:1000});await page.goto(`http://127.0.0.1:${server.address().port}/schedules/${local?'device/manage?local=1':'class/manage'}`,{waitUntil:'networkidle0'});await page.click('.prep-subject-tools .prep-primary');await page.click('.central-subject-toggle');await page.waitForSelector('.central-subject-options input');await page.click('[data-central-grades=all]');assert.equal(await page.$$eval('.central-subject-grades input:checked',els=>els.length),6);assert.equal(await page.$$eval('.central-subject-rooms input:checked',els=>els.length),7);assert.equal(await page.$eval('.central-subject-stage',el=>el.textContent.includes('เพิ่มใหม่ 8 รายการ · ข้ามรายการซ้ำ 1 รายการ')),true);
-    await page.click('.central-subject-rooms input[data-room="ip"]');await page.click('.central-subject-options input[data-code="ค11101"]');await page.click('.central-subject-grades input[data-grade="4"]');await page.click('.central-subject-grades input[data-grade="4"]');assert.equal(await page.$eval('.central-subject-rooms input[data-room="ip"]',el=>el.checked),false,'Adding a grade retains exclusions in other grades');assert.equal(await page.$eval('.central-subject-options input[data-code="ค11101"]',el=>el.checked),false);assert.equal(await page.$eval('.central-subject-stage',el=>el.textContent.includes('เพิ่มใหม่ 5 รายการ')),true);
-    await page.click('[data-central-rooms=all]');await page.evaluate(()=>[...document.querySelectorAll('.central-subject-panel button')].find(button=>button.textContent==='เลือกทุกวิชา').click());for(const width of [360,390,768,1440]){await page.setViewport({width,height:1000});assert.equal(await page.$eval('.central-subject-panel',el=>el.scrollWidth>el.clientWidth+1),false);assert.equal(await page.$eval('.prep-subject-dialog',el=>el.scrollWidth>el.clientWidth+1),false);if(width===390||width===1440)await page.screenshot({path:path.join(out,`catalog-all-grades-${local?'free':'online'}-${width}.png`)})}
-    await page.click('.central-subject-stage .prep-primary');await page.click('.prep-subject-dialog>footer .prep-primary');await page.waitForSelector('.prep-subject-dialog[open]',{hidden:true});assert.equal(saves.length,before+1);const rows=saves.at(-1).rows;assert.equal(rows.length,8);assert.equal(new Set(rows.map(row=>row.classroomId+':'+row.code)).size,8);for(const row of rows){const room=fixture.classrooms.find(room=>room.id===row.classroomId);assert.equal(row.code[2],room.level.slice(-1),'Each subject goes only to its own grade');assert.ok(!room.level.startsWith('ม.'))}assert.ok(!rows.some(row=>row.classroomId==='a'&&row.code==='ท11101'));
-  }
-  for(const kind of ['empty','secondary']){await page.setViewport({width:390,height:1000});await page.goto(`http://127.0.0.1:${server.address().port}/schedules/device/manage?local=1&case=${kind}`,{waitUntil:'networkidle0'});await page.click('.prep-subject-tools .prep-primary');await page.click('.central-subject-toggle');await page.waitForSelector('.central-subject-options input');assert.equal(await page.$$eval('.central-subject-grades input',els=>els.length),6);assert.equal(await page.$eval('.central-subject-grades input[data-grade="1"]',el=>el.checked),true);assert.equal(await page.$eval('.central-subject-stage .prep-primary',el=>el.disabled),true);assert.equal(await page.$$eval('.central-subject-rooms input',els=>els.length),0);assert.equal(await page.$eval('.central-subject-room-notice',(el,kind)=>el.textContent.includes(kind==='secondary'?'ม.1':'ยังไม่ได้กำหนดชั้น/ห้อง'),kind),true);assert.equal(await page.$eval('.central-subject-panel',el=>el.scrollWidth>el.clientWidth+1),false);await page.screenshot({path:path.join(out,'catalog-'+kind+'-390.png')})}
-  assert.equal(catalogReads,9);assert.deepEqual(errors,[])
-  console.log('PASS: real Free/online subject dialog, four widths, primary-only grade/room selection, invalid hours disabled, existing/staged rows protected, retry, editable preview and explicit batched save; one batch across ป.1–ป.6, per-grade matching and retained exclusions; six-grade browsing with empty/secondary-only rooms stays read-only; mobile spreadsheet scrolls without compressed columns')
+ browser=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true,userDataDir:fs.mkdtempSync(path.join(out,'profile-')),args:['--no-first-run','--disable-gpu']})
+ const page=await browser.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(15000);page.setDefaultNavigationTimeout(120000)
+ const click=async(text,selector='.central-subject-panel button')=>page.evaluate((text,selector)=>{const button=[...document.querySelectorAll(selector)].find(button=>button.textContent.trim()===text);if(!button||button.disabled)throw Error('Missing enabled button '+text);button.click()},text,selector)
+ const open=async(local=false)=>{await page.goto('http://127.0.0.1:'+server.address().port+'/schedules/'+(local?'device/manage?local=1':'class/manage'),{waitUntil:'networkidle0'});await page.click('.prep-subject-tools .prep-primary');await page.waitForSelector('.prep-subject-dialog[open]')}
+ for(const local of [false,true]){
+  await page.setViewport({width:1440,height:1000});await open(local)
+  const pending=['ป.1/IP','ค11101','ชื่อที่กรอกไว้','7','คณิตศาสตร์','พื้นฐาน'];for(let col=0;col<6;col++)await page.type('.prep-sheet input[data-row="0"][data-col="'+col+'"]',pending[col])
+  const before=saves.length;failCatalog=local;await page.click('.central-subject-toggle');if(local){await page.waitForSelector('.central-subject-panel .prep-error');await click('ลองโหลดอีกครั้ง')}
+  await page.waitForSelector('.central-subject-grades input[data-level="ป.1"]');await click('ถัดไป: เลือกวิชา');await page.waitForSelector('.central-subject-options')
+  assert.equal(await page.$eval('[data-code="ว11101"]',input=>input.disabled),true);assert.equal(await page.$('[data-code="ท21101"]'),null)
+  await click('เลือกวิชาที่แสดงทั้งหมด');await click('ถัดไป: เลือกห้อง');await page.waitForSelector('[data-room=ip]');await page.click('[data-room=ip]')
+  assert.equal(await page.$eval('.central-subject-stage',element=>element.textContent.includes('เพิ่มใหม่ 1 รายการ')),true)
+  await click('เพิ่ม 1 รายการลงตารางตรวจสอบ');await page.waitForFunction(()=>!document.querySelector('.central-subject-panel'))
+  assert.equal(saves.length,before,'Selecting central templates only stages rows, never saves')
+  const matrix=await page.$$eval('.prep-sheet tbody tr',rows=>rows.map(row=>[...row.querySelectorAll('input')].map(input=>input.value)).filter(row=>row.some(Boolean)))
+  assert.equal(matrix.length,2);assert.equal(matrix[0][2],'ชื่อที่กรอกไว้');assert.equal(matrix[0][3],'7');assert.equal(matrix[1][0],'ป.1/IP')
+  await click('บันทึก 2 รายการ','.prep-subject-dialog footer button');await page.waitForFunction(()=>!document.querySelector('.prep-subject-dialog[open]'))
+  assert.equal(saves.length,before+1);assert.equal(saves.at(-1).rows.length,2);assert.equal(saves.at(-1).rows[0].count,7);assert.ok(saves.at(-1).rows.every(row=>row.classroomId==='ip'))
+ }
+ await open(true);await page.click('.central-subject-toggle');await page.waitForSelector('.central-subject-grades');await click('ล้างการเลือก');await page.click('[data-level="ม.4"]');await page.click('[data-level="ม.6"]');await click('ถัดไป: เลือกวิชา')
+ await page.waitForSelector('[data-subject-key="ม.4|ศ30212"]');await click('เลือกวิชาที่แสดงทั้งหมด')
+ for(const width of [320,390,768,1440]){await page.setViewport({width,height:1000});assert.equal(await page.$eval('.central-subject-panel',panel=>panel.scrollWidth>panel.clientWidth+1),false,'Panel overflow '+width);if(width===390||width===1440)await (await page.$('.central-subject-panel')).screenshot({path:path.join(out,'central-subjects-'+width+'.png')})}
+ await click('ถัดไป: เลือกห้อง');await click('เลือกทุกห้องของชั้นที่เลือก');await click('เพิ่ม 2 รายการลงตารางตรวจสอบ')
+ let matrix=await page.$$eval('.prep-sheet tbody tr',rows=>rows.map(row=>[...row.querySelectorAll('input')].map(input=>input.value)).filter(row=>row.some(Boolean)))
+ assert.equal(matrix.find(row=>row[0]==='ม.4/1')[2],'ปฏิบัติเครื่องลม 2');assert.equal(matrix.find(row=>row[0]==='ม.4/1')[3],'1');assert.equal(matrix.find(row=>row[0]==='ม.6/1')[2],'การตกแต่งภายใน 2');assert.equal(matrix.find(row=>row[0]==='ม.6/1')[3],'2')
+ await open(true);await page.click('.central-subject-toggle');await page.waitForSelector('.central-subject-grades');await click('ล้างการเลือก');for(const grade of [1,2,3,4,5,6])await page.click('[data-level="ป.'+grade+'"]');await click('ถัดไป: เลือกวิชา');await click('เลือกวิชาที่แสดงทั้งหมด');await click('ถัดไป: เลือกห้อง');await click('เลือกทุกห้องของชั้นที่เลือก');await click('เพิ่ม 8 รายการลงตารางตรวจสอบ')
+ matrix=await page.$$eval('.prep-sheet tbody tr',rows=>rows.map(row=>[...row.querySelectorAll('input')].map(input=>input.value)).filter(row=>row.some(Boolean)));assert.equal(matrix.length,8);assert.ok(matrix.every(row=>row[0].startsWith('ป.')))
+ assert.deepEqual(errors,[]);console.log('PASS: ordered grade → course → destination workflow on Free/online; multiple grades and rooms; primary duplicates/staged edits; retry; secondary same-code variants and credits; 320–1440 responsive UI; zero writes before confirmation')
 }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve))}

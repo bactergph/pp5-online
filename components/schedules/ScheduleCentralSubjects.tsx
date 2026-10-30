@@ -1,58 +1,49 @@
 'use client'
 import { useState } from 'react'
-import { fetchPrimaryScheduleSubjects } from '@/app/schedules/catalog-actions'
-import { centralSubjectPeriods, centralSubjectProblem, prepareCentralSubjects, primaryRoomGrade, primarySubjectGrade, type CentralScheduleSubject, type CentralSubjectRoom } from '@/lib/schedule-central-subjects'
-import { SCHEDULE_WEEKS_PER_YEAR } from '@/lib/schedule-helpers'
+import { fetchScheduleCentralSubjects } from '@/app/schedules/catalog-actions'
+import { centralRoomLevel, centralSubjectLevel, centralSubjectKey, centralSubjectPeriods, centralSubjectProblem, prepareCentralSubjects, type CentralScheduleSubject, type CentralSubjectRoom } from '@/lib/schedule-central-subjects'
 import './schedule-central-subjects.css'
 
-export default function ScheduleCentralSubjects({rooms,initialLevel,existing,staged,disabled,onAppend}:{
-  rooms:CentralSubjectRoom[];initialLevel:string;existing:{classroomId:string;code:string;activity?:boolean}[]
-  staged:string[][];disabled:boolean;onAppend:(rows:string[][])=>void
-}) {
-  const grades=[1,2,3,4,5,6]
-  const configuredLevels=[...new Set(rooms.map(room=>room.level))]
-  const [open,setOpen]=useState(false),[catalog,setCatalog]=useState<CentralScheduleSubject[]|null>(null)
-  const [loading,setLoading]=useState(false),[error,setError]=useState('')
-  const [selectedGrades,setSelectedGrades]=useState<number[]>([primaryRoomGrade(initialLevel)||rooms.map(room=>primaryRoomGrade(room.level)).find(value=>value!==null)||1])
-  const [roomIds,setRoomIds]=useState<string[]|null>(null),[codes,setCodes]=useState<string[]|null>(null)
-  const gradeRooms=rooms.filter(room=>selectedGrades.includes(primaryRoomGrade(room.level)||0)).sort((a,b)=>(primaryRoomGrade(a.level)||0)-(primaryRoomGrade(b.level)||0)||a.room-b.room)
-  const missingGrades=selectedGrades.filter(grade=>!gradeRooms.some(room=>primaryRoomGrade(room.level)===grade))
-  const subjects=(catalog||[]).filter(subject=>selectedGrades.includes(primarySubjectGrade(subject.code)||0)).sort((a,b)=>(primarySubjectGrade(a.code)||0)-(primarySubjectGrade(b.code)||0)||a.sort_order-b.sort_order||a.code.localeCompare(b.code,'th'))
-  const selectedRooms=roomIds??gradeRooms.map(room=>room.id),selectedCodes=codes??subjects.filter(subject=>!centralSubjectProblem(subject)).map(subject=>subject.code)
-  const preview=prepareCentralSubjects(subjects,gradeRooms,selectedRooms,selectedCodes,existing,staged)
-  async function load(){
-    setLoading(true);setError('')
-    try{const result=await fetchPrimaryScheduleSubjects();if(result.error||!result.data)throw Error(result.error||'โหลดรายวิชากลางไม่สำเร็จ');setCatalog(result.data);setCodes(null)}
-    catch(cause){setError(cause instanceof Error?cause.message:'กรุณาเชื่อมต่ออินเทอร์เน็ตเพื่อดึงรายวิชากลาง แล้วลองอีกครั้ง')}
-    finally{setLoading(false)}
-  }
-  function toggleRoom(id:string){setRoomIds(selectedRooms.includes(id)?selectedRooms.filter(item=>item!==id):[...selectedRooms,id])}
-  function toggleSubject(code:string){setCodes(selectedCodes.includes(code)?selectedCodes.filter(item=>item!==code):[...selectedCodes,code])}
-  function chooseGrades(next:number[]){
-    const added=next.filter(grade=>!selectedGrades.includes(grade))
-    // Keep choices in the other grades when adding or removing a grade.
-    setRoomIds([...selectedRooms.filter(id=>rooms.some(room=>room.id===id&&next.includes(primaryRoomGrade(room.level)||0))),...rooms.filter(room=>added.includes(primaryRoomGrade(room.level)||0)).map(room=>room.id)])
-    setCodes([...selectedCodes.filter(code=>next.includes(primarySubjectGrade(code)||0)),...(catalog||[]).filter(subject=>added.includes(primarySubjectGrade(subject.code)||0)&&!centralSubjectProblem(subject)).map(subject=>subject.code)])
-    setSelectedGrades(next.slice().sort((a,b)=>a-b))
-  }
+export default function ScheduleCentralSubjects({rooms,initialLevel,existing,staged,disabled,onAppend,onOpenChange}:{rooms:CentralSubjectRoom[];initialLevel:string;existing:{classroomId:string;code:string;activity?:boolean}[];staged:string[][];disabled:boolean;onAppend:(rows:string[][])=>void;onOpenChange?:(open:boolean)=>void}) {
+  const levels=[...new Set(rooms.flatMap(room=>centralRoomLevel(room.level)?[centralRoomLevel(room.level)!]:[]))].sort((a,b)=>Number(a.startsWith('ม.'))-Number(b.startsWith('ม.'))||a.localeCompare(b,'th',{numeric:true}))
+  const [open,setOpen]=useState(false),[step,setStep]=useState(1),[catalog,setCatalog]=useState<CentralScheduleSubject[]|null>(null)
+  const [loading,setLoading]=useState(false),[error,setError]=useState(''),[query,setQuery]=useState('')
+  const [selectedLevels,setSelectedLevels]=useState<string[]>(levels.includes(centralRoomLevel(initialLevel)||'')?[centralRoomLevel(initialLevel)!]:levels.slice(0,1))
+  const [roomIds,setRoomIds]=useState<string[]>([]),[codes,setCodes]=useState<string[]>([])
+  const subjects=(catalog||[]).filter(subject=>selectedLevels.includes(centralSubjectLevel(subject)||'')).sort((a,b)=>(centralSubjectLevel(a)||'').localeCompare(centralSubjectLevel(b)||'','th',{numeric:true})||a.sort_order-b.sort_order||a.code.localeCompare(b.code,'th'))
+  const visible=subjects.filter(subject=>!query.trim()||(subject.code+' '+subject.name+' '+subject.subject_group).toLocaleLowerCase('th').includes(query.trim().toLocaleLowerCase('th')))
+  const targets=rooms.filter(room=>selectedLevels.includes(centralRoomLevel(room.level)||''))
+  const selectedSubjects=subjects.filter(subject=>codes.includes(centralSubjectKey(subject)))
+  const targetLevels=selectedLevels.filter(level=>selectedSubjects.some(subject=>centralSubjectLevel(subject)===level))
+  const eligible=targets.filter(room=>targetLevels.includes(centralRoomLevel(room.level)||''))
+  const preview=prepareCentralSubjects(subjects,targets,roomIds,codes,existing,staged)
+  function show(next:boolean){setOpen(next);onOpenChange?.(next)}
+  async function load(){setLoading(true);setError('');try{const result=await fetchScheduleCentralSubjects();if(result.error||!result.data)throw Error(result.error||'โหลดรายวิชากลางไม่สำเร็จ');setCatalog(result.data)}catch(error){setError(error instanceof Error?error.message:'โหลดไม่สำเร็จ กรุณาลองใหม่')}finally{setLoading(false)}}
+  function chooseLevels(next:string[]){setSelectedLevels(next);setCodes(codes.filter(code=>next.includes(code.split('|')[0])));setRoomIds(roomIds.filter(id=>rooms.some(room=>room.id===id&&next.includes(centralRoomLevel(room.level)||''))))}
   return <div className="central-subject-import">
-    <button type="button" className="central-subject-toggle" aria-expanded={open} aria-controls="primary-central-subjects" disabled={disabled||loading} onClick={()=>{setOpen(!open);if(!open&&catalog===null)void load()}}>ดึงโครงสร้างรายวิชากลาง</button>
-    {open&&<section id="primary-central-subjects" className="central-subject-panel" aria-labelledby="primary-central-title">
-      <header><div><h3 id="primary-central-title">รายวิชากลาง · ระดับประถม</h3><p>เลือกชั้น ห้อง และรายวิชา แล้วตรวจในตารางนำเข้าก่อนบันทึก</p></div><button type="button" disabled={loading||disabled} onClick={()=>setOpen(false)}>ปิดส่วนนี้</button></header>
-      <>
-        <fieldset className="central-subject-grade-picker" disabled={loading||disabled}><legend>เลือกชั้นได้หลายชั้น</legend><div className="central-subject-choice-bar"><button type="button" data-central-grades="all" onClick={()=>chooseGrades(grades)}>เลือกทั้งหมด ป.1–ป.6</button><button type="button" data-central-grades="clear" onClick={()=>chooseGrades([])}>ล้างการเลือกชั้น</button></div><div className="central-subject-grades">{grades.map(value=><label key={value}><input type="checkbox" data-grade={value} aria-label={`เลือกชั้น ป.${value}`} checked={selectedGrades.includes(value)} onChange={()=>chooseGrades(selectedGrades.includes(value)?selectedGrades.filter(grade=>grade!==value):[...selectedGrades,value])}/><span>ป.{value}<small>{rooms.filter(room=>primaryRoomGrade(room.level)===value).length} ห้อง</small></span></label>)}</div></fieldset>
-        {loading&&<p role="status">กำลังโหลดโครงสร้างรายวิชากลาง…</p>}
-        {error&&<div className="prep-error" role="alert">{error}<button type="button" disabled={loading||disabled} onClick={()=>void load()}>ลองโหลดอีกครั้ง</button></div>}
-        {catalog!==null&&!loading&&!error&&<>
-          {!selectedGrades.length&&<p className="central-subject-empty" role="status">เลือกอย่างน้อยหนึ่งชั้น หรือกดเลือกทั้งหมด ป.1–ป.6 เพื่อดูรายวิชา</p>}
-          {selectedGrades.length>0&&<fieldset disabled={disabled}><legend>ห้องที่จะเพิ่มรายวิชา</legend>{gradeRooms.length>0&&<><div className="central-subject-choice-bar"><button type="button" data-central-rooms="all" onClick={()=>setRoomIds(gradeRooms.map(room=>room.id))}>เลือกทุกห้องของชั้นที่เลือก</button><button type="button" onClick={()=>setRoomIds([])}>ล้างการเลือกห้อง</button></div><div className="central-subject-rooms">{gradeRooms.map(room=><label key={room.id}><input type="checkbox" data-room={room.id} checked={selectedRooms.includes(room.id)} onChange={()=>toggleRoom(room.id)}/>{room.level}/{room.name}</label>)}</div></>}{missingGrades.length>0&&<div className="central-subject-room-notice" role="status"><strong>ยังไม่มีห้องปลายทางสำหรับ {missingGrades.map(grade=>`ป.${grade}`).join(' · ')}</strong><p>{configuredLevels.length?`ชั้นที่ตั้งไว้ตอนนี้: ${configuredLevels.join(' · ')}`:'ชุดข้อมูลนี้ยังไม่ได้กำหนดชั้น/ห้อง'}</p><p>ดูรายวิชาได้ก่อน เพิ่มและบันทึกห้องที่ขาดในขั้น 2 แล้วกลับมานำเข้า วิชาจะถูกใส่เฉพาะห้องที่ตรงระดับชั้น</p></div>}</fieldset>}
-          <fieldset disabled={disabled}><legend>รายวิชาที่จะนำเข้า</legend><div className="central-subject-choice-bar"><button type="button" onClick={()=>setCodes(subjects.filter(subject=>!centralSubjectProblem(subject)).map(subject=>subject.code))}>เลือกทุกวิชา</button><button type="button" onClick={()=>setCodes([])}>ล้างการเลือกวิชา</button></div>
-            {!subjects.length?<p className="central-subject-empty">{selectedGrades.length?'ยังไม่มีรายวิชากลางสำหรับชั้นที่เลือก ให้ผู้ดูแลเพิ่มในเมนูโครงสร้างรายวิชากลางก่อน':'ยังไม่ได้เลือกชั้น'}</p>:<div className="central-subject-options">{subjects.map(subject=>{const problem=centralSubjectProblem(subject);return <label key={subject.code} className={problem?'is-unavailable':''}><input type="checkbox" data-code={subject.code} disabled={!!problem} checked={!problem&&selectedCodes.includes(subject.code)} onChange={()=>toggleSubject(subject.code)}/><span><strong>{subject.name}</strong><small><span className="central-subject-grade-tag">ป.{primarySubjectGrade(subject.code)}</span> {subject.code} · {subject.subject_group} · {subject.type}</small>{problem&&<small className="central-subject-problem">{problem}</small>}</span><em>{subject.hours_per_year} ชม./ปี<strong>{centralSubjectPeriods(subject)} คาบ/สัปดาห์</strong></em></label>})}</div>}
-          </fieldset>
-          <p className="central-subject-note">คำนวณจาก {SCHEDULE_WEEKS_PER_YEAR} สัปดาห์ต่อปี ปัดเป็นจำนวนคาบเต็ม ปรับจำนวนคาบในตารางนำเข้าได้ · วิชาเดิมของแต่ละห้องจะถูกข้าม</p>
-          <div className="central-subject-stage"><span role="status">เพิ่มใหม่ {preview.rows.length} รายการ · ข้ามรายการซ้ำ {preview.skipped} รายการ{preview.overLimit&&<strong className="central-subject-problem">จำนวนรายการเกินขีดจำกัด กรุณาเลือกห้องหรือวิชาให้น้อยลง</strong>}</span><button type="button" className="prep-primary" disabled={disabled||!preview.rows.length||preview.overLimit} onClick={()=>{if(preview.overLimit||!preview.rows.length)return;onAppend(preview.rows);setOpen(false)}}>นำ {preview.rows.length} รายการลงตารางนำเข้า</button></div>
-        </>}
-      </>
+    <button type="button" className="central-subject-toggle" aria-expanded={open} disabled={disabled||loading} onClick={()=>{show(!open);if(!open&&catalog===null)void load()}}>ดึงโครงสร้างรายวิชากลาง</button>
+    {open&&<section className="central-subject-panel" aria-labelledby="central-subject-title">
+      <header><div><h3 id="central-subject-title">เลือกรายวิชาจากข้อมูลกลาง</h3><p>ประถม ป.1–ป.6 และมัธยม ม.1–ม.6 · นำไปใช้ได้หลายห้องพร้อมกัน</p></div><button type="button" onClick={()=>show(false)}>ปิดส่วนนี้</button></header>
+      <ol className="central-subject-steps" aria-label="ขั้นตอนเลือกรายวิชากลาง">{['เลือกชั้น','เลือกวิชา','เลือกห้อง'].map((label,index)=><li key={label} aria-current={step===index+1?'step':undefined}><b>{index+1}</b>{label}</li>)}</ol>
+      {loading&&<p role="status">กำลังโหลดรายวิชากลาง…</p>}
+      {error&&<div className="prep-error" role="alert">{error}<button type="button" onClick={()=>void load()}>ลองโหลดอีกครั้ง</button></div>}
+      {!loading&&!error&&<>
+        {step===1&&<fieldset disabled={disabled}><legend>1. เลือกชั้นที่ต้องการเพิ่มรายวิชา</legend><p>เลือกจากชั้นที่ตั้งไว้ในขั้น 2 เลือกหลายชั้นได้</p>
+          {!levels.length?<p className="central-subject-room-notice">ยังไม่มีชั้น/ห้องเรียน กรุณาเพิ่มและบันทึกในขั้น 2 ก่อน</p>:<><div className="central-subject-choice-bar"><button type="button" data-central-grades="all" onClick={()=>chooseLevels(levels)}>เลือกทุกชั้นที่เปิดสอน</button>{levels.some(level=>level.startsWith('ป.'))&&levels.some(level=>level.startsWith('ม.'))&&<><button type="button" onClick={()=>chooseLevels(levels.filter(level=>level.startsWith('ป.')))}>เลือกเฉพาะประถม</button><button type="button" onClick={()=>chooseLevels(levels.filter(level=>level.startsWith('ม.')))}>เลือกเฉพาะมัธยม</button></>}<button type="button" data-central-grades="clear" onClick={()=>chooseLevels([])}>ล้างการเลือก</button></div><div className="central-subject-grades">{levels.map(level=><label key={level}><input type="checkbox" data-level={level} checked={selectedLevels.includes(level)} onChange={()=>chooseLevels(selectedLevels.includes(level)?selectedLevels.filter(item=>item!==level):[...selectedLevels,level])}/><span>{level}<small>{rooms.filter(room=>centralRoomLevel(room.level)===level).length} ห้อง</small></span></label>)}</div></>}
+        </fieldset>}
+        {step===2&&<fieldset disabled={disabled}><legend>2. เลือกรายวิชาที่จะนำไปใช้</legend><p>ชั้นที่เลือก: {selectedLevels.join(' · ')} · เลือกแล้ว {selectedSubjects.length} วิชา</p>
+          {selectedLevels.some(level=>level.startsWith('ม.'))&&<p className="central-subject-source">โครงสร้างมัธยมเป็นตัวอย่างจากโรงเรียนเซกา ภาคเรียน 2 ตรวจชื่อและจำนวนคาบให้ตรงกับหลักสูตรของโรงเรียนก่อนบันทึก</p>}
+          <input type="search" className="central-subject-search" placeholder="ค้นหารหัส ชื่อวิชา หรือกลุ่มสาระ" aria-label="ค้นหารายวิชากลาง" value={query} onChange={event=>setQuery(event.target.value)}/>
+          <div className="central-subject-choice-bar"><button type="button" onClick={()=>setCodes([...new Set([...codes,...visible.filter(subject=>!centralSubjectProblem(subject)).map(centralSubjectKey)])])}>เลือกวิชาที่แสดงทั้งหมด</button><button type="button" onClick={()=>setCodes([])}>ล้างการเลือกวิชา</button></div>
+          {!visible.length?<p className="central-subject-empty">ไม่พบรายวิชาสำหรับชั้นหรือคำค้นนี้</p>:<div className="central-subject-options">{visible.map(subject=>{const problem=centralSubjectProblem(subject),key=centralSubjectKey(subject);return <label key={key} className={problem?'is-unavailable':''}><input type="checkbox" data-code={subject.code} data-subject-key={key} checked={codes.includes(key)} disabled={!!problem} onChange={()=>setCodes(codes.includes(key)?codes.filter(code=>code!==key):[...codes,key])}/><span><strong>{subject.name}</strong><small><span className="central-subject-grade-tag">{centralSubjectLevel(subject)}</span> {subject.code} · {subject.type}</small><small>{subject.subject_group}</small>{problem&&<small className="central-subject-problem">{problem}</small>}</span><em><strong>{centralSubjectPeriods(subject)} คาบ/สัปดาห์</strong></em></label>})}</div>}
+        </fieldset>}
+        {step===3&&<fieldset disabled={disabled}><legend>3. เลือกห้องที่จะใช้รายวิชาเหล่านี้</legend><p>เลือกแล้ว {selectedSubjects.length} วิชา · {eligible.filter(room=>roomIds.includes(room.id)).length} ห้อง</p>
+          <div className="central-subject-choice-bar"><button type="button" data-central-rooms="all" onClick={()=>setRoomIds(eligible.map(room=>room.id))}>เลือกทุกห้องของชั้นที่เลือก</button><button type="button" onClick={()=>setRoomIds([])}>ล้างการเลือกห้อง</button></div>
+          {targetLevels.slice().sort((a,b)=>a.localeCompare(b,'th',{numeric:true})).map(level=><div className="central-subject-room-group" key={level}><strong>{level} · {selectedSubjects.filter(subject=>centralSubjectLevel(subject)===level).length} วิชาที่เลือก</strong><div className="central-subject-rooms">{targets.filter(room=>centralRoomLevel(room.level)===level).map(room=><label key={room.id}><input type="checkbox" data-room={room.id} checked={roomIds.includes(room.id)} onChange={()=>setRoomIds(roomIds.includes(room.id)?roomIds.filter(id=>id!==room.id):[...roomIds,room.id])}/>{room.level}/{room.name}</label>)}</div></div>)}
+          <p className="central-subject-note">รายวิชาจะเข้าห้องที่ตรงชั้นเท่านั้น วิชาเดิมและรายการที่อยู่ในตารางนำเข้าจะไม่ถูกทับ สามารถปรับจำนวนคาบก่อนบันทึกได้</p>
+        </fieldset>}
+        <div className="central-subject-stage"><span role="status">{step===3?('เพิ่มใหม่ '+preview.rows.length+' รายการ · ข้ามรายการที่มีแล้ว '+preview.skipped+' รายการ'):('เลือกแล้ว '+selectedLevels.length+' ชั้น'+(step===2?' · '+selectedSubjects.length+' วิชา':''))}{preview.overLimit&&step===3&&<strong className="central-subject-problem">รายการเกินขีดจำกัด กรุณาลดจำนวนห้องหรือรายวิชา</strong>}</span><div className="central-subject-nav">{step>1&&<button type="button" onClick={()=>setStep(step-1)}>ย้อนกลับ</button>}{step<3?<button type="button" className="prep-primary" disabled={disabled||!selectedLevels.length||step===2&&!selectedSubjects.length||catalog===null} onClick={()=>setStep(step+1)}>{step===1?'ถัดไป: เลือกวิชา':'ถัดไป: เลือกห้อง'}</button>:<button type="button" className="prep-primary" disabled={disabled||!preview.rows.length||preview.overLimit} onClick={()=>{onAppend(preview.rows);show(false)}}>เพิ่ม {preview.rows.length} รายการลงตารางตรวจสอบ</button>}</div></div>
+      </>}
     </section>}
   </div>
 }
