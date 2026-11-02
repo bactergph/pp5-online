@@ -27,6 +27,7 @@ export default function SubstituteScheduleEntry(){
   const [dayId,setDayId]=useState(''),[dayLabel,setDayLabel]=useState(''),[busy,setBusy]=useState<SubstituteBusy[]>([]),[rooms,setRooms]=useState<{id:string;label:string}[]>([])
   const [dayNames,setDayNames]=useState<Record<string,string>>({}),[entries,setEntries]=useState<Entry[]>([]),[original,setOriginal]=useState<Entry[]>([]),[dirty,setDirty]=useState(false)
   const [availabilityWarning,setAvailabilityWarning]=useState('')
+  const [download,setDownload]=useState<{url:string;fileName:string}|null>(null)
   const [selected,setSelected]=useState<string[]>([]),[teacherSearch,setTeacherSearch]=useState(''),[leaveType,setLeaveType]=useState('ลาป่วย')
   const [alert,setAlert]=useState<{type:'success'|'error';title:string;message?:string}|null>(null)
   const [deletion,setDeletion]=useState<{ids:string[];label:string}|null>(null),[editorRow,setEditorRow]=useState<Entry|null>(null),[editorError,setEditorError]=useState('')
@@ -39,6 +40,7 @@ export default function SubstituteScheduleEntry(){
   const regularPeriods=periods.filter(row=>!row.is_break)
   const editorOpen=editorRow!==null
   useScheduleGuard(dirty,!!working||loadingDay)
+  useEffect(()=>()=>{if(download)URL.revokeObjectURL(download.url)},[download])
   useEffect(()=>{if(editorOpen)editor.current?.showModal();else editor.current?.close()},[editorOpen])
   useEffect(()=>{let active=true;void(async()=>{try{
     const [data,time]=await Promise.all([fetchScheduleInit(),fetchPeriodTimes()]);if(!active)return
@@ -115,10 +117,13 @@ export default function SubstituteScheduleEntry(){
   }
   async function pdf(record?:SubstituteHistoryRecord,historyNames:Record<string,string>={}){
     const rows=record?.entries||original,pdfDate=record?.day.date||date
-    if(blocked||dirty||!rows.length||operation.current)return
-    operation.current=true;setWorking('กำลังสร้าง PDF…')
+    // Saved documents are independent of the current editor's unsaved draft.
+    if((!record&&(blocked||dirty))||!year||!rows.length||operation.current)return
+    operation.current=true;setDownload(null);setWorking('กำลังสร้าง PDF จากข้อมูลที่บันทึกแล้ว…')
     try{const context=await fetchSubstitutePdfContext(),result=await buildSubstitutePdf({schoolName:context.school?.name||'โรงเรียน',logoUrl:context.school?.logo_url,date:pdfDate,year:years.find(row=>row.id===year)?.year_be||0,term,academicHead:context.academicHead,director:directorDisplayName(context.school,''),times:context.periodTimes,teachers,teacherNames:substituteDocumentNames(rows,{...names,...historyNames}),entries:rows.map(row=>({...row,note:row.note}))})
-      const url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download=result.fileName;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)
+      const url=URL.createObjectURL(result.blob),link=document.createElement('a')
+      setDownload({url,fileName:result.fileName})
+      try{link.href=url;link.download=result.fileName;document.body.appendChild(link);link.click()}finally{link.remove()}
     }catch(error){setAlert({type:'error',title:'สร้าง PDF ไม่สำเร็จ',message:error instanceof Error?error.message:'กรุณาลองใหม่'})}
     finally{operation.current=false;setWorking('')}
   }
@@ -160,7 +165,8 @@ export default function SubstituteScheduleEntry(){
     })}
     {(entries.length>0||original.length>0||dirty)&&<footer className="sub-roster-footer sub-footer"><div><strong>{dirty?'มีการเปลี่ยนแปลงที่ยังไม่บันทึก':'ข้อมูลที่บันทึกแล้ว'}</strong><small>{unassigned.length} รายการยังไม่มีครู · {conflicts.length} รายการไม่ว่าง</small></div><button type="button" className="sub-roster-primary" disabled={blocked} onClick={prepareSave}>{working?'กำลังดำเนินการ…':'บันทึกทั้งหมด'}</button></footer>}
     </div></details>
-    <SubstituteSavedHistory year={year} term={Number(term)} revision={historyRevision} disabled={blocked||dirty} names={names} onEdit={editSaved} onPdf={(record,teacherNames)=>void pdf(record,teacherNames)} onDelete={setSavedDeletion}/>
+    {download&&<p className="sub-roster-document-note" role="status">PDF พร้อมแล้ว · ตรวจสอบไฟล์ในดาวน์โหลดของเบราว์เซอร์ หากไฟล์ไม่เริ่มดาวน์โหลด <a href={download.url} download={download.fileName}>กดดาวน์โหลด PDF ที่นี่</a></p>}
+    <SubstituteSavedHistory year={year} term={Number(term)} revision={historyRevision} disabled={blocked||dirty} pdfDisabled={!!working||!year} unsavedChanges={dirty} names={names} onEdit={editSaved} onPdf={(record,teacherNames)=>void pdf(record,teacherNames)} onDelete={setSavedDeletion}/>
     <dialog ref={editor} className="sub-roster-dialog" aria-labelledby="sub-editor-title" onCancel={()=>setEditorRow(null)} onClose={()=>setEditorRow(null)}><form onSubmit={event=>{event.preventDefault();applyEditor()}}><header><h2 id="sub-editor-title">{entries.some(row=>row.id===editorRow?.id)?'แก้ไขรายการสอนแทน':'เพิ่มรายการสอนแทน'}</h2><button type="button" onClick={()=>setEditorRow(null)}>ปิด</button></header>{editorRow&&<div className="sub-roster-editor-grid"><label>ครูเจ้าของคาบ<select aria-label="ครูเจ้าของคาบ" value={editorRow.absent_teacher_id} onChange={event=>setEditorRow({...editorRow,absent_teacher_id:event.target.value,class_subject_id:null})}>{teachers.map(teacher=><option key={teacher.id} value={teacher.id}>{names[teacher.id]}</option>)}</select></label><label>คาบเรียน<select aria-label="คาบเรียน" value={editorRow.period} onChange={event=>setEditorRow({...editorRow,period:Number(event.target.value)})}>{regularPeriods.map(period=><option key={period.period} value={period.period}>คาบ {period.period} · {periodTimeLabel(periods,period.period)}</option>)}</select></label><label>ชั้น / ห้อง<select aria-label="ชั้นและห้อง" value={editorRow.classroom_id||''} onChange={event=>setEditorRow({...editorRow,classroom_id:event.target.value,class_subject_id:null})}>{rooms.map(room=><option key={room.id} value={room.id}>{room.label}</option>)}</select></label><label>รายวิชา<input aria-label="รายวิชาสอนแทน" required maxLength={300} value={editorRow.subject_label||''} onChange={event=>setEditorRow({...editorRow,subject_label:event.target.value,class_subject_id:null})}/></label><label>ประเภทการลา<select value={editorRow.leave_type} onChange={event=>setEditorRow({...editorRow,leave_type:event.target.value})}>{[...new Set([...SUBSTITUTE_LEAVE_TYPES,editorRow.leave_type])].map(type=><option key={type}>{type}</option>)}</select></label><label>หมายเหตุ<input maxLength={1000} value={editorRow.note||''} onChange={event=>setEditorRow({...editorRow,note:event.target.value||null})}/></label>{editorError&&<p className="sub-roster-error" role="alert">{editorError}</p>}</div>}<footer><button type="button" onClick={()=>setEditorRow(null)}>ยกเลิก</button><button type="submit" className="sub-roster-primary">ใช้รายการนี้</button></footer></form></dialog>
     {alert&&<AppAlertModal open autoCloseMs={0} type={alert.type} title={alert.title} message={alert.message} onClose={()=>setAlert(null)}/>}
     {savedDeletion&&<AppAlertModal open type="confirm" title="ลบรายการที่บันทึกแล้ว?" message={`${names[savedDeletion.absentId]||'ครูเจ้าของคาบ'} · ${savedDeletion.day.date} · ${savedDeletion.entries.length} รายการ จะลบเฉพาะครูคนนี้ในวันนี้`} confirmLabel="ยืนยันลบรายการ" cancelLabel="ยกเลิก" onClose={()=>setSavedDeletion(null)} onConfirm={()=>void deleteSaved()}/>}

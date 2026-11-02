@@ -6,8 +6,8 @@ import {FiDownload,FiEdit2,FiTrash2,FiSearch,FiCheckCircle} from 'react-icons/fi
 import {useScheduleOperations} from './ScheduleServices'
 import {substituteHistoryRecords,type SubstituteHistoryPage,type SubstituteHistoryRecord} from '@/lib/substitute-history'
 
-export default function SubstituteSavedHistory({year,term,revision,disabled,names,onEdit,onPdf,onDelete}:{
-  year:string;term:number;revision:number;disabled:boolean;names:Record<string,string>
+export default function SubstituteSavedHistory({year,term,revision,disabled,pdfDisabled,unsavedChanges,names,onEdit,onPdf,onDelete}:{
+  year:string;term:number;revision:number;disabled:boolean;pdfDisabled:boolean;unsavedChanges:boolean;names:Record<string,string>
   onEdit:(record:SubstituteHistoryRecord)=>void
   onPdf:(record:SubstituteHistoryRecord,names:Record<string,string>)=>void
   onDelete:(record:SubstituteHistoryRecord)=>void
@@ -35,7 +35,7 @@ export default function SubstituteSavedHistory({year,term,revision,disabled,name
   return <section id="substitute-saved-history" className="sub-roster-saved" aria-labelledby="sub-saved-title" aria-busy={loading}>
     <div className="sub-roster-section-head"><div><h2 id="sub-saved-title"><FiCheckCircle aria-hidden/>รายการสอนแทนที่บันทึกแล้ว</h2><p>แยกตามวันที่และครูเจ้าของคาบ · ดาวน์โหลด PDF แก้ไข หรือลบได้ทีละรายการ</p></div><button type="button" disabled={disabled||loading||!year} onClick={()=>void load()}>โหลดรายการใหม่</button></div>
     <label className="sub-roster-search sub-history-search"><FiSearch aria-hidden/><input type="search" aria-label="ค้นหารายการที่บันทึกแล้ว" placeholder="ค้นหาครูหรือวันที่ในรายการที่โหลด" value={search} onChange={event=>setSearch(event.target.value)}/></label>
-    {disabled&&<p className="sub-history-hint">บันทึกหรือยกเลิกการแก้ไขด้านบนก่อนจัดการรายการที่บันทึกแล้ว</p>}
+    {unsavedChanges&&<p className="sub-history-hint">มีร่างที่ยังไม่บันทึกด้านบน · PDF ด้านล่างใช้ข้อมูลที่บันทึกแล้ว หากต้องการแก้ไขหรือลบรายการ ให้บันทึกหรือยกเลิกร่างก่อน</p>}
     {error&&<p className="sub-roster-error" role="alert">{error} <button type="button" disabled={disabled||loading} onClick={()=>void load()}>ลองใหม่</button></p>}
     {loading&&<p className="sub-roster-loading" role="status">กำลังโหลดรายการที่บันทึกแล้ว…</p>}
     {!!visible.length&&<div className="sub-history-table-wrap"><table className="sub-history-table"><caption>{records.length} รายการ จาก {days.length} วันที่ในภาคเรียนที่เลือก</caption><thead><tr><th>วันที่ / ครูเจ้าของคาบ</th><th>ครูสอนแทน</th><th>คาบ / สถานะ</th><th>จัดการรายการ</th></tr></thead><tbody>{visible.map(record=>{
@@ -46,7 +46,7 @@ export default function SubstituteSavedHistory({year,term,revision,disabled,name
         <td data-label="วันที่ / ครูเจ้าของคาบ"><time dateTime={record.day.date}>{dateText(record.day.date)}</time><strong>{recordNames[record.absentId]||'ครูเจ้าของคาบ'}</strong><small>{[...new Set(record.entries.map(row=>row.leave_type))].join(' · ')}</small></td>
         <td data-label="ครูสอนแทน"><div className="sub-history-names">{assigned.map(id=><span key={id}>{recordNames[id]||'ครูสอนแทน'}</span>)}</div>{!assigned.length&&<small>ยังไม่กำหนดครูสอนแทน</small>}</td>
         <td data-label="คาบ / สถานะ"><strong>{record.entries.length} รายการ</strong><small>คาบ {[...new Set(record.entries.map(row=>row.period))].join(', ')}</small><span className={'sub-history-status '+(waiting?'is-pending':'is-complete')}>{waiting?`รอครู ${waiting} รายการ`:'กำหนดครูครบแล้ว'}</span>{!!overrides&&<small>มีข้อสังเกตเวลาว่าง {overrides} รายการ</small>}</td>
-        <td data-label="จัดการรายการ"><div className="sub-history-actions"><button type="button" disabled={disabled||loading} onClick={()=>onPdf(record,recordNames)} aria-label={`PDF ${recordNames[record.absentId]} ${record.day.date}`}><FiDownload aria-hidden/>PDF</button><button type="button" disabled={disabled||loading} onClick={()=>onEdit(record)} aria-label={`แก้ไข ${recordNames[record.absentId]} ${record.day.date}`}><FiEdit2 aria-hidden/>แก้ไข</button><button type="button" className="sub-roster-danger" disabled={disabled||loading} onClick={()=>onDelete(record)} aria-label={`ลบ ${recordNames[record.absentId]} ${record.day.date}`}><FiTrash2 aria-hidden/>ลบ</button></div></td>
+        <td data-label="จัดการรายการ"><div className="sub-history-actions"><button type="button" disabled={pdfDisabled||loading} onClick={()=>onPdf(record,recordNames)} aria-label={`PDF ${recordNames[record.absentId]} ${record.day.date}`}><FiDownload aria-hidden/>PDF</button><button type="button" disabled={disabled||loading} onClick={()=>onEdit(record)} aria-label={`แก้ไข ${recordNames[record.absentId]} ${record.day.date}`}><FiEdit2 aria-hidden/>แก้ไข</button><button type="button" className="sub-roster-danger" disabled={disabled||loading} onClick={()=>onDelete(record)} aria-label={`ลบ ${recordNames[record.absentId]} ${record.day.date}`}><FiTrash2 aria-hidden/>ลบ</button></div></td>
       </tr>
     })}</tbody></table></div>}
     {!loading&&!error&&!visible.length&&<div className="sub-roster-empty">{records.length?'ไม่พบรายการที่ตรงกับคำค้น':'ยังไม่มีรายการที่บันทึกในภาคเรียนนี้ เมื่อบันทึกแล้วรายการจะแสดงที่นี่'}</div>}
