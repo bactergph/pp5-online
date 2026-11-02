@@ -10,6 +10,7 @@ import './workspace-theme.css'
 import './workspace-controls.css'
 import './workspace-depth.css'
 import './public-brand.css'
+import './ui-system.css'
 
 export const metadata: Metadata = {
   title: 'จารย์เสก (Jarn-Sek) - ระบบจัดการงานวิชาการครู',

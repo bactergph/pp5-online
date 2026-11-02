@@ -1,0 +1,108 @@
+/* Interaction contract shared by all workspaces, public pages and auth forms.
+   Module colours come from workspace-depth.css; document typography and print
+   output deliberately do not participate in this screen-only system. */
+@media screen {
+  :root {
+    --ui-space-1:4px;--ui-space-2:8px;--ui-space-3:12px;--ui-space-4:16px;--ui-space-6:24px;
+    --ui-motion-fast:140ms;--ui-motion-normal:200ms;
+    --ui-ease:cubic-bezier(.2,.7,.3,1);
+    --ui-focus:#245ed4;--ui-focus-halo:#245ed426;
+    --ui-success:#146744;--ui-success-bg:#eef9f2;
+    --ui-warning:#805014;--ui-warning-bg:#fff8e8;
+    --ui-error:#a72135;--ui-error-bg:#fff2f4;
+    --ui-shadow-raised:0 2px 5px #17365b08,0 14px 30px -18px #17365b40;
+    --ui-radius:12px;
+  }
+  html:has(.workspace-theme) {scroll-padding-block:90px 100px}
+  .workspace-theme {--ui-focus:var(--ws-color,#245ed4)}
+  .workspace-theme .content-shell {min-width:0}
+  .workspace-theme :where(button,a[href],input,select,textarea,summary,[tabindex]):focus-visible,
+  :is(.jsk,.auth-screen,.auth-scout-page) :where(button,a[href],input,select,textarea,summary,[tabindex]):focus-visible {
+    outline:3px solid var(--ui-focus);outline-offset:3px;
+    scroll-margin-block:100px;
+  }
+  .workspace-theme :is(.main-content,.prep-scroll,.table-scroll,.sub-history-table-wrap,.sub-roster-table-wrap) {scrollbar-width:thin;scrollbar-color:#aebed2 #f2f5fa}
+  .workspace-theme :is(.main-content,.prep-scroll,.table-scroll,.sub-history-table-wrap,.sub-roster-table-wrap):focus-visible {outline-offset:-3px}
+  .workspace-theme :where(button,summary),:is(.jsk,.auth-screen,.auth-scout-page) :where(button,summary) {touch-action:manipulation}
+
+  /* The help control is a single quiet row; the three steps are opt-in. */
+  .workspace-page-guide {margin:0 0 14px;min-width:0;color:#405674;font-size:13px;line-height:1.75}
+  .workspace-page-guide>summary {display:flex;align-items:center;justify-content:center;gap:7px;width:fit-content;min-height:36px;margin-left:auto;padding:4px 11px;border:1px solid #d7e2f0;border-radius:9px;background:#ffffffc9;color:#405674;cursor:pointer;list-style:none;user-select:none;transition:background var(--ui-motion-fast),border-color var(--ui-motion-fast)}
+  .workspace-page-guide>summary::-webkit-details-marker {display:none}
+  .workspace-page-guide>summary:hover {background:#fff;border-color:var(--ws-line,#c4d6f3);color:var(--ws-ink,#214c91)}
+  .workspace-page-guide>summary>svg {width:16px;height:16px;flex:none}
+  .workspace-page-guide .workspace-guide-chevron {width:13px;transition:transform var(--ui-motion-normal) var(--ui-ease)}
+  .workspace-page-guide[open] .workspace-guide-chevron {transform:rotate(180deg)}
+  .workspace-page-guide[open]>summary {border-color:var(--ws-line);color:var(--ws-ink);background:var(--ws-soft)}
+  .workspace-guide-body {margin-top:10px;padding:18px;border:1px solid var(--ws-line,#d7e2f0);border-radius:14px;background:#fff;box-shadow:var(--ui-shadow-raised)}
+  .workspace-guide-purpose {margin:0 0 12px;font-size:15px;font-weight:700;color:#223c5d}
+  .workspace-guide-body>ol {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;list-style:none;padding:0;margin:0}
+  .workspace-guide-body>ol>li {display:flex;align-items:flex-start;gap:10px;min-width:0;padding:12px;background:#f8fafd;border:1px solid #e3eaf3;border-radius:10px}
+  .workspace-guide-body>ol>li>span {display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:8px;background:var(--ws-soft,#e7f0ff);color:var(--ws-ink,#214c91);font-size:12px;font-weight:700}
+  .workspace-guide-body>ol p {margin:0;overflow-wrap:anywhere}
+  .workspace-guide-note {display:flex;align-items:flex-start;gap:8px;padding-top:12px;margin:14px 0 0;border-top:1px solid #e3eaf3;color:#526984}
+  .workspace-guide-note>svg {width:16px;height:16px;flex:none;margin-top:4px}
+
+  /* Titles / actions: one clear primary action, secondary surfaces stay quiet. */
+  .workspace-theme :is(.page-header,.page-hero) {padding:clamp(20px,2.2vw,30px);gap:20px}
+  .workspace-theme :is(.page-header,.page-hero) :is(h1,h2) {letter-spacing:0;line-height:1.5}
+  .workspace-theme :is(.page-header,.page-hero) p {max-width:72ch}
+  .workspace-theme :is(.page-subtitle,.eval-subtitle) {color:#526780}
+  .workspace-theme :is(.btn,.member-primary,.member-secondary,.sub-roster button,.sched-export-btn) {
+    transition:background-color var(--ui-motion-fast) var(--ui-ease),border-color var(--ui-motion-fast) var(--ui-ease),box-shadow var(--ui-motion-fast) var(--ui-ease);
+  }
+  .workspace-theme :is(.btn,.member-primary,.member-secondary,.sub-roster button,.sched-export-btn):not(:disabled):active {box-shadow:inset 0 2px 4px #17365b18}
+  .workspace-theme :is(.btn,.member-primary,.member-secondary,.sub-roster button,.sched-export-btn):disabled {cursor:not-allowed;box-shadow:none}
+  .workspace-theme :is(.btn-secondary,.btn-ghost) {font-weight:600}
+  .workspace-theme .btn-danger:not(:disabled) {background:#b42339;border-color:#b42339;color:#fff}
+  .workspace-theme .btn-danger:not(:disabled):hover {background:#921d30;border-color:#921d30}
+  .workspace-theme :is(.form-actions,.prep-footer,.sub-roster-actions,.sched-export-actions) {gap:10px;flex-wrap:wrap}
+
+  /* Form controls exclude score cells, timetable cells and document content. */
+  .workspace-theme :is(.form-label,.member-field>label,.sub-roster-scope>label) {color:#354e6c;font-size:14px;line-height:1.65}
+  .workspace-theme :is(.form-input,.form-select,.form-textarea,.input) {border-radius:var(--ui-radius);border-color:#bdcce0;background:#fcfdff;min-height:44px;color:#203956;line-height:1.6;transition:border-color var(--ui-motion-fast),box-shadow var(--ui-motion-fast),background-color var(--ui-motion-fast)}
+  .workspace-theme :is(.form-input,.form-select,.form-textarea,.input):focus {background:#fff;border-color:var(--ui-focus);box-shadow:0 0 0 3px var(--ui-focus-halo)}
+  .workspace-theme :is(.form-input,.form-textarea,.input)::placeholder {color:#687b92;opacity:1}
+  .workspace-theme :is(.form-input,.input):disabled {background:#edf1f6;color:#62728a}
+  .workspace-theme :is(.form-input,.form-select,.input)[aria-invalid=true] {border-color:var(--ui-error);background:#fff9fa}
+  .workspace-theme :is(.form-input,.form-select,.input)[aria-invalid=true]:focus {outline-color:var(--ui-error);box-shadow:0 0 0 3px #a721351c}
+  .workspace-theme :is(.form-help,.form-hint,.field-help) {color:#526780;line-height:1.75}
+
+  /* Dense data stay dense. Hover/focus highlights a row without moving it. */
+  .workspace-theme :is(.table,.thai-table,.eval-table) {font-variant-numeric:tabular-nums}
+  .workspace-theme [data-ui-table-scroll=true] {overscroll-behavior-inline:contain;scrollbar-width:thin;scrollbar-color:#91aaca #edf2f9}
+  .workspace-theme [data-ui-table-scroll=true]:focus-visible {outline-offset:-3px}
+  .workspace-theme [data-ui-table-scroll=true]::before {content:'↔ เลื่อนตารางซ้าย–ขวาเพื่อดูข้อมูลทั้งหมด';display:block;position:sticky;left:0;width:fit-content;max-width:100%;box-sizing:border-box;padding:5px 8px;margin-bottom:8px;border-radius:6px;background:#edf3fc;color:#405a7a;font-size:12px;line-height:1.7;white-space:normal;pointer-events:none}
+  .workspace-theme :is(.table,.thai-table,.eval-table) tbody tr:focus-within>td:not([class*=sticky]) {background-color:#edf4ff}
+  .workspace-theme :is(.empty-state,.sub-roster-empty,.prep-teacher-empty) {padding:clamp(20px,4vw,36px);border:1px dashed #c6d4e5;border-radius:14px;background:linear-gradient(135deg,#f8faff,#fff);color:#4c627d;line-height:1.8;text-align:center}
+  .workspace-theme :is(.alert,.prep-error,.prep-notice,.prep-success,.sub-roster-error) {line-height:1.8;overflow-wrap:anywhere}
+  .workspace-theme .alert-error {color:var(--ui-error);border-color:#edbdc6;background:var(--ui-error-bg)}
+  .workspace-theme .alert-success {color:var(--ui-success);border-color:#bbdec8;background:var(--ui-success-bg)}
+  .workspace-theme .alert-warning {color:var(--ui-warning);border-color:#e9d5af;background:var(--ui-warning-bg)}
+
+  /* Public / auth use the same focus, readable form controls and quiet motion. */
+  .jsk :is(.jsk-button,.jsk-product,.jsk-example,.jsk-module-link),.auth-screen :is(button,a) {transition:background-color var(--ui-motion-fast),border-color var(--ui-motion-fast),box-shadow var(--ui-motion-normal)}
+  .jsk :is(section[id],article[id]) {scroll-margin-top:100px}
+  :is(.auth-screen,.auth-scout-page) :is(input:not([type=checkbox]):not([type=radio]),select,button) {min-height:44px}
+  :is(.auth-screen,.auth-scout-page) input {font-size:16px}
+  :is(.auth-screen,.auth-scout-page) :is(input,select)[aria-invalid=true] {border-color:var(--ui-error)}
+
+  @media(max-width:767px) {
+    .workspace-page-guide>summary {min-height:44px}
+    .workspace-guide-body>ol {grid-template-columns:minmax(0,1fr);gap:8px}
+    .workspace-guide-body {padding:14px}
+    .workspace-theme :is(.page-header,.page-hero) {padding:20px;gap:16px;border-radius:17px}
+    .workspace-theme :is(.btn,.member-primary,.member-secondary,.sub-roster button,.sched-export-btn) {min-height:44px}
+    .workspace-theme :is(.form-input,.form-select,.form-textarea,.input) {font-size:16px}
+    .workspace-theme :is(.form-actions,.prep-footer,.sub-roster-actions) {row-gap:10px}
+    .workspace-theme :is(.modal-card,.member-dialog,.sgs-export-dialog) {max-width:calc(100vw - 24px);max-height:calc(100dvh - 32px);overflow:auto;overscroll-behavior:contain}
+    .workspace-theme :is(.btn-icon,.sidebar-close,.navbar-menu-button) {min-width:44px;min-height:44px}
+  }
+  @media(prefers-reduced-motion:reduce) {
+    html:has(:is(.workspace-theme,.jsk,.auth-screen,.auth-scout-page)) {scroll-behavior:auto}
+    :is(.workspace-theme,.jsk,.auth-screen,.auth-scout-page) *,
+    :is(.workspace-theme,.jsk,.auth-screen,.auth-scout-page) *::before,
+    :is(.workspace-theme,.jsk,.auth-screen,.auth-scout-page) *::after {animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+    .workspace-theme .workspace-guide-chevron {transition:none}
+  }
+}

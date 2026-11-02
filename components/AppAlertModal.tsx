@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useSyncExternalStore, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 
 type AlertType = 'success' | 'error' | 'confirm'
+const subscribeToHydration=()=>()=>{}
+const clientReady=()=>true
+const serverReady=()=>false
 
 const APP_ALERT_STYLES = `
   .app-alert-backdrop {
@@ -18,6 +21,9 @@ const APP_ALERT_STYLES = `
     -webkit-backdrop-filter: blur(2px);
     animation: app-alert-backdrop-in 0.22s ease;
   }
+  dialog.app-alert-backdrop { width:100vw; max-width:none; height:100dvh; max-height:none; margin:0; border:0; background:transparent; color:#203956; box-sizing:border-box; }
+  dialog.app-alert-backdrop:not([open]) { display:none; }
+  dialog.app-alert-backdrop::backdrop { background:rgba(16,35,61,.32); backdrop-filter:blur(3px); }
   .app-alert-backdrop.is-closing {
     animation: app-alert-backdrop-out 0.2s ease forwards;
   }
@@ -140,17 +146,37 @@ const APP_ALERT_STYLES = `
     to { opacity: 0; }
   }
   @keyframes app-alert-card-in {
-    from { opacity: 0; transform: scale(0.88); }
-    to { opacity: 1; transform: scale(1); }
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   @keyframes app-alert-card-out {
-    from { opacity: 1; transform: scale(1); }
-    to { opacity: 0; transform: scale(0.94); }
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(4px); }
   }
   @keyframes app-alert-icon-pop {
     from { opacity: 0; transform: scale(0.55); }
     to { opacity: 1; transform: scale(1); }
   }
+  .app-alert-card { width:min(100%,480px); max-height:calc(100dvh - 48px); overflow:auto; overscroll-behavior:contain; padding:26px; text-align:left; border-radius:20px; border-top:4px solid #b9cbe5; box-shadow:0 8px 24px #112c5124,0 28px 80px #112c5126; }
+  .app-alert-card[data-alert-type=error] { border-top-color:#b42339; }
+  .app-alert-card[data-alert-type=success] { border-top-color:#17804f; }
+  .app-alert-card[data-alert-type=confirm] { border-top-color:#ad741f; }
+  .app-alert-icon { margin:0 0 16px; width:48px; height:48px; border-radius:14px; animation:none; box-shadow:none; }
+  .app-alert-icon-success { background:#edf8f1; color:#146744; }
+  .app-alert-icon-error { background:#fff0f3; color:#a72135; }
+  .app-alert-icon-confirm { background:#fff5df; color:#805014; }
+  .app-alert-kind { margin:0 0 6px; font-size:12px; font-weight:600; color:#526984; }
+  .app-alert-title { text-align:left; color:#203956; font-size:21px; line-height:1.6; overflow-wrap:anywhere; }
+  .app-alert-message { text-align:left; color:#4c627d; font-size:15px; line-height:1.85; overflow-wrap:anywhere; }
+  .app-alert-actions { justify-content:flex-end; gap:10px; margin-top:24px; }
+  .app-alert-btn { min-height:44px; min-width:88px; border-radius:10px; font-size:15px; }
+  .app-alert-btn--success { background:#146744; }
+  .app-alert-btn--error,.app-alert-btn--confirm { background:#a72135; }
+  .app-alert-btn--confirm-primary { background:#245ed4; }
+  .app-alert-btn:focus-visible { outline:3px solid #245ed4; outline-offset:3px; }
+  @media(max-width:480px) { dialog.app-alert-backdrop { padding:16px; } .app-alert-card { padding:20px; max-height:calc(100dvh - 32px); } .app-alert-actions--confirm { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); } .app-alert-actions--confirm .app-alert-btn { min-width:0; width:100%; white-space:normal; } }
+  @media(prefers-reduced-motion:reduce) { .app-alert-backdrop,.app-alert-card,.app-alert-icon { animation:none!important; transition:none!important; } }
+  @media print { dialog.app-alert-backdrop { display:none!important; } }
 `
 
 export default function AppAlertModal({
@@ -161,7 +187,7 @@ export default function AppAlertModal({
   onClose,
   onConfirm,
   confirmLabel = 'ยืนยัน',
-  cancelLabel = 'ไม่ยกเลิก',
+  cancelLabel = 'ยกเลิก',
   confirmTone = 'danger',
   autoCloseMs,
 }: {
@@ -176,45 +202,58 @@ export default function AppAlertModal({
   confirmTone?: 'danger' | 'primary'
   autoCloseMs?: number
 }) {
-  const [mounted, setMounted] = useState(false)
-  const [closing, setClosing] = useState(false)
+  const mounted=useSyncExternalStore(subscribeToHydration,clientReady,serverReady)
+  const closing=useRef(false)
+  const dialog=useRef<HTMLDialogElement>(null),actionTimer=useRef<number|null>(null)
+  const titleId=useId(),messageId=useId()
   const isConfirm = type === 'confirm'
   // error/confirm ค้างไว้ให้อ่าน — ปิดด้วยปุ่ม; success ปิดอัตโนมัติ
   const duration = autoCloseMs ?? (type === 'success' ? 1200 : 0)
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  useEffect(()=>{
+    if(!mounted||!open)return
+    const element=dialog.current
+    if(!element)return
+    const previous=document.activeElement instanceof HTMLElement?document.activeElement:null
+    closing.current=false
+    element.classList.remove('is-closing')
+    element.showModal()
+    return()=>{element.close();if(previous?.isConnected&&!previous.closest('[inert]'))previous.focus({preventScroll:true})}
+  },[mounted,open])
+  useEffect(()=>()=>{if(actionTimer.current)window.clearTimeout(actionTimer.current)},[])
 
   useEffect(() => {
-    if (!open) {
-      setClosing(false)
-      return
-    }
-    setClosing(false)
-    if (duration <= 0) return
+    if (!mounted || !open || duration <= 0) return
     const fadeMs = 200
     const closeDelay = Math.max(0, duration - fadeMs)
-    const fadeTimer = window.setTimeout(() => setClosing(true), closeDelay)
+    const fadeTimer = window.setTimeout(() => {closing.current=true;dialog.current?.classList.add('is-closing')}, closeDelay)
     const closeTimer = window.setTimeout(onClose, duration)
     return () => {
       window.clearTimeout(fadeTimer)
       window.clearTimeout(closeTimer)
     }
-  }, [open, duration, onClose])
+  }, [mounted, open, duration, onClose])
 
   function handleClose() {
-    if (closing) return
-    setClosing(true)
-    window.setTimeout(onClose, 200)
+    if (closing.current) return
+    closing.current=true;dialog.current?.classList.add('is-closing')
+    actionTimer.current=window.setTimeout(onClose, 200)
   }
 
   function handleConfirm() {
-    if (closing) return
-    setClosing(true)
-    window.setTimeout(() => {
+    if (closing.current) return
+    closing.current=true;dialog.current?.classList.add('is-closing')
+    actionTimer.current=window.setTimeout(() => {
       onConfirm?.()
     }, 180)
+  }
+
+  function keepFocus(event:KeyboardEvent<HTMLDialogElement>){
+    if(event.key!=='Tab')return
+    const items=Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')).filter(element=>element.getClientRects().length)
+    const first=items[0],last=items[items.length-1],active=document.activeElement
+    if(event.shiftKey&&(active===first||active===event.currentTarget)){event.preventDefault();last?.focus()}
+    else if(!event.shiftKey&&active===last){event.preventDefault();first?.focus()}
   }
 
   if (!open || !mounted) return null
@@ -222,14 +261,11 @@ export default function AppAlertModal({
   return createPortal(
     <>
       <style>{APP_ALERT_STYLES}</style>
-      <div className={`app-alert-backdrop ${closing ? 'is-closing' : ''}`} onClick={handleClose}>
+      <dialog ref={dialog} className="app-alert-backdrop" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={message?messageId:undefined} onKeyDown={keepFocus} onCancel={event=>{event.preventDefault();handleClose()}} onClick={event=>{if(event.target===event.currentTarget)handleClose()}}>
         <div
           className="app-alert-card"
+          data-alert-type={type}
           onClick={event => event.stopPropagation()}
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="app-alert-title"
-          aria-describedby={message ? 'app-alert-message' : undefined}
         >
           <div className={`app-alert-icon app-alert-icon-${type}`} aria-hidden="true">
             {type === 'success' ? (
@@ -249,8 +285,9 @@ export default function AppAlertModal({
               </svg>
             )}
           </div>
-          <h3 id="app-alert-title" className="app-alert-title">{title}</h3>
-          {message ? <p id="app-alert-message" className="app-alert-message">{message}</p> : null}
+          <p className="app-alert-kind">{type==='success'?'ทำรายการสำเร็จ':type==='confirm'?'ยืนยันการทำรายการ':'ตรวจสอบรายการ'}</p>
+          <h3 id={titleId} className="app-alert-title">{title}</h3>
+          {message ? <p id={messageId} className="app-alert-message">{message}</p> : null}
           {isConfirm ? (
             <div className="app-alert-actions app-alert-actions--confirm">
               <button type="button" className="app-alert-btn app-alert-btn--ghost" onClick={handleClose}>
@@ -264,7 +301,7 @@ export default function AppAlertModal({
                 {confirmLabel}
               </button>
             </div>
-          ) : type === 'error' || duration <= 0 ? (
+          ) : (
             <div className="app-alert-actions">
               <button
                 type="button"
@@ -274,9 +311,9 @@ export default function AppAlertModal({
                 ปิด
               </button>
             </div>
-          ) : null}
+          )}
         </div>
-      </div>
+      </dialog>
     </>,
     document.body,
   )

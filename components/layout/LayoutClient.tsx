@@ -2,6 +2,9 @@
 
 import {workspacePageContext} from '@/lib/workspace-navigation'
 import {workspaceAppearance} from '@/lib/workspace-appearance'
+import {workspaceGuidance} from '@/lib/workspace-guidance'
+import WorkspacePageGuide from './WorkspacePageGuide'
+import WorkspaceTableAccess from './WorkspaceTableAccess'
 import { Suspense, useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Sidebar from './Sidebar'
@@ -107,6 +110,7 @@ function LayoutClientInner({
   const pageContext=workspacePageContext(pathname,schoolCode,titleFromPath(pathname,title))
   const appearance=workspaceAppearance(pathname,schoolCode)
   const pageTitle=pageContext.title
+  const guide=workspaceGuidance(pathname,schoolCode)
   // onboarding wizard: ไม่โชว์ sidebar/navbar — โหลดเต็มจอเลยหลังเลือกโรงเรียน
   const onSchoolSettings = pathname === '/settings/school' || pathname.endsWith('/settings/school')
   const chromeless =
@@ -198,7 +202,9 @@ function LayoutClientInner({
       />
 
       <main id="workspace-main" tabIndex={-1} className="main-content">
+        <WorkspaceTableAccess />
         <div className="content-shell">
+          {guide&&<WorkspacePageGuide key={pathname} guide={guide}/>}
           {children}
         </div>
       </main>
