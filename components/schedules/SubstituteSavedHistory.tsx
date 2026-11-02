@@ -1,8 +1,8 @@
 'use client'
 
 import {substituteDocumentNames} from '@/lib/substitute-document-model'
-import {useCallback,useEffect,useRef,useState} from 'react'
-import {FiDownload,FiEdit2,FiTrash2,FiSearch,FiCheckCircle} from 'react-icons/fi'
+import {Fragment,useCallback,useEffect,useRef,useState} from 'react'
+import {FiDownload,FiEdit2,FiTrash2,FiSearch,FiCheckCircle,FiChevronDown,FiFileText,FiRefreshCw} from 'react-icons/fi'
 import {useScheduleOperations} from './ScheduleServices'
 import {substituteHistoryRecords,type SubstituteHistoryPage,type SubstituteHistoryRecord} from '@/lib/substitute-history'
 
@@ -15,6 +15,7 @@ export default function SubstituteSavedHistory({year,term,revision,disabled,pdfD
   const {fetchSubstituteHistory}=useScheduleOperations()
   const [page,setPage]=useState<SubstituteHistoryPage>({days:[],teacher_names:{},nextBefore:null})
   const [loadedScope,setLoadedScope]=useState(''),[loading,setLoading]=useState(false),[error,setError]=useState(''),[search,setSearch]=useState('')
+  const [status,setStatus]=useState('all'),[expanded,setExpanded]=useState('')
   const scope=`${year}:${term}`,request=useRef(0)
   const load=useCallback(async(before?:string)=>{
     if(!year)return
@@ -31,25 +32,30 @@ export default function SubstituteSavedHistory({year,term,revision,disabled,pdfD
   const teacherNames={...names,...page.teacher_names},days=loadedScope===scope?page.days:[]
   const records=substituteHistoryRecords(days).sort((a,b)=>b.day.date.localeCompare(a.day.date)||(teacherNames[a.absentId]||'').localeCompare(teacherNames[b.absentId]||'','th'))
   const dateText=(date:string)=>new Intl.DateTimeFormat('th-TH',{dateStyle:'long',timeZone:'Asia/Bangkok'}).format(new Date(date+'T12:00:00+07:00'))
-  const visible=records.filter(record=>{const recordNames=substituteDocumentNames(record.entries,teacherNames);return [record.day.date,dateText(record.day.date),recordNames[record.absentId],...record.entries.map(row=>recordNames[row.substitute_teacher_id||''])].join(' ').toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())})
-  return <section id="substitute-saved-history" className="sub-roster-saved" aria-labelledby="sub-saved-title" aria-busy={loading}>
-    <div className="sub-roster-section-head"><div><h2 id="sub-saved-title"><FiCheckCircle aria-hidden/>รายการสอนแทนที่บันทึกแล้ว</h2><p>แยกตามวันที่และครูเจ้าของคาบ · ดาวน์โหลด PDF แก้ไข หรือลบได้ทีละรายการ</p></div><button type="button" disabled={disabled||loading||!year} onClick={()=>void load()}>โหลดรายการใหม่</button></div>
-    <label className="sub-roster-search sub-history-search"><FiSearch aria-hidden/><input type="search" aria-label="ค้นหารายการที่บันทึกแล้ว" placeholder="ค้นหาครูหรือวันที่ในรายการที่โหลด" value={search} onChange={event=>setSearch(event.target.value)}/></label>
-    {unsavedChanges&&<p className="sub-history-hint">มีร่างที่ยังไม่บันทึกด้านบน · PDF ด้านล่างใช้ข้อมูลที่บันทึกแล้ว หากต้องการแก้ไขหรือลบรายการ ให้บันทึกหรือยกเลิกร่างก่อน</p>}
+  const visible=records.filter(record=>{
+    const recordNames=substituteDocumentNames(record.entries,teacherNames)
+    const matches=[record.day.date,dateText(record.day.date),recordNames[record.absentId],...record.entries.map(row=>recordNames[row.substitute_teacher_id||''])].join(' ').toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())
+    const waiting=record.entries.some(row=>!row.substitute_teacher_id)
+    return matches&&(status==='all'||status==='pending'&&waiting||status==='complete'&&!waiting||status==='busy'&&record.entries.some(row=>row.override_conflicts))
+  })
+  return <section id="substitute-saved-history" tabIndex={-1} className="sub-roster-saved" aria-labelledby="sub-saved-title" aria-busy={loading}>
+    <div className="sub-roster-section-head sub-history-heading"><div><h2 id="sub-saved-title">รายการสอนแทนที่บันทึกแล้ว</h2><p>แยกตามครูและวันที่ · เปิดดูคาบ ดาวน์โหลด PDF หรือแก้ไขได้จากแถวเดียวกัน</p></div><span>{records.length} รายการที่โหลด · {days.length} วัน</span></div>
+    <div className="sub-history-toolbar"><label className="sub-roster-search sub-history-search"><FiSearch aria-hidden="true"/><input type="search" aria-label="ค้นหารายการที่บันทึกแล้ว" placeholder="ค้นหาครูหรือวันที่ เช่น 2026-11-02" value={search} onChange={event=>setSearch(event.target.value)}/></label><label className="sub-history-status-filter"><span>สถานะ</span><select aria-label="กรองสถานะรายการสอนแทน" value={status} onChange={event=>setStatus(event.target.value)}><option value="all">ทั้งหมด</option><option value="pending">รอครูสอนแทน</option><option value="complete">กำหนดครูครบแล้ว</option><option value="busy">มีข้อสังเกตเวลาว่าง</option></select></label><button type="button" disabled={disabled||loading||!year} onClick={()=>void load()}><FiRefreshCw aria-hidden="true"/>โหลดรายการใหม่</button></div>
+    {unsavedChanges&&<p className="sub-history-hint">มีร่างที่ยังไม่บันทึก · PDF ใช้ข้อมูลที่บันทึกแล้ว หากจะแก้ไขหรือลบรายการ ให้ <a href="#sub-roster-workbench">บันทึกหรือยกเลิกร่างด้านบน</a> ก่อน</p>}
     {error&&<p className="sub-roster-error" role="alert">{error} <button type="button" disabled={disabled||loading} onClick={()=>void load()}>ลองใหม่</button></p>}
     {loading&&<p className="sub-roster-loading" role="status">กำลังโหลดรายการที่บันทึกแล้ว…</p>}
-    {!!visible.length&&<div className="sub-history-table-wrap"><table className="sub-history-table"><caption>{records.length} รายการ จาก {days.length} วันที่ในภาคเรียนที่เลือก</caption><thead><tr><th>วันที่ / ครูเจ้าของคาบ</th><th>ครูสอนแทน</th><th>คาบ / สถานะ</th><th>จัดการรายการ</th></tr></thead><tbody>{visible.map(record=>{
-      const recordNames=substituteDocumentNames(record.entries,teacherNames)
-      const assigned=[...new Set(record.entries.flatMap(row=>row.substitute_teacher_id?[row.substitute_teacher_id]:[]))]
-      const waiting=record.entries.filter(row=>!row.substitute_teacher_id).length,overrides=record.entries.filter(row=>row.override_conflicts).length
-      return <tr key={record.key} data-history-key={record.key}>
-        <td data-label="วันที่ / ครูเจ้าของคาบ"><time dateTime={record.day.date}>{dateText(record.day.date)}</time><strong>{recordNames[record.absentId]||'ครูเจ้าของคาบ'}</strong><small>{[...new Set(record.entries.map(row=>row.leave_type))].join(' · ')}</small></td>
-        <td data-label="ครูสอนแทน"><div className="sub-history-names">{assigned.map(id=><span key={id}>{recordNames[id]||'ครูสอนแทน'}</span>)}</div>{!assigned.length&&<small>ยังไม่กำหนดครูสอนแทน</small>}</td>
-        <td data-label="คาบ / สถานะ"><strong>{record.entries.length} รายการ</strong><small>คาบ {[...new Set(record.entries.map(row=>row.period))].join(', ')}</small><span className={'sub-history-status '+(waiting?'is-pending':'is-complete')}>{waiting?`รอครู ${waiting} รายการ`:'กำหนดครูครบแล้ว'}</span>{!!overrides&&<small>มีข้อสังเกตเวลาว่าง {overrides} รายการ</small>}</td>
-        <td data-label="จัดการรายการ"><div className="sub-history-actions"><button type="button" disabled={pdfDisabled||loading} onClick={()=>onPdf(record,recordNames)} aria-label={`PDF ${recordNames[record.absentId]} ${record.day.date}`}><FiDownload aria-hidden/>PDF</button><button type="button" disabled={disabled||loading} onClick={()=>onEdit(record)} aria-label={`แก้ไข ${recordNames[record.absentId]} ${record.day.date}`}><FiEdit2 aria-hidden/>แก้ไข</button><button type="button" className="sub-roster-danger" disabled={disabled||loading} onClick={()=>onDelete(record)} aria-label={`ลบ ${recordNames[record.absentId]} ${record.day.date}`}><FiTrash2 aria-hidden/>ลบ</button></div></td>
-      </tr>
+    {!!visible.length&&<div className="sub-history-table-wrap"><table className="sub-history-table"><caption>แสดง {visible.length} จาก {records.length} รายการที่โหลดในภาคเรียนนี้</caption><thead><tr><th>วันที่ / ครูที่ลา</th><th>คาบและห้อง</th><th>ครูสอนแทน</th><th>สถานะ</th><th>เอกสาร / จัดการ</th></tr></thead><tbody>{visible.map(record=>{
+      const recordNames=substituteDocumentNames(record.entries,teacherNames),assigned=[...new Set(record.entries.flatMap(row=>row.substitute_teacher_id?[row.substitute_teacher_id]:[]))]
+      const waiting=record.entries.filter(row=>!row.substitute_teacher_id).length,overrides=record.entries.filter(row=>row.override_conflicts).length,open=expanded===record.key
+      return <Fragment key={record.key}><tr data-history-key={record.key} className={open?'is-expanded':undefined}>
+        <td data-label="วันที่ / ครูที่ลา"><time dateTime={record.day.date}>{dateText(record.day.date)}</time><button type="button" className="sub-history-detail-toggle" aria-expanded={open} aria-label={`ดูรายละเอียด ${recordNames[record.absentId]} ${record.day.date}`} onClick={()=>setExpanded(open?'':record.key)}><strong>{recordNames[record.absentId]||'ครูเจ้าของคาบ'}</strong><FiChevronDown aria-hidden="true"/></button><small>{[...new Set(record.entries.map(row=>row.leave_type))].join(' · ')}</small></td>
+        <td data-label="คาบและห้อง"><strong>{record.entries.length} คาบ</strong><small>คาบ {[...new Set(record.entries.map(row=>row.period))].join(', ')}</small><small>{[...new Set(record.entries.map(row=>row.room_label||'ไม่ระบุห้อง'))].join(', ')}</small></td>
+        <td data-label="ครูสอนแทน"><div className="sub-history-names">{assigned.slice(0,3).map(id=><span key={id}>{recordNames[id]||'ครูสอนแทน'}</span>)}{assigned.length>3&&<small>และอีก {assigned.length-3} คน · กดชื่อครูที่ลาเพื่อดูทั้งหมด</small>}</div>{!assigned.length&&<small>ยังไม่กำหนดครูสอนแทน</small>}</td>
+        <td data-label="สถานะ"><span className={'sub-history-status '+(waiting?'is-pending':'is-complete')}>{waiting?`รอครู ${waiting} คาบ`:<><FiCheckCircle aria-hidden="true"/>ครบแล้ว</>}</span>{!!overrides&&<small className="sub-history-busy-note">ไม่ว่าง {overrides} คาบ · ยังเลือกได้</small>}</td>
+        <td data-label="เอกสาร / จัดการ"><div className="sub-history-actions"><button type="button" className="sub-history-pdf" disabled={pdfDisabled||loading} onClick={()=>onPdf(record,recordNames)} aria-label={`PDF ${recordNames[record.absentId]} ${record.day.date}`}><FiDownload aria-hidden="true"/>PDF</button><button type="button" disabled={disabled||loading} onClick={()=>onEdit(record)} aria-label={`แก้ไข ${recordNames[record.absentId]} ${record.day.date}`}><FiEdit2 aria-hidden="true"/>แก้ไข</button><button type="button" className="sub-roster-danger" disabled={disabled||loading} onClick={()=>onDelete(record)} aria-label={`ลบ ${recordNames[record.absentId]} ${record.day.date}`}><FiTrash2 aria-hidden="true"/>ลบ</button></div></td>
+      </tr>{open&&<tr className="sub-history-expanded"><td colSpan={5}><div className="sub-history-detail-heading"><FiFileText aria-hidden="true"/><strong>รายละเอียดคาบสอนแทน</strong><span>{recordNames[record.absentId]} · {dateText(record.day.date)}</span></div><ul className="sub-history-periods">{record.entries.map(row=><li key={row.id}><b>คาบ {row.period}</b><div><strong>{row.room_label||'ไม่ระบุห้อง'} · {row.subject_label||'ไม่ระบุวิชา'}</strong><span>{row.substitute_teacher_id?recordNames[row.substitute_teacher_id]||'ครูสอนแทน':'ยังไม่กำหนดครูสอนแทน'}</span>{row.note&&<small>หมายเหตุ: {row.note}</small>}{row.override_conflicts&&<small className="sub-history-busy-note">{row.conflict_details?.join(' · ')||'มีข้อสังเกตเวลาว่าง'}</small>}</div></li>)}</ul></td></tr>}</Fragment>
     })}</tbody></table></div>}
-    {!loading&&!error&&!visible.length&&<div className="sub-roster-empty">{records.length?'ไม่พบรายการที่ตรงกับคำค้น':'ยังไม่มีรายการที่บันทึกในภาคเรียนนี้ เมื่อบันทึกแล้วรายการจะแสดงที่นี่'}</div>}
-    {page.nextBefore&&loadedScope===scope&&<button type="button" className="sub-history-more" disabled={disabled||loading} onClick={()=>void load(page.nextBefore!)}>ดูรายการเก่ากว่านี้</button>}
+    {!loading&&!error&&!visible.length&&<div className="sub-roster-empty sub-desk-empty-history"><FiFileText aria-hidden="true"/><h3>{records.length?'ไม่พบรายการที่ตรงกับตัวกรอง':'ยังไม่มีรายการสอนแทนที่บันทึก'}</h3><p>{records.length?'ลองเปลี่ยนชื่อ วันที่ หรือสถานะที่เลือก':'เลือกวันที่ด้านบน แล้วกด “จัดรายการสอนแทน” เพื่อเริ่มงาน'}</p>{(search||status!=='all')&&<button type="button" onClick={()=>{setSearch('');setStatus('all')}}>ล้างตัวกรอง</button>}</div>}
+    {page.nextBefore&&loadedScope===scope&&<button type="button" className="sub-history-more" disabled={disabled||loading} onClick={()=>void load(page.nextBefore!)}>ดูรายการเก่ากว่านี้<FiChevronDown aria-hidden="true"/></button>}
   </section>
 }
