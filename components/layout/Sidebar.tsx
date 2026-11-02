@@ -4,14 +4,13 @@ import {searchWorkspaceMenu} from '@/lib/workspace-navigation'
 import { workspaceMenuPanels, workspacePanelTrail, workspaceCurrentMenuHref, type WorkspaceMenuNode } from '@/lib/workspace-menu-panels'
 import {workspaceAppearance} from '@/lib/workspace-appearance'
 import { useFormStatus } from 'react-dom'
-import { ROLE_LABELS } from '@/lib/roles'
 import { defaultSidebarIcon, type SidebarTone } from '@/lib/sidebar-tones'
 import { logout } from '@/lib/actions/auth'
 import { usePathname } from 'next/navigation'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { filterSchoolMenu, type SchoolEducationType } from '@/lib/school-education-type'
 import { membershipAllows, type Membership } from '@/lib/membership'
-import { MembershipAd, MembershipBadge, type MembershipAdData } from './MembershipUI'
+import { MembershipAd, type MembershipAdData } from './MembershipUI'
 import './sidebar-panels.css'
 
 type Child = { href?: string; label: string; icon?: React.ReactNode; children?: Child[]; tone?: SidebarTone }
@@ -478,16 +477,13 @@ type Props = {
   onClose: () => void
   userRole: string
   navRole: string
-  userName: string
   isHomeroom: boolean
-  isActingDirector?: boolean
   schoolCode: string | null
   schoolLogoUrl?: string | null
   schoolProgramName?: string | null
   schoolName?: string | null
   membership?: Membership | null
   membershipAd?: MembershipAdData | null
-  onMembershipUpgrade?:()=>void
 }
 
 export default function Sidebar({
@@ -495,9 +491,7 @@ export default function Sidebar({
   onClose,
   userRole,
   navRole,
-  userName,
   isHomeroom,
-  isActingDirector = false,
   schoolCode,
   schoolLogoUrl = null,
   schoolProgramName = null,
@@ -505,7 +499,6 @@ export default function Sidebar({
   educationType = 'primary',
   membership = null,
   membershipAd = null,
-  onMembershipUpgrade,
 }: Props) {
   const pathname = usePathname()
   const asideRef=useRef<HTMLElement|null>(null),searchRef=useRef<HTMLInputElement|null>(null)
@@ -656,20 +649,6 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* User chip */}
-      <div className="sidebar-user-chip">
-        <div className="sidebar-user-avatar">
-          {userName.charAt(0)}
-        </div>
-        <div className="sidebar-user-copy">
-          <div className="sidebar-user-name" title={userName}>{userName}</div>
-          <div className="sidebar-user-role">
-            {getRoleLabel(userRole, isActingDirector)}{isHomeroom ? ' · ครูประจำชั้น' : ''}
-          </div>
-        </div>
-        {membership && <MembershipBadge membership={membership} onChoose={onMembershipUpgrade} />}
-      </div>
-
       {membershipAd&&<MembershipAd ad={membershipAd} className="membership-ad-sidebar"/>}
 
       <div className="sidebar-search"><label htmlFor="workspace-menu-search"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input ref={searchRef} id="workspace-menu-search" type="search" value={query} maxLength={120} placeholder="ค้นหาเมนู…" aria-label="ค้นหาเมนู" aria-controls={searching?'workspace-menu-results':undefined} onChange={event=>setSearch({path:pathname,query:event.target.value})} onKeyDown={event=>{if(event.key==='Escape'&&query){event.preventDefault();event.stopPropagation();setSearch({path:pathname,query:''})}}}/></label>{searching&&<button type="button" aria-label="ล้างการค้นหาเมนู" onClick={()=>{setSearch({path:pathname,query:''});searchRef.current?.focus()}}>×</button>}</div>
@@ -707,11 +686,4 @@ function SidebarLogoutButton() {
       {pending ? 'กำลังออก...' : 'ออกจากระบบ'}
     </button>
   )
-}
-
-function getRoleLabel(role: string, isActingDirector = false): string {
-  if (role === 'district') return 'Super Admin'
-  const label = ROLE_LABELS[role] || role
-  if (isActingDirector) return `${label} · รักษาการ ผอ.`
-  return label
 }

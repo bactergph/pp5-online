@@ -37,6 +37,9 @@ try{
   const heading=()=>page.$eval('.sidebar-panel-header strong',el=>el.textContent)
   const rootMenu=async()=>{if(await page.$('.sidebar-panel-home'))await page.click('.sidebar-panel-home');else if(await page.$('.sidebar-panel-back'))await page.click('.sidebar-panel-back');await page.waitForSelector('.sidebar-panel-body[data-root=true]')}
   await go('/phonoi/dashboard')
+  assert.equal(await page.$('.sidebar-user-chip'),null,'Account card must not take sidebar space')
+  await page.click('.navbar-user-button');await page.waitForSelector('.navbar-dropdown');await page.click('[data-work]');await page.waitForFunction(()=>!document.querySelector('.navbar-dropdown'))
+  await page.$eval('.navbar-user-button',el=>el.focus());await page.keyboard.press('ArrowDown');await page.waitForFunction(()=>document.activeElement?.classList.contains('membership-compare-button'));await page.keyboard.press('Escape');await page.waitForFunction(()=>document.activeElement?.classList.contains('navbar-user-button'))
   const labels=await page.$$eval('.sidebar-panel-body[data-root=true]>.sidebar-link',nodes=>nodes.map(el=>el.textContent.trim()))
   assert.equal(labels.at(-1),'ตั้งค่าโรงเรียน');assert.equal(labels.indexOf('ตารางเรียน / ตารางสอน'),labels.indexOf('วัดและประเมินผล')+1)
   assert.equal(await page.$('.sidebar-children'),null,'No nested accordion remains')
@@ -69,6 +72,13 @@ try{
     assert.equal(await page.$eval('.sidebar-nav',el=>el.scrollWidth>el.clientWidth+1),false,`Panel overflow ${width}`)
     await rootMenu();await page.screenshot({path:path.join(out,`root-${width}.png`)})
     if(width<1024){await enter('วัดและประเมินผล');await page.keyboard.press('Escape');await page.waitForSelector('.sidebar:not(.sidebar-open)');await page.waitForFunction(()=>document.activeElement?.classList.contains('navbar-menu-button'));await page.click('.navbar-menu-button');await page.waitForFunction(()=>document.querySelector('.sidebar-open')?.getBoundingClientRect().left>=-1)}
+    if(width<1024)await page.click('.sidebar-close')
+    assert.equal(await page.$eval('.navbar-user-button',el=>{const b=el.getBoundingClientRect(),title=document.querySelector('.navbar-title-group').getBoundingClientRect();return b.left>=title.right-1&&b.right<=innerWidth}),true,`Account stays visible without overlapping title ${width}`)
+    await page.click('.navbar-user-button');await page.waitForSelector('.navbar-account-membership');assert.match(await page.$eval('.navbar-dropdown',el=>el.textContent),/ครูวิชาการ ทดสอบ.*ผู้ดูแลโรงเรียน/s)
+    assert.equal(await page.$eval('.navbar-dropdown',el=>{const b=el.getBoundingClientRect();return b.left>=0&&b.right<=innerWidth&&b.bottom<=innerHeight}),true,`Account popover bounds ${width}`)
+    assert.equal(await page.$eval('.navbar-dropdown a',el=>el.getAttribute('href')),'/phonoi/settings/profile')
+    await page.screenshot({path:path.join(out,`account-${width}.png`)})
+    await page.click('.navbar-account-membership .membership-compare-button');await page.waitForSelector('.membership-upgrade[open]');assert.equal(await page.$('.navbar-dropdown'),null);await page.keyboard.press('Escape');await page.waitForSelector('.membership-upgrade:not([open])');assert.equal(await page.evaluate(()=>document.activeElement?.classList.contains('navbar-user-button')),true,'Closing pricing restores the account trigger')
   }
   await go('/phonoi/schedules/device/manage?free=1',390);assert.equal(await heading(),'จัดตารางสอนฟรี');assert.ok(await page.$('.membership-ad-sidebar'));assert.equal(await page.$('.sidebar-ad button'),null)
   await rootMenu();await enter('วัดและประเมินผล');await page.waitForSelector('.membership-upgrade[open]');assert.equal(new URL(page.url()).pathname,'/phonoi/schedules/device/manage','Paid module does not bypass Free membership')
@@ -79,5 +89,5 @@ try{
   await go('/phonoi/dashboard?secondary=1');assert.equal(await page.$('[aria-label="เปิดหมวด งานประจำชั้น"]'),null,'Secondary restrictions preserved')
   await go('/district/admins?role=district');assert.equal(await heading(),'สมาชิกและโรงเรียน');assert.ok(await page.$('a[href="/district/admins"][aria-current=page]'));assert.equal(await page.$('a[href^="/phonoi/"]'),null)
   assert.deepEqual(errors,[])
-  console.log('PASS: actual sidebar and shell, drill-in/back keyboard focus, direct links/reload/browser history, shared destination context, scoped school/role/education menus, Free paid gating/advert and 320–1440px layout')
+  console.log('PASS: compact account/plan in navbar, scoped profile/full membership/renewal, outside click and keyboard focus, 320–1440px popover/title bounds; actual sidebar drill-in/back/history, role/education menus, Free paid gating/advert')
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve))}

@@ -1,5 +1,6 @@
 /* One navigation level at a time. Keep the app's light navy/gold theme. */
 @media screen {
+  .workspace-theme .sidebar--panels>.sidebar-search {margin-top:10px}
   .workspace-theme .sidebar--panels .sidebar-panel-nav {display:flex;flex-direction:column;gap:5px;padding:4px 10px 12px;scroll-padding-block:90px 12px}
   .workspace-theme .sidebar--panels .sidebar-panel-root-title {flex:none;margin:0;padding:8px 12px 5px;color:#536b88;font-size:11px;font-weight:600;line-height:1.6}
   .workspace-theme .sidebar--panels .sidebar-panel-body {flex:1;min-height:0}

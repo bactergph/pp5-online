@@ -170,15 +170,12 @@ function LayoutClientInner({
         onClose={closeSidebar}
         userRole={userRole}
         navRole={navRole}
-        userName={userFullName}
         isHomeroom={isHomeroom}
-        isActingDirector={isActingDirector}
         schoolCode={schoolCode}
         schoolLogoUrl={localSchool?localSchool.logoDataUrl:schoolLogoUrl}
         schoolProgramName={localSchool?.schoolName?null:schoolProgramName}
         schoolName={localSchool?.schoolName||schoolName}
         membership={effectiveMembership}
-        onMembershipUpgrade={()=>setUpgrade('แพ็กเกจสมาชิก')}
         membershipAd={effectiveMembership&&isFreeMembership(effectiveMembership)&&pathname.includes('/schedules/device')?membershipAd:null}
       />
 
@@ -194,6 +191,9 @@ function LayoutClientInner({
         section={pageContext.section}
         userRole={userRole}
         userFullName={userFullName}
+        isHomeroom={isHomeroom}
+        isActingDirector={isActingDirector}
+        membership={effectiveMembership}
         schoolCode={schoolCode}
         schoolName={localSchool?.schoolName||schoolName}
         sidebarOpen={sidebarOpen}

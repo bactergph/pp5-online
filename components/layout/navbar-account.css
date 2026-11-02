@@ -1,0 +1,26 @@
+/* Keep account information in one compact, predictable place. */
+@media screen {
+  .workspace-theme .navbar {width:auto}
+  .workspace-theme .navbar .navbar-user-button {min-height:44px;gap:8px;padding:5px 9px 5px 5px;border-radius:12px}
+  .workspace-theme .navbar-user-button .navbar-avatar {width:32px;height:32px;border-radius:9px;font-size:14px;flex:none}
+  .workspace-theme .navbar-account-name {max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#244366;font-size:13px;font-weight:600}
+  .workspace-theme .navbar .navbar-account-plan {flex:none;margin:0;padding:3px 7px;font-size:10px;line-height:1.5;letter-spacing:.02em}
+  .workspace-theme .navbar .navbar-user-chevron {width:14px;height:14px}
+  .workspace-theme .navbar .navbar-dropdown {width:296px;max-width:calc(100vw - 24px);max-height:calc(100dvh - var(--navbar-h) - 24px);overflow-y:auto;overscroll-behavior:contain}
+  .workspace-theme .navbar-dropdown-profile>div:last-child {min-width:0}
+  .workspace-theme .navbar-dropdown .navbar-user-name {overflow-wrap:anywhere;white-space:normal;color:#244366;font-size:15px;font-weight:600;line-height:1.6}
+  .workspace-theme .navbar-dropdown .navbar-user-role {font-size:12px;line-height:1.7;color:#5b708d;overflow-wrap:anywhere}
+  .workspace-theme .navbar-account-membership {padding:10px 12px 12px;border-bottom:1px solid #e2e9f3}
+  .workspace-theme .navbar-account-membership .membership-status {max-width:100%;margin:0;justify-content:flex-start;align-items:flex-start;gap:6px 8px}
+  .workspace-theme .navbar-account-membership .membership-badge {max-width:100%;font-size:11px;white-space:normal;line-height:1.5}
+  .workspace-theme .navbar-account-membership .membership-status small {flex-basis:100%;font-size:12px;line-height:1.6;color:#536b88}
+  .workspace-theme .navbar-account-membership .membership-compare-button {display:flex;align-items:center;justify-content:center;width:100%;min-height:42px;margin-top:4px;padding:9px 12px;border:1px solid #cbdcf4;border-radius:9px;background:#eef4ff;color:#2053a5;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .workspace-theme .navbar-account-membership .membership-compare-button:hover {background:#e3edff;border-color:#adc5ec}
+  .workspace-theme .navbar :is(.navbar-user-button,.membership-compare-button):focus-visible {outline:3px solid #245ed4;outline-offset:2px}
+  @media(max-width:1023px) {.workspace-theme .navbar-account-name {display:none}}
+  @media(max-width:359px) {
+    .workspace-theme .navbar .navbar-user-button {gap:5px;padding-right:6px}
+    .workspace-theme .navbar-user-button .navbar-avatar {width:28px;height:28px}
+    .workspace-theme .navbar .navbar-account-plan {padding:3px 5px;font-size:9px}
+  }
+}
