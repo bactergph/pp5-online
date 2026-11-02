@@ -1,0 +1,35 @@
+/* One navigation level at a time. Keep the app's light navy/gold theme. */
+@media screen {
+  .workspace-theme .sidebar--panels .sidebar-panel-nav {display:flex;flex-direction:column;gap:5px;padding:4px 10px 12px;scroll-padding-block:90px 12px}
+  .workspace-theme .sidebar--panels .sidebar-panel-root-title {flex:none;margin:0;padding:8px 12px 5px;color:#536b88;font-size:11px;font-weight:600;line-height:1.6}
+  .workspace-theme .sidebar--panels .sidebar-panel-body {flex:1;min-height:0}
+  .workspace-theme .sidebar--panels .sidebar-panel-body[data-root=true] {display:flex;flex-direction:column}
+  .workspace-theme .sidebar--panels .sidebar-panel-body[data-root=true]>:last-child {margin-top:auto}
+  .workspace-theme .sidebar--panels .sidebar-link {min-height:45px;margin-block:3px;padding:9px 10px;gap:7px;border-radius:10px;font-size:13px;font-weight:500;line-height:1.65;letter-spacing:0;text-decoration:none}
+  .workspace-theme .sidebar--panels .sidebar-link-left {flex:1;min-width:0;gap:10px}
+  .workspace-theme .sidebar--panels .sidebar-link-label {min-width:0;overflow-wrap:anywhere}
+  .workspace-theme .sidebar--panels .sidebar-link-icon {width:28px;height:28px;flex:none;border-radius:8px}
+  .workspace-theme .sidebar--panels .sidebar-link-icon svg {width:17px;height:17px}
+  .workspace-theme .sidebar--panels .sidebar-panel-chevron {flex:none;color:#8093ad}
+  .workspace-theme .sidebar--panels .sidebar-panel-enter.has-current {background:#edf3fe;border-color:#d7e3f5;color:#194d9c}
+  .workspace-theme .sidebar--panels .sidebar-panel-enter.has-current .sidebar-panel-chevron {color:#245ed4}
+  .workspace-theme .sidebar--panels .sidebar-panel-header {position:sticky;top:-4px;z-index:2;flex:none;display:grid;gap:3px;margin:0 0 5px;padding:4px 0 9px;background:#f9fbfe;border-bottom:1px solid #e0e7f1}
+  .workspace-theme .sidebar--panels .sidebar-panel-back {display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:9px 10px;border:1px solid #d7e2f2;border-radius:10px;background:linear-gradient(115deg,#edf3fc,#f9fbff);color:#24456f;text-align:left;font:inherit;cursor:pointer}
+  .workspace-theme .sidebar--panels .sidebar-panel-back:hover {background:#e6effd;border-color:#b9cfee}
+  .workspace-theme .sidebar--panels .sidebar-panel-back>svg {flex:none}
+  .workspace-theme .sidebar--panels .sidebar-panel-back>span {min-width:0;display:grid;gap:2px}
+  .workspace-theme .sidebar--panels .sidebar-panel-back small {color:#536b88;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+  .workspace-theme .sidebar--panels .sidebar-panel-back strong {font-size:14px;font-weight:600;line-height:1.65;overflow-wrap:anywhere}
+  .workspace-theme .sidebar--panels .sidebar-panel-home {justify-self:start;min-height:32px;margin-left:27px;padding:5px 10px;border:0;border-radius:6px;background:transparent;color:#5f7390;font:inherit;font-size:11px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+  .workspace-theme .sidebar--panels .sidebar-panel-home:hover {color:#17499b;background:#edf3fc}
+  .workspace-theme .sidebar--panels .sidebar-panel-group {margin:0;padding:6px 0 8px}
+  .workspace-theme .sidebar--panels .sidebar-panel-group+.sidebar-panel-group {border-top:1px solid #e5ebf4}
+  .workspace-theme .sidebar--panels .sidebar-panel-group-label {margin:0;padding:6px 12px;color:#536b88;font-size:11px;font-weight:600;line-height:1.7}
+  .workspace-theme .sidebar--panels :is(.sidebar-panel-back,.sidebar-panel-home,.sidebar-link):focus-visible {outline:3px solid #245ed4;outline-offset:2px}
+  .workspace-theme .sidebar--panels .membership-lock {flex:none}
+  @media(max-width:1023px) {
+    .workspace-theme .sidebar--panels .sidebar-link {min-height:47px;font-size:14px}
+    .workspace-theme .sidebar--panels .sidebar-panel-back {min-height:60px}
+    .workspace-theme .sidebar--panels .sidebar-panel-home {min-height:40px}
+  }
+}

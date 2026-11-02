@@ -25,3 +25,23 @@ for(const role of ['admin','teacher','academic_head'])for(const homeroom of [fal
 assert.equal(context('/seka/export/sgs','seka','Export').title,'ส่งคะแนนเข้า SGS')
 assert.ok(!fs.readFileSync('app/(shell)/scores/page.tsx','utf8').includes('SGSExportDialog'),'SGS export is moved out of score entry')
 console.log('PASS: role-filtered menu search, Thai punctuation/multiple terms, unique nested destinations and context, no invented permissions, school prefixes and most-specific page titles')
+const {workspaceMenuPanels:panels,workspacePanelTrail:panelTrail,workspaceCurrentMenuHref:currentHref}=load('lib/workspace-menu-panels.ts')
+const {filterSchoolMenu}=load('lib/school-education-type.ts')
+const leaves=nodes=>nodes.flatMap(node=>node.children?.length?leaves(node.children):node.href?[node.href]:[])
+function visibleAt(nodes,trail){for(const key of trail){const node=nodes.find(node=>node.key===key);assert.ok(node?.children&&!node.heading,'Every panel in a deep link is reachable');nodes=node.children}return nodes.flatMap(node=>node.heading?visibleAt(node.children,[]):[node])}
+for(const role of ['admin','teacher','principal','academic_head','district','unknown'])for(const homeroom of [false,true])for(const education of ['primary','secondary']){
+  const sections=build(role,homeroom).map(section=>({...section,items:filterSchoolMenu(section.items,education)})).filter(section=>section.items.length)
+  const root=panels(sections),before=leaves(sections.flatMap(section=>section.items)),after=leaves(root)
+  assert.deepEqual([...after].sort(),[...before].sort(),`No destinations lost or added: ${role}/${homeroom}/${education}`)
+  assert.match(root.at(-1).label,/ตั้งค่า/,'Settings remains last')
+  const assessment=root.findIndex(node=>node.label==='วัดและประเมินผล'),schedules=root.findIndex(node=>node.label==='ตารางเรียน / ตารางสอน')
+  if(schedules>=0)assert.equal(schedules,assessment+1,'Timetable is a separate root module immediately after assessment')
+  for(const href of new Set(after))assert.ok(visibleAt(root,panelTrail(root,href)).some(node=>node.href===href),`Deep link opens its actual leaf: ${role} ${href}`)
+  assert.equal(panelTrail(root,'/not-a-menu-route').length,0)
+}
+const rootPanels=panels(admin)
+assert.equal(currentHref(rootPanels,'/schedules/class/manage'),'/schedules/class/manage','The class overview must not highlight alongside its manage page')
+assert.equal(currentHref(rootPanels,'/settings/users/person-123'),'/settings/users','Detail pages keep their parent destination active')
+assert.ok(panelTrail(rootPanels,'/schedules/device/manage').length>panelTrail(rootPanels,'/dashboard').length)
+assert.ok(visibleAt(rootPanels,panelTrail(rootPanels,'/schedules/device/manage')).every(node=>!node.href||!node.href.startsWith('/schedules/class')),'Free and online modules are distinct')
+console.log('PASS: drill-in panels preserve every role/education destination, separate timetables after assessment, settings last and direct-route context')

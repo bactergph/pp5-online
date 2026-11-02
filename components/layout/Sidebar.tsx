@@ -1,16 +1,18 @@
 'use client'
 import Link from 'next/link'
 import {searchWorkspaceMenu} from '@/lib/workspace-navigation'
+import { workspaceMenuPanels, workspacePanelTrail, workspaceCurrentMenuHref, type WorkspaceMenuNode } from '@/lib/workspace-menu-panels'
 import {workspaceAppearance} from '@/lib/workspace-appearance'
 import { useFormStatus } from 'react-dom'
 import { ROLE_LABELS } from '@/lib/roles'
-import { defaultSidebarIcon, normalizeSidebarTone, type SidebarTone } from '@/lib/sidebar-tones'
+import { defaultSidebarIcon, type SidebarTone } from '@/lib/sidebar-tones'
 import { logout } from '@/lib/actions/auth'
 import { usePathname } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { filterSchoolMenu, type SchoolEducationType } from '@/lib/school-education-type'
 import { membershipAllows, type Membership } from '@/lib/membership'
 import { MembershipAd, MembershipBadge, type MembershipAdData } from './MembershipUI'
+import './sidebar-panels.css'
 
 type Child = { href?: string; label: string; icon?: React.ReactNode; children?: Child[]; tone?: SidebarTone }
 type NavItem = { href: string; label: string; icon: React.ReactNode; children?: Child[] }
@@ -223,13 +225,13 @@ const SCHEDULE_MANAGE_CHILDREN: Child[] = [
 ]
 const SCHEDULE_VIEW_MAIN: NavItem = {
   href: '/schedules/class',
-  label: 'ตารางเรียน / ตารางสอน',
+  label: 'ตารางเรียนออนไลน์',
   icon: ic(I.calendar),
   children: SCHEDULE_VIEW_CHILDREN,
 }
 const SCHEDULE_MANAGE_MAIN: NavItem = {
   href: '/schedules/class',
-  label: 'ตารางเรียน / ตารางสอน',
+  label: 'ตารางเรียนออนไลน์',
   icon: ic(I.calendar),
   children: SCHEDULE_MANAGE_CHILDREN,
 }
@@ -470,93 +472,6 @@ function buildNav(role: string, isHomeroom: boolean): NavSection[] {
   }
 }
 
-function renderSubmenuLink(
-  child: Child,
-  tone: string,
-  opts: {
-    membership?: Membership | null
-    mounted: boolean
-    pathname: string
-    scopedHref: (href: string) => string
-    isCurrent: (href: string) => boolean
-    onClose: () => void
-  },
-) {
-  if (!child.href) return null
-  const childHref = opts.scopedHref(child.href)
-  const active = opts.mounted && (opts.pathname === childHref || opts.pathname === child.href)
-  const icon = leafIcon(child)
-  return (
-    <Link
-      key={`${child.href}::${child.label}`}
-      href={childHref}
-      prefetch={opts.membership&&!membershipAllows(child.href,opts.membership)||child.href.startsWith('/schedules/device')?false:undefined}
-      onClick={event=>{
-        if(child.href?.startsWith('/schedules/device')&&opts.pathname.includes('/schedules/device')&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();window.history.pushState(null,'',childHref)}
-        opts.onClose()
-      }}
-      data-sidebar-current={opts.isCurrent(child.href) ? 'true' : undefined}
-      data-nav-tone={workspaceAppearance(child.href).tone}
-      className={`sidebar-child-link sidebar-submenu-link sidebar-submenu-link--${tone} ${active ? 'is-active' : ''}`}
-    >
-      {icon && <span className="sidebar-child-icon">{icon}</span>}
-      <span>{child.label}</span>{opts.membership&&!membershipAllows(child.href,opts.membership)&&<small className="membership-lock">PRO</small>}
-    </Link>
-  )
-}
-
-function renderSubmenuChildren(
-  children: Child[],
-  opts: {
-    membership?: Membership | null
-    mounted: boolean
-    pathname: string
-    scopedHref: (href: string) => string
-    isCurrent: (href: string) => boolean
-    onClose: () => void
-  },
-) {
-  const nodes: React.ReactNode[] = []
-  let flatBatch: Child[] = []
-  let toneIndex = 0
-
-  const flushFlat = () => {
-    if (!flatBatch.length) return
-    const tone = normalizeSidebarTone(undefined, toneIndex++)
-    nodes.push(
-      <div key={`flat-${toneIndex}`} className={`sidebar-child-group sidebar-child-group--list sidebar-child-group--${tone}`}>
-        <div className="sidebar-grandchildren">
-          {flatBatch.map(child => renderSubmenuLink(child, tone, opts))}
-        </div>
-      </div>,
-    )
-    flatBatch = []
-  }
-
-  for (const child of children) {
-    if (child.children?.length) {
-      flushFlat()
-      const tone = normalizeSidebarTone(child.tone, toneIndex++)
-      nodes.push(
-        <div key={child.label} className={`sidebar-child-group sidebar-child-group--${tone}`}>
-          <div className="sidebar-child-group-label">
-            {child.icon && <span className="sidebar-child-group-badge">{child.icon}</span>}
-            <span className="sidebar-child-group-text">{child.label}</span>
-          </div>
-          <div className="sidebar-grandchildren">
-            {child.children.map(grandchild => renderSubmenuLink(grandchild, tone, opts))}
-          </div>
-        </div>,
-      )
-    } else if (child.href) {
-      flatBatch.push(child)
-    }
-  }
-
-  flushFlat()
-  return nodes
-}
-
 type Props = {
   educationType?: SchoolEducationType
   isOpen: boolean
@@ -597,20 +512,24 @@ export default function Sidebar({
   const [search,setSearch]=useState({path:pathname,query:''})
   const query=search.path===pathname?search.query:''
   const navRef = useRef<HTMLElement | null>(null)
-  const [expansion, setExpansion] = useState<{ path: string; items: string[] } | null>(null)
+  const [navigation, setNavigation] = useState<{ context: string; path: string; trail: string[] } | null>(null)
+  const pendingFocus = useRef<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     Promise.resolve().then(() => setMounted(true))
   }, [])
 
-  // A new route returns to its active menu before the next screen is painted.
-  if (expansion && expansion.path !== pathname) setExpansion(null)
 
   const sections = buildNav(navRole, isHomeroom).map(section => {
     const byEducation = filterSchoolMenu(section.items, educationType)
     const items = byEducation
-    return { ...section, items }
+    const icon = section.label?.includes('ตั้งค่า') ? ic(SETTINGS_ICON)
+      : section.label === 'วัดและประเมินผล' ? ic(I.book)
+      : section.label?.includes('ตาราง') ? ic(I.calendar)
+      : section.label?.includes('รายงาน') ? ic(I.chart)
+      : section.label?.includes('ระบบ') ? ic(I.sliders) : section.items[0]?.icon
+    return { ...section, items, icon }
   }).filter(section => section.items.length > 0)
   const results=searchWorkspaceMenu(sections,query)
   const searching=query.trim().length>0
@@ -620,109 +539,84 @@ export default function Sidebar({
     if (!schoolPrefix || !href.startsWith('/') || href.startsWith('/district')) return href
     return `${schoolPrefix}${href}`
   }
-  const isActive = (href: string) => {
-    if (!mounted) return false
-    // /classroom-admin/sign เป็นเมนูแยก (ธุรการเสนอเซ็น) — ไม่นับเป็นลูกของธุรการชั้นเรียน
-    if (
-      href === '/classroom-admin'
-      && (pathname === scopedHref('/classroom-admin/sign')
-        || pathname === '/classroom-admin/sign'
-        || pathname.startsWith(scopedHref('/classroom-admin/sign') + '/')
-        || pathname.startsWith('/classroom-admin/sign/'))
-    ) {
-      return false
-    }
-    const scoped = scopedHref(href)
-    return pathname === scoped || pathname.startsWith(scoped + '/') || pathname === href || pathname.startsWith(href + '/')
-  }
   const isCurrent = (href: string) => {
     if (!mounted) return false
     const scoped = scopedHref(href)
     return pathname === scoped || pathname === href
   }
-  function hasActiveChild(children?: Child[]): boolean {
-    if (!children) return false
-    return children.some(child => {
-      if (child.href && isActive(child.href)) return true
-      return hasActiveChild(child.children)
-    })
+  const panels = workspaceMenuPanels(sections)
+  const context = [navRole, isHomeroom, educationType, schoolCode].join(':')
+  const localPath = schoolPrefix && pathname.startsWith(schoolPrefix + '/') ? pathname.slice(schoolPrefix.length) : pathname
+  const currentHref = mounted ? workspaceCurrentMenuHref(panels, localPath) : undefined
+  const requestedTrail = navigation?.context === context && navigation.path === pathname
+    ? navigation.trail : mounted ? workspacePanelTrail(panels, localPath) : []
+  const ancestors: WorkspaceMenuNode[] = []
+  let visible = panels
+  for (const key of requestedTrail) {
+    const panel = visible.find(node => node.key === key && node.children && !node.heading)
+    if (!panel?.children) break
+    ancestors.push(panel)
+    visible = panel.children
   }
-  const isExpanded = (item: NavItem) => {
-    if (expansion) return expansion.items.includes(item.href)
-    return isActive(item.href) || hasActiveChild(item.children)
+  const trail = ancestors.map(node => node.key)
+  const currentPanel = ancestors.at(-1)
+  const parentPanel = ancestors.at(-2)
+  const panelKey = trail.join('|')
+
+  function openPanel(node: WorkspaceMenuNode) {
+    pendingFocus.current = 'back'
+    setNavigation({ context, path: pathname, trail: [...trail, node.key] })
   }
-  const toggle = (item: NavItem) => {
-    const currentlyOpen = isExpanded(item)
-    setExpansion({ path: pathname, items: currentlyOpen ? [] : [item.href] })
+  function backPanel() {
+    pendingFocus.current = currentPanel?.key || 'root'
+    setNavigation({ context, path: pathname, trail: trail.slice(0, -1) })
+  }
+  function followLink(href: string, nextTrail = trail) {
+    setNavigation({ context, path: scopedHref(href), trail: nextTrail })
+    onClose()
   }
 
-  useEffect(() => {
-    if (!mounted) return
+  useLayoutEffect(() => {
+    if (!mounted || searching) return
     const nav = navRef.current
-    if (!nav) return
-
-    const frame = window.requestAnimationFrame(() => {
-      const isDesktop = window.matchMedia('(min-width: 1024px)').matches
-      if (!isOpen && !isDesktop) return
-
-      const currentLink = nav.querySelector<HTMLElement>('[data-sidebar-current="true"]')
-      const activeLink = currentLink || nav.querySelector<HTMLElement>('.sidebar-child-link.is-active, .sidebar-link.is-active')
-      activeLink?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    })
-
-    return () => window.cancelAnimationFrame(frame)
-  }, [isOpen, mounted, pathname, userRole, isHomeroom])
-
-  function renderItem(item: NavItem) {
-    const allowed = (node: Child): boolean => node.children?.length ? node.children.some(allowed) : !node.href || !membership || membershipAllows(node.href, membership)
-    const locked = !!membership && !allowed(item)
-    const href = scopedHref(item.href)
-    const active = isActive(item.href) || hasActiveChild(item.children)
-    const left = (
-      <span className="sidebar-link-left">
-        <span className="sidebar-link-icon">{item.icon}</span>
-        <span className="sidebar-link-label">{item.label}</span>
-      </span>
-    )
-
-    if (!item.children) {
-      return (
-        <Link key={item.href} href={href} prefetch={membership&&!membershipAllows(item.href,membership)?false:undefined} onClick={onClose} data-nav-tone={workspaceAppearance(item.href).tone} data-sidebar-current={isCurrent(item.href) ? 'true' : undefined} className={`sidebar-link ${active ? 'is-active' : ''}`}>
-          {left}{membership&&!membershipAllows(item.href,membership)&&<small className="membership-lock">PRO</small>}
-        </Link>
-      )
+    if (!nav || (!isOpen && !window.matchMedia('(min-width:1024px)').matches)) return
+    if (pendingFocus.current) {
+      const key = pendingFocus.current
+      pendingFocus.current = null
+      nav.scrollTop = 0
+      const target = key === 'back' ? nav.querySelector<HTMLElement>('.sidebar-panel-back')
+        : [...nav.querySelectorAll<HTMLElement>('[data-panel-key]')].find(node => node.dataset.panelKey === key)
+      target?.focus({ preventScroll: true })
+      target?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+    } else {
+      nav.querySelector<HTMLElement>('.sidebar-panel-leaf.is-active')?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
     }
-    const open = isExpanded(item)
-    return (
-      <div key={item.href} data-nav-tone={workspaceAppearance(item.href).tone} className={`sidebar-item${open ? ' is-open' : ''}${active ? ' has-active' : ''}`}>
-        <button
-          type="button"
-          data-membership-locked={locked ? item.label : undefined}
-          onClick={() => toggle(item)}
-          aria-expanded={open}
-          className={`sidebar-link sidebar-parent${active ? ' is-active' : ''}${open ? ' is-open' : ''}`}
-        >
-          {left}
-          {locked && <small className="membership-lock">PRO</small>}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"
-            className={`sidebar-chevron${open ? ' is-expanded' : ''}`} aria-hidden="true">
-            <path d="M9 18l6-6-6-6" />
-          </svg>
-        </button>
-        {open && (
-          <div className="sidebar-children sidebar-submenu--cards">
-            {renderSubmenuChildren(item.children ?? [], {
-              membership,
-              mounted,
-              pathname,
-              scopedHref,
-              isCurrent,
-              onClose,
-            })}
-          </div>
-        )}
-      </div>
-    )
+  }, [panelKey, searching, isOpen, mounted, pathname])
+
+  function allowed(node: WorkspaceMenuNode): boolean {
+    return node.children?.length ? node.children.some(allowed) : !node.href || !membership || membershipAllows(node.href, membership)
+  }
+  function renderNode(node: WorkspaceMenuNode): React.ReactNode {
+    if (node.heading) return <section key={node.key} className="sidebar-panel-group" aria-labelledby={node.key}>
+      <h3 id={node.key} className="sidebar-panel-group-label">{node.label}</h3>
+      {node.children?.map(renderNode)}
+    </section>
+    const locked = !!membership && !allowed(node)
+    const active = mounted && (node.children ? workspacePanelTrail(panels, localPath).includes(node.key) : !!node.href && currentHref === node.href)
+    const content = <><span className="sidebar-link-left"><span className="sidebar-link-icon" aria-hidden="true">{node.icon || leafIcon(node)}</span><span className="sidebar-link-label">{node.label}</span></span>{locked && <small className="membership-lock">PRO</small>}</>
+    const tone = workspaceAppearance(node.href || node.children?.find(child => child.href)?.href || '/dashboard').tone
+    if (node.children) return <button key={node.key} type="button" data-panel-key={node.key} data-membership-locked={locked ? node.label : undefined} data-nav-tone={tone} className={`sidebar-link sidebar-panel-enter${active ? ' has-current' : ''}`} onClick={() => openPanel(node)} aria-label={`เปิดหมวด ${node.label}`}>
+      {content}<svg aria-hidden="true" className="sidebar-panel-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m9 6 6 6-6 6"/></svg>
+    </button>
+    if (!node.href) return null
+    const href = node.href, target = scopedHref(href)
+    return <Link key={node.key} href={target} prefetch={locked || href.startsWith('/schedules/device') ? false : undefined} data-panel-key={node.key} data-nav-tone={tone} data-sidebar-current={isCurrent(href) ? 'true' : undefined} aria-current={isCurrent(href) ? 'page' : undefined} className={`sidebar-link sidebar-panel-leaf${active ? ' is-active' : ''}`} onClick={event => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+      if (href.startsWith('/schedules/device') && pathname.includes('/schedules/device')) {
+        event.preventDefault(); window.history.pushState(null, '', target)
+      }
+      followLink(href)
+    }}>{content}</Link>
   }
 
   return (
@@ -731,7 +625,7 @@ export default function Sidebar({
       const controls=[...event.currentTarget.querySelectorAll<HTMLElement>('a[href],button:not(:disabled),input:not(:disabled),[tabindex="0"]')].filter(element=>element.getClientRects().length&&getComputedStyle(element).visibility!=='hidden')
       const first=controls[0],last=controls.at(-1)
       if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}
-    }} id="workspace-navigation" aria-label="เมนูงานโรงเรียน" className={`sidebar ${isOpen ? 'sidebar-open' : ''}`}>
+    }} id="workspace-navigation" aria-label="เมนูงานโรงเรียน" className={`sidebar sidebar--panels ${isOpen ? 'sidebar-open' : ''}`}>
       {/* Logo — โรงเรียน: โลโก้ + ชื่อโปรแกรม / Super Admin: จารย์เสก */}
       <div className="sidebar-brand">
         <div className="sidebar-brand-main">
@@ -780,17 +674,17 @@ export default function Sidebar({
 
       <div className="sidebar-search"><label htmlFor="workspace-menu-search"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input ref={searchRef} id="workspace-menu-search" type="search" value={query} maxLength={120} placeholder="ค้นหาเมนู…" aria-label="ค้นหาเมนู" aria-controls={searching?'workspace-menu-results':undefined} onChange={event=>setSearch({path:pathname,query:event.target.value})} onKeyDown={event=>{if(event.key==='Escape'&&query){event.preventDefault();event.stopPropagation();setSearch({path:pathname,query:''})}}}/></label>{searching&&<button type="button" aria-label="ล้างการค้นหาเมนู" onClick={()=>{setSearch({path:pathname,query:''});searchRef.current?.focus()}}>×</button>}</div>
       {/* Nav (sectioned) */}
-      <nav ref={navRef} className="sidebar-nav" aria-label="เมนูหลัก">
-        {searching?<div id="workspace-menu-results" className="sidebar-search-results"><p role="status" aria-live="polite">พบ {results.length} เมนู</p>{results.length?results.map(result=><Link key={result.href} href={scopedHref(result.href)} prefetch={false} className="sidebar-search-result" data-nav-tone={workspaceAppearance(result.href).tone} aria-current={isCurrent(result.href)?'page':undefined} onClick={onClose}><span className="sidebar-search-result-icon" aria-hidden="true">{leafIcon(result)}</span><span><strong>{result.label}</strong><small>{result.trail}</small></span>{membership&&!membershipAllows(result.href,membership)&&<small className="membership-lock">PRO</small>}</Link>):<div className="sidebar-search-empty">ไม่พบเมนูที่ค้นหา<small>ลองใช้คำ เช่น คะแนน ตาราง หรือครู</small></div>}</div>:sections.map((section, si) => (
-          <div key={si} className={section.label ? 'sidebar-section' : 'sidebar-section sidebar-section-first'}>
-            {section.label && (
-              <div className="sidebar-section-label">
-                {section.label}
-              </div>
-            )}
-            {section.items.map(renderItem)}
-          </div>
-        ))}
+      <nav ref={navRef} className="sidebar-nav sidebar-panel-nav" aria-label={searching ? 'ผลการค้นหาเมนู' : currentPanel?.label || 'เมนูหลัก'}>
+        {searching ? <div id="workspace-menu-results" className="sidebar-search-results"><p role="status" aria-live="polite">พบ {results.length} เมนู</p>{results.length ? results.map(result => <Link key={result.href} href={scopedHref(result.href)} prefetch={false} className="sidebar-search-result" data-nav-tone={workspaceAppearance(result.href).tone} aria-current={isCurrent(result.href) ? 'page' : undefined} onClick={() => followLink(result.href, workspacePanelTrail(panels, result.href))}><span className="sidebar-search-result-icon" aria-hidden="true">{leafIcon(result)}</span><span><strong>{result.label}</strong><small>{result.trail}</small></span>{membership && !membershipAllows(result.href, membership) && <small className="membership-lock">PRO</small>}</Link>) : <div className="sidebar-search-empty">ไม่พบเมนูที่ค้นหา<small>ลองใช้คำ เช่น คะแนน ตาราง หรือครู</small></div>}</div> : <>
+          {currentPanel ? <div className="sidebar-panel-header">
+            <button type="button" className="sidebar-panel-back" onClick={backPanel} aria-label={`กลับไป${parentPanel?.label || 'เมนูหลัก'}`}>
+              <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m14 6-6 6 6 6"/></svg>
+              <span><small>กลับไป{parentPanel?.label || 'เมนูหลัก'}</small><strong>{currentPanel.label}</strong></span>
+            </button>
+            {ancestors.length > 1 && <button type="button" className="sidebar-panel-home" onClick={() => {pendingFocus.current = ancestors[0].key; setNavigation({ context, path: pathname, trail: [] })}}>เมนูหลัก</button>}
+          </div> : <h2 className="sidebar-panel-root-title">เมนูหลัก</h2>}
+          <div id="workspace-menu-panel" className="sidebar-panel-body" data-root={!currentPanel ? 'true' : undefined} key={panelKey || 'root'}>{visible.map(renderNode)}</div>
+        </>}
       </nav>
 
       {/* Footer */}
