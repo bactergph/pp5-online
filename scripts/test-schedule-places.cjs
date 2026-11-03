@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),path=require('path'),ts=require('typescript'),assert=require('node:assert/strict')
 const cache={}
 function load(file){const abs=path.resolve(file);if(cache[abs])return cache[abs];const exports={};cache[abs]=exports;vm.runInNewContext(ts.transpileModule(fs.readFileSync(abs,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,crypto,structuredClone,AbortController,Date,Error,console,require(name){if(name==='./schedule-device-run')return {};if(name.startsWith('@/'))return load(name.slice(2)+'.ts');if(name.startsWith('.'))return load(path.resolve(path.dirname(abs),name+'.ts'));throw Error('Unexpected dependency '+name)}});return exports}
-const {applySchedulePlaceChange,placeReferences}=load('lib/schedule-places.ts'),free=load('lib/schedule-device-free.ts'),{deviceDataKey,devicePreparation}=load('lib/schedule-device-view.ts'),{createDeviceScheduleServices}=load('lib/schedule-device-services.ts')
+const {applySchedulePlaceChange,placeReferences}=load('lib/schedule-places.ts'),free=load('lib/schedule-device-free.ts'),{deviceScheduleKey,devicePreparation}=load('lib/schedule-device-view.ts'),{createDeviceScheduleServices}=load('lib/schedule-device-services.ts')
 const uuid=i=>`11111111-1111-4111-8111-${String(i).padStart(12,'0')}`
 const r1=uuid(1),r2=uuid(2),p1=uuid(3),p2=uuid(4),p3=uuid(5),s1=uuid(6),s2=uuid(7)
 const initial=free.normalizePlan({rooms:[{id:r1,label:'ม.1/1'},{id:r2,label:'ม.1/2'}],teachers:[{id:uuid(8),name:'ครูหนึ่ง'},{id:uuid(9),name:'ครูสอง'}],places:[{id:p1,name:'ห้องวิทยาศาสตร์'},{id:p2,name:'ห้องภาษา'}],subjects:[{id:s1,roomId:r1,code:'ว21102',name:'วิทยาศาสตร์',teacherId:uuid(8),periods:3,pattern:[2,1],placeId:p1,timePreference:'afternoon',spread:false},{id:s2,roomId:r2,code:'ว21102',name:'วิทยาศาสตร์',teacherId:uuid(9),periods:3,pattern:[2,1],placeId:p2}]})
@@ -26,7 +26,7 @@ assert.equal(applySchedulePlaceChange(unrelated,{kind:'rename',id:p1,name:'ห�
 async function run(){
  let bundle={year:'2569',semester:2,terms:{1:{...structuredClone(initial),substitutes:{}},2:{...structuredClone(initial),timetable,substitutes:{}}}},reject=false,writes=0
  const services=createDeviceScheduleServices({read:()=>bundle,write:async next=>{writes++;if(reject)return false;bundle=next;return true}})
- const get=()=>bundle.terms[2],hash=()=>deviceDataKey(get()),save=async change=>{const r=await services.saveSchedulePlaces('2569',2,hash(),change);assert.equal(r.error,null,r.error);return r.data}
+ const get=()=>bundle.terms[2],hash=()=>deviceScheduleKey(get()),save=async change=>{const r=await services.saveSchedulePlaces('2569',2,hash(),change);assert.equal(r.error,null,r.error);return r.data}
  await services.fetchScheduleInit()
  const stale=hash();await save({kind:'rename',id:p1,name:'ห้องทดลองใหม่'})
  assert.equal(bundle.terms[1].places[0].name,'ห้องทดลองใหม่');assert.equal(get().places[0].name,'ห้องทดลองใหม่')

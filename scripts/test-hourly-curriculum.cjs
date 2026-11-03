@@ -46,7 +46,7 @@ const db = { from(table) {
   }; return chain
 } }
 const actions = load('app/(shell)/attendance/actions.ts', {
-  '@/lib/supabase': { createServerClient: () => db }, '@/lib/session': { getSession: async () => ({ role: 'admin', schoolId: 'school', userId: 'teacher' }) },
+  '@/lib/personal-data-scope':{isPersonalSubjectAccess:async()=>false},'@/lib/supabase': { createServerClient: () => db }, '@/lib/session': { getSession: async () => ({ role: 'admin', schoolId: 'school', userId: 'teacher' }) },
   '@/lib/hourly-attendance': hourly, '@/lib/supabase-paginate': load('lib/supabase-paginate.ts'),
   '@/lib/audit': { logActivity: async () => {}, resolveClassSubjectContext: async () => ({ schoolId: 'school' }) },
 })

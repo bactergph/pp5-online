@@ -55,20 +55,21 @@ async function testPage(path, hourly) {
     '@/lib/score-transfer': compile('lib/score-transfer.ts', () => ({})),
   }
   const page = harness(path, actions, libs)
+  const choose = kind => hourly ? page.selects()[{year:0,class:1,subject:2}[kind]] : page.selects().find(node=>node.props.id==='score-'+kind)
   await settle()
   assert.equal(requests.length, 1)
-  page.selects()[1].props.onChange({ target: { value: 'c2' } }); await settle()
+  choose('class').props.onChange({ target: { value: 'c2' } }); await settle()
   assert.equal(requests.length, 1, 'Must not request new classroom with old subject')
-  page.selects()[1].props.onChange({ target: { value: 'c3' } }); await settle()
+  choose('class').props.onChange({ target: { value: 'c3' } }); await settle()
   pending.get('c3').resolve(subject(3)); await settle()
   pending.get('c2').resolve(subject(2)); await settle()
-  assert.equal(page.selects()[1].props.value, 'c3')
-  assert.equal(page.selects()[2].props.value, 's3', 'Late old subject response must not overwrite current selection')
-  page.selects()[0].props.onChange({ target: { value: 'year2' } }); await settle()
+  assert.equal(choose('class').props.value, 'c3')
+  assert.equal(choose('subject').props.value, 's3', 'Late old subject response must not overwrite current selection')
+  choose('year').props.onChange({ target: { value: 'year2' } }); await settle()
   assert.ok(pending.has('c1'), 'Changing year must also load subjects for its first classroom')
   pending.get('c1').resolve(subject(1)); await settle()
   for (const request of requests) assert.equal(request.classSubjectId, request.classroomId.replace('c', 's'))
-  assert.equal(page.selects()[0].props.value, 'year2')
+  assert.equal(choose('year').props.value, 'year2')
   console.log(`${hourly ? 'Hourly attendance' : 'Score entry'}: classroom/year switching and delayed response tests passed`)
 }
 async function testHourlyValidation() {
@@ -84,6 +85,7 @@ async function testHourlyValidation() {
     return chain
   } }
   const actions = compile('app/(shell)/attendance/actions.ts', name => {
+    if (name === '@/lib/personal-data-scope') return {isPersonalSubjectAccess:async()=>false}
     if (name === '@/lib/supabase') return { createServerClient: () => db }
     if (name === '@/lib/session') return { getSession: async () => ({ role: 'admin', schoolId: 'school' }) }
     if (name === '@/lib/supabase-paginate') return { fetchAllRows: async () => [] }

@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase'
 import { readMembership } from '@/lib/member-plan'
 import { serverRoomLimit } from '@/lib/membership'
 import { getSession } from '@/lib/session'
+import { schoolRecordsMatch } from '@/lib/school-record-scope'
 import { logActivity } from '@/lib/audit'
 import { resolveSchoolEducationType, schoolLevels, type SchoolEducationType } from '@/lib/school-education-type'
 
@@ -137,6 +138,10 @@ export async function saveClassroom(id: string | null, payload: {
   const db = createServerClient()
   if (!session.schoolId) return { error: 'กรุณาเลือกโรงเรียน' }
   const allowed = schoolLevels(await loadSchoolEducationType(db, session.schoolId))
+  if (id && !await schoolRecordsMatch(db,session.schoolId,'classrooms',[id])) return {error:'ไม่พบห้องเรียนในโรงเรียนนี้'}
+  const teachers=[payload.homeroom_teacher_id,payload.homeroom_teacher2_id].filter(Boolean)
+  if (!await schoolRecordsMatch(db,session.schoolId,'users',teachers)) return {error:'ครูประจำชั้นต้องเป็นบุคลากรในโรงเรียนนี้'}
+  if (teachers.length===2 && teachers[0]===teachers[1]) return {error:'ครูประจำชั้นทั้งสองคนต้องไม่ซ้ำกัน'}
   const { data: year } = await db.from('academic_years').select('id').eq('id', payload.academic_year_id).eq('school_id', session.schoolId).maybeSingle()
   if (!year) return { error: 'ไม่พบปีการศึกษาของโรงเรียนนี้' }
   if (!allowed.includes(payload.level)) {
@@ -160,7 +165,7 @@ export async function saveClassroom(id: string | null, payload: {
   // ตั้ง is_homeroom=true ให้ครูที่ถูกกำหนดเป็นครูประจำชั้น (เพื่อให้เห็นเมนูธุรการชั้นเรียน)
   const homerooms = [payload.homeroom_teacher_id, payload.homeroom_teacher2_id].filter(Boolean) as string[]
   if (homerooms.length > 0) {
-    await db.from('users').update({ is_homeroom: true }).in('id', homerooms)
+    await db.from('users').update({ is_homeroom: true }).in('id', homerooms).eq('school_id',session.schoolId)
   }
   await logActivity({
     actor: session,
@@ -349,10 +354,12 @@ export async function deleteClassroom(id: string) {
   const { data: classroom } = await db.from('classrooms')
     .select('level, room, school_id')
     .eq('id', id)
+    .eq('school_id',session.schoolId)
     .maybeSingle()
+  if (!classroom) return {error:'ไม่พบห้องเรียนในโรงเรียนนี้'}
   const { count } = await db.from('students').select('id', { count: 'exact', head: true }).eq('classroom_id', id)
   if ((count ?? 0) > 0) return { error: `ลบไม่ได้ — มีนักเรียน ${count} คนในห้องนี้` }
-  const { error } = await db.from('classrooms').delete().eq('id', id)
+  const { error } = await db.from('classrooms').delete().eq('id', id).eq('school_id',session.schoolId)
   if (!error) {
     await logActivity({
       actor: session,

@@ -13,7 +13,7 @@ for(const lesson of fixture.lessons){lesson.count=2;lesson.pattern=[2];lesson.ro
 let state=structuredClone(fixture),failAssignment=false,revision=0,activeWrites=0,maxWrites=0,writeDelay=180
 const calls=[]
 const write=(name,text)=>{const file=path.join(out,name);fs.writeFileSync(file,text);return file}
-const bridge=write('actions.js',`async function call(method,args){const r=await fetch('/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method,args})});if(!r.ok)throw Error(await r.text());return r.json()};export const fetchPreparation=(...args)=>call('fetch',args),savePreparation=(...args)=>call('plan',args),saveScheduleTeachingAssignments=(...args)=>call('assign',args);export const checkPreparation=()=>{},createScheduleDraft=()=>{},confirmScheduleDraft=()=>{},discardScheduleDraft=()=>{};`)
+const bridge=write('actions.js',`async function call(method,args){const r=await fetch('/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method,args})});if(!r.ok)throw Error(await r.text());return r.json()};export const fetchPreparation=(...args)=>call('fetch',args),savePreparation=(...args)=>call('plan',args),saveScheduleTeachingAssignments=(...args)=>call('assign',args),setJointTeachingScheduleCell=(...args)=>call('joint',args);export const checkPreparation=()=>{},createScheduleDraft=()=>{},confirmScheduleDraft=()=>{},discardScheduleDraft=()=>{};`)
 const noop=write('noop.js','export default function Panel(){return null};export const savePeriodTimes=()=>{},editTeacherScheduleCell=()=>{},saveClassScheduleCell=()=>{},setTeacherAvailabilityBlock=()=>{},toggleScheduleCellLock=()=>{};')
 const entry=write('entry.js',`import React from 'react';import{createRoot}from'react-dom/client';import Provider from ${JSON.stringify(path.join(root,'components/schedules/OnlineScheduleProvider.tsx'))};import Wizard from ${JSON.stringify(path.join(root,'components/schedules/SchedulePreparation.tsx'))};createRoot(document.getElementById('root')).render(React.createElement(Provider,null,React.createElement(Wizard,{yearId:'year',semester:2,initialStep:6,onChanged:()=>{},onBusyChange:v=>window.isBusy=v})));`)
 const loader=write('loader.cjs',`const ts=require('typescript');module.exports=s=>ts.transpileModule(s,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText`)
@@ -33,9 +33,10 @@ const server=http.createServer(async(req,res)=>{
    if(method!=='fetch'){
     calls.push({method,args});activeWrites++;maxWrites=Math.max(maxWrites,activeWrites)
     await new Promise(resolve=>setTimeout(resolve,writeDelay));activeWrites--
-    if(args[2]!==state.hash){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:'ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก'}));return}
+    if((method==='joint'?args[2].expectedHash:args[2])!==state.hash){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:'ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก'}));return}
     if(method==='assign'&&failAssignment){failAssignment=false;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:'เครือข่ายขัดข้องจำลอง กรุณาลองใหม่'}));return}
-    if(method==='plan')state.plan=structuredClone(args[3])
+    if(method==='joint'){assert.equal(args[2].cancelGroup,true);state.plan.teachingGroups=state.plan.teachingGroups.filter(g=>g.id!==args[2].groupId);state.slots=[]}
+    else if(method==='plan')state.plan=structuredClone(args[3])
     else {assert.equal(method,'assign');for(const row of args[3]){const lesson=state.lessons.find(l=>l.id===row.lessonId);assert.ok(lesson);lesson.teacherId=row.teacherId||null}}
     state.hash=String(++revision)
    }
@@ -62,7 +63,7 @@ try{
  await page.setViewport({width:1440,height:1000});await page.screenshot({path:path.join(out,'desktop.png')});
  await click(dialog+'>footer button','บันทึกกลุ่มสอนรวม');await page.waitForSelector(dialog+' .prep-joint-groups li');
  assert.equal(state.plan.teachingGroups.length,1);assert.deepEqual(state.plan.teachingGroups[0].lessonIds,['math1','math2']);assert.equal(calls.length,1,'Save the group with one plan operation');
- await click(dialog+' .prep-joint-groups button','ยกเลิกสอนรวม');await page.waitForFunction(()=>!document.querySelector('.prep-joint-groups'));assert.equal(state.plan.teachingGroups.length,0);
+ await click(dialog+' .prep-joint-groups button','ยกเลิกสอนรวม');await page.waitForSelector(dialog+' .joint-cancel-confirm');await click(dialog+' .joint-cancel-confirm button','ยืนยันยกเลิกทั้งกลุ่ม');await page.waitForFunction(()=>!document.querySelector('.prep-joint-groups'));assert.equal(state.plan.teachingGroups.length,0);
  await click(dialog+'>header button','ปิด');await page.waitForSelector(dialog,{hidden:true});assert.deepEqual(errors,[]);
  console.log('PASS: real shared wizard opens joint instruction, teacher filters rooms, saves/removes a group, one write per operation; 360/390/768/1024/1440 widths keep confirmation visible; no page errors');
 }catch(error){if(page)await page.screenshot({path:path.join(out,'failure.png'),fullPage:true});throw error}

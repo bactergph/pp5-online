@@ -72,6 +72,12 @@ async function getClassroomForAccess(classroomId: string, session: ClassroomAdmi
   return { error: null, classroom }
 }
 
+async function studentRowsError(classroomId: string, rows: {student_id:string}[]) {
+  const students=await fetchStudentsForClassroom(classroomId)
+  const ids=new Set(students.map(student=>student.id))
+  return rows.some(row=>!ids.has(row.student_id)) ? 'พบนักเรียนที่ไม่ได้อยู่ในห้องนี้ กรุณาโหลดรายชื่อใหม่' : null
+}
+
 async function fetchStudentsForClassroom(classroomId: string) {
   return getClassroomStudentsCached(classroomId, async () => {
     const db = createServerClient()
@@ -335,6 +341,8 @@ export async function saveDailyAttendance(classroomId: string, date: string, row
   if (!canEdit(session) || session.role === 'principal') return { error: 'ไม่มีสิทธิ์', count: 0 }
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
+  const rosterError=await studentRowsError(classroomId,rows)
+  if (rosterError) return {error:rosterError,count:0}
   if (!date || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
   const closedDays = await fetchHolidaysForRange(access.classroom.academic_year_id, date, date)
   if (closedDays.some(day => day.date === date)) return { error: 'วันที่เลือกเป็นวันหยุดหรืออยู่นอกช่วงเปิดภาคเรียน', count: 0 }
@@ -419,6 +427,8 @@ export async function saveMonthlyAttendance(
   if (!canEdit(session) || session.role === 'principal') return { error: 'ไม่มีสิทธิ์', count: 0 }
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
+  const rosterError=await studentRowsError(classroomId,rows)
+  if (rosterError) return {error:rosterError,count:0}
   if (!monthKey || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
 
   const db = createServerClient()
@@ -928,6 +938,8 @@ export async function saveDailyActivity(
   if (!canEdit(session) || session.role === 'principal') return { error: 'ไม่มีสิทธิ์', count: 0 }
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
+  const rosterError=await studentRowsError(classroomId,rows)
+  if (rosterError) return {error:rosterError,count:0}
   if (!date || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
   if (!['saving','merit','milk','cleaning','brushing','lunch'].includes(activityType)) return { error:'ประเภทบันทึกไม่ถูกต้อง', count:0 }
   if(isStudentValueKind(activityType)) {
@@ -1031,6 +1043,8 @@ export async function saveMonthlyActivity(
   if (!canEdit(session) || session.role === 'principal') return { error: 'ไม่มีสิทธิ์', count: 0 }
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
+  const rosterError=await studentRowsError(classroomId,rows)
+  if (rosterError) return {error:rosterError,count:0}
   if (!monthKey || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
 
   if (!['saving','merit','milk','cleaning','brushing','lunch'].includes(activityType)) return { error:'ประเภทบันทึกไม่ถูกต้อง', count:0 }
@@ -1107,6 +1121,11 @@ export async function saveWeightHeight(
   if (!canEdit(session) || session.role === 'principal') return { error: 'ไม่มีสิทธิ์', count: 0 }
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
+  const rosterError=await studentRowsError(classroomId,rows)
+  if (rosterError) return {error:rosterError,count:0}
+  if (access.classroom.academic_year_id!==academicYearId) return {error:'ปีการศึกษาไม่ตรงกับห้องเรียน',count:0}
+  if (!Number.isInteger(month)||month<1||month>12) return {error:'เดือนไม่ถูกต้อง',count:0}
+  if (rows.some(row=>[row.weight,row.height].some(value=>value!==null&&(!Number.isFinite(value)||value<=0)))) return {error:'น้ำหนักและส่วนสูงต้องเป็นจำนวนมากกว่า 0 หรือเว้นว่าง',count:0}
 
   const db = createServerClient()
   const payload = rows.map(row => {
@@ -1174,6 +1193,11 @@ export async function saveHealthInspection(
   if (!canEdit(session) || session.role === 'principal') return { error: 'ไม่มีสิทธิ์', count: 0 }
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
+  const rosterError=await studentRowsError(classroomId,rows)
+  if (rosterError) return {error:rosterError,count:0}
+  if (access.classroom.academic_year_id!==academicYearId) return {error:'ปีการศึกษาไม่ตรงกับห้องเรียน',count:0}
+  if (!Number.isInteger(month)||month<1||month>12) return {error:'เดือนไม่ถูกต้อง',count:0}
+  if (![1,2].includes(term)) return {error:'ภาคเรียนไม่ถูกต้อง',count:0}
 
   const db = createServerClient()
   const payload = rows.map(row => ({

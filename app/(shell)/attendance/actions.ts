@@ -167,6 +167,8 @@ export async function saveHourlyCell(params: {
   const db = createServerClient()
   const { data: subject, error: subjectError } = await db.from('subjects').select('hours_per_year').eq('id', cs.subject_id).maybeSingle()
   if (subjectError || !subject) return { error: 'ตรวจสอบชั่วโมงรายวิชาไม่สำเร็จ กรุณาลองใหม่' }
+  const {data:student,error:studentError}=await db.from('students').select('id').eq('id',params.studentId).eq('classroom_id',cs.classroom_id).maybeSingle()
+  if (studentError||!student) return {error:'นักเรียนไม่อยู่ในห้องเรียนของรายวิชานี้'}
   const hpw = hoursPerWeek(subject.hours_per_year || 0, 20)
   if (!Number.isInteger(params.slot) || params.slot < 1 || params.slot > hpw ||
     !Number.isInteger(params.weekNumber) || params.weekNumber < 1 || params.weekNumber > 20) return { error: 'คาบหรือสัปดาห์เกินเวลาเรียนของรายวิชา กรุณารีเฟรชหน้า' }

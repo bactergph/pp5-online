@@ -4,7 +4,7 @@ function load(file){const abs=path.resolve(file);if(cache[abs])return cache[abs]
 
 
 const id=n=>'00000000-0000-0000-0000-'+String(n).padStart(12,'0'),free=load('lib/schedule-device-free.ts'),view=load('lib/schedule-device-view.ts'),lock=load('lib/schedule-joint-lock.ts').prepareJointTeachingSession;
-const plan=free.normalizePlan({teachers:[{id:id(1),name:'ครู ก.'},{id:id(2),name:'ครู ข.'}],rooms:[{id:id(10),label:'ป.4/1'},{id:id(11),label:'ป.5/1'}],subjects:[{id:id(30),roomId:id(10),teacherId:id(1),code:'ง14101',name:'การงาน',periods:2,pattern:[2],placeId:null},{id:id(31),roomId:id(11),teacherId:id(1),code:'ศ15101',name:'ศิลปะ',periods:3,pattern:[1,1,1],placeId:null}]});
+const plan=free.normalizePlan({teachers:[{id:id(1),name:'ครู ก.'},{id:id(2),name:'ครู ข.'}],rooms:[{id:id(10),label:'ป.4/1'},{id:id(11),label:'ป.5/1'}],subjects:[{id:id(30),roomId:id(10),teacherId:id(1),code:'ง14101',name:'การงาน',periods:2,pattern:[2],placeId:null},{id:id(31),roomId:id(11),teacherId:id(1),code:'ศ15101',name:'ศิลปะ',periods:3,pattern:[2,1],placeId:null}]});
 plan.substitutes={};
 const request={expectedHash:view.devicePreparation(plan).hash,lessonId:id(30),lessonIds:[id(30),id(31)],groupId:id(40),day:1,period:2,periods:[2,3],locked:true,expected:[10,11].flatMap(room=>[2,3].map(period=>({classroomId:id(room),lessonId:null,locked:false,period})))};
 const changed=lock(view.devicePreparation(plan),request,'2569');assert.equal(changed.rows.length,4);assert.equal(changed.plan.teachingGroups[0].cells.length,2);

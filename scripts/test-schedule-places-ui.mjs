@@ -1,4 +1,5 @@
 // Shared production editor with the online service boundary. Synthetic backend only.
+import loadPure from './helpers/load-pure-ts.cjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import http from 'node:http'
@@ -8,7 +9,7 @@ import assert from 'node:assert/strict'
 import puppeteer from 'puppeteer-core'
 import webpackPackage from 'next/dist/compiled/webpack/webpack.js'
 const {webpack}=webpackPackage,root=process.cwd(),out=path.resolve('tmp/schedule-places-ui');fs.mkdirSync(out,{recursive:true})
-const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-places.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Error})
+const exports=loadPure('lib/schedule-places.ts')
 const {applySchedulePlaceChange}=exports,uuid=i=>`11111111-1111-4111-8111-${String(i).padStart(12,'0')}`
 const fixture={hash:'0',teachers:[],classrooms:[1,2,3,4,5,6].map(i=>({id:'r'+i,level:'ม.1',room:i,name:String(i)})),plan:{days:[1,2,3,4,5],rooms:[{id:uuid(1),name:'ห้องวิทย์'},{id:uuid(2),name:'ห้องภาษา'}],rules:Object.fromEntries([1,2,3,4,5,6].map(i=>['s'+i,{count:3,pattern:[2,1],roomId:i===1?uuid(1):i===2?uuid(2):null,morning:false,spread:true,timePreference:'afternoon'}])),reduceGaps:false,maxContinuous:0},lessons:[1,2,3,4,5,6].map(i=>({id:'s'+i,classroomId:'r'+i,code:'ว21102',name:'วิทยาศาสตร์',label:'ม.1/'+i+' · วิทยาศาสตร์',teacherId:'t'+i,teacherName:'ครูทดสอบ '+i,count:3,pattern:[2,1],activity:false})),slots:[1,2].map(i=>({classroom_id:'r'+i,class_subject_id:'s'+i,activity_id:null,day_of_week:1,period:1,locked:true})),blocks:[],activities:[],periods:[]}
 let state=structuredClone(fixture),revision=0,failNext=false,activeWrites=0,maxWrites=0;const calls=[]

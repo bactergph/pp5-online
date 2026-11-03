@@ -1,4 +1,5 @@
 'use server'
+import {schoolRecordsMatch,schoolClassSubjectsMatch,schoolStudentsMatchYear} from '@/lib/school-record-scope'
 import { centralSubjectLevel } from '@/lib/schedule-central-subjects'
 import { randomUUID } from 'crypto'
 import { createServerClient } from '@/lib/supabase'
@@ -280,6 +281,9 @@ export async function saveSchool(id: string | null, payload: Record<string, stri
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้น' }
   if (id && id !== session.schoolId) return {error:'ไม่มีสิทธิ์แก้ไขข้อมูลโรงเรียนนี้'}
   if ('id' in payload) return {error:'ไม่สามารถเปลี่ยนรหัสโรงเรียนผ่านฟอร์มนี้'}
+  const editableFields=new Set(['name','department','area_office','district','province','address','phone','document_prefix','code','program_name','created_by'])
+  if (Object.keys(payload).some(key=>!editableFields.has(key))) return {error:'ข้อมูลแพ็กเกจ สิทธิ์ และไฟล์โรงเรียนต้องแก้ไขผ่านเมนูที่กำหนด'}
+  if (!id && session.schoolId) return {error:'บัญชีนี้มีโรงเรียนแล้ว กรุณาแก้ไขโรงเรียนเดิมหรือติดต่อผู้ดูแลระบบ'}
   const db = createServerClient()
   const { revalidatePath } = await import('next/cache')
   const withoutPendingColumns = () => {
@@ -356,9 +360,9 @@ export async function saveSchool(id: string | null, payload: Record<string, stri
     }
     return { error: error?.message }
   }
-  let { data, error } = await db.from('schools').insert(payload).select('id').single()
+  let { data, error } = await db.from('schools').insert({...payload,is_catalog:false,membership_kind:'individual',member_plan:'free'}).select('id').single()
   if (isMissingActingPosition(error)) {
-    ;({ data, error } = await db.from('schools').insert(withoutPendingColumns()).select('id').single())
+    ;({ data, error } = await db.from('schools').insert({...withoutPendingColumns(),is_catalog:false,membership_kind:'individual',member_plan:'free'}).select('id').single())
   }
   if (!error && data?.id && session.role === 'admin') {
     await db.from('users').update({ school_id: data.id }).eq('id', session.userId)
@@ -393,6 +397,7 @@ export async function updateSchoolActingDirector(payload: {
   if (!schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
 
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,schoolId,'users',[payload.acting_director_user_id,payload.vice_director_user_id].filter(Boolean))) return {error:'ผู้บริหารต้องเป็นบุคลากรในโรงเรียนนี้'}
   const updates: Record<string, string | null> = {
     acting_director: payload.acting_director?.trim() || null,
     acting_director_position: payload.acting_director_position?.trim() || null,
@@ -498,6 +503,8 @@ export async function saveSchoolLeaders(payload: {
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้น' }
   const schoolId = session.schoolId
   if (!schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
+  const editableFields=new Set(['director_user_id','director_name','vice_director_user_id','vice_director_name','acting_director_user_id','acting_director','acting_director_position','academic_head_user_id','academic_head_name','measurement_head_user_id','measurement_head_name'])
+  if (Object.keys(payload).some(key=>!editableFields.has(key))) return {error:'ข้อมูลที่ส่งมาไม่ใช่การตั้งค่าผู้บริหารโรงเรียน'}
 
   const db = createServerClient()
   const { actingLeaderRole, attachTypedNamesToStaff } = await import('@/lib/leader-staff')
@@ -737,8 +744,11 @@ export async function saveAcademicYear(id: string | null, payload: Record<string
   const session = await requireSchoolSession()
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
+  if ('id' in payload || (payload.school_id !== undefined && payload.school_id !== session.schoolId)) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
+  if (id && !await schoolRecordsMatch(db,session.schoolId,'academic_years',[id])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
+  payload = {...payload,school_id:session.schoolId}
   if (id) {
-    const { error } = await db.from('academic_years').update(payload).eq('id', id)
+    const { error } = await db.from('academic_years').update(payload).eq('id', id).eq('school_id',session.schoolId)
     if (!error) {
       await logActivity({
         actor: session,
@@ -816,8 +826,8 @@ export async function setActiveAcademicYear(id: string, schoolId: string) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
-  await db.from('academic_years').update({ is_active: false }).eq('school_id', schoolId)
-  const { error } = await db.from('academic_years').update({ is_active: true }).eq('id', id)
+  if (schoolId !== session.schoolId || !await schoolRecordsMatch(db,session.schoolId,'academic_years',[id])) return {error:'ไม่พบปีการศึกษาในโรงเรียนนี้'}
+  const { error } = await db.rpc('set_school_active_year',{p_school:session.schoolId,p_year:id})
   if (!error) {
     await logActivity({
       actor: session,
@@ -829,6 +839,7 @@ export async function setActiveAcademicYear(id: string, schoolId: string) {
       description: 'ตั้งปีการศึกษาปัจจุบัน',
     })
   }
+  return {error:error?.message || null}
 }
 
 // ============================================================
@@ -932,6 +943,7 @@ export async function addHoliday(yearId: string, date: string, name: string) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'academic_years',[yearId])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
   const { data: year } = await db.from('academic_years').select('school_id, year_be').eq('id', yearId).maybeSingle()
   const { error } = await db.from('holidays').insert({ academic_year_id: yearId, date, name })
   if (!error) {
@@ -956,6 +968,7 @@ export async function bulkAddHolidays(yearId: string, rows: { date: string; name
   if (!rows.length) return { error: 'ไม่พบรายการที่นำเข้าได้', added: 0, skipped: 0 }
 
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'academic_years',[yearId])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',added:0,skipped:0}
   const { data: year } = await db.from('academic_years').select('school_id, year_be').eq('id', yearId).maybeSingle()
   if (!year) return { error: 'ไม่พบปีการศึกษา', added: 0, skipped: 0 }
 
@@ -1038,6 +1051,7 @@ export async function deleteWeekendSchoolDay(id: string) {
     .select('date, name, academic_year_id, academic_years(school_id, year_be)')
     .eq('id', id)
     .maybeSingle()
+  if (!row || !await schoolRecordsMatch(db,session.schoolId,'academic_years',[row.academic_year_id])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
   const { error } = await db.from('weekend_school_days').delete().eq('id', id)
   if (!error) {
     invalidateSchoolCalendar(row?.academic_year_id)
@@ -1065,6 +1079,7 @@ export async function deleteHoliday(id: string) {
     .select('date, name, academic_year_id, academic_years(school_id, year_be)')
     .eq('id', id)
     .maybeSingle()
+  if (!holiday || !await schoolRecordsMatch(db,session.schoolId,'academic_years',[holiday.academic_year_id])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
   const { error } = await db.from('holidays').delete().eq('id', id)
   if (!error) {
     invalidateSchoolCalendar(holiday?.academic_year_id)
@@ -1081,6 +1096,7 @@ export async function deleteHoliday(id: string) {
       metadata: { date: holiday?.date ?? null, yearBe: year?.year_be ?? null },
     })
   }
+  return {error:error?.message || null}
 }
 
 // ============================================================
@@ -1128,6 +1144,7 @@ export async function addPermission(teacherId: string, classroomId: string, subj
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'users',[teacherId]) || !await schoolRecordsMatch(db,session.schoolId,'classrooms',[classroomId]) || (subjectId && !await schoolRecordsMatch(db,session.schoolId,'subjects',[subjectId]))) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
   const { error } = await db.from('teacher_permissions').insert({
     teacher_id: teacherId,
     classroom_id: classroomId,
@@ -1153,6 +1170,7 @@ export async function addPermissions(rows: { teacher_id: string; classroom_id: s
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', added: 0 }
   if (rows.length === 0) return { error: 'ไม่มีรายการให้เพิ่ม', added: 0 }
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'users',rows.map(r=>r.teacher_id)) || !await schoolRecordsMatch(db,session.schoolId,'classrooms',rows.map(r=>r.classroom_id)) || !await schoolRecordsMatch(db,session.schoolId,'subjects',rows.map(r=>r.subject_id))) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',added:0}
   const { error } = await db.from('teacher_permissions').insert(rows)
   if (!error) {
     await logActivity({
@@ -1170,12 +1188,13 @@ export async function addPermissions(rows: { teacher_id: string; classroom_id: s
 
 export async function removePermission(id: string) {
   const session = await requireSchoolSession()
-  if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return
+  if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return {error:'ไม่มีสิทธิ์'}
   const db = createServerClient()
   const { data: permission } = await db.from('teacher_permissions')
     .select('teacher_id, classroom_id, subject_id')
     .eq('id', id)
     .maybeSingle()
+  if (!permission || !await schoolRecordsMatch(db,session.schoolId,'classrooms',[permission.classroom_id])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
   const { error } = await db.from('teacher_permissions').delete().eq('id', id)
   if (!error) {
     await logActivity({
@@ -1193,6 +1212,7 @@ export async function removePermission(id: string) {
       },
     })
   }
+  return {error:error?.message || null}
 }
 
 // ============================================================
@@ -1227,6 +1247,8 @@ export async function savePeriodConfig(
   const session = await requireSchoolSession()
   if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'classrooms',[classroomId])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
+  if (Object.values(hours).some(value=>!Number.isInteger(value)||value<0||value>24)) return {error:'จำนวนคาบต่อวันต้องเป็นจำนวนเต็มตั้งแต่ 0–24'}
   const payload = {
     classroom_id: classroomId,
     mon_hours: hours.mon, tue_hours: hours.tue, wed_hours: hours.wed,
@@ -1321,6 +1343,7 @@ export async function importStudents(classroomId: string, rows: {
   if (!classroomId) return { error: 'ยังไม่ได้เลือกชั้นเรียนปลายทาง', inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
   if (rows.length === 0) return { error: 'ไม่มีข้อมูลนักเรียน', inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'classrooms',[classroomId])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',inserted:0,skipped:0,duplicate:0,failed:0,firstError:null}
 
   // กันซ้ำด้วยเลขบัตร + หาเลขที่ล่าสุดในห้อง (เพื่อไล่เลขที่ต่อ)
   const { data: existing } = await db.from('students')
@@ -1419,6 +1442,7 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
   if (rows.length === 0) return { error: 'ไม่มีข้อมูลนักเรียน', ...empty }
 
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'academic_years',[academicYearId])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',...empty}
   const { data: initialClassrooms } = await db.from('classrooms')
     .select('id, level, room, school_id')
     .eq('academic_year_id', academicYearId)
@@ -1911,6 +1935,8 @@ export async function saveEvaluationSetting(id: string, payload: Partial<Pick<Ev
     .eq('school_id', session.schoolId)
     .maybeSingle()
 
+  if (!before) return {error:'ไม่พบหัวข้อประเมินในโรงเรียนนี้'}
+
   if (before?.kind === 'character') {
     const validationError = validateCharacterEvaluationSetting(
       String(payload.label || ''),
@@ -1940,7 +1966,7 @@ export async function saveEvaluationSetting(id: string, payload: Partial<Pick<Ev
       module: 'evaluation_settings',
       targetType: 'evaluation_setting',
       targetId: id,
-      targetLabel: updatePayload.label,
+      targetLabel: String(updatePayload.label || ''),
       description: `แก้ไขการตั้งค่าประเมิน ${before?.label || updatePayload.label}`,
       metadata: { kind: before?.kind, fieldKey: before?.field_key, fields: Object.keys(updatePayload) },
     })
@@ -2419,6 +2445,7 @@ export async function saveClub(id: string | null, payload: Record<string, unknow
   if (!session.schoolId) return { error: 'ยังไม่ได้เลือกโรงเรียน' }
 
   const db = createServerClient()
+  if (id && !await schoolRecordsMatch(db,session.schoolId,'clubs',[id])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
   const row = {
     code: String(payload.code || '').trim(),
     name: String(payload.name || '').trim(),
@@ -2483,6 +2510,7 @@ export async function deleteClub(id: string) {
     .eq('id', id)
     .eq('school_id', session.schoolId)
     .maybeSingle()
+  if (!club) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
   const { count } = await db.from('student_club_assignments')
     .select('id', { count: 'exact', head: true })
     .eq('club_id', id)
@@ -2548,6 +2576,7 @@ export async function saveClubAssignments(academicYearId: string, rows: { studen
   if (!rows.length) return { error: 'ไม่มีข้อมูล', count: 0 }
 
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'academic_years',[academicYearId]) || !await schoolStudentsMatchYear(db,session.schoolId,academicYearId,rows.map(r=>r.student_id)) || !await schoolRecordsMatch(db,session.schoolId,'clubs',rows.map(r=>r.club_id).filter(Boolean))) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',count:0}
   const payload = rows.map(row => ({
     student_id: row.student_id,
     academic_year_id: academicYearId,
@@ -2571,7 +2600,7 @@ export async function saveClubAssignments(academicYearId: string, rows: { studen
     })
   }
 
-  return { error: error?.message ?? null, count: payload.length }
+  return { error: error?.message ?? null, count: error ? 0 : payload.length }
 }
 
 // ============================================================
@@ -2619,7 +2648,7 @@ export async function fetchScoreClassroomsLite(yearId: string) {
       .eq('classrooms.school_id', schoolId)
     const map = new Map<string, { id: string; level: string; room: number }>()
     for (const row of data || []) {
-      const classroom = row.classrooms as { id: string; level: string; room: number }
+      const classroom = Array.isArray(row.classrooms) ? row.classrooms[0] : row.classrooms
       if (classroom?.id) map.set(classroom.id, classroom)
     }
     return Array.from(map.values()).sort((a, b) => a.level.localeCompare(b.level, 'th') || a.room - b.room)
@@ -2729,6 +2758,10 @@ export async function addClassSubjects(classroomId: string, academicYearId: stri
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', added: 0 }
   if (subjectIds.length === 0) return { error: 'ไม่ได้เลือกวิชา', added: 0 }
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'classrooms',[classroomId]) || !await schoolRecordsMatch(db,session.schoolId,'academic_years',[academicYearId]) || !await schoolRecordsMatch(db,session.schoolId,'subjects',subjectIds)) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',added:0}
+  const {data:targetRoom}=await db.from('classrooms').select('academic_year_id').eq('id',classroomId).maybeSingle()
+  if (targetRoom?.academic_year_id!==academicYearId) return {error:'ห้องเรียนไม่ตรงกับปีการศึกษา',added:0}
+  subjectIds=[...new Set(subjectIds)]
   const room = await db.from('classrooms').select('level').eq('id', classroomId).maybeSingle()
   const term = semester ?? classSubjectSemesterForLevel(room.data?.level, 1)
   let existingQuery = db.from('class_subjects').select('subject_id, order_number').eq('classroom_id', classroomId)
@@ -2764,7 +2797,7 @@ export async function addClassSubjects(classroomId: string, academicYearId: stri
       metadata: { classroomId, academicYearId, count: rows.length },
     })
   }
-  return { error: error?.message, added: rows.length }
+  return { error: error?.message, added: error ? 0 : rows.length }
 }
 
 export async function previewClassSubjectCopy(input: ClassSubjectCopyInput) {
@@ -2859,6 +2892,7 @@ export async function removeClassSubject(id: string) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
+  if (!await schoolClassSubjectsMatch(db,session.schoolId,[id])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
   const context = await resolveClassSubjectContext(id)
   const { data: classSubjectRow } = await db.from('class_subjects').select('classroom_id, semester').eq('id', id).maybeSingle()
   const { count } = await db.from('scores').select('id', { count: 'exact', head: true }).eq('class_subject_id', id)
@@ -2885,6 +2919,7 @@ export async function removeAllClassSubjects(classroomId: string, semester?: Cla
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์', deleted: 0 }
   if (!classroomId) return { error: 'ยังไม่ได้เลือกห้องเรียน', deleted: 0 }
   const db = createServerClient()
+  if (!await schoolRecordsMatch(db,session.schoolId,'classrooms',[classroomId])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',deleted:0}
   let list = db.from('class_subjects').select('id').eq('classroom_id', classroomId)
   if (semester !== undefined) list = list.eq('semester', semester)
   let listed = await list
@@ -2939,6 +2974,8 @@ export async function saveScoreConfigs(rows: {
   if (!hasRole(session, [...ACADEMIC_MANAGE_ROLES, 'teacher'])) return { error: 'ไม่มีสิทธิ์' }
   if (rows.length === 0) return { error: 'ไม่มีข้อมูล' }
   const db = createServerClient()
+  if (!await schoolClassSubjectsMatch(db,session.schoolId,rows.map(r=>r.class_subject_id))) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข'}
+  if (rows.some(r=>![1,2].includes(r.term))) return {error:'ภาคเรียนไม่ถูกต้อง'}
   // ครู: แก้ได้เฉพาะวิชาที่ตนสอน
   if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) {
     const ids = rows.map(r => r.class_subject_id)

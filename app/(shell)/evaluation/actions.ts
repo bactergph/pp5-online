@@ -257,6 +257,12 @@ export async function saveEvaluationRows(
 
   const db = createServerClient()
   const schoolId = await resolveClassroomSchoolId(classroomId)
+  if (schoolId!==session.schoolId) return {error:'ไม่มีสิทธิ์บันทึกข้อมูลห้องเรียนนี้',count:0}
+  const {data:roomScope,error:roomError}=await db.from('classrooms').select('academic_year_id').eq('id',classroomId).maybeSingle()
+  if (roomError||roomScope?.academic_year_id!==academicYearId) return {error:'ปีการศึกษาไม่ตรงกับห้องเรียน',count:0}
+  const {data:roster,error:rosterError}=await db.from('students').select('id').eq('classroom_id',classroomId).in('id',rows.map(row=>row.student_id))
+  if (rosterError||new Set((roster||[]).map(row=>row.id)).size!==new Set(rows.map(row=>row.student_id)).size) return {error:'พบนักเรียนที่ไม่ได้อยู่ในห้องนี้',count:0}
+
   let criteriaBand: EducationBand | undefined
   if (isBandedEvaluationKind(kind)) {
     const { data: classroom, error } = await db.from('classrooms').select('level')

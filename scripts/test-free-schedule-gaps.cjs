@@ -70,13 +70,14 @@ function plan(extra = {}) {
   assert.equal(imported.plan.places[0].name, 'ห้องวิทย์')
 
   const upper = plan({
-    subjects: [{ id: 'math', roomId: 'r1', code: '', name: 'คณิต', teacherId: 't1', periods: 33, pattern: free.patternFor(33, 0), placeId: null }],
+    // Capacity stress test: 33 distinct single-period subjects; ordinary subjects no longer repeat on one day.
+    subjects: Array.from({length:33},(_,i)=>({ id:'math'+i,roomId:'r1',code:'T'+i,name:'วิชา '+i,teacherId:'t1',periods:1,pattern:[1],placeId:null })),
     activities: [{ id: 'club', name: 'ชุมนุม', mode: 'joint', roomIds: ['r1'], teacherId: 't2', roomTeachers: {}, cells: [{ day: 5, period: 7 }] }],
   })
   assert.equal(free.roomNeed(upper, 'r1'), 34)
   const upperDraft = build.buildDeviceDraft(free.toDeviceSnapshot(upper, ['r1']), 'local', ['r1'], true)
   assert.equal(upperDraft.status, 'complete', upperDraft.issues[0]?.message || upperDraft.message)
-  assert.equal(upperDraft.rows.filter(row => row.class_subject_id === 'math').length, 33)
+  assert.equal(upperDraft.rows.filter(row => row.class_subject_id?.startsWith('math')).length, 33)
   assert.ok(upperDraft.rows.some(row => row.activity_id && row.day_of_week === 5 && row.period === 7))
 
   const doubles = plan({
@@ -123,7 +124,7 @@ function plan(extra = {}) {
   assert.equal(lockDraft.rows.filter(row => row.class_subject_id === 'thai').length, 2)
 
   const term2 = free.copyTermSubjects(upper, free.normalizePlan({ teachers: upper.teachers, rooms: upper.rooms, places: upper.places, periods: upper.periods }))
-  assert.equal(term2.subjects[0].name, 'คณิต')
+  assert.equal(term2.subjects[0].name, upper.subjects[0].name)
   assert.equal(term2.timetable.length, 0)
   assert.equal(term2.activities[0].name, 'ชุมนุม')
 

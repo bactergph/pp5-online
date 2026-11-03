@@ -76,8 +76,11 @@ export default function HolidaysPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('ลบวันหยุดนี้?')) return
-    await deleteHoliday(id)
-    loadHolidaysForYear(selectedYear)
+    try {
+      const result=await deleteHoliday(id)
+      if (result.error) { notify('error',result.error); return }
+      await loadHolidaysForYear(selectedYear)
+    } catch { notify('error','ลบวันหยุดไม่สำเร็จ กรุณาลองใหม่') }
   }
 
   async function handleImportRows(rows: { date: string; name: string }[]) {

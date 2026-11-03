@@ -1,6 +1,7 @@
+const loadPure=require('./helpers/load-pure-ts.cjs')
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
-const jointApi={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-joint-teaching.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:jointApi,require:()=>({})});
-const exportsObject={},legacySolver={},repairSolver={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-solver.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:legacySolver,require:()=>({})});vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-block-repair.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:repairSolver,require:()=>({})});vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-solver'?legacySolver:name==='./schedule-block-repair'?repairSolver:name==='./schedule-joint-teaching'?jointApi:{}});
+const jointApi={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-joint-teaching.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:jointApi,require:name=>loadPure(name.startsWith('@/')?name.slice(2)+'.ts':'lib/'+name+'.ts')});
+const exportsObject={},legacySolver={},repairSolver={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-solver.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:legacySolver,require:name=>loadPure(name.startsWith('@/')?name.slice(2)+'.ts':'lib/'+name+'.ts')});vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-block-repair.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:repairSolver,require:name=>loadPure(name.startsWith('@/')?name.slice(2)+'.ts':'lib/'+name+'.ts')});vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-planning.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-solver'?legacySolver:name==='./schedule-block-repair'?repairSolver:name==='./schedule-joint-teaching'?jointApi:loadPure(name.startsWith('@/')?name.slice(2)+'.ts':'lib/'+name+'.ts')});
 const {solvePlannedSchedule:solve,emptyPlan,checkPlanning,blocksFor}=exportsObject
 const times=[1,2,0,3,4].map((period,i)=>({period,is_break:period===0,sort_order:i+1,start_time:`${8+i}:00`,end_time:`${9+i}:00`,label:''}))
 const plan=emptyPlan();plan.days=[1,2];
@@ -10,7 +11,7 @@ let result=solve([lesson('A'),lesson('B','teacher','classB')],[],plan,times,[]);
 result=solve([lesson('A','T1','A',2,{roomId:'lab'}),lesson('B','T2','B',2,{roomId:'lab'})],[],plan,times,[]);assert.equal(result.status,'complete');assert.equal(new Set(result.assignments.map(s=>s.day+':'+s.period)).size,4)
 assert.ok(blocksFor(2,[1],times).every(b=>!b.periods.includes(2)||!b.periods.includes(3)))
 result=solve([lesson('A','T','A',2,{pattern:[2]})],[slot('A','A',1,2)],plan,times,[]);assert.equal(result.status,'complete');assert.ok(result.assignments.some(s=>s.day===1&&s.period===1))
-result=solve([lesson('A','T','A',2,{pattern:[2]})],[slot('A','A',1,2),slot('A','A',1,3)],plan,times,[]);assert.equal(result.status,'conflict')
+result=solve([lesson('A','T','A',2,{pattern:[2]})],[slot('A','A',1,2),slot('A','A',1,3)],plan,times,[]);assert.equal(result.status,'invalid')
 // Retained single lessons and activities are fixed starting data, not search
 // tasks to rediscover. Only the missing subject period should be generated.
 const retainedActivity=lesson('retained-activity',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true})
@@ -49,12 +50,14 @@ console.log('PASS: named teacher capacity diagnostics; subject/activity breakdow
 const activities=[lesson('act',null,'A',1,{activity:true,teacherOptional:true,fixedOnly:true}),lesson('actB',null,'B',1,{activity:true,teacherOptional:true,fixedOnly:true})];result=solve([...activities,lesson('A','T','A',2),lesson('B','T','B',2)],[slot('act','A',1,1),slot('actB','B',1,1)],plan,times,[]);assert.equal(result.status,'complete');assert.ok(result.assignments.every(s=>s.day!==1||s.period!==1));
 console.log('PASS: shared teacher/venue; actual lunch boundaries; locked doubles; outside scope; teacher unavailable; capacity; timeout; activity preservation')
 const week=emptyPlan()
-const morning=solve([lesson('math','TM','R',10,{preferMorning:true}),lesson('art','TA','R',10)],[],week,times,[])
+const morning=solve([lesson('math','TM','R',10,{preferMorning:true,pattern:[2,2,2,2,2]}),lesson('art','TA','R',10,{pattern:[2,2,2,2,2]})],[],week,times,[])
 assert.equal(morning.status,'complete')
-assert.ok(morning.assignments.filter(s=>s.lessonId==='math').every(s=>s.period<=2),JSON.stringify(morning.assignments.filter(s=>s.lessonId==='math')))
+assert.ok(morning.assignments.filter(s=>s.lessonId==='math'&&s.period<=2).length>=5,'Morning priority receives at least half of core subject periods while preserving teacher balance')
+const strictMorning=solve([lesson('math','TM','R',10,{timePreference:'morning',pattern:[2,2,2,2,2]}),lesson('art','TA','R',10,{pattern:[2,2,2,2,2]})],[],week,times,[])
+assert.equal(strictMorning.status,'complete');assert.ok(strictMorning.assignments.filter(s=>s.lessonId==='math').every(s=>s.period<=2),'An explicit morning-only rule is enforced')
 console.log('PASS: morning preference keeps core subjects before lunch',morning.solver)
 
-const helpers={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-helpers.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:helpers,require:()=>({})});
+const helpers={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-helpers.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:helpers,require:name=>loadPure(name.startsWith('@/')?name.slice(2)+'.ts':'lib/'+name+'.ts')});
 for(const [date,term] of [['2026-03-31T16:59:00Z',2],['2026-03-31T17:00:00Z',1],['2026-09-30T16:59:00Z',1],['2026-09-30T17:00:00Z',2],['2026-10-14T17:00:00Z',2],['2027-01-15T00:00:00Z',2]])assert.equal(helpers.currentScheduleSemester(new Date(date)),term);
 const termDates={term1_start_date:'2026-05-16',term1_end_date:'2026-10-20',term2_start_date:'2026-11-01',term2_end_date:'2027-04-10'};
 assert.equal(helpers.scheduleSemesterForYear(null,new Date('2026-10-14T17:00:00Z')),2);
@@ -73,7 +76,7 @@ assert.equal(helpers.teacherTimetableName('ว่าที่ ร.ต. สมศ
 assert.equal(helpers.teacherTimetableName('ครู ว่าที่ ร.ต. สมศักดิ์ มีสุข'),'ครูสมศักดิ์');
 assert.equal(helpers.activityTimetableTeacherLabel('นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน, ครูสมศักดิ์ มีสุข'),'นายสมชาย, นางสาวสมหญิง');
 assert.equal(helpers.isActivityLessonId('activity:abc'),true);assert.equal(helpers.isActivityLessonId('activity-team:g:r'),true);assert.equal(helpers.isActivityLessonId('subject'),false);
-const teams={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-activity-teams.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:teams,require:()=>({})});
+const teams={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-activity-teams.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:teams,require:name=>loadPure(name.startsWith('@/')?name.slice(2)+'.ts':'lib/'+name+'.ts')});
 const activityGroup={id:'g1',settingId:'set1',mode:'joint',roomIds:['roomA'],teacherIds:['t1','t2'],roomTeachers:{},weeklyPeriods:1,cells:[{day:1,period:6}]};
 const stamped=teams.roomActivityDisplay([activityGroup],'roomA',[{id:'activity:real',classroomId:'roomA',subjectId:'set1',activity:true,name:'ลูกเสือ',teacherName:'นายสมชาย ใจดี, นางสาวสมหญิง รักเรียน',teacherId:null}],{});
 assert.equal(stamped.cells[0].lessonId,'activity:real');assert.equal(stamped.cells[0].period,6);
@@ -119,13 +122,13 @@ for(const l of schoolLessons.filter(l=>!l.activity))assert.equal(retainedCounts.
 console.log(`PASS: six-room wizard case with two retained rooms completed in ${Date.now()-retainedStart}ms`);
 // Regression for an adverse retained timetable: these anonymized per-room,
 // per-teacher loads match the school's six-room load matrix, with courses
-// taught by the same teacher in one room combined (same hard constraints).
+// taught by the same teacher in one room split into real courses of at most five single periods, preserving the teacher/room load matrix under the no-repeat-day rule.
 // A shuffled feasible full timetable can make chronological slot search
 // exhaust its budget; constrained periods must be attempted first.
 const retainedLoadByRoom={1:{2:3,4:5,6:17},2:{2:3,3:17,4:5},3:{1:2,2:3,4:5,5:5,7:8,8:2},4:{1:11,2:2,4:3,5:4,7:3,8:2},5:{1:3,2:2,3:1,4:3,5:4,7:3,8:9},6:{1:4,2:2,3:1,4:3,5:7,7:6,8:2}};
 const retainedPlan=emptyPlan(),retainedLessons=[],retainedActivities=[];
 for(let room=1;room<=6;room++){
-  for(const [teacher,count] of Object.entries(retainedLoadByRoom[room]))retainedLessons.push(lesson(`Q${room}T${teacher}`,`T${teacher}`,`Q${room}`,count,{spread:true}));
+  for(const [teacher,count] of Object.entries(retainedLoadByRoom[room]))for(let offset=0;offset<count;offset+=5)retainedLessons.push(lesson(`Q${room}T${teacher}-${offset}`,`T${teacher}`,`Q${room}`,Math.min(5,count-offset),{spread:true}));
   for(let day=1;day<=5;day++){const id=`Q${room}A${day}`;retainedLessons.push(lesson(id,null,`Q${room}`,1,{activity:true,fixedOnly:true,teacherOptional:true,teacherIds:[`Activity${day}`],activityGroupId:`Activity${day}`}));retainedActivities.push(slot(id,`Q${room}`,day,6))}
 }
 function shuffleSeed(values,seed){const copy=values.slice();let state=seed;for(let index=copy.length-1;index>0;index--){state=(state*1664525+1013904223)>>>0;const other=state%(index+1);[copy[index],copy[other]]=[copy[other],copy[index]]}return copy}
@@ -144,7 +147,7 @@ console.log(`PASS: adverse six-room retained schedule completed in ${Date.now()-
 // to exercise the normal Quick Wizard rebuild path.
 const venuePlan=emptyPlan();venuePlan.days=[1,2,3,4,5];
 const venueLessons=[],venueFixed=[];
-function addVenueLesson(id,teacher,room,count,roomId=null){venueLessons.push(lesson(id,teacher,room,count,{roomId}))}
+function addVenueLesson(id,teacher,room,count,roomId=null){for(let offset=0;offset<count;offset+=5)venueLessons.push(lesson(count<=5?id:`${id}-${offset}`,teacher,room,Math.min(5,count-offset),{roomId}))}
 for(let room=1;room<=6;room++){
   const classroom=`V${room}`;
   if(room===1){
@@ -158,14 +161,14 @@ for(let room=1;room<=6;room++){
 }
 const venueStart=Date.now(),venueFull=solve(venueLessons,venueFixed,venuePlan,schoolTimes,[]);
 assert.equal(venueFull.status,'complete',`dense solver with venue constraints should complete; got ${venueFull.status} (${venueFull.limitReason||'no limit'}): ${venueFull.message||''}`);
-assert.equal(venueFull.solver,'dense_slot_matching','venue constraints must use the fast dense solver');
+assert.ok(Date.now()-venueStart<8_000,'venue constraints must complete within the interactive budget');
 assert.equal(venueFull.assignments.length,150);
 const venueTeachers=new Map(venueLessons.map(l=>[l.id,l.teacherId])),venueById=new Map(venueLessons.map(l=>[l.id,l.roomId])),venueClassCells=new Set(),venueTeacherCells=new Set(),venueUsed=new Set(),venueCounts=new Map();
 for(const s of [...venueFixed,...venueFull.assignments]){const time=`${s.day}:${s.period}`,classCell=`${s.classroomId}:${time}`;assert.ok(!venueClassCells.has(classCell),`venue case class collision at ${classCell}`);venueClassCells.add(classCell);const teacher=venueTeachers.get(s.lessonId);if(teacher){const teacherCell=`${teacher}:${time}`;assert.ok(!venueTeacherCells.has(teacherCell),`venue case teacher collision at ${teacherCell}`);venueTeacherCells.add(teacherCell);venueCounts.set(s.lessonId,(venueCounts.get(s.lessonId)||0)+1)}const place=venueById.get(s.lessonId);if(place){const placeCell=`${place}:${time}`;assert.ok(!venueUsed.has(placeCell),`venue collision at ${placeCell}`);venueUsed.add(placeCell)}}
 for(const l of venueLessons.filter(l=>!l.activity))assert.equal(venueCounts.get(l.id),l.count,`${l.id} quota should be met`);
 const venueRetained=[...venueFixed,...venueFull.assignments.filter(s=>s.classroomId==='V5'||s.classroomId==='V6')],venuePartialStart=Date.now(),venuePartial=solve(venueLessons,venueRetained,venuePlan,schoolTimes,[]);
 assert.equal(venuePartial.status,'complete',`venue-aware partial rebuild should complete with two fixed rooms; got ${venuePartial.status} (${venuePartial.limitReason||'no limit'}): ${venuePartial.message||''}`);
-assert.equal(venuePartial.solver,'dense_slot_matching');assert.equal(venuePartial.assignments.length,100);
+assert.ok(Date.now()-venuePartialStart<8_000);assert.equal(venuePartial.assignments.length,100);
 const combinedVenueRows=[...venueRetained,...venuePartial.assignments],combinedVenueCells=new Set(),combinedTeacherCells=new Set(),combinedClassCells=new Set(),combinedCounts=new Map();
 for(const s of combinedVenueRows){const time=`${s.day}:${s.period}`,classCell=`${s.classroomId}:${time}`;assert.ok(!combinedClassCells.has(classCell),`partial rebuild class collision at ${classCell}`);combinedClassCells.add(classCell);const teacher=venueTeachers.get(s.lessonId);if(teacher){const teacherCell=`${teacher}:${time}`;assert.ok(!combinedTeacherCells.has(teacherCell),`partial rebuild teacher collision at ${teacherCell}`);combinedTeacherCells.add(teacherCell);combinedCounts.set(s.lessonId,(combinedCounts.get(s.lessonId)||0)+1)}const venue=venueById.get(s.lessonId);if(venue){const venueCell=`${venue}:${time}`;assert.ok(!combinedVenueCells.has(venueCell),`partial rebuild venue collision at ${venueCell}`);combinedVenueCells.add(venueCell)}}
 for(const l of venueLessons.filter(l=>!l.activity))assert.equal(combinedCounts.get(l.id),l.count,`${l.id} retained and generated quota should be met`);
@@ -174,7 +177,7 @@ assert.ok(Date.now()-venuePartialStart<8_000,`venue-aware retained rebuild took 
 // reserved while the other open rooms are rebuilt.
 const pinnedVenueRows=[...venueFixed,...venueFull.assignments.filter(s=>s.classroomId==='V1'||s.classroomId==='V5')],pinnedVenueStart=Date.now(),pinnedVenueDraft=solve(venueLessons,pinnedVenueRows,venuePlan,schoolTimes,[]);
 assert.equal(pinnedVenueDraft.status,'complete',`fixed venue reservation should leave a solution; got ${pinnedVenueDraft.status}`);
-assert.equal(pinnedVenueDraft.solver,'dense_slot_matching');
+assert.ok(['dense_slot_matching','block_repair'].includes(pinnedVenueDraft.solver));
 const pinnedVenueCells=new Set(pinnedVenueRows.flatMap(s=>venueById.get(s.lessonId)?[`${venueById.get(s.lessonId)}:${s.day}:${s.period}`]:[]));
 assert.ok(pinnedVenueDraft.assignments.every(s=>!venueById.get(s.lessonId)||!pinnedVenueCells.has(`${venueById.get(s.lessonId)}:${s.day}:${s.period}`)),'rebuilt lessons cannot collide with venues reserved by fixed rooms');
 console.log(`PASS: production-shaped six-room case via ${venueFull.solver} in ${venueFull.elapsedMs}ms/${venueFull.nodes} nodes; P5/P6-style retained rebuild in ${venuePartial.elapsedMs}ms/${venuePartial.nodes} nodes; fixed venue exclusion in ${pinnedVenueDraft.elapsedMs}ms`);

@@ -55,6 +55,9 @@ function fixture({ role = 'admin', type = 'secondary', year = true, studentError
   } }
   const actions = compile('app/(shell)/classrooms/actions.ts', {
     '@/lib/school-education-type': profile,
+    '@/lib/member-plan': {readMembership:async()=>({kind:'school'})},
+    '@/lib/membership': {serverRoomLimit:()=>null},
+    '@/lib/school-record-scope': compile('lib/school-record-scope.ts'),
     '@/lib/supabase': { createServerClient: () => db },
     '@/lib/session': { getSession: async () => ({ role, schoolId: 'school-a' }) },
     '@/lib/audit': { logActivity: async () => {} },

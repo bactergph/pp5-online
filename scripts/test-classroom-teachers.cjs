@@ -38,11 +38,14 @@ function query(table) {
   }
   return q
 }
+const scope = {}
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/school-record-scope.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:scope})
 const api = {}, db = { from: query }
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/(shell)/classrooms/actions.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, { exports: api, require: name => ({
   '@/lib/session': { getSession: async () => session },
+  '@/lib/school-record-scope': scope,
   '@/lib/supabase': { createServerClient: () => db },
   '@/lib/audit': { logActivity: async () => {} },
   '@/lib/school-education-type': { schoolLevels: () => ['ป.1'] },

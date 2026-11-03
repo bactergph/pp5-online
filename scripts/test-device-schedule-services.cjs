@@ -6,7 +6,7 @@ const uuid=i=>`11111111-1111-4111-8111-${String(i).padStart(12,'0')}`
 const base=free.normalizePlan({rooms:[{id:uuid(1),label:'ม.1/IP'},{id:uuid(2),label:'ม.1/2PL'}]})
 let bundle={year:'2569',semester:2,terms:{1:{...structuredClone(base),substitutes:{}},2:{...structuredClone(base),substitutes:{}}}},writes=0,reject=false
 const services=createDeviceScheduleServices({read:()=>bundle,write:async next=>{writes++;if(reject)return false;bundle=next;return true}})
-const get=()=>bundle.terms[2],hash=()=>view.deviceDataKey(get()),saved=async result=>{const value=await result;assert.equal(value.error,null,JSON.stringify(value));return value.data}
+const get=()=>bundle.terms[2],hash=()=>view.deviceScheduleKey(get()),saved=async result=>{const value=await result;assert.equal(value.error,null,JSON.stringify(value));return value.data}
 async function run(){
  const blank={...free.normalizePlan(),substitutes:{}}
  let emptyBundle={year:'2569',semester:2,terms:{1:structuredClone(blank),2:structuredClone(blank)}}
@@ -55,7 +55,7 @@ async function run(){
  assert.equal((await services.fetchScheduleInit()).defaultSemester,2)
  const assignedDay=await services.fetchSubstituteDay(dayDate,'2569',2),assignedChanges=assignedDay.entries.map(({id,substitute_teacher_id,leave_type,note})=>({id,substitute_teacher_id,leave_type,note}))
  await saved(services.saveSubstituteDay(loaded.day.id,assignedChanges,assignedChanges))
- assert.match((await services.importSubstituteFromSchedule(loaded.day.id,dayDate,'2569',get().teachers[24].id,'ลาป่วย',2)).error,/ครูที่ลา/)
+ assert.match((await services.importSubstituteFromSchedule(loaded.day.id,dayDate,'2569',get().teachers[24].id,'ลาป่วย',2)).error,/ไม่มีคาบสอน/)
  assert.match((await services.deleteSubstituteEntries(loaded.day.id,changes,[changes[0].id])).error,/โหลดใหม่/)
  assert.match((await services.deleteSubstituteEntries(loaded.day.id,assignedChanges,[changes[0].id,'missing'])).error,/ไม่พบรายการ/)
  const beforeDelete=JSON.stringify(get().timetable)

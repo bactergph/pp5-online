@@ -22,7 +22,7 @@ const physicalTraits = Array.from({ length: 8 }, (_, i) => `trait${i + 1}_score`
 assert.deepEqual(Array.from(settings.evaluationStoredFieldKeys('character')), physicalTraits)
 assert.ok(settings.characterDefaultSettingsForBand('1').some(row => row.field_key === 'trait1_1_indicator'), 'Descriptions remain available for the assessment UI')
 let session = { userId: 'teacher', schoolId: 'school', role: 'teacher' }, denyScope = false, failSettings = false
-const tables = { classrooms: [{ id: 'room', level: 'ป.1' }], students: [{ id: 'student', classroom_id: 'room' }], evaluation_settings: [], character_traits: [], evaluation_custom_scores: [] }
+const tables = { classrooms: [{ id: 'room', level: 'ป.1', academic_year_id: 'year' }], students: [{ id: 'student', classroom_id: 'room' }], evaluation_settings: [], character_traits: [], evaluation_custom_scores: [] }
 const writes = []
 function query(table) {
   const filters = []; let columns = '*'

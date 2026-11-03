@@ -35,6 +35,16 @@ vm.runInNewContext(source('app/(shell)/classroom-admin/actions.ts'),{exports:api
  assert.ok((await api.saveMonthlyActivity('room','2026-11',2,'saving',[{student_id:'s0',day:3,value:.111}])).error)
  assert.ok((await api.saveMonthlyActivity('room','2026-11',2,'merit',[{student_id:'foreign',day:3,value:2}])).error)
  assert.ok((await api.saveDailyActivity('room','2026-11-03',2,'merit',[{student_id:'foreign',value:2}])).error)
+ for(const call of [
+ ()=>api.saveDailyAttendance('room','2026-11-03',[{student_id:'foreign',status:'ข'}]),
+ ()=>api.saveMonthlyAttendance('room','2026-11',[{student_id:'foreign',day:3,status:'ข'}]),
+ ()=>api.saveDailyActivity('room','2026-11-03',2,'milk',[{student_id:'foreign',value:1}]),
+ ()=>api.saveMonthlyActivity('room','2026-11',2,'brushing',[{student_id:'foreign',day:3,value:1}]),
+ ()=>api.saveWeightHeight('room','year',11,'2026-11-03',[{student_id:'foreign',weight:30,height:130}]),
+ ()=>api.saveWeightHeight('room','other-year',11,'2026-11-03',[{student_id:'s0',weight:30,height:130}]),
+ ()=>api.saveWeightHeight('room','year',11,'2026-11-03',[{student_id:'s0',weight:-1,height:130}]),
+ ()=>api.saveHealthInspection('room','year',2,11,'2026-11-03',[{student_id:'foreign'}]),
+ ])assert.ok((await call()).error,'All daily and health records validate classroom roster before writing')
  assert.equal(writes.length,count)
  fail=true;assert.ok((await api.saveMonthlyActivity('room','2026-11',2,'merit',[{student_id:'s0',day:3,value:20}])).error);fail=false;assert.equal(records.find(row=>row.activity_type==='merit').value,9)
  assert.equal((await api.fetchStudentValueSummary('room','year','saving','month','2026-11')).summary.total,10.25)

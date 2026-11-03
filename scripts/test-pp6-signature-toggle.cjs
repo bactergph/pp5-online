@@ -29,9 +29,9 @@ async function testToggleButton(variant='pp6'){
   return {}
  },m,m.exports)
  const button=()=>{cursor=0;const tree=m.exports.default({variant,classSubjectId:'subject',classroomId:'room',reportTerm:1,reportMonth:5,compact:true,onSignatureChange:()=>{previews++}});let found;function visit(node){if(!node||typeof node!=='object')return;if(Array.isArray(node))return node.forEach(visit);if(node.type==='button'&&String(node.props.className).includes('--signature'))found=node;visit(node.props?.children)}visit(tree);return found}
- assert.equal(button().props.children,'ใส่ลายเซ็น');assert.equal(button().props['aria-pressed'],false)
- await button().props.onClick();assert.equal(puts,1);assert.equal(button().props.children,'เอาลายเซ็นออก');assert.equal(button().props['aria-pressed'],true)
- await button().props.onClick();assert.equal(removes,1);assert.equal(button().props.children,'ใส่ลายเซ็น');assert.equal(previews,2)
+ assert.equal(button().props.children,variant==='pp5_class'?'ลงชื่อสำหรับเสนอเซ็น':'ใส่ลายเซ็น');assert.equal(button().props['aria-pressed'],false)
+ await button().props.onClick();assert.equal(puts,1);if(variant==='pp5_class'){assert.equal(button(),undefined,'Class PP5 moves to proposal after signing; print-signature visibility is a separate control');assert.equal(previews,1);return}assert.equal(button().props.children,'เอาลายเซ็นออก');assert.equal(button().props['aria-pressed'],true)
+ await button().props.onClick();assert.equal(removes,1);assert.equal(button().props.children,variant==='pp5_class'?'ลงชื่อสำหรับเสนอเซ็น':'ใส่ลายเซ็น');assert.equal(previews,2)
  currentState={...state(),status:'approved',hasDocumentSignature:true,canRemoveSignature:false};assert.equal(button().props.disabled,true)
  console.log('PP6 button tests passed: add/remove/add labels, pressed state, action routing and preview refresh')
 }
