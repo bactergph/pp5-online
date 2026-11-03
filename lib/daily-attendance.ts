@@ -33,15 +33,24 @@ export function toDailyDb(status: DailyDisplayStatus | '/'): DailyDbStatus {
   return status
 }
 
-/** Sparse + blank: ไม่มีแถว = มา; มี '-' = ช่องว่าง; นอกนั้นตามค่า */
-export function resolveDailyStatus(saved?: DailyDbStatus | string | null): DailyDisplayStatus {
+/** วันที่ของโรงเรียนในประเทศไทย ใช้กับการแสดงผลเท่านั้น */
+const dailyDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
+})
+export function dailyAttendanceToday(now = new Date()): string {
+  return dailyDateFormatter.format(now)
+}
+
+/** Sparse เหมือนเดิม; เมื่อระบุวันที่ ไม่เติมมาอัตโนมัติให้วันล่วงหน้า */
+export function resolveDailyStatus(saved?: DailyDbStatus | string | null, date?: string, asOf = dailyAttendanceToday()): DailyDisplayStatus {
+  if ((saved == null || saved === '') && date && date > asOf) return DAILY_BLANK
   if (isDailyBlank(saved)) return DAILY_BLANK
   return toDailyDisplay(saved as DailyDbStatus | null) ?? 'ม'
 }
 
 /** ข้อความในช่อง: ช่องว่างที่เก็บแล้ว = ว่างเปล่า; ไม่มีแถว = ม */
-export function dailyCellText(saved?: DailyDbStatus | string | null): string {
-  const status = resolveDailyStatus(saved)
+export function dailyCellText(saved?: DailyDbStatus | string | null, date?: string, asOf = dailyAttendanceToday()): string {
+  const status = resolveDailyStatus(saved, date, asOf)
   return status === DAILY_BLANK ? '' : status
 }
 
@@ -64,12 +73,14 @@ export function isDailyPresentOrDefault(status?: DailyDbStatus | string | null) 
 export function summarizeDailyStatuses(
   schoolDays: number[],
   byDay: Record<number, string | undefined> | undefined,
+  monthKey?: string,
+  asOf = dailyAttendanceToday(),
 ) {
   const out = { 'ม': 0, 'ป': 0, 'ล': 0, 'ข': 0 } as Record<'ม' | 'ป' | 'ล' | 'ข', number>
   for (const day of schoolDays) {
     const saved = byDay?.[day]
     if (isDailyBlank(saved)) continue
-    const display = resolveDailyStatus(saved)
+    const display = resolveDailyStatus(saved, monthKey ? `${monthKey}-${String(day).padStart(2, '0')}` : undefined, asOf)
     if (display === DAILY_BLANK) continue
     out[display] += 1
   }

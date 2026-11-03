@@ -127,8 +127,9 @@ function summaryFor(
   studentId: string,
   schoolDays: number[],
   attendance: Record<string, Record<number, string | undefined>>,
+  monthKey: string,
 ) {
-  return summarizeDailyStatuses(schoolDays, attendance[studentId])
+  return summarizeDailyStatuses(schoolDays, attendance[studentId], monthKey)
 }
 
 function activityDoneCount(
@@ -154,8 +155,9 @@ function attendanceDisplay(
   studentId: string,
   day: number,
   attendance: Record<string, Record<number, string | undefined>>,
+  monthKey: string,
 ) {
-  return dailyCellText(attendance[studentId]?.[day])
+  return dailyCellText(attendance[studentId]?.[day], dayDateKey(monthKey, day))
 }
 
 function activityDisplay(
@@ -613,7 +615,7 @@ export async function buildDailyAttendancePdfBlob(
 
         if (isStudentRow && isSchoolDay(day)) {
           if (isAttendance) {
-            value = attendanceDisplay(row.student.id, day, attendanceMap)
+            value = attendanceDisplay(row.student.id, day, attendanceMap, input.monthKey)
             const style = statusStyle(value)
             if (style) {
               fill = style.bg
@@ -640,7 +642,7 @@ export async function buildDailyAttendancePdfBlob(
 
       if (isAttendance) {
         const summary = isStudentRow
-          ? summaryFor(row.student.id, input.schoolDays, attendanceMap)
+          ? summaryFor(row.student.id, input.schoolDays, attendanceMap, input.monthKey)
           : null
         const summaryFills = [COLORS.summaryGood, COLORS.amberBg, COLORS.absentBg, COLORS.absentBg]
         const summaryValues = summary

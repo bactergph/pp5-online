@@ -140,9 +140,9 @@ function holidayColumnLabel(day: number, name: string) {
   return `วันที่ ${day}: ${name}`
 }
 
-function summaryFor(student: Student, data: ExportData) {
+function summaryFor(student: Student, data: ExportData, monthKey: string) {
   // sparse: ไม่มีแถว = มา; ช่องว่างที่เก็บ (-) ไม่นับ
-  return summarizeDailyStatuses(data.schoolDays || [], data.attendance?.[student.id])
+  return summarizeDailyStatuses(data.schoolDays || [], data.attendance?.[student.id], monthKey)
 }
 
 /** จำนวนวันที่ทำกิจวัตร (เช็ค) หรือยอดรวมเงินออม */
@@ -158,9 +158,9 @@ function isRoutineActivityReport(type: ReportType): type is Exclude<ActivityType
   return type === 'brushing' || type === 'milk' || type === 'lunch' || type === 'cleaning'
 }
 
-function attendanceExportDisplay(studentId: string, day: number, data: ExportData) {
+function attendanceExportDisplay(studentId: string, day: number, data: ExportData, monthKey: string) {
   // ไม่มีแถว = ม; ช่องว่างที่เก็บ (-) = ว่างเปล่า
-  return dailyCellText(data.attendance?.[studentId]?.[day])
+  return dailyCellText(data.attendance?.[studentId]?.[day], dayDateKey(monthKey, day))
 }
 
 export default function ClassroomAdminExportPage() {
@@ -431,13 +431,14 @@ export default function ClassroomAdminExportPage() {
 
     loadedMonths.forEach(month => {
       const data = sourceData[month]
+      const sheetMonthKey = setMonthInKey(monthKey, month)
       const days = Array.from({ length: data.days || 0 }, (_, i) => i + 1)
       const attendanceRows = data.students?.map(student => {
-        const summary = summaryFor(student, data)
+        const summary = summaryFor(student, data, sheetMonthKey)
         return [
           student.student_number,
           studentName(student),
-          ...days.map(day => data.schoolDays?.includes(day) ? attendanceExportDisplay(student.id, day, data) : ''),
+          ...days.map(day => data.schoolDays?.includes(day) ? attendanceExportDisplay(student.id, day, data, sheetMonthKey) : ''),
           summary['ม'], summary['ป'], summary['ล'], summary['ข'],
         ]
       }) || []
@@ -676,7 +677,7 @@ export default function ClassroomAdminExportPage() {
           const closedWeekend = isClosedWeekend(day)
           const openWeekend = isOpenWeekend(day)
           const schoolDay = isSchoolDay(day)
-          const attendanceValue = type === 'attendance' && schoolDay ? attendanceExportDisplay(row.student.id, day, data) : ''
+          const attendanceValue = type === 'attendance' && schoolDay ? attendanceExportDisplay(row.student.id, day, data, sheetMonthKey) : ''
           const activityValue = type !== 'attendance' && schoolDay ? (data.activities?.[type as ActivityType]?.[row.student.id]?.[day] || 0) : 0
           const displayValue = type === 'attendance'
             ? attendanceValue
@@ -815,7 +816,7 @@ export default function ClassroomAdminExportPage() {
                   )
                 }
 
-                const summary = type === 'attendance' ? summaryFor(row.student, data) : null
+                const summary = type === 'attendance' ? summaryFor(row.student, data, sheetMonthKey) : null
                 const activitySummary = showActivitySummary
                   ? activitySummaryFor(row.student.id, type as ActivityType, data)
                   : null
