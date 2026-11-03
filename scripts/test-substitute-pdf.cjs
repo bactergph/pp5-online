@@ -38,6 +38,7 @@ async function test(){
     if(expected)assert.equal(pages,expected,`${name}: table and signatures fit together`)
     else if(name==='many-periods'||name==='long-notes')assert.ok(pages>1,`${name}: genuinely long content continues without shrinking text`)
     const owner=events.filter(event=>event.text.startsWith('ลงชื่อครูเจ้าของคาบ'))
+    if(['six-with-logo','eight-with-logo','six-without-logo'].includes(name))assert.ok(owner[0].y-doc.lastAutoTable.finalY>=9.99,'Keep at least 10mm between table edge and owner signature baseline')
     assert.equal(owner.length,new Set(input.entries.map(row=>row.absent_teacher_id)).size,'One signature block per absent teacher')
     assert.equal(events.filter(event=>/^รายวิชาทดสอบ \d+$/.test(event.text)).length,input.entries.length,'Every row survives pagination')
     for(const signature of owner){

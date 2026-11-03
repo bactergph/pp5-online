@@ -42,7 +42,7 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
     const signerLines=Math.max(...[input.academicHead,input.director].map(name=>(doc.splitTextToSize(`(${name||'........................................................'})`,content*0.45) as string[]).length))
     const signerLineHeight=14*1.15*25.4/72
     const signerOffset=ownerLines.length*6.2+6,signatureHeight=signerOffset+6+signerLines*signerLineHeight+9
-    const signatureGap=6,bottomLimit=height-15,bodyBottom=bottomLimit-signatureHeight-signatureGap
+    const signatureGap=10,bottomLimit=height-15,bodyBottom=bottomLimit-signatureHeight-signatureGap
     const drawHeader=()=>{
       const page=doc.getCurrentPageInfo().pageNumber
       if(drawnHeaders.has(page))return
@@ -63,7 +63,8 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
       head:[['คาบ','เวลา','ชั้น / ห้อง','รายวิชา / กิจกรรม','ครูผู้สอนแทน','หมายเหตุ','ลงชื่อหลังสอน']],
       body:entries.map((entry,i)=>[String(entry.period),periodTimeLabel(input.times,entry.period).replaceAll('–','-'),entry.room_label||'-',entry.subject_label||'-',names.get(entry.substitute_teacher_id||'')||'ยังไม่กำหนดครู',(entry.note?.length||0)>180?`ดูหมายเหตุเพิ่มเติมข้อ ${i+1}`:entry.note||'','']),
       theme:'grid',showHead:'everyPage',rowPageBreak:'avoid',
-      styles:{font:'THSarabunNew',fontSize:15,textColor:0,fillColor:255,lineColor:80,lineWidth:0.18,cellPadding:2.2,minCellHeight:10.5,valign:'middle',overflow:'linebreak'},
+      // A full eight-period day uses slightly less cell whitespace, retaining readable type.
+      styles:{font:'THSarabunNew',fontSize:15,textColor:0,fillColor:255,lineColor:80,lineWidth:0.18,cellPadding:entries.length>=8?1.9:2.2,minCellHeight:entries.length>=8?10:10.5,valign:'middle',overflow:'linebreak'},
       headStyles:{fontStyle:'bold',fillColor:242,textColor:0,halign:'center'},alternateRowStyles:{fillColor:255},
       columnStyles:Object.fromEntries(widths.map((cellWidth,i)=>[i,{cellWidth,...i<3?{halign:'center' as const}:{}}])),didDrawPage:drawHeader,
     })
