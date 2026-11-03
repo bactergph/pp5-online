@@ -53,6 +53,13 @@ export const READING_SCORE_FIELD_KEYS = [
   'writing_3_1',
 ] as const
 
+/** คอลัมน์คะแนนจริงในตารางหลัก ไม่รวมหัวข้อบ่งชี้หรือหัวข้อที่โรงเรียนเพิ่ม */
+export function evaluationStoredFieldKeys(kind: EvaluationKind): string[] {
+  if (kind === 'character') return Array.from({ length: 8 }, (_, i) => `trait${i + 1}_score`)
+  if (kind === 'reading') return [...READING_SCORE_FIELD_KEYS]
+  return EVALUATION_DEFAULT_SETTINGS[kind].map(setting => setting.field_key)
+}
+
 export const READING_INDICATOR_FIELD_KEYS: Record<string, string> = {
   '1.1': 'reading_1_1',
   '1.2': 'reading_1_2',

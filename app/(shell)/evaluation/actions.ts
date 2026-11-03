@@ -6,12 +6,12 @@ import { logActivity, resolveClassroomSchoolId } from '@/lib/audit'
 import {assertPersonalHomeroom,personalHomeroomIds} from '@/lib/personal-data-scope'
 import {
   EVALUATION_DEFAULT_SETTINGS,
-  READING_SCORE_FIELD_KEYS,
   activeEvaluationSettings,
   activeScorableEvaluationSettings,
   characterDefaultSettingsForBand,
   educationBandFromClassroomLevel,
   evaluationBandForKind,
+  evaluationStoredFieldKeys,
   isBandedEvaluationKind,
   normalizeEvaluationSetting,
   readingDefaultSettingsForBand,
@@ -205,11 +205,7 @@ export async function fetchEvaluationData(kind: EvaluationKind, classroomId: str
   }
 
   const activeKeys = new Set(activeScorableEvaluationSettings(settingsResult.settings, kind).map(setting => setting.field_key))
-  const defaultKeys = new Set(
-    kind === 'reading'
-      ? READING_SCORE_FIELD_KEYS
-      : EVALUATION_DEFAULT_SETTINGS[kind].map(setting => setting.field_key),
-  )
+  const defaultKeys = new Set(evaluationStoredFieldKeys(kind))
   const customKeys = [...activeKeys].filter(key => !defaultKeys.has(key))
   if (customKeys.length === 0) {
     return { students: students || [], rows: data || [], settings: settingsResult.settings, error: settingsResult.error }
@@ -261,13 +257,19 @@ export async function saveEvaluationRows(
 
   const db = createServerClient()
   const schoolId = await resolveClassroomSchoolId(classroomId)
-  const settingsResult = await fetchSettingsForSchool(schoolId, kind)
+  let criteriaBand: EducationBand | undefined
+  if (isBandedEvaluationKind(kind)) {
+    const { data: classroom, error } = await db.from('classrooms').select('level')
+      .eq('id', classroomId).maybeSingle()
+    if (error || !classroom) return { error: 'ตรวจระดับชั้นของห้องเรียนไม่สำเร็จ กรุณาลองใหม่', count: 0 }
+    criteriaBand = educationBandFromClassroomLevel(classroom.level)
+  }
+  const settingsResult = await fetchSettingsForSchool(schoolId, kind, criteriaBand)
+  if (settingsResult.error) return { error: settingsResult.error, count: 0 }
   const activeSettings = activeScorableEvaluationSettings(settingsResult.settings, kind)
   const activeScoreSettings = activeSettings.filter(setting => setting.score_type === 'score_0_3')
   const maxScore = activeScoreSettings.reduce((sum, setting) => sum + Number(setting.max_score || 0), 0)
-  const defaultKeys = kind === 'reading'
-    ? [...READING_SCORE_FIELD_KEYS]
-    : EVALUATION_DEFAULT_SETTINGS[kind].map(setting => setting.field_key)
+  const defaultKeys = evaluationStoredFieldKeys(kind)
   const defaultKeySet = new Set(defaultKeys)
   const customSettings = activeSettings.filter(setting => !defaultKeySet.has(setting.field_key))
 

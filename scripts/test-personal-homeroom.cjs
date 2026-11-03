@@ -9,7 +9,7 @@ const id=n=>`87000000-0000-4000-8000-${String(n).padStart(12,'0')}`
  create table academic_years(id uuid primary key,school_id uuid references schools(id));
  create table classrooms(id uuid primary key,school_id uuid references schools(id),academic_year_id uuid references academic_years(id),homeroom_teacher_id uuid,homeroom_teacher2_id uuid);
  create table students(id uuid primary key,classroom_id uuid references classrooms(id)on delete cascade);
- create table class_subjects(id uuid primary key,classroom_id uuid references classrooms(id)on delete cascade,teacher_id uuid);
+ create table class_subjects(id uuid primary key,classroom_id uuid references classrooms(id)on delete cascade,teacher_id uuid,subject_id uuid);
  create table scores(id uuid primary key default gen_random_uuid(),class_subject_id uuid references class_subjects(id)on delete cascade,student_id uuid references students(id)on delete cascade,term integer,value integer);
  create table score_configs(id uuid primary key default gen_random_uuid(),class_subject_id uuid references class_subjects(id)on delete cascade,value integer);
  create table hourly_attendance(id uuid primary key default gen_random_uuid(),class_subject_id uuid references class_subjects(id)on delete cascade,student_id uuid references students(id)on delete cascade,classroom_id uuid references classrooms(id)on delete cascade,value integer);
@@ -28,12 +28,22 @@ const id=n=>`87000000-0000-4000-8000-${String(n).padStart(12,'0')}`
    const r=school*1000+room
    await q('insert into classrooms values($1,$2,$3,$4,null)',[id(r),id(school),id(100+school),room===1?id(owner):null])
    await q('insert into students values($1,$2)',[id(r+10000),id(r)])
-   await q('insert into class_subjects values($1,$2,$3)',[id(r+20000),id(r),room===5?id(99):id(owner)])
+   await q('insert into class_subjects(id,classroom_id,teacher_id)values($1,$2,$3)',[id(r+20000),id(r),room===5?id(99):id(owner)])
   }
  }
  await q('insert into daily_attendance(student_id,classroom_id,value)values($1,$2,1)',[id(11005),id(1005)])
- const migration=fs.readFileSync('supabase/migrations/087_personal_teaching_homeroom_scope.sql','utf8')
+ const originalMigration=fs.readFileSync('supabase/migrations/087_personal_teaching_homeroom_scope.sql','utf8')
+ await db.exec(originalMigration)
+ await assert.rejects(q('insert into score_configs(class_subject_id,value)values($1,1)',[id(23001)]),/subject_id.*ambiguous/,'Reproduce production failure with the real subject_id column')
+ const migration=originalMigration+'\n'+fs.readFileSync('supabase/migrations/101_personal_academic_subject_lookup.sql','utf8')
  await db.exec(migration);await db.exec(migration)
+ for(const school of [1,2,3]){
+  const key=id(school*1000+1+20000)
+  await q('insert into score_configs(class_subject_id,value)values($1,60)',[key])
+  await q('update score_configs set value=70 where class_subject_id=$1',[key])
+  assert.equal((await q('select value from score_configs where class_subject_id=$1',[key])).rows[0].value,70)
+ }
+ await assert.rejects(q('insert into score_configs(class_subject_id,value)values($1,1)',[id(21005)]),/รายวิชา/,'Pro still cannot configure another teacher’s subject')
  const selected=async school=>(await q('select classroom_id from personal_homeroom_rooms where school_id=$1 order by classroom_id',[id(school)])).rows.map(r=>r.classroom_id)
  const set=(s,owner,year,rooms)=>q('select set_personal_homeroom_rooms($1,$2,$3,$4::uuid[])',[id(s),id(owner),id(year),rooms.map(id)])
  assert.deepEqual(await selected(1),[id(1001)]);assert.deepEqual(await selected(2),[id(2001)])
@@ -76,5 +86,5 @@ const id=n=>`87000000-0000-4000-8000-${String(n).padStart(12,'0')}`
  assert.equal((await q("select has_function_privilege('authenticated','set_personal_homeroom_rooms(uuid,uuid,uuid,uuid[])','execute')allowed")).rows[0].allowed,false)
  await q("update schools set membership_expires_on=current_date-1 where id=$1",[id(1)])
  await assert.rejects(saveAttendance(1,1),/สมาชิก/)
- await db.close();console.log('PASS: SQL 087 Pro 1 / Plus 3, atomic replacement, invalid actor/school/year, direct-write quota, own-subject writes, selected-homeroom writes, downgrade/expiry, preserved data, cascade cleanup and protected RPC')
+ await db.close();console.log('PASS: SQL 087 + 101, reproduced ambiguity, score-config insert/update for School/Pro/Plus, Pro 1 / Plus 3, atomic replacement, invalid actor/school/year, direct-write quota, own-subject writes, selected-homeroom writes, downgrade/expiry, preserved data, cascade cleanup and protected RPC')
 })().catch(error=>{console.error(error);process.exitCode=1})
