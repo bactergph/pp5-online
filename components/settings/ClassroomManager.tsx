@@ -8,6 +8,7 @@ import AppAlertModal from '@/components/AppAlertModal'
 import { SCHOOL_LEVEL_GROUPS, schoolLevels, type SchoolEducationType } from '@/lib/school-education-type'
 import {
   fetchClassroomInit,
+  fetchClassroomTeachers,
   fetchClassrooms,
   saveClassroom,
   deleteClassroom,
@@ -36,6 +37,8 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
   const router = useRouter()
   const [years, setYears] = useState<Year[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [teachersLoading, setTeachersLoading] = useState(false)
+  const [teachersError, setTeachersError] = useState('')
   const [canManage, setCanManage] = useState(false)
   const [selectedYear, setSelectedYear] = useState('')
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
@@ -177,10 +180,20 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
       homeroom_teacher2_id: c.homeroom_teacher2_id || '',
     })
     setShowForm(true)
+    void refreshTeachers()
+  }
+
+  async function refreshTeachers() {
+    setTeachersLoading(true)
+    setTeachersError('')
+    try { setTeachers(await fetchClassroomTeachers() as Teacher[]) }
+    catch { setTeachersError('โหลดรายชื่อครูไม่สำเร็จ กรุณากดอัปเดตรายชื่อแล้วลองใหม่') }
+    finally { setTeachersLoading(false) }
   }
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (teachersLoading || teachersError) return
     setSaving(true)
     setAlertModal(null)
     const fd = new FormData(e.currentTarget)
@@ -407,25 +420,31 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
                       <div className="form-grid">
                         <div>
                           <label className="form-label">ครูประจำชั้น</label>
-                          <select name="homeroom_teacher_id" defaultValue={editing.homeroom_teacher_id} className="form-input">
+                          <select name="homeroom_teacher_id" value={editing.homeroom_teacher_id} onChange={event => setEditing(current => ({ ...current, homeroom_teacher_id: event.target.value }))} disabled={saving || teachersLoading || !!teachersError} className="form-input">
                             <option value="">— ไม่ระบุ —</option>
                             {teachers.map(t => <option key={t.id} value={t.id}>{t.prefix}{t.full_name}</option>)}
                           </select>
                         </div>
                         <div>
                           <label className="form-label">ครูประจำชั้น (คนที่ 2)</label>
-                          <select name="homeroom_teacher2_id" defaultValue={editing.homeroom_teacher2_id} className="form-input">
+                          <select name="homeroom_teacher2_id" value={editing.homeroom_teacher2_id} onChange={event => setEditing(current => ({ ...current, homeroom_teacher2_id: event.target.value }))} disabled={saving || teachersLoading || !!teachersError} className="form-input">
                             <option value="">— ไม่ระบุ —</option>
                             {teachers.map(t => <option key={t.id} value={t.id}>{t.prefix}{t.full_name}</option>)}
                           </select>
                         </div>
+                      </div>
+                      <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span role={teachersError ? 'alert' : 'status'} style={{ color: teachersError ? 'var(--danger)' : 'var(--text-3)', fontSize: 13 }}>
+                          {teachersError || (teachersLoading ? 'กำลังอัปเดตรายชื่อครู…' : `บุคลากรที่เลือกได้ ${teachers.length} คน · ไม่จำเป็นต้องเปิดบัญชีเข้าสู่ระบบ`)}
+                        </span>
+                        <button type="button" className="btn btn-ghost" onClick={() => void refreshTeachers()} disabled={saving || teachersLoading}>อัปเดตรายชื่อ</button>
                       </div>
                       {savedEducationType !== 'secondary' && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 10 }}>
                         * ครูที่ถูกกำหนดเป็นครูประจำชั้น จะได้สิทธิ์เห็นเมนู &quot;ธุรการชั้นเรียน&quot; อัตโนมัติ
                       </p>}
                       <div className="form-actions" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
                         <button type="button" onClick={() => setShowForm(false)} disabled={saving} className="btn btn-secondary">ยกเลิก</button>
-                        <LoadingButton type="submit" loading={saving}>บันทึก</LoadingButton>
+                        <LoadingButton type="submit" loading={saving} disabled={teachersLoading || !!teachersError}>บันทึก</LoadingButton>
                       </div>
                     </form>
                   </div>

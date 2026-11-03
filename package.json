@@ -14,6 +14,7 @@
     "test:login-ui": "node scripts/test-interface-design.mjs --login-only",
     "test:student-ledger": "node scripts/test-student-value-ledger.cjs && node scripts/test-student-merit-db.cjs && node scripts/test-student-ledger-services.cjs && node scripts/test-student-ledger-ui.mjs",
     "test:daily-attendance": "node scripts/test-daily-attendance-cutoff.cjs && node scripts/test-student-ledger-ui.mjs --attendance-only",
+    "test:classroom-teachers": "node scripts/test-classroom-teachers.cjs && node scripts/test-classroom-teachers-ui.mjs",
     "test:workspace-navigation": "node scripts/test-workspace-navigation.cjs && node scripts/test-sidebar-panels-ui.mjs",
     "test:schedule-joint-teaching": "node scripts/test-schedule-joint-teaching.cjs && node scripts/test-schedule-joint-lock.cjs && node scripts/test-schedule-joint-sessions.cjs && node scripts/test-schedule-period-budget.cjs && node scripts/test-schedule-joint-cancellation.cjs",
     "test:schedule-teacher-balance": "node scripts/test-schedule-teacher-balance.cjs && node scripts/test-schedule-teacher-days.cjs && node scripts/test-schedule-morning.mjs && node scripts/test-schedule-dense-school.mjs",

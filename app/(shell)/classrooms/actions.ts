@@ -59,16 +59,31 @@ export async function saveSchoolEducationType(type: SchoolEducationType) {
 }
 
 // ข้อมูลตั้งต้น: ปีการศึกษา + ครู + ห้องของปีที่ active
+async function loadClassroomTeachers(db: ReturnType<typeof createServerClient>, schoolId: string) {
+  if (!schoolId) return []
+  const { data, error } = await db.from('users').select('id, prefix, full_name, is_homeroom')
+    .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin'])
+    .eq('school_id', schoolId)
+    // บุคลากรที่ยังไม่ได้เปิดบัญชีเข้าสู่ระบบก็สามารถเป็นครูประจำชั้นได้
+    .or('is_active.eq.true,email.like.pending-%')
+    .order('full_name')
+  if (error) throw new Error('โหลดรายชื่อครูไม่สำเร็จ กรุณาลองใหม่')
+  return data || []
+}
+
+export async function fetchClassroomTeachers() {
+  const session = await requireSession()
+  return loadClassroomTeachers(createServerClient(), session.schoolId || '')
+}
+
 export async function fetchClassroomInit() {
   const session = await requireSession()
   const db = createServerClient()
   const sid = session.schoolId || ''
-  const [yearsRes, teachersRes] = await Promise.all([
+  const [yearsRes, teachers] = await Promise.all([
     db.from('academic_years').select('id, year_be, is_active')
       .eq('school_id', sid).order('year_be', { ascending: false }),
-    db.from('users').select('id, prefix, full_name, is_homeroom')
-      .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin']).eq('school_id', sid).eq('is_active', true)
-      .order('full_name'),
+    loadClassroomTeachers(db, sid),
   ])
   const years = yearsRes.data || []
   const active = years.find(y => y.is_active) || years[0]
@@ -77,7 +92,7 @@ export async function fetchClassroomInit() {
     role: session.role,
     canManage: CAN_MANAGE.includes(session.role),
     years,
-    teachers: teachersRes.data || [],
+    teachers,
     activeYearId: active?.id || '',
     classrooms,
     educationType: sid ? await loadSchoolEducationType(db, sid) : 'primary' as SchoolEducationType,
