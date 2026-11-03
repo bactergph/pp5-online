@@ -1,0 +1,11 @@
+const fs=require('node:fs'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite')
+;(async()=>{const db=new PGlite();try{
+await db.exec("create table daily_activities(student_id text,date date,activity_type text constraint daily_activities_activity_type_check check(activity_type in ('saving','milk','cleaning','brushing','lunch')),value numeric(10,2),unique(student_id,date,activity_type));insert into daily_activities values('one','2026-11-03','saving',10.25)")
+const sql=fs.readFileSync('supabase/migrations/100_student_merit_points.sql','utf8');await db.exec(sql);await db.exec(sql)
+await db.exec("insert into daily_activities values('one','2026-11-03','merit',5)");assert.equal((await db.query("select value from daily_activities where activity_type='saving'")).rows[0].value,'10.25')
+await db.exec("insert into daily_activities values('one','2026-11-03','merit',8) on conflict(student_id,date,activity_type) do update set value=excluded.value");assert.equal((await db.query("select value from daily_activities where activity_type='merit'")).rows[0].value,'8.00')
+for(const value of [-1,1.5,null])await assert.rejects(db.query("insert into daily_activities values('bad','2026-11-04','merit',$1)",[value]),/merit_value/)
+await assert.rejects(db.query("insert into daily_activities values('bad','2026-11-04','unknown',1)"),/activity_type/)
+await db.exec("insert into daily_activities values('old','2026-11-03','saving',-2)");await db.exec(sql);assert.equal((await db.query('select count(*) n from daily_activities')).rows[0].n,3)
+console.log('PASS: migration is repeatable, existing savings preserved, merit isolated by unique kind/day and non-negative whole-point constraints enforced')
+}finally{await db.close()}})().catch(error=>{console.error(error);process.exitCode=1})

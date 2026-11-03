@@ -22,6 +22,7 @@ export const JSPDF_BOOK_REPORT_TYPES: ClassroomAdminReportKey[] = [
   'lunch',
   'cleaning',
   'saving',
+  'merit',
   'health',
   'inspection',
 ]

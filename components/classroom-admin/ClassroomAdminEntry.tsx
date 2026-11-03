@@ -72,6 +72,8 @@ import {
   printPageRowCount,
 } from '@/lib/print-student-pages'
 import { useAppAlert } from '@/lib/use-app-alert'
+import StudentValueCell from '@/components/classroom-admin/StudentValueCell'
+import StudentValueSummary from '@/components/classroom-admin/StudentValueSummary'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 
 function attendanceDayAllLabel(busy: boolean, clearing: boolean) {
@@ -100,16 +102,16 @@ type Student = {
   prefix: string | null
   first_name: string
   last_name: string
-  gender: string
-  birth_date: string | null
-  status: string
+  gender: string | null
+  birth_date?: string | null
+  status: string | null
 }
 type Mode = 'attendance' | 'activity' | 'weightHeight' | 'healthInspection'
 type AttendanceStatus = 'ม' | 'ป' | 'ล' | 'ข' | typeof DAILY_BLANK
-type ActivityType = 'saving' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
+type ActivityType = 'saving' | 'merit' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
 type InspectionField = 'nails' | 'hair' | 'ears' | 'nose' | 'teeth' | 'skin' | 'clothes'
-type Holiday = { date: string; name: string }
-type WeekendSchoolDay = { date: string; name: string }
+type Holiday = { date: string; name?: string | null }
+type WeekendSchoolDay = { date: string; name?: string | null }
 
 type Props = {
   mode: Mode
@@ -259,7 +261,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [classroomId, setClassroomId] = useState('')
   const [date, setDate] = useState(today())
   const [monthKey, setMonthKey] = useState(currentMonthKey())
-  const [term, setTerm] = useState<1 | 2>(1)
+  const [term, setTerm] = useState<1 | 2>(()=>(activityType==='saving'||activityType==='merit')&&[11,12,1,2,3,4].includes(currentMonth())?2:1)
   const [month, setMonth] = useState(currentMonth())
   const [students, setStudents] = useState<Student[]>([])
   const [recordsLoadedKey, setRecordsLoadedKey] = useState('')
@@ -272,6 +274,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [weekendSchoolDays, setWeekendSchoolDays] = useState<WeekendSchoolDay[]>([])
   const [savingCells, setSavingCells] = useState<Record<string, boolean>>({})
   const [savingTeacherPercent, setSavingTeacherPercent] = useState(0)
+  const [ledgerView,setLedgerView]=useState<'daily'|'summary'>('daily')
+  const activityRequestRef=useRef('')
+  const pendingValueSaves=useRef(new Set<Promise<unknown>>())
+  const [ledgerWaiting,setLedgerWaiting]=useState(false)
   const [attendanceBulkFilling, setAttendanceBulkFilling] = useState(false)
   const [attendanceClearingAll, setAttendanceClearingAll] = useState(false)
   const [attendanceFillingDays, setAttendanceFillingDays] = useState<Record<number, true>>({})
@@ -289,6 +295,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const monthlyHeaderRowSpan = hasMonthlyBulkTools ? 4 : 3
   // ไม่ใส่ date ใน request key — date ใช้เฉพาะวันตรวจวัดตอนบันทึก ไม่ใช่โหลดตาราง
   const recordsRequestKey = [classroomId, yearId, mode, activityType || '', month, monthKey, term].join('|')
+  activityRequestRef.current=recordsRequestKey
   const recordsLoaded = Boolean(classroomId) && recordsLoadedKey === recordsRequestKey
   const tableLoading = Boolean(classroomId) && !recordsLoaded
 
@@ -434,26 +441,29 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       try {
         if (mode === 'attendance') {
           const result = await fetchMonthlyAttendance(classroomId, yearId, monthKey)
-          if (result.error) { notify('error', result.error); return }
+          if(activityRequestRef.current!==requestKey)return
+          if (result.error) throw Error(result.error)
           setStudents(result.students)
           setMonthDays(result.days || 31)
           setHolidays(result.holidays)
           setWeekendSchoolDays(result.weekendSchoolDays || [])
-          setMonthlyAttendanceValues(Object.fromEntries(result.students.map(s => [s.id, result.records[s.id] || {}])))
+          setMonthlyAttendanceValues(Object.fromEntries(result.students.map(s => [s.id, (result.records as Record<string,Record<number,AttendanceStatus>>)[s.id] || {}])))
         } else if (mode === 'activity' && activityType) {
           const result = await fetchMonthlyActivity(classroomId, yearId, monthKey, activityType)
-          if (result.error) { notify('error', result.error); return }
+          if(activityRequestRef.current!==requestKey)return
+          if (result.error) throw Error(result.error)
           setStudents(result.students)
           setMonthDays(result.days || 31)
           setHolidays(result.holidays)
           setWeekendSchoolDays(result.weekendSchoolDays || [])
-          setMonthlyActivityValues(Object.fromEntries(result.students.map(s => [s.id, result.records[s.id] || {}])))
+          setMonthlyActivityValues(Object.fromEntries(result.students.map(s => [s.id, (result.records as Record<string,Record<number,number>>)[s.id] || {}])))
         } else if (mode === 'weightHeight') {
           const result = await fetchWeightHeight(classroomId, yearId, month)
-          if (result.error) { notify('error', result.error); return }
+          if(activityRequestRef.current!==requestKey)return
+          if (result.error) throw Error(result.error)
           setStudents(result.students)
           setWeightRows(Object.fromEntries(result.students.map(s => {
-            const r = result.records[s.id]
+            const r = (result.records as Record<string,{weight?:unknown;height?:unknown;bmi?:number|null;bmi_result?:string|null}>)[s.id]
             return [s.id, {
               weight: r?.weight != null ? String(r.weight) : '',
               height: r?.height != null ? String(r.height) : '',
@@ -463,15 +473,18 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           })))
         } else if (mode === 'healthInspection') {
           const result = await fetchHealthInspection(classroomId, yearId, term, month)
-          if (result.error) { notify('error', result.error); return }
+          if(activityRequestRef.current!==requestKey)return
+          if (result.error) throw Error(result.error)
           setStudents(result.students)
           setInspectionRows(Object.fromEntries(result.students.map(s => {
-            const r = result.records[s.id]
+            const r = (result.records as Record<string,Partial<Record<InspectionField,string|null>>>)[s.id]
             return [s.id, Object.fromEntries(INSPECTION_FIELDS.map(f => [f.key, r?.[f.key] || 'ผ่าน'])) as Record<InspectionField, string>]
           })))
         }
+      } catch(error) {
+        if(activityRequestRef.current===requestKey){setStudents([]);setMonthlyActivityValues({});setMonthlyAttendanceValues({});notify('error',error instanceof Error?error.message:'โหลดข้อมูลไม่สำเร็จ')}
       } finally {
-        setRecordsLoadedKey(requestKey)
+        if(activityRequestRef.current===requestKey)setRecordsLoadedKey(requestKey)
       }
     })
   }
@@ -676,7 +689,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       const activityValue = mode === 'activity' && schoolDay ? (monthlyActivityValues[row.student.id]?.[day] ?? 0) : 0
       const displayValue = mode === 'attendance'
         ? attendanceValue
-        : activityType === 'saving'
+        : (activityType === 'saving' || activityType === 'merit')
           ? (activityValue ? String(activityValue) : '')
           : classroomAdminDoneMark(activityValue)
       const attendanceClass = mode === 'attendance' && attendanceValue
@@ -701,8 +714,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
   const termLabel = `ภาคเรียนที่ ${attendanceTerm}`
   const isSavingMode = mode === 'activity' && activityType === 'saving'
-  const isRoutineActivityMode = mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType))
-  const savingDayColWidth = isSavingMode ? 56 : 32
+  const isMeritMode = mode === 'activity' && activityType === 'merit'
+  const isNumericMode = isSavingMode || isMeritMode
+  const hasActivitySummary = mode === 'activity' && Boolean(activityType && activityType !== 'saving')
+  const savingDayColWidth = isNumericMode ? 56 : 32
   const savingStats = isSavingMode
     ? (() => {
         const rows = students.map(student => {
@@ -998,13 +1013,21 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   async function autoSaveActivity(studentId: string, day: number, value: number) {
-    if (!activityType) return
+    if (!activityType) return false
+    const requestKey=recordsRequestKey,previous=monthlyActivityValues[studentId]?.[day]??0
     const cellKey = `${studentId}-${day}`
     setMonthlyActivity(studentId, day, value)
     markSaving(cellKey, true)
-    const result = await saveMonthlyActivity(classroomId, monthKey, term, activityType, [{ student_id: studentId, day, value }])
-    markSaving(cellKey, false)
-    if (result.error) notify('error', result.error)
+    try {
+      const write=saveMonthlyActivity(classroomId, monthKey, term, activityType, [{ student_id: studentId, day, value }]);pendingValueSaves.current.add(write)
+      let result
+      try{result=await write}finally{pendingValueSaves.current.delete(write)}
+      if (result.error) throw Error(result.error)
+      return true
+    }catch(error){
+      if(activityRequestRef.current===requestKey){if(isNumericMode)setMonthlyActivity(studentId,day,previous);notify('error',error instanceof Error?error.message:'บันทึกไม่สำเร็จ')}
+      return false
+    }finally{markSaving(cellKey,false)}
   }
 
   function printAttendanceDocument(printWindow: Window) {
@@ -1144,7 +1167,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                         <col className="attendance-print-summary-col" />
                       </>
                     )}
-                    {isRoutineActivityMode && <col className="attendance-print-summary-col" />}
+                    {hasActivitySummary && <col className="attendance-print-summary-col" />}
                     {isSavingMode && (
                       <>
                         <col className="attendance-print-summary-col" />
@@ -1160,7 +1183,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                       <th rowSpan={3}>ชื่อ-นามสกุล</th>
                       <th colSpan={days.length} className="attendance-print-month-title">เดือน{thaiMonthTitle(monthKey, years, yearId)}</th>
                       {mode === 'attendance' && <th colSpan={4} className="attendance-print-summary-title">สรุปผล</th>}
-                      {isRoutineActivityMode && <th rowSpan={3} className="attendance-print-summary-title">สรุปผล</th>}
+                      {hasActivitySummary && <th rowSpan={3} className="attendance-print-summary-title">{isMeritMode?'รวมคะแนน':'สรุปผล'}</th>}
                       {isSavingMode && <th colSpan={4} className="attendance-print-summary-title">สรุปเงินออม</th>}
                     </tr>
                     <tr>
@@ -1240,7 +1263,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                                 <td className="attendance-print-summary-absent">&nbsp;</td>
                               </>
                             )}
-                            {isRoutineActivityMode && <td className="attendance-print-summary-good">&nbsp;</td>}
+                            {hasActivitySummary && <td className="attendance-print-summary-good">&nbsp;</td>}
                             {isSavingMode && (
                               <>
                                 <td className="attendance-print-summary-good">&nbsp;</td>
@@ -1254,7 +1277,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                       }
 
                       const summary = mode === 'attendance' ? attendanceSummary(row.student) : null
-                      const routineCount = isRoutineActivityMode ? activityDoneCount(row.student) : null
+                      const routineCount = hasActivitySummary ? activityDoneCount(row.student) : null
                       const savingRow = savingStats?.rows.get(row.student.id)
                       return (
                         <tr key={`${row.student.id}-p${pageIndex}`}>
@@ -1400,7 +1423,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             'ชื่อ-นามสกุล',
             ...days.map(day => String(day)),
             ...(mode === 'attendance' ? ['มา', 'ป่วย', 'ลา', 'ขาด'] : []),
-            ...(isRoutineActivityMode ? ['สรุปผล'] : []),
+            ...(hasActivitySummary ? [isMeritMode?'รวมคะแนน':'สรุปผล'] : []),
             ...(isSavingMode ? ['รวม', 'ครูช่วย', 'สุทธิ', 'อันดับ'] : []),
           ],
           [
@@ -1408,7 +1431,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             '',
             ...days.map(day => weekdayLabel(monthKey, day)),
             ...(mode === 'attendance' ? ['', '', '', ''] : []),
-            ...(isRoutineActivityMode ? [''] : []),
+            ...(hasActivitySummary ? [''] : []),
             ...(isSavingMode ? ['', '', '', ''] : []),
           ],
           ...printRows.map(row => {
@@ -1418,12 +1441,12 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 '',
                 ...days.map(() => ''),
                 ...(mode === 'attendance' ? ['', '', '', ''] : []),
-                ...(isRoutineActivityMode ? [''] : []),
+                ...(hasActivitySummary ? [''] : []),
                 ...(isSavingMode ? ['', '', '', ''] : []),
               ]
             }
             const summary = mode === 'attendance' ? attendanceSummary(row.student) : null
-            const routineCount = isRoutineActivityMode ? activityDoneCount(row.student) : null
+            const routineCount = hasActivitySummary ? activityDoneCount(row.student) : null
             const savingRow = savingStats?.rows.get(row.student.id)
             return [
               row.number,
@@ -1434,7 +1457,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 if (holiday || !schoolDay) return ''
                 if (mode === 'attendance') return attendanceDisplayValue(row.student.id, day) || ''
                 const value = monthlyActivityValues[row.student.id]?.[day] ?? 0
-                return activityType === 'saving' ? (value || '') : classroomAdminDoneMark(value)
+                return (activityType === 'saving' || activityType === 'merit') ? (value || '') : classroomAdminDoneMark(value)
               }),
               ...(summary ? [summary['ม'], summary['ป'], summary['ล'], summary['ข']] : []),
               ...(routineCount !== null ? [routineCount || ''] : []),
@@ -1473,9 +1496,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     worksheet['!cols'] = [
       { wch: 8 },
       { wch: 28 },
-      ...(isMonthlyMode ? days.map(() => ({ wch: activityType === 'saving' ? 6 : 4 })) : []),
+      ...(isMonthlyMode ? days.map(() => ({ wch: isNumericMode ? 6 : 4 })) : []),
       ...(mode === 'attendance' ? [{ wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }] : []),
-      ...(isRoutineActivityMode ? [{ wch: 8 }] : []),
+      ...(hasActivitySummary ? [{ wch: 8 }] : []),
       ...(isSavingMode ? [{ wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 }] : []),
       ...(mode === 'weightHeight' ? [
         { wch: 4 },
@@ -1534,7 +1557,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     const jsPdfReportType: MonthlyJsPdfReportType | null =
       mode === 'attendance'
         ? 'attendance'
-        : mode === 'activity' && activityType && ['brushing', 'milk', 'lunch', 'cleaning', 'saving'].includes(activityType)
+        : mode === 'activity' && activityType && ['brushing', 'milk', 'lunch', 'cleaning', 'saving', 'merit'].includes(activityType)
           ? (activityType as MonthlyJsPdfReportType)
           : null
     const standardJsPdfReportType: StandardJsPdfReportType | null =
@@ -1594,7 +1617,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           }
 
           if (standardReportType) {
-            return buildStandardClassroomAdminPdfBlob({
+            const pdf = await buildStandardClassroomAdminPdfBlob({
               ...shared,
               layout: standardLayout,
               sheets: [{
@@ -1607,9 +1630,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 signatures: sigResult.signaturesByMonth?.[exportMonth] || {},
               }],
             })
+            if (!pdf.blob) throw Error('สร้างไฟล์ PDF ไม่สำเร็จ')
+            return {blob:pdf.blob,fileName:pdf.fileName}
           }
 
-          return buildDailyAttendancePdfBlob({
+          const pdf = await buildDailyAttendancePdfBlob({
             ...shared,
             reportType: reportType!,
             term: exportTerm,
@@ -1627,6 +1652,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             layout: monthlyLayout,
             fileName,
           })
+          if (!pdf.blob) throw Error('สร้างไฟล์ PDF ไม่สำเร็จ')
+          return {blob:pdf.blob,fileName:pdf.fileName}
         },
       })
       return
@@ -1642,7 +1669,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   function activityDoneCount(student: Student) {
     return activeDays.reduce((sum, day) => {
       const value = Number(monthlyActivityValues[student.id]?.[day] || 0)
-      return sum + (value > 0 ? 1 : 0)
+      return sum + (isMeritMode ? value : value > 0 ? 1 : 0)
     }, 0)
   }
 
@@ -1697,27 +1724,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     }
 
     const value = monthlyActivityValues[student.id]?.[day] ?? 0
-    if (activityType === 'saving') {
-      return (
-        <input
-          className={`${cellClass} classroom-admin-month-input classroom-admin-saving-input`}
-          type="text"
-          inputMode="decimal"
-          pattern="[0-9]*\.?[0-9]*"
-          disabled={disabled}
-          value={schoolDay && value ? String(value) : ''}
-          title={holiday || 'จำนวนเงินออม (บาท)'}
-          aria-label={`เงินออมวันที่ ${day}`}
-          onChange={e => {
-            const raw = e.target.value.replace(/[^\d.]/g, '')
-            setMonthlyActivity(student.id, day, raw === '' ? 0 : Number(raw))
-          }}
-          onBlur={e => {
-            const raw = e.target.value.replace(/[^\d.]/g, '')
-            void autoSaveActivity(student.id, day, raw === '' ? 0 : Number(raw))
-          }}
-        />
-      )
+    if (activityType === 'saving' || activityType === 'merit') {
+      return <StudentValueCell key={`${recordsRequestKey}:${student.id}:${day}`} kind={activityType} value={schoolDay?value:0} disabled={disabled} className={`${cellClass} classroom-admin-month-input classroom-admin-saving-input`} label={`${activityType==='merit'?'คะแนนความดี':'เงินออม'}วันที่ ${day} ของ ${studentName(student)}`} onSave={next=>autoSaveActivity(student.id,day,next)} onInvalid={message=>notify('error',message)}/>
     }
     return (
       <button
@@ -1742,7 +1750,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   }
 
   function renderActivityCell(student: Student) {
-    if (activityType === 'saving') {
+    if (activityType === 'saving' || activityType === 'merit') {
       return (
         <input
           className="form-input classroom-admin-compact-input classroom-admin-saving-input"
@@ -1850,7 +1858,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
   return (
     <ClassroomAdminPrintLayoutsProvider layouts={printLayouts}>
-    <div className={`page-stack classroom-admin-page${printMode ? ' classroom-admin-page--print' : ''}`}>
+    <div data-ledger-view={isNumericMode?ledgerView:undefined} className={`page-stack classroom-admin-page${printMode ? ' classroom-admin-page--print' : ''}`}>
       <AlertModal />
       <style>{CLASSROOM_ADMIN_PRINT_STYLES}</style>
       {!printMode && (
@@ -2049,6 +2057,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         </div>
       </div>
 
+      {isNumericMode&&!printMode&&<div className="student-ledger-tabs" role="tablist" aria-label={isMeritMode?'มุมมองคะแนนความดี':'มุมมองเงินออม'}>{(['daily','summary'] as const).map(view=><button key={view} type="button" role="tab" aria-selected={ledgerView===view} disabled={ledgerWaiting||isPending||!classroomId||!yearId} onClick={async()=>{setLedgerWaiting(true);await Promise.allSettled([...pendingValueSaves.current]);setLedgerView(view);setLedgerWaiting(false)}}>{view==='daily'?'บันทึกรายวัน':isMeritMode?'สรุปคะแนนความดี':'สรุปเงินออม'}</button>)}</div>}
+      {isNumericMode&&ledgerView==='summary'&&!printMode ? <StudentValueSummary key={`${classroomId}:${yearId}:${activityType}`} kind={activityType as 'saving'|'merit'} classroomId={classroomId} yearId={yearId} yearBe={years.find(year=>year.id===yearId)?.year_be||0} monthKey={monthKey} classLabel={currentClassLabel(classrooms,classroomId)} schoolName={schoolName}/> : <>
       {isSavingMode && savingStats && !tableLoading && students.length > 0 && (
         <div className="control-card saving-summary-grid">
           <div className="saving-summary-teacher">
@@ -2275,13 +2285,13 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           )}
           <div className="classroom-admin-month-table-wrap">
           <table
-            className={`thai-table classroom-admin-month-table${isSavingMode ? ' classroom-admin-saving-table' : ''}`}
+            className={`thai-table classroom-admin-month-table${isNumericMode ? ' classroom-admin-saving-table' : ''}`}
           >
             <colgroup>
               <col style={{ width: 40 }} />
               <col style={{ width: 148 }} />
               {days.map(day => <col key={day} style={{ width: savingDayColWidth }} />)}
-              {isRoutineActivityMode && <col style={{ width: 64 }} />}
+              {hasActivitySummary && <col style={{ width: 64 }} />}
               {isSavingMode && (
                 <>
                   <col style={{ width: 80 }} />
@@ -2311,9 +2321,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                     สรุป
                   </th>
                 )}
-                {isRoutineActivityMode && (
+                {hasActivitySummary && (
                   <th rowSpan={monthlyHeaderRowSpan} className="classroom-admin-month-title classroom-admin-summary-head">
-                    สรุปผล
+                    {isMeritMode?'รวมคะแนน':'สรุปผล'}
                   </th>
                 )}
                 {isSavingMode && (
@@ -2426,35 +2436,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             </thead>
             <tbody>
               {interactiveBodyRows.map((row, bodyRowIndex) => {
-                if (row.type === 'blank') {
-                  return (
-                    <tr key={`blank-print-${row.number}`} className="classroom-admin-print-row">
-                      <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{row.number}</td>
-                      <td className="classroom-admin-student-cell">&nbsp;</td>
-                      {renderMonthlyDayCells(bodyRowIndex, null)}
-                      {mode === 'attendance' && (
-                        <>
-                          <td className="classroom-admin-summary-cell">&nbsp;</td>
-                          <td className="classroom-admin-summary-cell">&nbsp;</td>
-                          <td className="classroom-admin-summary-cell">&nbsp;</td>
-                          <td className="classroom-admin-summary-cell">&nbsp;</td>
-                        </>
-                      )}
-                      {isRoutineActivityMode && <td className="classroom-admin-summary-cell">&nbsp;</td>}
-                      {isSavingMode && (
-                        <>
-                          <td className="classroom-admin-summary-cell">&nbsp;</td>
-                          <td className="classroom-admin-summary-cell">&nbsp;</td>
-                          <td className="classroom-admin-summary-cell">&nbsp;</td>
-                          <td className="classroom-admin-summary-cell">&nbsp;</td>
-                        </>
-                      )}
-                    </tr>
-                  )
-                }
-
                 const summary = mode === 'attendance' ? attendanceSummary(row.student) : null
-                const routineCount = isRoutineActivityMode ? activityDoneCount(row.student) : null
+                const routineCount = hasActivitySummary ? activityDoneCount(row.student) : null
                 const savingRow = savingStats?.rows.get(row.student.id)
                 return (
                   <tr key={row.student.id}>
@@ -2543,7 +2526,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               <span className="legend-pill legend-sky">ฟ้า = เปิดสอนพิเศษ</span>
             </>
           )}
-          {mode === 'activity' && activityType !== 'saving' && (
+          {mode === 'activity' && !isNumericMode && (
             <>
               <span className="legend-pill legend-green">{CLASSROOM_ADMIN_CHECK_MARK} ทำแล้ว</span>
               <span className="legend-pill legend-red">ว่าง = ยังไม่ทำ</span>
@@ -2551,9 +2534,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               <span className="legend-pill legend-gray">วันหยุดจะไม่รับบันทึก</span>
             </>
           )}
-          {mode === 'activity' && activityType === 'saving' && (
+          {isNumericMode && (
             <>
-              <span className="legend-pill legend-green">กรอกจำนวนเงินในช่องวันที่</span>
+              <span className="legend-pill legend-green">{isMeritMode?'กรอกคะแนนเต็มในช่องวันที่':'กรอกจำนวนเงินในช่องวันที่'}</span>
               <span className="legend-pill legend-amber">ออกจากช่องแล้วบันทึกอัตโนมัติ</span>
             </>
           )}
@@ -2580,6 +2563,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           </div>
         </div>
       )}
+    </>}
     </div>
     </ClassroomAdminPrintLayoutsProvider>
   )

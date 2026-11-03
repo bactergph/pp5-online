@@ -22,7 +22,7 @@ type RoleSession = {
 }
 
 type AttendanceStatus = 'ม' | 'ป' | 'ล' | 'ข'
-type ActivityType = 'saving' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
+type ActivityType = 'saving' | 'merit' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
 
 const VIEW_ROLES = ['admin', 'academic_head', 'deputy_principal', 'principal', 'teacher']
 const ATTENDANCE_SYNC_ACTIVITY_TYPES: ActivityType[] = ['brushing', 'milk', 'lunch', 'cleaning']
@@ -227,9 +227,9 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
   })
 
   const activities: Record<ActivityType, Record<string, Record<number, number>>> = {
-    brushing: {}, milk: {}, lunch: {}, cleaning: {}, saving: {},
+    brushing: {}, milk: {}, lunch: {}, cleaning: {}, saving: {}, merit: {},
   }
-  ;(['brushing', 'milk', 'lunch', 'cleaning', 'saving'] as ActivityType[]).forEach(type => {
+  ;(['brushing', 'milk', 'lunch', 'cleaning', 'saving', 'merit'] as ActivityType[]).forEach(type => {
     students.forEach(student => {
       activities[type][student.id] = {}
       schoolDays.forEach(day => {

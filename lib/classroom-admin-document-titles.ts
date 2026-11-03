@@ -5,6 +5,7 @@ export type ClassroomAdminReportKey =
   | 'lunch'
   | 'cleaning'
   | 'saving'
+  | 'merit'
   | 'health'
   | 'inspection'
 
@@ -17,6 +18,7 @@ export const CLASSROOM_ADMIN_DOCUMENT_TITLES: Record<ClassroomAdminReportKey, st
   lunch: 'แบบบันทึกอาหารกลางวัน',
   cleaning: 'แบบบันทึกการทำความสะอาดห้องเรียน',
   saving: 'แบบบันทึกการออมเงิน',
+  merit: 'แบบบันทึกคะแนนความดี',
   health: 'แบบบันทึกน้ำหนัก-ส่วนสูง',
   inspection: 'แบบบันทึกการตรวจสุขภาพ',
 }
@@ -27,7 +29,7 @@ export function classroomAdminDocumentTitle(key: ClassroomAdminReportKey): strin
 
 export function resolveClassroomAdminDocumentTitle(input: {
   mode: ClassroomAdminMode
-  activityType?: 'brushing' | 'milk' | 'lunch' | 'cleaning' | 'saving'
+  activityType?: 'brushing' | 'milk' | 'lunch' | 'cleaning' | 'saving' | 'merit'
 }): string {
   if (input.mode === 'attendance') return CLASSROOM_ADMIN_DOCUMENT_TITLES.attendance
   if (input.mode === 'weightHeight') return CLASSROOM_ADMIN_DOCUMENT_TITLES.health

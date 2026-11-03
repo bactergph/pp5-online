@@ -88,6 +88,7 @@ const routes:Record<string,[string,string]>={
   '/classroom-admin/daily-attendance':['ธุรการชั้นเรียน','เวลาเรียนรายวัน'],
   '/classroom-admin/milk':['ธุรการชั้นเรียน','บันทึกการดื่มนม'],
   '/classroom-admin/lunch':['ธุรการชั้นเรียน','อาหารกลางวัน'],
+  '/classroom-admin/merit':['ธุรการชั้นเรียน','คะแนนความดี'],
   '/classroom-admin/saving':['ธุรการชั้นเรียน','เงินออมนักเรียน'],
   '/classroom-admin/health':['ธุรการชั้นเรียน','ตรวจสุขภาพ'],
   '/classroom-admin/weight-height':['ธุรการชั้นเรียน','น้ำหนักและส่วนสูง'],

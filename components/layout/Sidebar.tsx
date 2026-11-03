@@ -114,6 +114,7 @@ const CLASSROOM_CLEANING: NavItem = { href: '/classroom-admin/cleaning', label: 
 const CLASSROOM_WEIGHT: NavItem = { href: '/classroom-admin/weight-height', label: 'บันทึกน้ำหนัก - ส่วนสูง', icon: ic(I.scale) }
 const CLASSROOM_HEALTH: NavItem = { href: '/classroom-admin/health', label: 'บันทึกตรวจสุขภาพ', icon: ic(I.heart) }
 const CLASSROOM_SAVING: NavItem = { href: '/classroom-admin/saving', label: 'บันทึกเงินออม', icon: ic(I.coin) }
+const CLASSROOM_MERIT: NavItem = { href: '/classroom-admin/merit', label: 'คะแนนความดี', icon: ic(I.star) }
 const CLASSROOM_PRINT: NavItem = { href: '/export/classroom-admin', label: 'พิมพ์เล่มเอกสาร', icon: ic(I.export) }
 const CLASSROOM_ADMIN_APPROVED: NavItem = { href: '/classroom-admin/approved', label: 'เอกสารที่อนุมัติแล้ว', icon: ic(I.doc) }
 const CLASSROOM_ADMIN_MAIN: NavItem = {
@@ -141,6 +142,7 @@ const CLASSROOM_ADMIN_MAIN: NavItem = {
         { href: CLASSROOM_WEIGHT.href, label: 'น้ำหนัก - ส่วนสูง', icon: CLASSROOM_WEIGHT.icon },
         { href: CLASSROOM_HEALTH.href, label: 'ตรวจสุขภาพ', icon: CLASSROOM_HEALTH.icon },
         { href: CLASSROOM_SAVING.href, label: 'เงินออม', icon: CLASSROOM_SAVING.icon },
+        { href: CLASSROOM_MERIT.href, label: 'คะแนนความดี', icon: CLASSROOM_MERIT.icon },
       ],
     },
     {

@@ -45,7 +45,7 @@ const WEEKDAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'] as cons
 /** รายงานรายเดือนที่ใช้ตารางวันเหมือนกัน — เวลาเรียน + กิจวัตร + ออมเงิน */
 export type MonthlyJsPdfReportType = Extract<
   ClassroomAdminReportKey,
-  'attendance' | 'brushing' | 'milk' | 'lunch' | 'cleaning' | 'saving'
+  'attendance' | 'brushing' | 'milk' | 'lunch' | 'cleaning' | 'saving' | 'merit'
 >
 
 export const JSPDF_MONTHLY_REPORT_TYPES: MonthlyJsPdfReportType[] = [
@@ -55,6 +55,7 @@ export const JSPDF_MONTHLY_REPORT_TYPES: MonthlyJsPdfReportType[] = [
   'lunch',
   'cleaning',
   'saving',
+  'merit',
 ]
 
 export function isMonthlyJsPdfReportType(value: string): value is MonthlyJsPdfReportType {
@@ -320,7 +321,7 @@ export async function buildDailyAttendancePdfBlob(
   const loadImage = target?.loadImage ?? loadImageDataUrl
   const reportType: MonthlyJsPdfReportType = input.reportType || 'attendance'
   const isAttendance = reportType === 'attendance'
-  const isSaving = reportType === 'saving'
+  const isSaving = reportType === 'saving' || reportType === 'merit'
   const attendanceMap = input.attendance || {}
   const activityMap = input.activities || {}
   const layout = { ...DEFAULT_CLASSROOM_ADMIN_MONTHLY_LAYOUT, ...input.layout }

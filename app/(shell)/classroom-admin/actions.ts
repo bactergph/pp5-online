@@ -1,4 +1,5 @@
 'use server'
+import { isStudentValueKind, validLedgerValue, ledgerDateRange, summarizeStudentValues, type StudentValueKind } from '@/lib/student-value-ledger'
 import { fetchTermClosedDays } from '@/lib/term-calendar-server'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
@@ -26,7 +27,7 @@ type ClassroomAdminSession = {
 }
 
 type AttendanceStatus = 'ม' | 'ป' | 'ล' | 'ข' | typeof DAILY_BLANK
-type ActivityType = 'saving' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
+type ActivityType = 'saving' | 'merit' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
 type InspectionField = 'nails' | 'hair' | 'ears' | 'nose' | 'teeth' | 'skin' | 'clothes'
 type ActivityRecord = { student_id: string; date?: string; value: number | null; is_manual_override?: boolean | null }
 
@@ -34,6 +35,7 @@ const EDIT_ROLES = ['admin', 'academic_head', 'deputy_principal']
 const VIEW_ROLES = ['admin', 'academic_head', 'deputy_principal', 'principal', 'teacher']
 const ACTIVITY_LABELS: Record<ActivityType, string> = {
   saving: 'การออม',
+  merit: 'คะแนนความดี',
   milk: 'ดื่มนม',
   cleaning: 'ทำความสะอาดห้อง',
   brushing: 'แปรงฟัน',
@@ -927,6 +929,15 @@ export async function saveDailyActivity(
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
   if (!date || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
+  if (!['saving','merit','milk','cleaning','brushing','lunch'].includes(activityType)) return { error:'ประเภทบันทึกไม่ถูกต้อง', count:0 }
+  if(isStudentValueKind(activityType)) {
+    if(![1,2].includes(term)||!/^\d{4}-\d{2}-\d{2}$/.test(date))return {error:'วันที่หรือภาคเรียนไม่ถูกต้อง',count:0}
+    const {data:year}=await createServerClient().from('academic_years').select('year_be').eq('id',access.classroom.academic_year_id).eq('school_id',access.classroom.school_id).maybeSingle()
+    if(!year)return {error:'ไม่พบปีการศึกษาของห้องนี้',count:0}
+    try{ledgerDateRange(year.year_be,'month',date.slice(0,7))}catch(error){return {error:error instanceof Error?error.message:'เดือนที่เลือกไม่ถูกต้อง',count:0}}
+    const students=await fetchStudentsForClassroom(classroomId),ids=new Set(students.map(student=>student.id))
+    if(rows.some(row=>!ids.has(row.student_id)||!validLedgerValue(activityType,row.value)))return {error:'นักเรียนหรือจำนวนที่กรอกไม่ถูกต้อง',count:0}
+  }
   const closedDays = await fetchHolidaysForRange(access.classroom.academic_year_id, date, date)
   if (closedDays.some(day => day.date === date)) return { error: 'วันที่เลือกเป็นวันหยุดหรืออยู่นอกช่วงเปิดภาคเรียน', count: 0 }
 
@@ -1022,6 +1033,17 @@ export async function saveMonthlyActivity(
   if (access.error || !access.classroom) return { error: access.error, count: 0 }
   if (!monthKey || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
 
+  if (!['saving','merit','milk','cleaning','brushing','lunch'].includes(activityType)) return { error:'ประเภทบันทึกไม่ถูกต้อง', count:0 }
+  if (isStudentValueKind(activityType)) {
+    const {data:year}=await createServerClient().from('academic_years').select('year_be').eq('id',access.classroom.academic_year_id).eq('school_id',access.classroom.school_id).maybeSingle()
+    if(!year)return {error:'ไม่พบปีการศึกษาของห้องนี้',count:0}
+    try{ledgerDateRange(year.year_be,'month',monthKey)}catch(error){return {error:error instanceof Error?error.message:'เดือนที่เลือกไม่ถูกต้อง',count:0}}
+    if(rows.some(row=>!Number.isInteger(row.day)||row.day<1||row.day>monthRange(monthKey).days))return {error:'วันที่บันทึกไม่ถูกต้อง',count:0}
+    if (![1,2].includes(term) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey)) return { error:'เดือนหรือภาคเรียนไม่ถูกต้อง', count:0 }
+    const students = await fetchStudentsForClassroom(classroomId), ids = new Set(students.map(student=>student.id))
+    if (rows.some(row=>!ids.has(row.student_id))) return { error:'พบนักเรียนที่ไม่ได้อยู่ในห้องนี้', count:0 }
+    if (rows.some(row=>!validLedgerValue(activityType,row.value))) return { error:activityType==='merit'?'คะแนนความดีต้องเป็นจำนวนเต็มตั้งแต่ 0 ถึง 99,999,999 คะแนน':'ยอดเงินต้องอยู่ระหว่าง 0 ถึง 99,999,999 บาท และมีทศนิยมไม่เกิน 2 ตำแหน่ง', count:0 }
+  }
   const teachingRows = await filterRowsForTeachingDays(access.classroom.academic_year_id, monthKey, rows)
   if (teachingRows.length === 0) return { error: 'ไม่มีวันเปิดสอนให้บันทึก', count: 0 }
   const payload = teachingRows.map(row => ({
@@ -1184,4 +1206,23 @@ export async function saveHealthInspection(
     })
   }
   return { error: error?.message || null, count: error ? 0 : rows.length }
+}
+
+/** Read only persisted classroom values; school/personal-homeroom access is checked first. */
+export async function fetchStudentValueSummary(classroomId:string,academicYearId:string,kind:StudentValueKind,scope:'month'|'year',monthKey:string) {
+  const session=await requireClassroomAdminSession()
+  const access=await getClassroomForAccess(classroomId,session)
+  if(access.error||!access.classroom)return {error:access.error||'ไม่พบห้องเรียน',summary:null}
+  if(!isStudentValueKind(kind)||!['month','year'].includes(scope)||access.classroom.academic_year_id!==academicYearId)return {error:'ประเภทข้อมูลหรือปีการศึกษาไม่ถูกต้อง',summary:null}
+  try {
+    const db=createServerClient()
+    const {data:year,error:yearError}=await db.from('academic_years').select('year_be').eq('id',academicYearId).eq('school_id',access.classroom.school_id).maybeSingle()
+    if(yearError||!year)return {error:'ไม่พบปีการศึกษาของห้องนี้',summary:null}
+    const range=ledgerDateRange(year.year_be,scope,monthKey)
+    const [students,records]=await Promise.all([
+      fetchStudentsForClassroom(classroomId),
+      fetchAllRows<{student_id:string;date:string;value:number|null}>((from,to)=>db.from('daily_activities').select('student_id,date,value').eq('classroom_id',classroomId).eq('activity_type',kind).gte('date',range.start).lte('date',range.end).order('date').order('student_id').range(from,to)),
+    ])
+    return {error:null,summary:summarizeStudentValues(students,records,kind),range}
+  }catch(error){return {error:error instanceof Error?error.message:'โหลดสรุปไม่สำเร็จ',summary:null}}
 }

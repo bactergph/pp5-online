@@ -1,0 +1,15 @@
+const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
+const exportsApi={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/student-value-ledger.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsApi})
+const {summarizeStudentValues:sum,validLedgerValue:valid,ledgerDateRange:range}=exportsApi
+const students=['a','b','zero'].map((id,i)=>({id,student_number:i+1,prefix:'เด็กชาย',first_name:'ทดสอบ'+id,last_name:'สรุป'}))
+const records=[{student_id:'a',date:'2026-11-03',value:.1},{student_id:'a',date:'2026-11-04',value:.2},{student_id:'b',date:'2026-11-03',value:.3}]
+const result=sum(students,[...records,records[0]],'saving');assert.equal(result.total,.6);assert.equal(result.rows[0].total,.3);assert.equal(result.rows[0].rank,1);assert.equal(result.rows[1].rank,1);assert.equal(result.rows[2].rank,null);assert.equal(result.participantCount,2);assert.equal(result.rows[0].days,2)
+const merit=sum(students,[{student_id:'a',date:'2026-11-03',value:5},{student_id:'a',date:'2026-11-04',value:2},{student_id:'b',date:'2026-11-03',value:3}],'merit');assert.equal(merit.total,10);assert.equal(merit.rows[0].total,7);assert.equal(merit.rows[1].rank,2)
+const former=sum(students,[...records,{student_id:'moved',date:'2026-11-03',value:100}],'saving');assert.equal(former.total,100.6);assert.equal(former.rows[0].former,true,'Moved students do not lose historical room balances');assert.equal(former.studentCount,3)
+assert.equal(sum(students,[],'saving').total,0);assert.equal(sum(students,[],'merit').rows.length,3)
+assert.equal(range(2569,'year','').start,'2026-05-01');assert.equal(range(2569,'year','').end,'2027-04-30');assert.equal(range(2569,'month','2027-02').end,'2027-02-28');assert.equal(range(2570,'month','2028-02').end,'2028-02-29');assert.throws(()=>range(2569,'month','2026-04'));assert.throws(()=>range(2569,'month','2026-13'))
+for(const value of [NaN,Infinity,-1,1.5,'2',100000000])assert.equal(valid('merit',value),false)
+for(const value of [0,1,99999999])assert.equal(valid('merit',value),true)
+assert.equal(valid('saving',.15),true);assert.equal(valid('saving',.111),false);assert.equal(valid('saving',NaN),false)
+assert.equal(sum(students,[{student_id:'a',date:'2026-11-01',value:8}],'merit').total,8,'Summary retains persisted amounts even if the calendar later marks their date closed')
+console.log('PASS: precise satang, point sums, tied ranks, unique daily values, zeros/former students, academic-year ranges/leap years and input validation')

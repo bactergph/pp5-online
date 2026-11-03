@@ -39,7 +39,7 @@ import {
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number; academic_year_id: string; homeroom_teacher_id?: string | null; homeroom_teacher2_id?: string | null }
 type Student = { id: string; student_number: number; prefix: string | null; first_name: string; last_name: string; gender: string; status: string }
-type ActivityType = 'brushing' | 'milk' | 'lunch' | 'cleaning' | 'saving'
+type ActivityType = 'brushing' | 'milk' | 'lunch' | 'cleaning' | 'saving' | 'merit'
 type ReportType = 'attendance' | ActivityType | 'health' | 'inspection'
 type ExportData = {
   error?: string | null
@@ -86,6 +86,7 @@ const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lunch: 'อาหารกลางวัน',
   cleaning: 'ทำความสะอาดห้อง',
   saving: 'การออมเงิน',
+  merit: 'คะแนนความดี',
 }
 const REPORT_TYPES: { key: ReportType; label: string; hint: string }[] = [
   { key: 'attendance', label: 'เวลาเรียน', hint: 'มา/ป่วย/ลา/ขาด' },
@@ -94,6 +95,7 @@ const REPORT_TYPES: { key: ReportType; label: string; hint: string }[] = [
   { key: 'lunch', label: 'อาหารกลางวัน', hint: 'กิจวัตรรายวัน' },
   { key: 'cleaning', label: 'ทำความสะอาดห้อง', hint: 'กิจวัตรรายวัน' },
   { key: 'saving', label: 'การออมเงิน', hint: 'ยอดออมรายวัน' },
+  { key: 'merit', label: 'คะแนนความดี', hint: 'คะแนนรายวันและยอดสะสม' },
   { key: 'health', label: 'น้ำหนัก-ส่วนสูง', hint: 'BMI รายเดือน' },
   { key: 'inspection', label: 'ตรวจสุขภาพ', hint: 'สุขอนามัย' },
 ]
@@ -148,11 +150,11 @@ function activitySummaryFor(studentId: string, type: ActivityType, data: ExportD
   return (data.schoolDays || []).reduce((sum, day) => {
     const value = Number(data.activities?.[type]?.[studentId]?.[day] || 0)
     if (!value) return sum
-    return type === 'saving' ? sum + value : sum + 1
+    return (type === 'saving' || type === 'merit') ? sum + value : sum + 1
   }, 0)
 }
 
-function isRoutineActivityReport(type: ReportType): type is Exclude<ActivityType, 'saving'> {
+function isRoutineActivityReport(type: ReportType): type is Exclude<ActivityType, 'saving' | 'merit'> {
   return type === 'brushing' || type === 'milk' || type === 'lunch' || type === 'cleaning'
 }
 
@@ -221,7 +223,7 @@ export default function ClassroomAdminExportPage() {
         if (monthsParam) setSelectedMonths(monthsParam.split(',').map(Number).filter(n => !Number.isNaN(n)))
         else setSelectedMonths(TERM_MONTHS[nextTerm])
         if (reportsParam) setSelectedReports(reportsParam.split(',').filter(Boolean) as ReportType[])
-        else setSelectedReports(REPORT_TYPES.map(report => report.key))
+        else setSelectedReports(REPORT_TYPES.filter(report=>report.key!=='merit').map(report => report.key))
         return
       }
 
@@ -301,6 +303,7 @@ export default function ClassroomAdminExportPage() {
       }
       const nextData = Object.fromEntries(results.map(([month, result]) => [month, result as ExportData]))
       setDataByMonth(nextData)
+      if(searchParams.get('merit')==='auto'&&Object.values(nextData).some(data=>Object.values(data.activities?.merit||{}).some(days=>Object.values(days).some(value=>Number(value)!==0))))setSelectedReports(previous=>previous.includes('merit')?previous:[...previous,'merit'])
       void loadMonthSignatures(selectedMonths)
       return nextData
     } finally {
@@ -443,7 +446,7 @@ export default function ClassroomAdminExportPage() {
         ...attendanceRows,
       ]), `เวลาเรียน-${MONTH_SHORT_LABELS[month]}`.slice(0, 31))
 
-      ;(['brushing', 'milk', 'lunch', 'cleaning', 'saving'] as ActivityType[]).forEach(type => {
+      ;(['brushing', 'milk', 'lunch', 'cleaning', 'saving', 'merit'] as ActivityType[]).forEach(type => {
         const rows = data.students?.map(student => {
           const summary = activitySummaryFor(student.id, type, data)
           return [
@@ -454,7 +457,7 @@ export default function ClassroomAdminExportPage() {
           ]
         }) || []
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-          [...baseHeaders, ...days.map(String), type === 'saving' ? 'รวม' : 'สรุปผล'],
+          [...baseHeaders, ...days.map(String), (type === 'saving' || type === 'merit') ? 'รวม' : 'สรุปผล'],
           ...rows,
         ]), `${ACTIVITY_LABELS[type]}-${MONTH_SHORT_LABELS[month]}`.slice(0, 31))
       })
@@ -601,8 +604,8 @@ export default function ClassroomAdminExportPage() {
   const reportLabel = (type: ReportType) => classroomAdminDocumentTitle(type)
 
   function renderReportSheet(type: ReportType, data: ExportData, sheetMonthKey: string) {
-    const monthly = type === 'attendance' || ['brushing', 'milk', 'lunch', 'cleaning', 'saving'].includes(type)
-    const showActivitySummary = isRoutineActivityReport(type) || type === 'saving'
+    const monthly = type === 'attendance' || ['brushing', 'milk', 'lunch', 'cleaning', 'saving', 'merit'].includes(type)
+    const showActivitySummary = isRoutineActivityReport(type) || (type === 'saving' || type === 'merit')
     const days = Array.from({ length: data.days || 0 }, (_, i) => i + 1)
     const allStudents = data.students || []
     const studentPages = chunkStudentsForPrintPages(allStudents)
@@ -677,12 +680,12 @@ export default function ClassroomAdminExportPage() {
           const activityValue = type !== 'attendance' && schoolDay ? (data.activities?.[type as ActivityType]?.[row.student.id]?.[day] || 0) : 0
           const displayValue = type === 'attendance'
             ? attendanceValue
-            : type === 'saving'
+            : (type === 'saving' || type === 'merit')
               ? (activityValue ? String(activityValue) : '')
               : classroomAdminDoneMark(activityValue)
           const attendanceClass = type === 'attendance' && attendanceValue
             ? (attendanceValue === 'ม' ? 'attendance-print-status-present' : `attendance-print-status-${attendanceValue}`)
-            : type !== 'attendance' && type !== 'saving' && displayValue === CLASSROOM_ADMIN_CHECK_MARK
+            : type !== 'attendance' && type !== 'saving' && type !== 'merit' && displayValue === CLASSROOM_ADMIN_CHECK_MARK
               ? 'attendance-print-status-present'
               : ''
 
@@ -746,7 +749,7 @@ export default function ClassroomAdminExportPage() {
                 {type === 'attendance' && <th colSpan={4} className="attendance-print-summary-title">สรุปผล</th>}
                 {showActivitySummary && (
                   <th rowSpan={3} className="attendance-print-summary-title">
-                    {type === 'saving' ? 'รวม' : 'สรุปผล'}
+                    {(type === 'saving' || type === 'merit') ? 'รวม' : 'สรุปผล'}
                   </th>
                 )}
               </tr>
@@ -831,7 +834,7 @@ export default function ClassroomAdminExportPage() {
                     )}
                     {activitySummary !== null && (
                       <td className="attendance-print-summary-good">
-                        {activitySummary ? (type === 'saving' ? activitySummary.toLocaleString('th-TH') : activitySummary) : ''}
+                        {activitySummary ? ((type === 'saving' || type === 'merit') ? activitySummary.toLocaleString('th-TH') : activitySummary) : ''}
                       </td>
                     )}
                   </tr>

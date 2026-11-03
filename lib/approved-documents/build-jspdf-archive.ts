@@ -34,7 +34,7 @@ import {
 import { appOrigin } from '@/lib/app-origin'
 
 type AttendanceStatus = 'ม' | 'ป' | 'ล' | 'ข'
-type ActivityType = 'saving' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
+type ActivityType = 'saving' | 'merit' | 'milk' | 'cleaning' | 'brushing' | 'lunch'
 
 const ATTENDANCE_SYNC_ACTIVITY_TYPES: ActivityType[] = ['brushing', 'milk', 'lunch', 'cleaning']
 
@@ -185,9 +185,9 @@ async function loadMonthData(params: {
   })
 
   const activities: Partial<Record<ActivityType, Record<string, Record<number, number>>>> = {
-    brushing: {}, milk: {}, lunch: {}, cleaning: {}, saving: {},
+    brushing: {}, milk: {}, lunch: {}, cleaning: {}, saving: {}, merit: {},
   }
-  ;(['brushing', 'milk', 'lunch', 'cleaning', 'saving'] as ActivityType[]).forEach(type => {
+  ;(['brushing', 'milk', 'lunch', 'cleaning', 'saving', 'merit'] as ActivityType[]).forEach(type => {
     const bucket = activities[type]!
     students.forEach(student => {
       bucket[student.id] = {}
@@ -294,7 +294,7 @@ export async function buildClassroomAdminArchivePdfBuffer(params: {
     term,
     monthKeyBase: monthKey,
     months: [month],
-    reports: [...CLASSROOM_ADMIN_REPORTS],
+    reports: [...CLASSROOM_ADMIN_REPORTS,...(Object.values(monthData.activities?.merit||{}).some(days=>Object.values(days).some(value=>Number(value)!==0))?['merit' as const]:[])],
     dataByMonth: { [month]: monthData },
     signaturesByMonth: {
       [month]: {

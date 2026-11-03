@@ -84,6 +84,7 @@ export function buildSignDocumentPreviewUrl(target: SignDocumentPreviewTarget, m
       term: String(term),
       months: String(month),
       reports: CLASSROOM_ADMIN_REPORTS,
+      merit: 'auto',
       monthkey: classroomAdminMonthKey(month),
     })
     return `/export/classroom-admin?${params}`
