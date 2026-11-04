@@ -1,6 +1,7 @@
 'use client'
 import {levelPeriodTimes} from '@/lib/schedule-period-profiles'
 import { useScheduleOperations } from './ScheduleServices'
+import {usePendingScheduleEditor} from './SchedulePendingEdits'
 import { useRef, useState } from 'react'
 import Swal from 'sweetalert2'
 import type { Preparation } from '@/lib/schedule-preparation'
@@ -26,6 +27,7 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
   const [pendingTeam, setPendingTeam] = useState(false), [showTimes, setShowTimes] = useState(false)
   const groups = data.plan.activityGroups || [], workload = activityTeamWorkload(groups), eligibleTeacherIds = data.plan.teacherIds ?? data.teachers.map(t => t.id)
   const activityTimes=levelPeriodTimes(data.periods,data.classrooms.find(room=>room.id===draft?.roomIds[0])?.level||'')
+  usePendingScheduleEditor('student-activity',{step:4,label:'กิจกรรมนักเรียน',dirty:!!draft,save:async()=>draft?save(draft):true})
   const repair=repairActivityTeacherPlan(data.plan,data.teachers.map(t=>t.id))
   async function repairTeachers(){
     if(blocked||busy||lock.current)return
@@ -99,7 +101,7 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
     else setDraft({ ...draft, ...patch })
   }
   async function save(group: ActivityTeam, remove = false) {
-    if (lock.current) return
+    if (lock.current) return false
     lock.current = true; setBusy(true); onBusy(true); setError('')
     const editorOpen = dialog.current?.open
     let committed = false
@@ -113,13 +115,14 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
       if (editorOpen) dialog.current?.close()
       const overwrittenRooms = new Set(preview.data.overwrites.flatMap(group => group.rooms.map(room => room.roomId))).size
       const impact = [overwrittenRooms ? `แทนที่ทีมเดิมใน ${overwrittenRooms} ห้อง` : '', preview.data.affected ? `เปลี่ยนคาบเดิม ${preview.data.affected} ช่อง` : ''].filter(Boolean).join(' · ')
-      if (!(await Swal.fire({ ...activityConfirmation, title:remove ? 'นำกิจกรรมออกหรือไม่?' : 'ต้องการบันทึกกิจกรรมหรือไม่?', text:remove ? 'การนำออกจะไม่คืนวิชาเดิม' : impact || undefined, confirmButtonText:remove ? 'นำออก' : 'บันทึก' })).isConfirmed) return
+      if (!(await Swal.fire({ ...activityConfirmation, title:remove ? 'นำกิจกรรมออกหรือไม่?' : 'ต้องการบันทึกกิจกรรมหรือไม่?', text:remove ? 'การนำออกจะไม่คืนวิชาเดิม' : impact || undefined, confirmButtonText:remove ? 'นำออก' : 'บันทึก' })).isConfirmed) return false
       let unlock = false
-      if (preview.data.locked) { unlock = (await Swal.fire({ ...activityConfirmation, title:`แทนที่คาบล็อก ${preview.data.locked} ช่อง?`, text:'ปลดล็อกเฉพาะคาบที่ได้รับผลกระทบ', confirmButtonText:'แทนที่คาบล็อก', focusCancel:true })).isConfirmed; if (!unlock) return }
+      if (preview.data.locked) { unlock = (await Swal.fire({ ...activityConfirmation, title:`แทนที่คาบล็อก ${preview.data.locked} ช่อง?`, text:'ปลดล็อกเฉพาะคาบที่ได้รับผลกระทบ', confirmButtonText:'แทนที่คาบล็อก', focusCancel:true })).isConfirmed; if (!unlock) return false }
       const result = await saveScheduleActivityTeam(year, term, preview.data.hash, group, remove, unlock, preview.data.overwrites.length > 0)
       if (result.error) throw Error(result.error)
       committed = true; dialog.current?.close(); setDraft(null); onDirty(false); setMessage(remove ? 'นำกิจกรรมออกแล้ว' : 'บันทึกกิจกรรมแล้ว'); await onSaved()
-    } catch (e) { const message = e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ'; setError(message); if (!dialog.current?.open) await Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: message }) }
+      return true
+    } catch (e) { const message = e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ'; setError(message); if (!dialog.current?.open) await Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: message });return false }
     finally { lock.current = false; setBusy(false); onBusy(false); if (editorOpen && !committed && !dialog.current?.open) dialog.current?.showModal() }
   }
   async function removeFromRoom(targets: ActivityTeam[], roomId: string) {

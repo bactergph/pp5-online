@@ -124,6 +124,11 @@
 .schedule-prep .prep-room-names label{display:flex;flex-flow:row nowrap;align-items:center;gap:8px;margin:0;padding:8px 10px;border:1px solid #d5e3f5;border-radius:12px;background:#fff}
 .schedule-prep .prep-room-names span{flex:none;color:#1373d9;font-weight:700}
 .schedule-prep .prep-room-names input{flex:1;width:auto;min-width:0}
+.schedule-prep .prep-persist-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px}
+.schedule-prep .prep-persist-state{margin:0;font-size:14px;line-height:1.6;color:#526783}
+.schedule-prep .prep-persist-state.is-dirty{color:#8a540a;background:#fff6df;border:1px solid #ecd198;border-radius:10px;padding:8px 12px}
+.schedule-prep .prep-persist-state.is-saved{color:#166543;background:#edf9f1;border:1px solid #b5ddc3;border-radius:10px;padding:8px 12px}
+.schedule-prep .prep-persist-state.is-saving{color:#245cc6}
 .schedule-prep .prep-workload > .prep-checks { padding:12px; border-radius:12px; background:#f4f8ff; }
 .schedule-prep .prep-workload select { max-width:260px; min-width:150px; }
 @media(max-width:640px){.schedule-prep .prep-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-prep .prep-steps li:last-child{grid-column:auto}.schedule-prep .prep-steps button{min-height:76px;align-items:flex-start;text-align:left;flex-direction:row}.schedule-prep .prep-steps small{display:none}.schedule-prep .prep-workload > .prep-checks{align-items:stretch;flex-direction:column}}

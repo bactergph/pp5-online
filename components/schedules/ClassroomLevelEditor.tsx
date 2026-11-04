@@ -1,6 +1,7 @@
 'use client'
 import { useScheduleOperations } from './ScheduleServices'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {usePendingScheduleEditor} from './SchedulePendingEdits'
 import { SCHOOL_LEVEL_GROUPS } from '@/lib/school-education-type'
 import {scheduleRoomEnabled} from '@/lib/schedule-room-state'
 import { isTimetableClassroom } from '@/lib/schedules'
@@ -35,12 +36,15 @@ export default function ClassroomLevelEditor({ classrooms, year, term, locked, b
   const signature = JSON.stringify(saved)
   const [edited, setEdited] = useState({source:signature,values:saved})
   const draft = edited.source === signature ? edited.values : saved
-  const setDraft = (change:(current:Record<string,string[]>)=>Record<string,string[]>) => setEdited(current=>({source:signature,values:change(current.source===signature?current.values:saved)}))
+  const setDraft = (change:(current:Record<string,string[]>)=>Record<string,string[]>) => {setSaveStatus('idle');setEdited(current=>({source:signature,values:change(current.source===signature?current.values:saved)}))}
   const [active, setActive] = useState(levels.find(level => saved[level]?.length) || 'ป.1')
   const [band, setBand] = useState<PeriodBand>(periodBand(classrooms[0]?.level||'')||'primary')
   const [error, setError] = useState('')
+  const [saveStatus,setSaveStatus]=useState<'idle'|'saving'|'saved'|'error'|'refresh-error'>('idle')
+  const saving=useRef(false)
   const names = draft[active] || []
   const dirty = JSON.stringify(draft) !== signature
+  usePendingScheduleEditor('classrooms',{step:1,label:'ชั้นและห้องเรียน',dirty,save})
 
   useEffect(()=>{onDirty?.(dirty);return()=>onDirty?.(false)},[dirty,onDirty])
 
@@ -65,18 +69,25 @@ export default function ClassroomLevelEditor({ classrooms, year, term, locked, b
     setDraft(current => ({ ...current, [level]: (current[level] || []).map((name, item) => item === index ? value : name) }))
   }
   async function save() {
-    if (locked || busy) return
+    if (locked || busy || saving.current) return false
     const payload = levels.map(level => ({ level, names: (draft[level] || []).map(name => name.trim()) }))
-    if (payload.some(row => row.names.some(name => !name))) { setError('กรอกชื่อห้องให้ครบ'); return }
+    if (payload.some(row => row.names.some(name => !name))) { setError('กรอกชื่อห้องให้ครบ');setSaveStatus('error');return false }
+    let committed=saveStatus==='refresh-error'
+    saving.current=true;setSaveStatus('saving');setError('')
     onBusy(true)
     try {
-      const result = await saveTimetableClassrooms(year, term, payload)
-      if (result.error) throw Error(result.error)
+      if(!committed){const result = await saveTimetableClassrooms(year, term, payload);if (result.error) throw Error(result.error);committed=true}
       setError('')
       await onSaved()
+      const values=Object.fromEntries(payload.map(row=>[row.level,row.names]))
+      setEdited({source:JSON.stringify(values),values});setSaveStatus('saved')
+      onDirty?.(false)
+      return true
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'บันทึกชั้นเรียนไม่สำเร็จ')
-    } finally { onBusy(false) }
+      const detail=cause instanceof Error?cause.message:'กรุณาลองใหม่'
+      setError(committed?`บันทึกชั้นเรียนแล้ว แต่โหลดข้อมูลล่าสุดไม่สำเร็จ · ${detail}`:detail)
+      setSaveStatus(committed?'refresh-error':'error');return false
+    } finally { saving.current=false;onBusy(false) }
   }
 
   return <section className="prep-classrooms">
@@ -103,6 +114,6 @@ export default function ClassroomLevelEditor({ classrooms, year, term, locked, b
     </fieldset>
     {error && <p className="prep-error" role="alert">{error}</p>}
     {locked && <p className="prep-notice">บันทึกหรือยกเลิกข้อมูลที่กำลังแก้ในขั้นอื่นก่อน</p>}
-    <button type="button" className="prep-primary" disabled={busy || locked || !dirty} onClick={() => void save()}>บันทึกชั้นเรียน</button>
+    <div className="prep-persist-actions"><p className={`prep-persist-state is-${saveStatus==='saving'?'saving':dirty?'dirty':saveStatus==='saved'?'saved':'idle'}`} role="status" aria-live="polite">{saveStatus==='saving'?'กำลังบันทึกชั้นเรียน…':saveStatus==='refresh-error'?'บันทึกแล้ว · ยังโหลดข้อมูลล่าสุดไม่สำเร็จ':dirty?(saveStatus==='error'?'ยังบันทึกไม่สำเร็จ · ข้อมูลที่แก้ยังอยู่':'มีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก'):saveStatus==='saved'?'✓ บันทึกชั้นเรียนเรียบร้อยแล้ว':classrooms.length?'✓ ข้อมูลตรงกับที่บันทึกไว้':'ยังไม่ได้กำหนดห้องเรียน'}</p><button type="button" className="prep-primary" disabled={busy || locked || (!dirty&&saveStatus!=='refresh-error')} onClick={() => void save()}>{saveStatus==='saving'?'กำลังบันทึก…':saveStatus==='refresh-error'?'โหลดข้อมูลล่าสุด':'บันทึกชั้นเรียน'}</button></div>
   </section>
 }

@@ -48,7 +48,7 @@ try{
   assert.equal(await page.evaluate(()=>window.read().terms[2].periods[0].profiles.kindergarten.filter(row=>row.is_break).length),3)
   await step(4);await click('.schedule-activities-tabs button','กิจกรรมครู');await click('button','+ เพิ่มกิจกรรมครู')
   await fill('.schedule-teacher-activity-fields .full input','PLC ทดสอบ');await click('.schedule-teacher-activity-form button','เลือกครูทั้งหมด')
-  await step(2);await step(4);assert.equal(await page.$eval('.schedule-teacher-activity-fields .full input',el=>el.value),'PLC ทดสอบ','Unsubmitted form survives step navigation')
+  await step(2);await page.waitForSelector('.swal2-cancel');await page.click('.swal2-cancel');await page.waitForFunction(()=>!document.querySelector('.swal2-container'));assert.equal(await page.$eval('.schedule-teacher-activity-fields .full input',el=>el.value),'PLC ทดสอบ','Cancelling step navigation preserves the unsubmitted form')
   await click('.schedule-teacher-activity-form button','บันทึกกิจกรรมครู');await page.waitForFunction(()=>window.read().terms[2].teacherActivities?.[0]?.name==='PLC ทดสอบ'&&!document.querySelector('.schedule-teacher-activity-form'))
   assert.equal(await page.evaluate(()=>window.read().terms[1].teacherActivities?.length||0),0,'Teacher activity is term-scoped')
   await click('.schedule-teacher-activity-item button','แก้ไข');await fill('.schedule-teacher-activity-fields .full input','PLC แก้ไข');await page.evaluate(()=>window.rejectWrite=true);await click('.schedule-teacher-activity-form button','บันทึกกิจกรรมครู');await page.waitForFunction(()=>[...document.querySelectorAll('[role="alert"]')].some(el=>el.textContent.includes('ยังไม่ได้บันทึก')))

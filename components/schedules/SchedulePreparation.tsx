@@ -14,6 +14,7 @@ import ClassroomLevelEditor from './ClassroomLevelEditor'
 import SchedulePeriodBudget from './SchedulePeriodBudget'
 import { confirmScheduleClear } from './confirmScheduleClear'
 import {schedulePeriodBudget} from '@/lib/schedule-period-budget'
+import {SchedulePendingEdits,type PendingScheduleEditor} from './SchedulePendingEdits'
 import './schedule-preparation.css'
 import { FiArrowLeft, FiArrowRight, FiCheck, FiZap } from 'react-icons/fi'
 const titles=['กำหนดชั้น','วันและเวลา','กำหนดครู','กิจกรรม','รายวิชา','กำหนดภาระสอน/ล็อกคาบ','ตรวจและจัดตาราง']
@@ -26,24 +27,26 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  const [rooms,setRooms]=useState<string[]>(initialRooms||[]),[clear,setClear]=useState(false),[issues,setIssues]=useState<PlanningIssue[]|null>(null),[draft,setDraft]=useState<ScheduleDraftView|null>(null)
  const [teacherAssignments,setTeacherAssignments]=useState<Record<string,string>>({})
  const [lockTeacher,setLockTeacher]=useState('')
- function goFix(next:number,teacherId?:string){setLockTeacher(teacherId||'');setStep(next)}
+ function goFix(next:number,teacherId?:string){void changeStep(next,teacherId)}
  const [workingLabel,setWorkingLabel]=useState('กำลังบันทึก กรุณารอ…')
  const [timeDirty,setTimeDirty]=useState(false)
- const runLock=useRef(false)
+ const runLock=useRef(false),navigationLock=useRef(false),pendingEditors=useRef(new Map<string,PendingScheduleEditor>())
+ const [navigating,setNavigating]=useState(false),[editorVersion,setEditorVersion]=useState(0)
  const [inputDirty,setInputDirty]=useState({teachers:false,subjects:false})
  const [activityDirty,setActivityDirty]=useState(false)
  const [classroomsDirty,setClassroomsDirty]=useState(false)
  const hasInputDirty=inputDirty.teachers||inputDirty.subjects
  const hasUnsavedInput=hasInputDirty||activityDirty||classroomsDirty
+ useEffect(()=>{if(dirty||timeDirty||hasUnsavedInput)setMessage('')},[dirty,timeDirty,hasUnsavedInput])
  useScheduleGuard(dirty||timeDirty||hasUnsavedInput||!!draft?.id,busy)
  useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false)},[busy,onBusyChange])
  useEffect(()=>{onUnsavedChange?.(dirty||timeDirty||busy||hasUnsavedInput||!!draft?.id);const guard=(e:BeforeUnloadEvent)=>{if(dirty||timeDirty||busy||hasUnsavedInput||draft?.id){e.preventDefault();e.returnValue=''}};window.addEventListener('beforeunload',guard);return()=>{window.removeEventListener('beforeunload',guard);onUnsavedChange?.(false)}},[dirty,timeDirty,busy,hasUnsavedInput,draft?.id,onUnsavedChange])
  useEffect(()=>{let active=true;fetchPreparation(yearId,semester).then(r=>{if(!active)return;if(r.error)setError(r.error);else if(r.data){setData(r.data);setRooms(initialRooms?.length?initialRooms.filter(id=>r.data!.classrooms.some(c=>c.id===id)):r.data.classrooms.map(c=>c.id))}}).catch(()=>{if(active)setError('โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่')});return()=>{active=false}},[yearId,semester,initialRooms,fetchPreparation])
  async function run(work:()=>Promise<void>,label='กำลังบันทึก กรุณารอ…'){if(runLock.current)return;runLock.current=true;setWorkingLabel(label);setBusy(true);setError('');setMessage('');try{await work()}catch(e){setError(e instanceof Error?e.message:'ดำเนินการไม่สำเร็จ')}finally{runLock.current=false;setBusy(false)}}
  function edit(update:(d:Preparation)=>Preparation){setData(current=>current?update(current):current);setDirty(true);setIssues(null);setDraft(null)}
- async function save(){if(!data)return;let hash=data.hash
+ async function save(confirmTime=true){if(!data)throw Error('ยังโหลดข้อมูลไม่สำเร็จ');let hash=data.hash
  if(timeDirty||!data.timesConfigured){
- if(!(await alert.fire({icon:'question',title:'บันทึกเวลาคาบของโรงเรียน?',text:'เวลานี้ใช้ร่วมกับตารางทุกปีและภาคเรียน ระบบจะตรวจคาบเดิมก่อนเปลี่ยนโครงสร้าง',showCancelButton:true})).isConfirmed)throw Error('ยังไม่ได้บันทึกวันและเวลา')
+ if(confirmTime&&!(await alert.fire({icon:'question',title:'บันทึกเวลาคาบของโรงเรียน?',text:'เวลานี้ใช้ร่วมกับตารางทุกปีและภาคเรียน ระบบจะตรวจคาบเดิมก่อนเปลี่ยนโครงสร้าง',showCancelButton:true})).isConfirmed)throw Error('ยังไม่ได้บันทึกวันและเวลา')
  await savePeriodTimes(data.periods);const latest=await fetchPreparation(yearId,semester);if(latest.error||!latest.data)throw Error(latest.error||'โหลดเวลาหลังบันทึกไม่สำเร็จ');hash=latest.data.hash;setData({...latest.data,plan:data.plan});setTimeDirty(false)
  }
  const r=await savePreparation(yearId,semester,hash,data.plan);if(r.error||!r.data)throw Error(r.error||'บันทึกไม่สำเร็จ');let saved=r.data;setData(saved)
@@ -76,6 +79,33 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
     if(result.error)throw Error(result.error)
     await reload();setMessage('ล้างคาบ'+(kind==='activities'?'กิจกรรม':'รายวิชา')+'แล้ว '+(result.data?.removed||0)+' คาบ'+(choice.includeLocked?' · รวมคาบที่ล็อก':' · เก็บคาบที่ล็อกไว้'))
   },'กำลังตรวจและล้างคาบตาราง…')
+ }
+ async function changeStep(next:number,teacherId?:string){
+  if(next===step||busy||navigationLock.current||next<1||next>7)return
+  const pending=()=>[...pendingEditors.current.entries()].filter(([,editor])=>editor.dirty)
+  const move=()=>{if(teacherId!==undefined)setLockTeacher(teacherId);setStep(next);requestAnimationFrame(()=>document.querySelector('.schedule-prep')?.scrollIntoView({block:'start',behavior:'smooth'}))}
+  if(!dirty&&!timeDirty&&!hasUnsavedInput&&!pending().length){move();return}
+  navigationLock.current=true;setNavigating(true)
+  try{
+   const names=[...(dirty||timeDirty?['การตั้งค่า']:[]),...pending().map(([,editor])=>editor.label)]
+   const choice=await alert.fire({icon:'warning',title:'มีข้อมูลที่ยังไม่ได้บันทึก',text:`${names.join(' · ')||'แบบฟอร์มที่กำลังแก้ไข'} — บันทึกก่อนเปลี่ยนขั้นตอน หรือเลือกไม่บันทึกเพื่อกลับไปใช้ข้อมูลเดิม`,showDenyButton:true,showCancelButton:true,confirmButtonText:'บันทึกแล้วไปต่อ',denyButtonText:'ไม่บันทึก',cancelButtonText:'แก้ไขต่อ',denyButtonColor:'#64748b',focusCancel:true})
+   if(choice.isDenied){
+    let loaded=false;await run(async()=>{await reload();loaded=true;setEditorVersion(value=>value+1);setInputDirty({teachers:false,subjects:false});setActivityDirty(false);setClassroomsDirty(false);setMessage('ไม่ได้บันทึกการเปลี่ยนแปลง · ใช้ข้อมูลที่บันทึกไว้เดิม')})
+    if(loaded)move();return
+   }
+   if(!choice.isConfirmed)return
+   if(dirty||timeDirty){let saved=false;await run(async()=>{await save(false);saved=true});if(!saved)return;await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()))}
+   for(const [id] of pending()){
+    const editor=pendingEditors.current.get(id)
+    if(!editor?.dirty)continue
+    if(!await editor.save()){setStep(editor.step);return}
+    await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()))
+   }
+   // Native modal editors keep their own validation. Never leave unresolved edits.
+   if(pending().length){setError('ยังมีข้อมูลที่บันทึกไม่สำเร็จ กรุณาตรวจแบบฟอร์ม');return}
+   setMessage('บันทึกข้อมูลเรียบร้อยแล้ว');move()
+  }catch(cause){setError(cause instanceof Error?cause.message:'บันทึกไม่สำเร็จ กรุณาลองใหม่')}
+  finally{navigationLock.current=false;setNavigating(false)}
  }
  async function reload(){const r=await fetchPreparation(yearId,semester);if(r.error||!r.data)throw Error(r.error||'โหลดไม่สำเร็จ');setData(r.data);setRooms(previous=>{const active=r.data!.classrooms.map(room=>room.id);const kept=previous.filter(id=>active.includes(id));return kept.length?kept:active});setDirty(false);setTimeDirty(false);setTeacherAssignments({});setIssues(null);setDraft(null);onChanged()}
  async function saveTeachingGroups(groups:NonNullable<Preparation['plan']['teachingGroups']>){
@@ -125,21 +155,21 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  const stepsReady=[data.classrooms.length>0&&!classroomsDirty,data.timesConfigured&&!timeDirty&&data.periods.length>0&&data.plan.days.length>0,eligibleTeachers.length>0&&!inputDirty.teachers,true,teaching.length>0&&!inputDirty.subjects,workloadReady,issues!==null&&!issues.some(i=>i.severity==='error')&&!dirty&&!timeDirty&&!hasInputDirty]
  const statuses=[stepsReady[0]?`เปิด ${data.classrooms.length} ห้อง`:'ยังต้องกำหนดชั้น',stepsReady[1]?'ตั้งค่าแล้ว':'ยังต้องตั้งค่า',stepsReady[2]?`เลือก ${eligibleTeachers.length} คน`:'ยังต้องเลือกครู','กำหนดตามแผนโรงเรียน',stepsReady[4]?`${teaching.length} รายการ`:'ยังต้องเพิ่มรายวิชา',stepsReady[5]?'กำหนดครบแล้ว':'ยังต้องกำหนดภาระสอน',stepsReady[6]?'ผ่านการตรวจเบื้องต้น':'ยังไม่ผ่านการตรวจ']
 
- return <section className="schedule-prep" aria-label="เตรียมและจัดตารางเรียน" aria-busy={busy}>
+ return <SchedulePendingEdits.Provider value={pendingEditors}><section key={editorVersion} className="schedule-prep" aria-label="เตรียมและจัดตารางเรียน" aria-busy={busy}>
  <header className="prep-heading"><div><span className="prep-eyebrow"><FiZap aria-hidden="true"/> จัดตารางเรียน</span><h2>เตรียมตารางอย่างเป็นขั้นตอน</h2><p>กำหนดวัน ครู วิชา และกิจกรรม แล้วตรวจฉบับร่างก่อนบันทึกใช้จริง</p></div><span className="prep-count">ขั้น {step} จาก 7</span></header>
- <nav aria-label="ขั้นตอนจัดตาราง"><ol className="prep-steps">{titles.map((title,i)=><li key={title}><button type="button" disabled={busy} aria-current={step===i+1?'step':undefined} onClick={()=>setStep(i+1)}><b aria-hidden="true">{i+1}</b><span><strong>{title}</strong><small>{statuses[i]}</small></span></button></li>)}</ol></nav>
+ <nav aria-label="ขั้นตอนจัดตาราง"><ol className="prep-steps">{titles.map((title,i)=><li key={title}><button type="button" disabled={busy||navigating} aria-current={step===i+1?'step':undefined} onClick={()=>void changeStep(i+1)}><b aria-hidden="true">{i+1}</b><span><strong>{title}</strong><small>{statuses[i]}</small></span></button></li>)}</ol></nav>
  {step===1&&<div className="prep-step-context"><span>ขั้น {step} · {titles[step-1]}</span><p>{descriptions[step-1]}</p><small>ความพร้อมนี้เป็นข้อมูลเบื้องต้น ตรวจข้อบังคับทั้งหมดอีกครั้งในขั้น 7</small></div>}
  {hasInputDirty&&<p className="prep-notice">มีข้อมูลนำเข้าที่ยังไม่บันทึกในขั้น {inputDirty.teachers?"3 ครู ":""}{inputDirty.subjects?"5 รายวิชา":""} · บันทึกข้อมูลในขั้นนั้นก่อนสร้างฉบับร่าง</p>}
  {error&&<div className="prep-error" role="alert">{error}<button disabled={busy} onClick={()=>void run(async()=>{if((dirty||timeDirty)&&!(await alert.fire({icon:'warning',title:'ทิ้งการตั้งค่าที่ยังไม่บันทึก?',showCancelButton:true})).isConfirmed)return;await reload();setDraft(null)})}>โหลดข้อมูลล่าสุด</button></div>}{message&&<p role="status" className="prep-success">{message}</p>}
  {(dirty||timeDirty)&&step!==2&&<div className="prep-save-bar" role="status"><span>{step===1?'บันทึกการตั้งค่าที่กำลังแก้ก่อนบันทึกชั้น':step===3?'บันทึกวันและเวลาก่อนเพิ่มครู':step===5?'บันทึกวันและเวลาก่อนเพิ่มรายวิชา':'มีการตั้งค่าที่ยังไม่บันทึก'}</span><button type="button" className="prep-primary" disabled={busy} onClick={()=>void run(save)}>บันทึก</button></div>}
  <div className="prep-input-step" hidden={step!==3}><ScheduleDataInput kind="teachers" data={data} year={yearId} term={semester} onSaved={reload} onRoster={ids=>edit(d=>({...d,plan:{...d.plan,teacherIds:ids}}))} locked={dirty||timeDirty} onBusy={setBusy} onDirty={value=>setInputDirty(v=>({...v,teachers:value}))}/></div><div className="prep-input-step" hidden={step!==5}><ScheduleDataInput kind="subjects" data={data} year={yearId} term={semester} onSaved={reload} onRoster={ids=>edit(d=>({...d,plan:{...d.plan,teacherIds:ids}}))} locked={dirty||timeDirty} onBusy={setBusy} onDirty={value=>setInputDirty(v=>({...v,subjects:value}))}/><SchedulePeriodBudget data={data} onFix={goFix}/></div>
  <div hidden={step!==1}><ClassroomLevelEditor classrooms={data.allClassrooms||data.classrooms} year={yearId} term={semester} locked={dirty||timeDirty||activityDirty||hasInputDirty} busy={busy} onSaved={reload} onBusy={setBusy} onDirty={setClassroomsDirty}/></div>
- <div hidden={step!==4}><ScheduleActivitiesStep data={data} year={yearId} term={semester} onSaved={reload} onBusy={setBusy} onDirty={setActivityDirty} blocked={dirty||timeDirty||hasInputDirty||classroomsDirty} busy={busy} onFix={()=>setStep(6)}/></div>
+ <div hidden={step!==4}><ScheduleActivitiesStep data={data} year={yearId} term={semester} onSaved={reload} onBusy={setBusy} onDirty={setActivityDirty} blocked={dirty||timeDirty||hasInputDirty||classroomsDirty} busy={busy} onFix={()=>void changeStep(6)}/></div>
  <fieldset disabled={busy} className="prep-body">
  {step===2&&<><h2>วันและเวลาคาบเรียน</h2><p>เลือกวันเรียน แล้วปรับเวลาและช่วงพักได้ที่นี่</p><div className="prep-checks">{SCHEDULE_DAYS.map(day=><label key={day.value}><input type="checkbox" checked={data.plan.days.includes(day.value)} onChange={()=>edit(d=>({...d,plan:{...d.plan,days:d.plan.days.includes(day.value)?d.plan.days.filter(v=>v!==day.value):[...d.plan.days,day.value].sort()}}))}/>{day.label}</label>)}</div><WizardPeriodEditor levels={data.classrooms.map(room=>room.level)} rows={data.periods} configured={data.timesConfigured} dirty={dirty||timeDirty} onSave={()=>void run(save)} onChange={periods=>{setData({...data,periods});setTimeDirty(true);setIssues(null);setDraft(null)}}/></>}
 
 
- {step===6&&<WorkloadEditor initialTeacherId={lockTeacher} snapshotHash={data.hash} teachingGroups={data.plan.teachingGroups||[]} onTeachingGroupsChange={saveTeachingGroups} classrooms={data.classrooms} lessons={teaching} teachers={data.teachers.filter(t=>eligibleTeachers.includes(t.id))} rules={data.plan.rules} teacherAssignments={teacherAssignments} activityLessons={data.lessons.filter(lesson=>lesson.activity)} activityGroups={data.plan.activityGroups||[]} onEditActivities={()=>setStep(4)} slots={data.slots} places={data.plan.rooms} blocks={data.manualBlocks??data.blocks} days={data.plan.days} periods={data.periods} year={yearId} term={semester} busy={busy} ready={workloadReady} onCommit={saveWorkload} onRefresh={refreshLocks} operations={{setJointTeachingScheduleCell,removeScheduleSubjectCell,editTeacherScheduleCell,saveClassScheduleCell,setTeacherAvailabilityBlock,toggleScheduleCellLock}}/>}
+ {step===6&&<WorkloadEditor initialTeacherId={lockTeacher} snapshotHash={data.hash} teachingGroups={data.plan.teachingGroups||[]} onTeachingGroupsChange={saveTeachingGroups} classrooms={data.classrooms} lessons={teaching} teachers={data.teachers.filter(t=>eligibleTeachers.includes(t.id))} rules={data.plan.rules} teacherAssignments={teacherAssignments} activityLessons={data.lessons.filter(lesson=>lesson.activity)} activityGroups={data.plan.activityGroups||[]} onEditActivities={()=>void changeStep(4)} slots={data.slots} places={data.plan.rooms} blocks={data.manualBlocks??data.blocks} days={data.plan.days} periods={data.periods} year={yearId} term={semester} busy={busy} ready={workloadReady} onCommit={saveWorkload} onRefresh={refreshLocks} operations={{setJointTeachingScheduleCell,removeScheduleSubjectCell,editTeacherScheduleCell,saveClassScheduleCell,setTeacherAvailabilityBlock,toggleScheduleCellLock}}/>}
 
  {step===7&&<ScheduleReviewStep data={data} rooms={rooms} clear={clear} issues={issues} draft={draft} blocked={hasUnsavedInput} workingLabel={busy?workingLabel:undefined}
  onRooms={next=>{setRooms(next);setIssues(null);setDraft(null)}} onClear={next=>{setClear(next);setIssues(null);setDraft(null)}} onFix={goFix}
@@ -149,6 +179,6 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  onGenerate={()=>void generateDraft()}
  onConfirm={()=>void run(async()=>{if(!draft?.id||dirty||timeDirty||hasUnsavedInput)throw Error('ข้อมูลเตรียมตารางเปลี่ยนแล้ว กรุณาบันทึกและสร้างฉบับร่างใหม่');const locked=draft.locked||0;const outside=draft.affectedRooms||[];if(!(await alert.fire({icon:'question',title:'ยืนยันใช้ฉบับร่างนี้?',text:`บันทึกตารางเป็นชุดเดียว${outside.length?` รวมกิจกรรมร่วมในห้องนอกขอบเขตอีก ${outside.length} ห้อง`:''}${locked?` และแทนที่คาบล็อก ${locked} ช่อง`:''} ระบบจะตรวจว่าข้อมูลล่าสุดยังตรงกับฉบับร่าง`,showCancelButton:true})).isConfirmed)return;const result=await confirmScheduleDraft(draft.id,locked>0);if(result.error)throw Error(result.error);setDraft(null);await reload();setMessage('บันทึกใช้ตารางแล้ว');await alert.fire({icon:'success',title:'บันทึกตารางแล้ว',text:result.data?.committed?'ตารางเรียนและตารางครูใช้ข้อมูลชุดนี้แล้ว':'ฉบับร่างนี้ถูกบันทึกใช้ไปแล้ว ไม่มีการบันทึกซ้ำ'})},'กำลังตรวจข้อมูลล่าสุดและบันทึกตาราง…')}
  onDiscard={()=>void run(async()=>{if(!draft?.id||!(await alert.fire({icon:'warning',title:'ทิ้งฉบับร่างนี้?',showCancelButton:true})).isConfirmed)return;const result=await discardScheduleDraft(draft.id);if(result.error)throw Error(result.error);setDraft(null);setMessage('ยกเลิกร่างแล้ว ตารางจริงไม่เปลี่ยน')},'กำลังยกเลิกฉบับร่าง…')}/>}
- </fieldset>{busy&&step!==7&&<p className="prep-working" role="status">{workingLabel}</p>}<footer className="prep-wizard-footer"><button type="button" disabled={step===1||busy} onClick={()=>setStep(step-1)}><FiArrowLeft aria-hidden="true"/>ย้อนกลับ</button><span>{step===7?'ตรวจร่างก่อนยืนยัน ตารางจริงยังไม่เปลี่ยน':`ถัดไป: ${titles[step]}`}</span>{step<7&&<button type="button" className="prep-primary" disabled={busy} onClick={()=>setStep(step+1)}>ขั้นถัดไป<FiArrowRight aria-hidden="true"/></button>}{step===7&&<span className="prep-review-hint"><FiCheck aria-hidden="true"/>ยืนยันได้เมื่อมีฉบับร่างพร้อมตรวจ</span>}</footer>
- </section>
+ </fieldset>{busy&&step!==7&&<p className="prep-working" role="status">{workingLabel}</p>}<footer className="prep-wizard-footer"><button type="button" disabled={step===1||busy||navigating} onClick={()=>void changeStep(step-1)}><FiArrowLeft aria-hidden="true"/>ย้อนกลับ</button><span>{step===7?'ตรวจร่างก่อนยืนยัน ตารางจริงยังไม่เปลี่ยน':`ถัดไป: ${titles[step]}`}</span>{step<7&&<button type="button" className="prep-primary" disabled={busy||navigating} onClick={()=>void changeStep(step+1)}>ขั้นถัดไป<FiArrowRight aria-hidden="true"/></button>}{step===7&&<span className="prep-review-hint"><FiCheck aria-hidden="true"/>ยืนยันได้เมื่อมีฉบับร่างพร้อมตรวจ</span>}</footer>
+ </section></SchedulePendingEdits.Provider>
 }

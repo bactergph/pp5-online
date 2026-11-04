@@ -1,5 +1,6 @@
 'use client'
 import { useScheduleOperations } from './ScheduleServices'
+import {usePendingScheduleEditor} from './SchedulePendingEdits'
 import { useEffect, useRef, useState } from 'react'
 import Link from './ScheduleLink'
 import Swal from 'sweetalert2'
@@ -42,6 +43,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
   }
   function change(next: string[][]) { setRows(next); setStatuses({}); setError(''); setMessage(''); onDirty(next.some(r => r.some(Boolean))) }
   const filled = rows.map((r, i) => ({ r, i })).filter(x => x.r.some(Boolean))
+  usePendingScheduleEditor(`input-${kind}`,{step:kind==='teachers'?3:5,label:kind==='teachers'?'รายชื่อครูนำเข้า':'รายวิชานำเข้า',dirty:filled.length>0,save:async()=>{const saved=await save(true);if(!saved)openAdd();return saved}})
   const capacity=kind==='teachers'&&localTeachers?teacherImportCapacity(teachers.map(teacher=>teacher.name),rows,localTeachers.limit):null
   function resolveSubjects(): SubjectInputRow[] {
     return filled.map(({ r, i }) => {
@@ -56,8 +58,9 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
     })
   }
   async function save(alreadyConfirmed = false) {
-    if (saving.current || locked) return
-    if(capacity?.over){setError(`เกินสิทธิ์ ${capacity.over} คน — เพิ่มครูได้สูงสุด ${capacity.limit} คน กรุณาลดรายชื่อใหม่อย่างน้อย ${capacity.over} คนก่อนบันทึก`);return}
+    if (saving.current || locked) return false
+    if(capacity?.over){setError(`เกินสิทธิ์ ${capacity.over} คน — เพิ่มครูได้สูงสุด ${capacity.limit} คน กรุณาลดรายชื่อใหม่อย่างน้อย ${capacity.over} คนก่อนบันทึก`);return false}
+    let complete=true
     saving.current = true; setBusy(true); onBusy(true)
     setError(''); setMessage('')
     try {
@@ -65,7 +68,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
       else if (filled.some(({ r }) => !r[1].trim())) throw Error('กรอกชื่อ-นามสกุลให้ครบทุกแถวที่มีข้อมูล')
       if (!alreadyConfirmed) {
         const answer = await Swal.fire({ icon: 'question', title: `บันทึกรายวิชา ${filled.length} รายการ?`, text: 'ครู การแบ่งคาบ และห้องสถานที่กำหนดในขั้นภาระสอน วิชาเดิมจะคงรายละเอียดเหล่านั้นไว้', showCancelButton: true, confirmButtonText: 'บันทึกข้อมูล', cancelButtonText: 'กลับไปตรวจ', confirmButtonColor: '#1373d9' })
-        if (!answer.isConfirmed) return
+        if (!answer.isConfirmed) return false
       }
       setBusy(true); onBusy(true); setProgress(0)
       if (kind === 'subjects') {
@@ -88,12 +91,14 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
           setProgress(offset + batch.length)
         }
         setRows(failures.length ? failures : Array.from({ length: 8 }, () => Array(3).fill(''))); setStatuses({}); onDirty(!!failures.length)
+        complete=failures.length===0
         setMessage(`สำเร็จ ${saved} รายการ${failures.length ? ` · ${failures.length} รายการยังไม่สำเร็จ เก็บไว้ในตารางเพื่อแก้ไขและลองอีกครั้ง` : ''}`)
         if (reasons.length) setError(reasons.join('\n'))
         if (!failures.length) { setAddOpen(false); dialogRef.current?.close() }
       }
       await onSaved()
-    } catch (e) { setError(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ') }
+      return complete
+    } catch (e) { setError(e instanceof Error ? e.message : 'บันทึกไม่สำเร็จ');return false }
     finally { saving.current = false; setBusy(false); onBusy(false) }
   }
   useEffect(() => {

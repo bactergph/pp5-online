@@ -5,19 +5,22 @@ import {SCHEDULE_DAYS} from '@/lib/schedules'
 import {validateTeacherActivities,teacherActivityMinutes,type TeacherScheduleActivity} from '@/lib/schedule-teacher-activities'
 import {teacherActivityConflicts} from '@/lib/schedule-teacher-activity-conflicts'
 import {useScheduleOperations} from './ScheduleServices'
+import {usePendingScheduleEditor} from './SchedulePendingEdits'
 import './schedule-setup.css'
 
 export default function TeacherActivityEditor({data,year,term,blocked,busy,onBusy,onSaved,onDirty,onFix}:{data:Preparation;year:string;term:number;blocked:boolean;busy:boolean;onBusy:(value:boolean)=>void;onSaved:()=>Promise<void>;onDirty:(value:boolean)=>void;onFix:()=>void}){
  const {savePreparation}=useScheduleOperations(),[draft,setDraft]=useState<TeacherScheduleActivity|null>(null),[baseline,setBaseline]=useState('null'),[error,setError]=useState(''),[message,setMessage]=useState(''),lock=useRef(false)
  const activities=data.plan.teacherActivities||[]
- useEffect(()=>{onDirty(!!draft);return()=>onDirty(false)},[draft,onDirty])
+ const dirty=!!draft&&JSON.stringify(draft)!==baseline
+ useEffect(()=>{onDirty(dirty);return()=>onDirty(false)},[dirty,onDirty])
  const name=(id:string)=>{const teacher=data.teachers.find(t=>t.id===id);return teacher?`${teacher.prefix||''}${teacher.full_name}`:id}
  const conflicts=draft?teacherActivityConflicts(data,draft):[]
+ usePendingScheduleEditor('teacher-activity',{step:4,label:'กิจกรรมครู',dirty,save:()=>save()})
  let validation='';if(draft)try{validateTeacherActivities([...activities.filter(a=>a.id!==draft.id),draft],data.teachers.map(t=>t.id))}catch(cause){validation=cause instanceof Error?cause.message:'ข้อมูลกิจกรรมครูไม่ถูกต้อง'}
  function open(activity?:TeacherScheduleActivity){setError('');setMessage('');setBaseline(JSON.stringify(activity||null));setDraft(activity?{...activity,teacherIds:[...activity.teacherIds],days:[...activity.days]}:{id:crypto.randomUUID(),name:'',teacherIds:[],days:[3],start_time:'15:30',end_time:'16:30'})}
  async function save(remove?:TeacherScheduleActivity){
-  if(lock.current||blocked||busy||!remove&&!draft)return
-  if(remove&&!window.confirm(`ลบกิจกรรมครู “${remove.name}”? เวลานี้จะไม่ถูกกันไว้สำหรับครูที่เข้าร่วมอีกต่อไป`))return
+  if(lock.current||blocked||busy||!remove&&!draft)return false
+  if(remove&&!window.confirm(`ลบกิจกรรมครู “${remove.name}”? เวลานี้จะไม่ถูกกันไว้สำหรับครูที่เข้าร่วมอีกต่อไป`))return false
   lock.current=true;onBusy(true);setError('');setMessage('')
   try{
    if(!remove&&JSON.stringify(activities.find(activity=>activity.id===draft!.id)||null)!==baseline)throw Error('กิจกรรมนี้มีการแก้ไขแล้ว กรุณายกเลิกฟอร์มและเปิดข้อมูลล่าสุดก่อนบันทึก')
@@ -26,7 +29,8 @@ export default function TeacherActivityEditor({data,year,term,blocked,busy,onBus
    const result=await savePreparation(year,term,data.hash,{...data.plan,teacherActivities:next})
    if(result.error)throw Error(result.error)
    setDraft(null);await onSaved();setMessage(remove?'ลบกิจกรรมครูแล้ว':'บันทึกกิจกรรมครูแล้ว ตารางครูและ PDF จะใช้ข้อมูลชุดนี้')
-  }catch(cause){setError(cause instanceof Error?cause.message:'บันทึกกิจกรรมครูไม่สำเร็จ')}finally{lock.current=false;onBusy(false)}
+   return true
+  }catch(cause){setError(cause instanceof Error?cause.message:'บันทึกกิจกรรมครูไม่สำเร็จ');return false}finally{lock.current=false;onBusy(false)}
  }
  return <section aria-label="จัดการกิจกรรมครู">
   <div className="prep-review-actions"><div><h2>กิจกรรมครู</h2><p>PLC ประชุม เวรดูแลเด็ก หรือภารกิจอื่น · ระบุเวลาได้ทั้งก่อนเรียนและหลังเลิกเรียน</p></div>{!draft&&<button type="button" className="prep-primary" disabled={blocked||busy} onClick={()=>open()}>+ เพิ่มกิจกรรมครู</button>}</div>
