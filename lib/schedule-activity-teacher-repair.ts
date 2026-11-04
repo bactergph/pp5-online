@@ -1,7 +1,7 @@
 import type {ActivityTeam} from './schedule-activity-teams'
-type Plan={teacherIds?:string[];activityGroups?:ActivityTeam[]}
+type Plan={teacherActivities?:import('./schedule-teacher-activities').TeacherScheduleActivity[];teacherIds?:string[];activityGroups?:ActivityTeam[]}
 export function activityTeacherReferences(plan:Plan){
- return [...new Set([...(plan.teacherIds||[]),...(plan.activityGroups||[]).flatMap(group=>[...group.teacherIds,...Object.values(group.roomTeachers).flat()])])]
+ return [...new Set([...(plan.teacherIds||[]),...(plan.teacherActivities||[]).flatMap(activity=>activity.teacherIds),...(plan.activityGroups||[]).flatMap(group=>[...group.teacherIds,...Object.values(group.roomTeachers).flat()])])]
 }
 /** Explicit repair removes unavailable references, never people or placements. */
 export function repairActivityTeacherPlan<T extends Plan>(plan:T,available:readonly string[]){
@@ -12,7 +12,8 @@ export function repairActivityTeacherPlan<T extends Plan>(plan:T,available:reado
   if(teacherIds.length!==group.teacherIds.length||Object.keys(roomTeachers).some(room=>roomTeachers[room].length!==group.roomTeachers[room].length))affectedGroups++
   return {...group,teacherIds,roomTeachers}
  })
- const next={...plan,...(plan.teacherIds?{teacherIds:plan.teacherIds.filter(id=>!removed.has(id))}:{}),...(activityGroups?{activityGroups}:{})}
+ const teacherActivities=plan.teacherActivities?.map(activity=>({...activity,teacherIds:activity.teacherIds.filter(id=>!removed.has(id))})).filter(activity=>activity.teacherIds.length)
+ const next={...plan,...(teacherActivities?{teacherActivities}:{}),...(plan.teacherIds?{teacherIds:plan.teacherIds.filter(id=>!removed.has(id))}:{}),...(activityGroups?{activityGroups}:{})}
  // An old selection containing only deleted IDs must not hide every current teacher.
  // Removing the obsolete selection restores the normal available-personnel picker.
  if(plan.teacherIds?.length&&next.teacherIds?.length===0)Reflect.deleteProperty(next,'teacherIds')

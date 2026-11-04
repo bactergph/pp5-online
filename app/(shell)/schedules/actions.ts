@@ -248,9 +248,9 @@ export async function fetchSchedulePdfGrids(yearId: string, semester: number, ki
   return result
 }
 
-export async function fetchPeriodTimes() {
+export async function fetchPeriodTimes(yearId?:string,semester=1) {
   const mod = await import('./extended-actions')
-  return mod.fetchPeriodTimes()
+  return mod.fetchPeriodTimes(yearId,semester)
 }
 
 export async function savePeriodTimes(times: PeriodTimeRow[]) {

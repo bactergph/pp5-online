@@ -1,10 +1,10 @@
 import type {PlannedLesson,PlannedSlot,PlanningIssue,PlannedScheduleResult,SchedulePlan} from './schedule-planning'
-import type {PeriodTimeRow} from './schedule-helpers'
-import {clockMinute,levelPeriodTimes,periodInterval,intervalsOverlap} from './schedule-period-profiles'
+import {scheduleLunchBreak,type PeriodTimeRow} from './schedule-helpers'
+import {clockMinute,levelPeriodTimes,periodInterval,intervalsOverlap,teacherBlockInterval} from './schedule-period-profiles'
 import {teachingEventAt,jointTeachingSlotErrors} from './schedule-joint-teaching'
 import {subjectDayIssue} from './schedule-subject-days'
 import {solveBlockRepair} from './schedule-block-repair'
-type Block={teacherId:string;day:number;period:number}
+type Block=import('./schedule-teacher-activities').ScheduleTeacherBlock
 const staff=(l:PlannedLesson)=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 const same=(a:PlannedSlot,b:PlannedSlot)=>a.classroomId===b.classroomId&&a.day===b.day&&a.period===b.period&&a.lessonId===b.lessonId
 function interval(l:PlannedLesson|undefined,period:number,times:PeriodTimeRow[]){return periodInterval(levelPeriodTimes(times,l?.classroomLevel||''),period)}
@@ -34,7 +34,7 @@ export function checkProfilePlanning(lessons:PlannedLesson[],fixed:PlannedSlot[]
   if(row.lessonId&&!l)error('ไม่พบวิชาของคาบเดิม','fixed_unknown_lesson')
   if(l&&l.classroomId!==row.classroomId)error(`${l.label} ไม่ตรงกับห้องเรียน`,'fixed_classroom_mismatch')
   if(fixed.slice(0,i).some(other=>conflict(row,other,byId,times)))error(`${l?.label||'คาบเดิม'} ชนกับคาบอื่นเมื่อเทียบเวลาจริง`,'fixed_teacher_conflict')
-  if(l&&time&&blocks.some(b=>b.day===row.day&&staff(l).includes(b.teacherId)&&!!periodInterval(times,b.period)&&intervalsOverlap(time,periodInterval(times,b.period)!)))error(`${l.label} ตรงกับเวลาที่ครูล็อกไม่ว่าง`,'fixed_teacher_conflict')
+  if(l&&time&&blocks.some(b=>b.day===row.day&&staff(l).includes(b.teacherId)&&!!teacherBlockInterval(times,b)&&intervalsOverlap(time,teacherBlockInterval(times,b)!)))error(`${l.label} ตรงกับเวลาที่ครูล็อกไม่ว่าง`,'fixed_teacher_conflict')
  }
  for(const l of lessons){
   if(!staff(l).length&&!l.teacherOptional&&l.count>0)error(`${l.label} ยังไม่มีครู`)
@@ -64,7 +64,7 @@ export function solveProfileSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
    const levels=new Map(lessons.map(l=>[l.classroomId,l.classroomLevel||'']))
    const toAxis=(room:string,period:number)=>{const source=levelPeriodTimes(times,levels.get(room)||'').find(t=>!t.is_break&&t.period===period);return axis.find(t=>t.start_time===source?.start_time&&t.end_time===source?.end_time)?.period}
    const fromAxis=(room:string,period:number)=>{const source=axis.find(t=>t.period===period);return levelPeriodTimes(times,levels.get(room)||'').find(t=>!t.is_break&&t.start_time===source?.start_time&&t.end_time===source?.end_time)?.period}
-   const retained=fixed.map(row=>({...row,period:toAxis(row.classroomId,row.period)||0})),mappedBlocks=blocks.map(block=>{const source=times.find(t=>!t.is_break&&t.period===block.period);return {...block,period:axis.find(t=>t.start_time===source?.start_time&&t.end_time===source?.end_time)?.period||0}})
+   const retained=fixed.map(row=>({...row,period:toAxis(row.classroomId,row.period)||0})),mappedBlocks=blocks.flatMap(block=>{const source=teacherBlockInterval(times,block);return source?axis.filter(t=>intervalsOverlap(source,{start:clockMinute(t.start_time),end:clockMinute(t.end_time)})).map(t=>({...block,period:t.period})):[]})
    if(retained.every(row=>row.period)&&mappedBlocks.every(row=>row.period)){
     for(const room of levels.keys())for(const day of plan.days)for(const clock of axis)if(!fromAxis(room,clock.period))retained.push({classroomId:room,lessonId:null,day,period:clock.period})
     const fast=solveBlockRepair(lessons,retained,plan,axis,mappedBlocks,l=>l.morning||l.preferMorning?2:l.timePreference==='afternoon'?-2:0,Math.min(maxNodes,120000),Math.min(timeLimitMs,6000))
@@ -89,7 +89,7 @@ export function solveProfileSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
     if(group.some(item=>run.some(t=>{const other=interval(item,t.period,times);return !other||other.start!==clockMinute(t.start_time)||other.end!==clockMinute(t.end_time)})))continue
     const rows=group.flatMap(item=>run.map(t=>({classroomId:item.classroomId,lessonId:item.id,day,period:t.period})))
     if(group.some(item=>{const locked=fixed.filter(row=>row.lessonId===item.id&&row.day===day);return locked.some(row=>!rows.some(next=>same(row,next)))}))continue
-    if(rows.some(row=>{const item=byId.get(row.lessonId!)!,time=interval(item,row.period,times)!;return fixed.some(other=>conflict(row,other,byId,times))||blocks.some(b=>b.day===day&&staff(item).includes(b.teacherId)&&!!periodInterval(times,b.period)&&intervalsOverlap(time,periodInterval(times,b.period)!))}))continue
+    if(rows.some(row=>{const item=byId.get(row.lessonId!)!,time=interval(item,row.period,times)!;return fixed.some(other=>conflict(row,other,byId,times))||blocks.some(b=>b.day===day&&staff(item).includes(b.teacherId)&&!!teacherBlockInterval(times,b)&&intervalsOverlap(time,teacherBlockInterval(times,b)!))}))continue
     choices.push(rows)
    }
    tasks.push({lessons:group,size,choices})
@@ -111,7 +111,7 @@ export function solveProfileSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
  }
  function occupy(items:Resource[],delta:number){for(const item of items){const old=occupancy.get(item.key),count=(old?.count||0)+delta;if(count)occupancy.set(item.key,{owner:item.owner,count});else occupancy.delete(item.key)}}
  for(const row of fixed)occupy(resources(row),1)
- for(const block of blocks){const clock=periodInterval(times,block.period);if(clock)occupy(tokens(block.day,clock.start,clock.end).map(cell=>({key:`teacher:${block.teacherId}:${cell}`,owner:'unavailable'})),1)}
+ for(const block of blocks){const clock=teacherBlockInterval(times,block);if(clock)occupy(tokens(block.day,clock.start,clock.end).map(cell=>({key:`teacher:${block.teacherId}:${cell}`,owner:'unavailable'})),1)}
  const candidateResources=new Map<PlannedSlot[],Resource[]>(),extraRows=new Map<PlannedSlot[],PlannedSlot[]>()
  for(const task of tasks)for(const choice of task.choices){candidateResources.set(choice,choice.flatMap(resources));extraRows.set(choice,choice.filter(row=>!fixedKeys.has(`${row.lessonId}:${row.day}:${row.period}`)))}
  let nodes=0,timedOut=false;let answer:PlannedSlot[]|null=null
@@ -129,9 +129,9 @@ export function solveProfileSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[]
   for(const task of tasks){if(selected.has(task))continue;const possible=task.choices.filter(choice=>fits(task,choice));if(!possible.length)return false;if(!next||possible.length<options.length){next=task;options=possible}}
   if(!next)return false
   const task=next,dayLoad=new Map<string,number>(),sessionLoad=new Map<string,number>()
-  for(const row of rows){const l=byId.get(row.lessonId||'');if(!l)continue;const clock=interval(l,row.period,times),lunch=levelPeriodTimes(times,l.classroomLevel||'').find(t=>t.is_break),session=clock&&lunch&&clock.start>=clockMinute(lunch.end_time)?'afternoon':'morning';for(const id of staff(l)){const key=id+':'+row.day;dayLoad.set(key,(dayLoad.get(key)||0)+1);sessionLoad.set(id+':'+session,(sessionLoad.get(id+':'+session)||0)+1)}}
+  for(const row of rows){const l=byId.get(row.lessonId||'');if(!l)continue;const clock=interval(l,row.period,times),lunch=scheduleLunchBreak(levelPeriodTimes(times,l.classroomLevel||'')),session=clock&&lunch&&clock.start>=clockMinute(lunch.end_time)?'afternoon':'morning';for(const id of staff(l)){const key=id+':'+row.day;dayLoad.set(key,(dayLoad.get(key)||0)+1);sessionLoad.set(id+':'+session,(sessionLoad.get(id+':'+session)||0)+1)}}
   function score(choice:PlannedSlot[]){
-   const day=choice[0].day,teachers=new Set(task.lessons.flatMap(staff)),lesson=task.lessons[0],time=interval(lesson,choice[0].period,times)!,lunch=levelPeriodTimes(times,lesson.classroomLevel||'').find(t=>t.is_break),afternoon=!!lunch&&time.start>=clockMinute(lunch.end_time)
+   const day=choice[0].day,teachers=new Set(task.lessons.flatMap(staff)),lesson=task.lessons[0],time=interval(lesson,choice[0].period,times)!,lunch=scheduleLunchBreak(levelPeriodTimes(times,lesson.classroomLevel||'')),afternoon=!!lunch&&time.start>=clockMinute(lunch.end_time)
    const wrongSession=lesson.timePreference==='afternoon'?!afternoon:(lesson.morning||lesson.preferMorning||lesson.timePreference==='morning')?afternoon:false
    let score=-choice.filter(row=>fixedKeys.has(cellKey(row))).length*100+(wrongSession?4:0)
    for(const id of teachers){score+=(dayLoad.get(id+':'+day)||0)*3+(sessionLoad.get(id+':'+(afternoon?'afternoon':'morning'))||0)*0.5}

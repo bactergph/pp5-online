@@ -191,6 +191,7 @@ export async function saveClassroom(id: string | null, payload: {
 export async function applyClassroomLevels(
   academicYearId: string,
   levels: { level: string; rooms: number }[],
+  timetable = false,
 ) {
   const session = await requireSession()
   if (!CAN_MANAGE.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
@@ -199,7 +200,7 @@ export async function applyClassroomLevels(
   const sid = session.schoolId || ''
 
   if (!sid) return { error: 'กรุณาเลือกโรงเรียน' }
-  const allowed = schoolLevels(await loadSchoolEducationType(db, sid))
+  const allowed = timetable ? [...schoolLevels('primary'), ...schoolLevels('secondary')] : schoolLevels(await loadSchoolEducationType(db, sid))
   if (levels.some(row => !allowed.includes(row.level) || !Number.isInteger(row.rooms) || row.rooms < 0 || row.rooms > 100)) return { error: 'ระดับชั้นหรือจำนวนห้องไม่ถูกต้องสำหรับประเภทโรงเรียนนี้' }
   const { data: year } = await db.from('academic_years').select('id').eq('id', academicYearId).eq('school_id', sid).maybeSingle()
   if (!year) return { error: 'ไม่พบปีการศึกษาของโรงเรียนนี้' }

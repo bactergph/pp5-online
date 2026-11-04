@@ -1,3 +1,5 @@
+import {createRequire} from 'node:module'
+const pure=createRequire(import.meta.url)('./helpers/load-pure-ts.cjs')
 import fs from 'node:fs'
 import vm from 'node:vm'
 import assert from 'node:assert/strict'
@@ -5,7 +7,7 @@ import ts from 'typescript'
 import * as jsxRuntime from 'react/jsx-runtime'
 function load(file, deps = {}, footer = '') {
   const exports = {}
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8') + footer, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports, require: name => name === 'react/jsx-runtime' ? jsxRuntime : deps[name] || (name==='./schedule-joint-teaching'?load('lib/schedule-joint-teaching.ts'):{}) })
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8') + footer, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports, require: name => name === 'react/jsx-runtime' ? jsxRuntime : deps[name] || (name.startsWith('./schedule-')?pure('lib/'+name.slice(2)+'.ts'):{}) })
   return exports
 }
 const teams = load('lib/schedule-activity-teams.ts'), helpers = load('lib/schedule-helpers.ts'), summary = load('lib/schedule-workload.ts', { './schedule-activity-teams': teams, './schedule-helpers': helpers })

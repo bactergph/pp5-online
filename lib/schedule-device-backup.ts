@@ -1,4 +1,5 @@
 import {validatePeriodProfiles} from './schedule-period-profiles'
+import {validateTeacherActivities} from './schedule-teacher-activities'
 import type {PeriodTimeRow} from './schedule-helpers'
 import {validateJointTeachingGroups,jointTeachingSlotErrors} from './schedule-joint-teaching'
 import { deviceTeacherLimitMessage, toDeviceSnapshot, normalizePlan, type FreeWizardPlan } from './schedule-device-free'
@@ -45,6 +46,7 @@ export function readDeviceBackup(raw:unknown,teacherLimit?:number):DeviceBundle 
     if(record(plan.document)&&plan.document.logoDataUrl!==undefined&&!validDeviceLogo(plan.document.logoDataUrl))return invalid()
     if(plan.reduceGaps!==undefined&&typeof plan.reduceGaps!=='boolean'||plan.maxContinuous!==undefined&&(!integer(plan.maxContinuous)||Number(plan.maxContinuous)<0||Number(plan.maxContinuous)>8))return invalid()
     const normalized=normalizePlan(plan as Partial<FreeWizardPlan>)
+    validateTeacherActivities(normalized.teacherActivities,normalized.teachers.map(teacher=>teacher.id))
     const snapshot=toDeviceSnapshot(normalized,[])
     validateJointTeachingGroups(normalized.teachingGroups,snapshot.lessons)
     if(jointTeachingSlotErrors(snapshot.lessons,normalized.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period,locked:!!cell.locked}))).length)return invalid()

@@ -1,7 +1,7 @@
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { jsPDF } from 'jspdf'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
-import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS } from '@/lib/schedules'
+import { SCHEDULE_DAYS } from '@/lib/schedules'
 import { periodTimeLabel, schedulePeriods, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { formatThaiDate } from '@/lib/thaiDate'
 
@@ -21,7 +21,7 @@ const TEXT: [number, number, number] = [0, 0, 0]
 const MUTED: [number, number, number] = [0, 0, 0]
 
 export type SchedulePdfCell = { line1: string; line2: string; line3?: string; line4?: string }
-export type SchedulePdfPage = { periodTimes?:PeriodTimeRow[]; title: string; gridData: Record<string, SchedulePdfCell> }
+export type SchedulePdfPage = { layout?:'grid'|'teacher-agenda'; periodTimes?:PeriodTimeRow[]; title: string; gridData: Record<string, SchedulePdfCell> }
 export type SchedulePdfInput = {
   academicHeadName?: string
   directorName?: string
@@ -188,7 +188,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   const signStep = 6.3
   for (const [index, sheet] of pages.entries()) {
   const times=sheet.periodTimes||input.periodTimes
-  const PERIODS=schedulePeriods(times),breakIndex=times.findIndex(t=>t.is_break),MORNING=breakIndex>=0?breakIndex:PERIODS.length
+  const PERIODS=schedulePeriods(times)
   if (index) doc.addPage()
   let y = MARGIN_TOP
   if (logo) {
@@ -220,9 +220,24 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y)
   y += 3
 
+  if ('layout' in sheet && sheet.layout==='teacher-agenda') {
+    const events=SCHEDULE_DAYS.filter(day=>!input.days||input.days.includes(day.value)).flatMap(day=>times.filter(time=>!time.is_break).flatMap(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return cell&&cell.line1&&cell.line1!=='—'?[{day,time,cell}]:[]}))
+    const widths=[24,36,91,45,81],head=()=>{let x=MARGIN_X;for(const [i,label] of ['วัน','เวลา','รายวิชา / กิจกรรม','ชั้น / ห้อง','รายละเอียด'].entries()){drawCell(doc,x,y,widths[i],10,label,'',{fill:HEADER_BG,line1Size:14});x+=widths[i]}y+=10}
+    head()
+    for(const event of events){
+      if(y+10>PAGE_H-MARGIN_BOTTOM-signStep*3-10){doc.addPage();y=12;doc.setFont('THSarabunNew','bold');doc.setFontSize(16);doc.text(scheduleSchoolName(input.schoolName),PAGE_W/2,y,{align:'center'});y+=8;doc.setFont('THSarabunNew','normal');doc.setFontSize(14);doc.text(sheet.title,PAGE_W/2,y,{align:'center'});y+=5;head()}
+      const teacherEvent=event.cell.line2==='(กิจกรรมครู)',values=[event.day.label,`${event.time.start_time}–${event.time.end_time}`,teacherEvent?event.cell.line1:event.cell.line2||event.cell.line1,teacherEvent?'กิจกรรมครู':event.cell.line2?event.cell.line1:'',[teacherEvent?'':event.cell.line3,event.cell.line4].filter(Boolean).join(' · ')]
+      let x=MARGIN_X;values.forEach((value,i)=>{drawCell(doc,x,y,widths[i],10,value,'',{line1Size:13});x+=widths[i]});y+=10
+    }
+    if(!events.length){drawCell(doc,MARGIN_X,y,PAGE_W-MARGIN_X*2,12,'ยังไม่มีคาบสอนหรือกิจกรรมครูที่กำหนด','');y+=12}
+    drawSigners(doc,Math.min(y+8,PAGE_H-MARGIN_BOTTOM-signStep*3),PAGE_W,MARGIN_X,signers,input.printDate)
+    continue
+  }
   const days = SCHEDULE_DAYS.filter(d => !input.days || input.days.includes(d.value))
-  const widths=columnWidths(PERIODS.length)
-  const {dayW}=widths,breakW=breakIndex>=0?widths.breakW:0,periodW=widths.periodW+(breakIndex<0?widths.breakW/PERIODS.length:0)
+  const widths=columnWidths(PERIODS.length),dayW=widths.dayW
+  const breaks=times.filter(row=>row.is_break).length,available=PAGE_W-MARGIN_X*2-dayW
+  const breakW=breaks?Math.min(widths.breakW,available/(PERIODS.length+breaks)*.8):0
+  const periodW=(available-breaks*breakW)/PERIODS.length
   const headerH = 12
   const signBlock = signStep * 3
   const maxTableBottom = PAGE_H - MARGIN_BOTTOM - signBlock - 8
@@ -231,19 +246,10 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   let x = MARGIN_X
   drawCell(doc, x, y, dayW, headerH, 'วัน', '', { fill: HEADER_BG, line1Size: 14 })
   x += dayW
-  for (const p of PERIODS.slice(0, MORNING)) {
-    drawCell(doc, x, y, periodW, headerH, (times.find(t=>!t.is_break&&t.period===p)?.label.startsWith('ช่วง')?times.find(t=>!t.is_break&&t.period===p)!.label:`คาบ ${p}`), periodTimeLabel(times, p), {
-      fill: HEADER_BG, line1Size: 14, line2Size: 11, line2Color: TEXT,
-    })
-    x += periodW
-  }
-  if(breakW)drawCell(doc, x, y, breakW, headerH, 'พักเที่ยง', '', { fill: BREAK_BG, line1Size: 13, line1Bold: true })
-  x += breakW
-  for (const p of PERIODS.slice(MORNING)) {
-    drawCell(doc, x, y, periodW, headerH, (times.find(t=>!t.is_break&&t.period===p)?.label.startsWith('ช่วง')?times.find(t=>!t.is_break&&t.period===p)!.label:`คาบ ${p}`), periodTimeLabel(times, p), {
-      fill: HEADER_BG, line1Size: 14, line2Size: 11, line2Color: TEXT,
-    })
-    x += periodW
+  for(const row of times){
+    const width=row.is_break?breakW:periodW
+    drawCell(doc,x,y,width,headerH,row.is_break?row.label:(row.label.startsWith('ช่วง')?row.label:`คาบ ${row.period}`),row.is_break?`${row.start_time}–${row.end_time}`:periodTimeLabel(times,row.period),{fill:row.is_break?BREAK_BG:HEADER_BG,line1Size:row.is_break?11:14,line2Size:10,line2Color:TEXT})
+    x+=width
   }
   y += headerH
 
@@ -251,17 +257,10 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
     x = MARGIN_X
     drawCell(doc, x, y, dayW, rowH, day.label, '', { fill: DAY_BG })
     x += dayW
-    for (const p of PERIODS.slice(0, MORNING)) {
-      const cell = sheet.gridData[`${day.value}-${p}`]
-      drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '', { line3: cell?.line3, line4: cell?.line4 })
-      x += periodW
-    }
-    if(breakW)drawCell(doc, x, y, breakW, rowH, 'พัก', '', { fill: BREAK_BG, line2Color: BREAK_TEXT })
-    x += breakW
-    for (const p of PERIODS.slice(MORNING)) {
-      const cell = sheet.gridData[`${day.value}-${p}`]
-      drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '', { line3: cell?.line3, line4: cell?.line4 })
-      x += periodW
+    for(const row of times){
+      const width=row.is_break?breakW:periodW,cell=sheet.gridData[`${day.value}-${row.period}`]
+      drawCell(doc,x,y,width,rowH,row.is_break?row.label:cell?.line1||'—',row.is_break?'':cell?.line2||'',row.is_break?{fill:BREAK_BG,line1Size:11}:{line3:cell?.line3,line4:cell?.line4})
+      x+=width
     }
     y += rowH
   }

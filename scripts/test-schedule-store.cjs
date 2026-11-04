@@ -1,3 +1,4 @@
+const pure=require('./helpers/load-pure-ts.cjs')
 const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), assert = require('node:assert/strict')
 const tables = {
   classrooms: Array.from({length:40},(_,i)=>({id:`room${i}`,level:`ป.${i}`,room:1})),
@@ -5,16 +6,16 @@ const tables = {
   class_schedule_slots: Array.from({length:1200},(_,i)=>({classroom_id:`room${Math.floor(i/30)}`,semester:1,academic_year_id:'year',day_of_week:Math.floor(i%30/6)+1,period:i%6+1,class_subject_id:null,activity_id:null,note:'reserved',locked:true})),
 }
 let legacySchema=false, savedRpc, teamConfig,checkParallel=true,subjectsWaiting=false,slotsStartedDuringSubjects=false,releaseSubjects
-const db={from(table){const filters={};const query={select(){return query},eq(k,v){filters[k]=v;return query},in(){return query},order(){return query},async maybeSingle(){return {data:table==='schedule_plans'?{config:teamConfig}:{id:'year'},error:null}},async range(from,to){
+const db={from(table){const filters={};const query={select(){return query},eq(k,v){filters[k]=v;return query},in(){return query},order(){return query},then(resolve){resolve({data:tables[table]||[],error:null})},async maybeSingle(){return {data:table==='schedule_plans'?{config:teamConfig}:{id:'year'},error:null}},async range(from,to){
  if(checkParallel&&table==='class_subjects'){subjectsWaiting=true;let timer;await new Promise(resolve=>{releaseSubjects=resolve;timer=setTimeout(resolve,200)});clearTimeout(timer);subjectsWaiting=false}
  if(checkParallel&&table==='class_schedule_slots'){slotsStartedDuringSubjects ||= subjectsWaiting;releaseSubjects?.()}
  if(legacySchema && table==='class_schedule_slots' && 'semester' in filters) return {data:null,error:{code:'42703',message:'column semester does not exist'}}
  const rows=tables[table].filter(r=>table!=='class_schedule_slots'||!('semester' in filters)||r.semester===filters.semester)
  return {data:rows.slice(from,to+1),error:null}}};return query},async rpc(name,args){savedRpc={name,args};return {error:null}}}
 const jointHelpers={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-joint-teaching.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:jointHelpers});
-const teamHelpers={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-activity-teams.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:teamHelpers});
+const teamHelpers=pure('lib/schedule-activity-teams.ts');
 const exportsObject={}
-vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-store.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-joint-teaching'?jointHelpers:name==='./schedule-activity-teams'?teamHelpers:name==='./schedule-plan-validation'?{validateManualPlan:async()=>{}}:name==='@/lib/supabase'?{createServerClient:()=>db}:name==='@/lib/schedule-helpers'?{weeklyHoursFromYear:n=>Math.max(1,Math.round(n/40))}:name==='@/lib/schedule-activity'?{LEARNER_DEVELOPMENT_KEY:'learner-development',LEARNER_DEVELOPMENT_NAME:'กิจกรรมพัฒนาผู้เรียน'}:{}})
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-store.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-joint-teaching'?jointHelpers:name==='./schedule-activity-teams'?teamHelpers:name==='./schedule-plan-validation'?{validateManualPlan:async()=>{}}:name==='@/lib/supabase'?{createServerClient:()=>db}:name==='@/lib/schedule-helpers'?pure('lib/schedule-helpers.ts'):name==='@/lib/schedule-activity'?{LEARNER_DEVELOPMENT_KEY:'learner-development',LEARNER_DEVELOPMENT_NAME:'กิจกรรมพัฒนาผู้เรียน'}:name.startsWith('./')?pure('lib/'+name.slice(2)+'.ts'):{}})
 ;(async()=>{const result=await exportsObject.loadSchedule('school','year');assert.equal(result.slots.length,1200);assert.equal(result.classrooms.length,40);assert.equal(result.lessons.length,1);assert.equal(result.lessons[0].name,'กิจกรรมแนะแนว');assert.equal(result.lessons[0].subjectId,'guide');assert.equal(result.lessons[0].teacherId,null);assert.equal(result.lessons[0].teacherOptional,true);assert.equal(result.lessons[0].selectable,true);assert.equal(result.lessons[0].count,0);tables.class_schedule_slots.push({...tables.class_schedule_slots[0],semester:2,note:'term2'})
  assert.equal(slotsStartedDuringSubjects,true,'Timetable reads must start without waiting for all subject pages');checkParallel=false;
  console.log('PASS: subject/activity/timetable/teacher reads run concurrently after school scope validation');

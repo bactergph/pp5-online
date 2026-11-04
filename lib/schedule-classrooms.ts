@@ -39,7 +39,7 @@ export async function saveTimetableRooms(yearId: string, term: number, levels: {
   const busy = await occupiedRoomIds(doomed.map(room => room.id))
   const blocked = doomed.filter(room => busy.has(room.id)).map(room => `${room.level}/${current.plan.roomLabels?.[room.id]?.trim() || room.name || room.room}`)
   if (blocked.length) throw new Error(`ยังลบห้องเหล่านี้ไม่ได้ เพราะมีนักเรียน รายวิชา หรือตารางอยู่แล้ว: ${blocked.join(', ')}`)
-  const applied = await applyClassroomLevels(yearId, normalized.map(row => ({ level: row.level, rooms: row.names.length })))
+  const applied = await applyClassroomLevels(yearId, normalized.map(row => ({ level: row.level, rooms: row.names.length })), true)
   if (applied.error) throw new Error(applied.error)
   if (applied.blocked?.length) throw new Error(`ยังลบห้องเหล่านี้ไม่ได้ เพราะมีนักเรียน: ${applied.blocked.join(', ')}`)
 

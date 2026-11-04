@@ -1,4 +1,5 @@
 'use client'
+import {levelPeriodTimes} from '@/lib/schedule-period-profiles'
 import { useScheduleOperations } from './ScheduleServices'
 import { useRef, useState } from 'react'
 import Swal from 'sweetalert2'
@@ -24,6 +25,7 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
   const [activityLevel, setActivityLevel] = useState(''), [activityRoom, setActivityRoom] = useState(''), [query, setQuery] = useState('')
   const [pendingTeam, setPendingTeam] = useState(false), [showTimes, setShowTimes] = useState(false)
   const groups = data.plan.activityGroups || [], workload = activityTeamWorkload(groups), eligibleTeacherIds = data.plan.teacherIds ?? data.teachers.map(t => t.id)
+  const activityTimes=levelPeriodTimes(data.periods,data.classrooms.find(room=>room.id===draft?.roomIds[0])?.level||'')
   const repair=repairActivityTeacherPlan(data.plan,data.teachers.map(t=>t.id))
   async function repairTeachers(){
     if(blocked||busy||lock.current)return
@@ -105,7 +107,7 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
       if(!remove&&repair.removedTeacherIds.length)throw Error('กรุณากด “ปรับปรุงรายชื่อครูกิจกรรม” ก่อน แล้วเลือกครูปัจจุบันอีกครั้ง ทีมเดิมมีรายชื่อครูที่ใช้ไม่ได้ค้างอยู่')
       if (!remove) group = { ...group, roomTeachers: Object.fromEntries(Object.entries(group.roomTeachers).filter(([id]) => group.roomIds.includes(id))) }
       if (!remove && group.roomIds.length < 2 && group.mode === 'separate') group = { ...group, mode: 'joint', teacherIds: activityTeachers(group, group.roomIds[0] || '') }
-      if (!remove) validateActivityTeam(group, data.classrooms.map(c => c.id), data.teachers.map(t => t.id), activities.map(a => a.id), data.plan.days, data.periods)
+      if (!remove) validateActivityTeam(group, data.classrooms.map(c => c.id), data.teachers.map(t => t.id), activities.map(a => a.id), data.plan.days, data.periods, data.classrooms)
       const preview = await previewScheduleActivityTeam(year, term, data.hash, group, remove)
       if (preview.error || !preview.data) throw Error(preview.error || 'ตรวจผลกระทบไม่สำเร็จ')
       if (editorOpen) dialog.current?.close()
@@ -245,9 +247,10 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
               <div className="prep-activity-head"><span>4</span><div><h3>วันและคาบ</h3><p>{when(draft)} · {draft.weeklyPeriods} คาบ/สัปดาห์</p></div></div>
               <details className="activity-time-details" open={showTimes} onToggle={event => setShowTimes(event.currentTarget.open)}><summary>กำหนดวันและคาบเอง (ไม่บังคับ)</summary>
               {!!draft.cells.length && <button type="button" onClick={() => change({ cells: [] })}>ล้างคาบที่เลือก ให้ระบบจัดอัตโนมัติ</button>}
-              <div className="prep-scroll"><table className="prep-activity-grid"><thead><tr><th>วัน</th>{data.periods.map((period, index) => <th key={index}>{period.is_break ? 'พัก' : period.period}</th>)}</tr></thead><tbody>{SCHEDULE_DAYS.filter(day => data.plan.days.includes(day.value)).map(day => <tr key={day.value}><th>{day.short}</th>{data.periods.map((period, index) => {
+              <div className="prep-scroll"><table className="prep-activity-grid"><thead><tr><th>วัน</th>{activityTimes.map((period, index) => <th key={index}>{period.is_break ? period.label : `คาบ ${period.period}`}<small style={{display:'block'}}>{period.start_time}–{period.end_time}</small></th>)}</tr></thead><tbody>{SCHEDULE_DAYS.filter(day => data.plan.days.includes(day.value)).map(day => <tr key={day.value}><th>{day.short}</th>{activityTimes.map((period, index) => {
+                const clockMismatch=draft.roomIds.some(room=>{const time=levelPeriodTimes(data.periods,data.classrooms.find(item=>item.id===room)?.level||'').find(row=>!row.is_break&&row.period===period.period);return !time||draft.mode==='joint'&&(time.start_time!==period.start_time||time.end_time!==period.end_time)})
                 const on = draft.cells.some(cell => cell.day === day.value && cell.period === period.period)
-                return <td key={index}>{period.is_break ? <span>พัก</span> : <button type="button" aria-pressed={on} aria-label={`${day.label} คาบ ${period.period}`} disabled={!on && draft.cells.length >= draft.weeklyPeriods} onClick={() => toggleCell(day.value, period.period)} />}</td>
+                return <td key={index}>{period.is_break ? <span>พัก</span> : <button type="button" aria-pressed={on} aria-label={`${day.label} คาบ ${period.period}`} title={clockMismatch?'ช่วงเวลาของแต่ละห้องไม่ตรงกัน กรุณาแยกกลุ่มกิจกรรม':undefined} disabled={!on && (clockMismatch||draft.cells.length >= draft.weeklyPeriods)} onClick={() => toggleCell(day.value, period.period)} />}</td>
               })}</tr>)}</tbody></table></div>
               <p role="status">{draft.cells.length ? `${when(draft)} · เลือก ${draft.cells.length}/${draft.weeklyPeriods} คาบ` : `ระบบจะเลือกวันและคาบให้เมื่อสร้างตารางฉบับร่าง จำนวน ${draft.weeklyPeriods} คาบ/สัปดาห์`}</p>
               </details>

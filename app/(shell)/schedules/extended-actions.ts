@@ -50,7 +50,7 @@ async function loadAllSlotsForYear(schoolId:string,yearId:string, semester = 1) 
  return data.slots.map(row=>{const l=data.lessons.find(l=>l.id===lessonKey(row));const room=data.classrooms.find(c=>c.id===row.classroom_id)!;return {...row,class_subject_id:lessonKey(row),classrooms:room,class_subjects:l?{id:l.id,teacher_id:l.teacherId,subject_id:l.subjectId,subjects:{code:l.code,name:l.name,short_name:l.name,hours_per_year:l.count*40}}:null}})
 }
 
-export async function fetchPeriodTimes() {
+export async function fetchPeriodTimes(yearId?:string,semester=1) {
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
   const db = createServerClient()
@@ -59,12 +59,13 @@ export async function fetchPeriodTimes() {
     .eq('school_id', session.schoolId)
     .order('sort_order')
   if (error) throw new Error(error.message)
-  if (!data?.length) return { times: DEFAULT_PERIOD_TIMES, isDefault: true }
+  const attach=async(times:PeriodTimeRow[])=>{if(!yearId)return times;if(semester!==1&&semester!==2)throw Error('ภาคเรียนไม่ถูกต้อง');const {data:plan,error}=await db.from('schedule_plans').select('config').eq('school_id',session.schoolId!).eq('academic_year_id',yearId).eq('semester',semester).maybeSingle();if(error)throw Error(error.message);const {withTeacherActivityClock}=await import('@/lib/schedule-teacher-activities');return withTeacherActivityClock(times,(plan?.config as {teacherActivities?:import('@/lib/schedule-teacher-activities').TeacherScheduleActivity[]}|null)?.teacherActivities)}
+  if (!data?.length) return { times: await attach(DEFAULT_PERIOD_TIMES), isDefault: true }
   const teachingCount = (data as PeriodTimeRow[]).filter(t => !t.is_break).length
   if (teachingCount < 1 || teachingCount > 8) {
     return { times: DEFAULT_PERIOD_TIMES, isDefault: true }
   }
-  return { times: normalizePeriodTimes(data as PeriodTimeRow[]), isDefault: false }
+  return { times: await attach(normalizePeriodTimes(data as PeriodTimeRow[])), isDefault: false }
 }
 
 export async function savePeriodTimes(times: PeriodTimeRow[]) {

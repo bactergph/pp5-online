@@ -1,3 +1,4 @@
+import {levelPeriodTimes} from './schedule-period-profiles'
 import {validatePeriodProfiles} from '@/lib/schedule-period-profiles'
 import {jointTeachingScope,validateJointTeachingGroups} from './schedule-joint-teaching'
 import { verifyCompleteSchedule } from './schedule-verification'
@@ -150,7 +151,7 @@ export function prepareDeviceDraft(data: DeviceSnapshot, year: string, scope: st
       !Number.isInteger(group.weeklyPeriods) || group.weeklyPeriods < 1 || group.weeklyPeriods > 8 ||
       (group.cells.length !== 0 && group.cells.length !== group.weeklyPeriods) ||
       new Set(group.cells.map(cell => cell.day+':'+cell.period)).size !== group.cells.length ||
-      group.cells.some(cell => !data.plan.days.includes(cell.day) || !data.periods.some(row => !row.is_break && row.period === cell.period)) ||
+      group.cells.some(cell => !data.plan.days.includes(cell.day) || group.roomIds.some(room=>!levelPeriodTimes(data.periods,data.classrooms.find(item=>item.id===room)?.level||'').some(row=>!row.is_break&&row.period===cell.period))) ||
       group.roomIds.some(id => activityTeachers(group, id).some(teacher => !data.teachers.some(row => row.id === teacher)))
     if (invalid) issues.push({ severity:'error', message:name+': ตรวจห้อง ครู จำนวนคาบ และวันกิจกรรมให้ถูกต้อง', step:4,manageStep:4 })
     for (const room of group.roomIds) {

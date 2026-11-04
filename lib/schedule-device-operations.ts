@@ -1,5 +1,5 @@
 import { devicePreflight } from './schedule-device-view'
-import {profileCellOverlap} from './schedule-period-profiles'
+import {levelPeriodTimes,profileCellOverlap} from './schedule-period-profiles'
 import { freeActivityTeachers, teachingRows, type FreeWizardPlan, type LocalCell } from './schedule-device-free'
 
 export function deviceActivityAt(plan:FreeWizardPlan, room:string, day:number, period:number) {
@@ -7,7 +7,7 @@ export function deviceActivityAt(plan:FreeWizardPlan, room:string, day:number, p
   return plan.activities.find(activity=>activity.roomIds.includes(room)&&(activity.id===saved?.activityId||activity.cells.some(cell=>cell.day===day&&cell.period===period)))
 }
 function position(plan:FreeWizardPlan, room:string, day:number, period:number) {
-  if(!plan.rooms.some(item=>item.id===room)||!plan.days.includes(day)||!teachingRows(plan.periods).some(row=>row.period===period))throw Error('ห้อง วัน หรือคาบอยู่นอกตารางเรียน')
+  if(!plan.rooms.some(item=>item.id===room)||!plan.days.includes(day)||!teachingRows(levelPeriodTimes(plan.periods,plan.rooms.find(item=>item.id===room)?.label||'')).some(row=>row.period===period))throw Error('ห้อง วัน หรือคาบอยู่นอกตารางเรียน')
 }
 function validate(plan:FreeWizardPlan) {
   const errors=devicePreflight(plan,plan.rooms.map(room=>room.id),false).filter(issue=>issue.severity==='error'&&issue.code?.startsWith('fixed_'))

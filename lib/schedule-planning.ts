@@ -1,5 +1,6 @@
 import {teachingEventAt,teachingQuotaParts,jointTeachingSlotErrors} from './schedule-joint-teaching'
 import type { ActivityTeam } from './schedule-activity-teams'
+import {validateTeacherActivities,type TeacherScheduleActivity} from './schedule-teacher-activities'
 import { solveSchoolSchedule } from './schedule-solver'
 import { solveBlockRepair } from './schedule-block-repair'
 import type {JointTeachingGroup} from './schedule-joint-teaching'
@@ -13,7 +14,7 @@ import {hasPeriodProfiles} from './schedule-period-profiles'
 import {checkProfilePlanning,solveProfileSchedule} from './schedule-profile-solver'
 export type TimePreference = 'any' | 'morning' | 'afternoon'
 export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean; timePreference?: TimePreference }
-export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[]; teachingGroups?:JointTeachingGroup[]; roomLabels?: Record<string, string> }
+export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[]; teacherActivities?:TeacherScheduleActivity[]; teachingGroups?:JointTeachingGroup[]; roomLabels?: Record<string, string> }
 export type PlannedLesson = { classroomLevel?:string; id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; timePreference?: TimePreference; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; jointTeachingCells?:Record<string,string>; subjectGroup?: string; fullName?: string; name?: string; teacherName?: string }
 export function lessonPrefersMorning(lesson: { subjectGroup?: string; fullName?: string; name?: string; label?: string }) {
   return /ภาษาไทย|คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา|สังคมศึกษา|ภาษาอังกฤษ|ภาษาต่างประเทศ/.test(`${lesson.subjectGroup || ''} ${lesson.fullName || ''} ${lesson.name || ''}`)
@@ -42,6 +43,7 @@ export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
 export const SCHEDULE_SEARCH_TIME_LIMIT_MS = 45_000
 export const emptyPlan = (): SchedulePlan => ({ days: [1,2,3,4,5], rooms: [], rules: {}, reduceGaps: false, maxContinuous: 0 })
 export function validatePlan(plan: SchedulePlan, lessonIds: string[]) {
+  validateTeacherActivities(plan.teacherActivities)
   if (!Array.isArray(plan.days) || !plan.days.length || new Set(plan.days).size !== plan.days.length || plan.days.some(d=>!Number.isInteger(d)||d<1||d>5)) throw Error('เลือกวันเรียนจันทร์–ศุกร์อย่างน้อยหนึ่งวัน')
   if (!Array.isArray(plan.rooms) || plan.rooms.length>500 || new Set(plan.rooms.map(r=>r.id)).size!==plan.rooms.length || plan.rooms.some(r=>!/^[-0-9a-f]{36}$/i.test(r.id)||!r.name.trim()||r.name.length>100)) throw Error('ข้อมูลห้องสถานที่ไม่ถูกต้อง')
   if (typeof plan.reduceGaps!=='boolean' || !Number.isInteger(plan.maxContinuous)||plan.maxContinuous<0||plan.maxContinuous>8) throw Error('เงื่อนไขคาบต่อเนื่องไม่ถูกต้อง')

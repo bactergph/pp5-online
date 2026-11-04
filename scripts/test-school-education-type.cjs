@@ -13,8 +13,9 @@ function compile(path, imports = {}) {
   return exports
 }
 const profile = compile('lib/school-education-type.ts')
-assert.equal(profile.schoolLevels('primary').length, 11)
+assert.equal(profile.schoolLevels('primary').length, 12)
 assert.equal(profile.schoolLevels('secondary').length, 6)
+assert(profile.schoolLevels('primary').includes('อ.1'))
 assert(!profile.schoolLevels('primary').includes('ม.4'))
 assert(!profile.schoolLevels('secondary').includes('ป.1'))
 assert.equal(profile.resolveSchoolEducationType(null, ['ม.6']), 'secondary')
@@ -86,6 +87,7 @@ async function test() {
   const removed = f.writes.find(write => write.operation === 'delete')
   assert.equal(removed.filters[0][1].join(','), 'secondary-room')
   assert(removed.filters.some(([key, value]) => key === 'school_id' && value === 'school-a'))
+  f=fixture({type:'primary'});assert.equal((await f.actions.applyClassroomLevels('year-a',[{level:'อ.1',rooms:1},{level:'ป.1',rooms:1},{level:'ม.4',rooms:1}],true)).error,null);assert.equal(f.writes.find(write=>write.operation==='insert').payload.map(row=>row.level).join(','),'อ.1,ม.4');f=fixture({role:'teacher'});assert((await f.actions.applyClassroomLevels('year-a',[{level:'อ.1',rooms:1}],true)).error);assert.equal(f.writes.length,0)
   console.log('PASS: school level ranges, fallback, roles, school scope, year ownership, failed reads, legacy preservation')
 }
 test().catch(error => { console.error(error); process.exit(1) })

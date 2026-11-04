@@ -5,7 +5,7 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 import {useCallback, useEffect, useRef, useState} from 'react'
 import {type PeriodTimeRow} from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
-import {hasPeriodProfiles,profileCellOverlap,levelPeriodTimes} from '@/lib/schedule-period-profiles'
+import {hasPeriodProfiles,profileCellOverlap,levelPeriodTimes,periodInterval,clockMinute} from '@/lib/schedule-period-profiles'
 
 type Availability = Awaited<ReturnType<import('./ScheduleServices').ScheduleOperations['fetchTeacherAvailability']>>
 export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded,onChanged}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean;onChanged?:()=>Promise<void>}) {
@@ -125,6 +125,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   }
   const teacherQuotas=data?.quotas.filter(q=>q.teacherId===teacher)||[]
   function busyAt(day:number,period:number){
+    const activity=data?.busy.find(b=>{const time=periodInterval(periodTimes,period),event=b as typeof b&Partial<import('@/lib/schedule-teacher-activities').ScheduleTeacherBlock>;return event.teacherId===teacher&&event.day===day&&event.teacherActivityId&&event.start_time&&event.end_time&&time&&time.start<clockMinute(event.end_time)&&clockMinute(event.start_time)<time.end});if(activity)return activity
     if(!hasPeriodProfiles(periodTimes))return data?.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
     const rows=data?.busy.filter(b=>b.teacherId===teacher&&b.day===day&&profileCellOverlap(periodTimes,data.classroomLevels?.[b.classroomId]||'',b.period,'',period))||[]
     return rows.length?{...rows[0],label:rows.map(row=>{const clock=levelPeriodTimes(periodTimes,data?.classroomLevels?.[row.classroomId]||'').find(t=>!t.is_break&&t.period===row.period);return `${row.label} (${clock?.start_time}–${clock?.end_time})`}).join(' / ')}:undefined

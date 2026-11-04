@@ -1,3 +1,4 @@
+import {levelPeriodTimes} from './schedule-period-profiles'
 import type { PeriodTimeRow } from './schedule-helpers'
 export type ActivityTeam = { id:string; settingId:string; mode:'joint'|'separate'; roomIds:string[]; teacherIds:string[]; roomTeachers:Record<string,string[]>; weeklyPeriods:number; cells:{day:number;period:number}[] }
 export function activityTeachers(group:ActivityTeam,room:string){return group.mode==='joint'?group.teacherIds:group.roomTeachers[room]||[]}
@@ -18,13 +19,14 @@ export function restoreActivityRoomTeachers(draft:ActivityTeam,groups:ActivityTe
  return {...draft,roomIds,roomTeachers,mode:separate?'separate':'joint',teacherIds:separate?draft.teacherIds:[...(roomTeachers[roomIds[0]]||[])]}
 }
 export function lessonTeachers(l:{teacherId:string|null;teacherIds?:string[]}){return l.teacherIds??(l.teacherId?[l.teacherId]:[])}
-export function validateActivityTeam(g:ActivityTeam,rooms:string[],teachers:string[],settings:string[],days:number[],periods:PeriodTimeRow[]){
+export function validateActivityTeam(g:ActivityTeam,rooms:string[],teachers:string[],settings:string[],days:number[],periods:PeriodTimeRow[],classrooms?:{id:string;level:string}[]){
  const uuid=(s:string)=>typeof s==='string'&&/^[-0-9a-f]{36}$/i.test(s)
  const unique=(ids:string[])=>Array.isArray(ids)&&new Set(ids).size===ids.length
  if(!g||!uuid(g.id)||!settings.includes(g.settingId)||!['joint','separate'].includes(g.mode)||!unique(g.roomIds)||!g.roomIds.length||g.roomIds.some(id=>!rooms.includes(id)))throw Error('เลือกกิจกรรมและห้องในโรงเรียนให้ถูกต้อง')
  if(!g.roomTeachers||typeof g.roomTeachers!=='object'||!Array.isArray(g.teacherIds))throw Error('กำหนดทีมครูให้ถูกต้อง')
  for(const room of g.roomIds){const ids=activityTeachers(g,room);if(!unique(ids)||ids.some(id=>!teachers.includes(id)))throw Error('ครูผู้รับผิดชอบไม่อยู่ในรายชื่อครูของโรงเรียน')}
- if(!Number.isInteger(g.weeklyPeriods)||g.weeklyPeriods<1||g.weeklyPeriods>8||!Array.isArray(g.cells)||(g.cells.length!==0&&g.cells.length!==g.weeklyPeriods)||new Set(g.cells.map(c=>`${c.day}:${c.period}`)).size!==g.cells.length||g.cells.some(c=>!days.includes(c.day)||!periods.some(p=>!p.is_break&&p.period===c.period)))throw Error('ไม่เลือกคาบเพื่อให้ระบบจัดอัตโนมัติ หรือเลือกคาบให้ครบตามชั่วโมงต่อสัปดาห์ และห้ามใช้ช่วงพัก')
+ if(!Number.isInteger(g.weeklyPeriods)||g.weeklyPeriods<1||g.weeklyPeriods>8||!Array.isArray(g.cells)||(g.cells.length!==0&&g.cells.length!==g.weeklyPeriods)||new Set(g.cells.map(c=>`${c.day}:${c.period}`)).size!==g.cells.length||g.cells.some(c=>!days.includes(c.day)||g.roomIds.some(room=>!levelPeriodTimes(periods,classrooms?.find(item=>item.id===room)?.level||'').some(p=>!p.is_break&&p.period===c.period))))throw Error('เลือกคาบให้ครบตามชั่วโมงต่อสัปดาห์และอยู่ในเวลาเรียนของทุกห้อง หรือไม่เลือกคาบเพื่อให้ระบบจัดอัตโนมัติ')
+ if(g.mode==='joint'&&g.cells.some(cell=>new Set(g.roomIds.map(room=>{const time=levelPeriodTimes(periods,classrooms?.find(item=>item.id===room)?.level||'').find(row=>!row.is_break&&row.period===cell.period);return time?.start_time+'-'+time?.end_time})).size>1))throw Error('กิจกรรมร่วมต้องเริ่มและจบตรงกันทุกห้อง หากเวลาเรียนต่างกัน ให้แยกกลุ่มกิจกรรมตามช่วงชั้น')
 }
 
 export function activityWeeklyPeriods(value: unknown) {

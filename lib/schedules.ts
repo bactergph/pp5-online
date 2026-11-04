@@ -31,9 +31,9 @@ export const SCHEDULE_PERIODS = Array.from({ length: SCHEDULE_PERIOD_COUNT }, (_
 export const SCHEDULE_EDIT_ROLES = ['admin', 'academic_head', 'deputy_principal'] as const
 export const SCHEDULE_VIEW_ROLES = ['admin', 'academic_head', 'deputy_principal', 'principal', 'teacher'] as const
 
-/** Kindergarten uses a separate learning plan, outside the timetable wizard. */
+/** Timetable levels include kindergarten 1–3, primary and secondary. */
 export function isTimetableClassroom(level: string) {
-  return !/^(?:อ\.?\s*[1-3]$|อนุบาล)/.test(level.trim())
+  return Boolean(level.trim())
 }
 
 /** Shown room name. A blank custom name falls back to the room number. */

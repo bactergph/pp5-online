@@ -1,9 +1,10 @@
 'use client'
+import {teacherActivitiesInClock} from '@/lib/schedule-teacher-activities'
 import {levelPeriodTimes,teacherPeriodTimes} from '@/lib/schedule-period-profiles'
 import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
-import { periodTimeLabel, scheduleSemesterForYear, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { SCHEDULE_DAYS } from '@/lib/schedules'
+import { scheduleSemesterForYear, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
@@ -140,7 +141,7 @@ const STYLES = `
 `
 
 export default function ScheduleExportPage() {
-  const { fetchScheduleDays, fetchScheduleClassrooms, fetchScheduleInit, fetchSchedulePdfGrids, fetchScheduleExportContext } = useScheduleOperations()
+  const { fetchPeriodTimes, fetchScheduleDays, fetchScheduleClassrooms, fetchScheduleInit, fetchSchedulePdfGrids, fetchScheduleExportContext } = useScheduleOperations()
 
   const [loading, setLoading] = useState(true)
   const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
@@ -190,7 +191,7 @@ export default function ScheduleExportPage() {
     return new URLSearchParams(window.location.search).get('print') === '1'
   })
 
-  useEffect(()=>{if(!yearId)return;let active=true;fetchScheduleDays(yearId,Number(semester)).then(d=>{if(active)setScheduleDays(d)}).catch(()=>{});return()=>{active=false}},[yearId,semester,fetchScheduleDays])
+
   useEffect(() => {
     printMode.current = isPrintMode
   }, [isPrintMode])
@@ -242,11 +243,11 @@ export default function ScheduleExportPage() {
     if(!id)return
     const request=++gridRequest.current
     try{
-      const grids=await fetchSchedulePdfGrids(yearId,Number(semester),exportType,[id])
+      const [grids,clock,days]=await Promise.all([fetchSchedulePdfGrids(yearId,Number(semester),exportType,[id]),fetchPeriodTimes(yearId,Number(semester)),fetchScheduleDays(yearId,Number(semester))])
       if(request!==gridRequest.current)return
-      setError('');setGridData(grids[id]||{});setLoadedContext(`${exportType}:${yearId}:${semester}:${id}`);setPreviewReady(true)
+      setPeriodTimes(clock.times);setScheduleDays([...new Set([...days,...(exportType==='teaching'?teacherActivitiesInClock(clock.times).flatMap(activity=>activity.days):[])])].sort());setError('');setGridData(grids[id]||{});setLoadedContext(`${exportType}:${yearId}:${semester}:${id}`);setPreviewReady(true)
     }catch(error){if(request!==gridRequest.current)return;setPreviewReady(false);setError(error instanceof Error?error.message:'โหลดตารางไม่สำเร็จ')}
-  },[exportType,classroomId,teacherId,yearId,semester,fetchSchedulePdfGrids])
+  },[exportType,classroomId,teacherId,yearId,semester,fetchSchedulePdfGrids,fetchPeriodTimes,fetchScheduleDays])
 
   const invalidateGridRequest = useCallback(() => { ++gridRequest.current }, [])
   useEffect(() => { void Promise.resolve().then(init) }, [init])
@@ -313,7 +314,7 @@ export default function ScheduleExportPage() {
             return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id],periodTimes:exportType==='class'?levelPeriodTimes(periodTimes,classrooms.find(c=>c.id===id)?.level||''):teacherPeriodTimes(periodTimes) }
           }
           const teacher = teachers.find(t => t.id === id)
-          return { title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix.trim()}${teacher.full_name.trim()}` : ''}`, gridData: grids[id],periodTimes:teacherPeriodTimes(periodTimes) }
+          return { layout:teacherPeriodTimes(periodTimes).length>10?'teacher-agenda' as const:'grid' as const, title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix.trim()}${teacher.full_name.trim()}` : ''}`, gridData: grids[id],periodTimes:teacherPeriodTimes(periodTimes) }
         })
         return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, directorName, directorPosition, printDate, fileName })
       },
@@ -321,8 +322,6 @@ export default function ScheduleExportPage() {
   }
 
   const displayTimes=exportType==='class'?levelPeriodTimes(periodTimes,selectedClass?.level||''):teacherPeriodTimes(periodTimes)
-  const periods = displayTimes.length ? displayTimes.filter(t=>!t.is_break).map(t=>t.period) : SCHEDULE_PERIODS
-  const morning = displayTimes.length ? (displayTimes.some(t=>t.is_break)?displayTimes.findIndex(t=>t.is_break):periods.length) : SCHEDULE_MORNING_PERIODS
   const classGroups = useMemo(() => {
     const map = new Map<string, Classroom[]>()
     for (const room of classrooms) {
@@ -514,28 +513,14 @@ export default function ScheduleExportPage() {
             <thead>
               <tr>
                 <th>วัน</th>
-                {periods.slice(0, morning).map(p => (
-                  <th key={p}>
-                    {displayTimes.find(t=>!t.is_break&&t.period===p)?.label||`คาบ ${p}`}
-                    {periodTimes.length ? <span className="time">{periodTimeLabel(displayTimes, p)}</span> : null}
-                  </th>
-                ))}
-                <>{displayTimes.some(t=>t.is_break)&&<th className="break-col">พักเที่ยง</th>}</>
-                {periods.slice(morning).map(p => (
-                  <th key={p}>
-                    {displayTimes.find(t=>!t.is_break&&t.period===p)?.label||`คาบ ${p}`}
-                    {periodTimes.length ? <span className="time">{periodTimeLabel(displayTimes, p)}</span> : null}
-                  </th>
-                ))}
+                {displayTimes.map((row,index)=><th key={index} className={row.is_break?'break-col':undefined}>{row.label||`คาบ ${row.period}`}<span className="time">{row.start_time}–{row.end_time}</span></th>)}
               </tr>
             </thead>
             <tbody>
               {SCHEDULE_DAYS.filter(d=>scheduleDays.includes(d.value)).map(day => (
                 <tr key={day.value}>
                   <td className="day-col">{day.label}</td>
-                  {periods.slice(0, morning).map(p => renderPrintCell(day.value, p))}
-                  <>{displayTimes.some(t=>t.is_break)&&<td className="break-col">พัก</td>}</>
-                  {periods.slice(morning).map(p => renderPrintCell(day.value, p))}
+                  {displayTimes.map((row,index)=>row.is_break?<td key={`break-${index}`} className="break-col">{row.label}</td>:renderPrintCell(day.value,row.period))}
                 </tr>
               ))}
             </tbody>

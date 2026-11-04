@@ -1,0 +1,57 @@
+const assert=require('node:assert/strict'),load=require('./helpers/load-pure-ts.cjs')
+const {DEFAULT_PERIOD_TIMES,validatePeriodTimes,moveLunchBreak}=load('lib/schedule-helpers.ts')
+const profiles=load('lib/schedule-period-profiles.ts'),activity=load('lib/schedule-teacher-activities.ts')
+const {checkPlanning,solvePlannedSchedule,emptyPlan}=load('lib/schedule-planning.ts'),{verifyCompleteSchedule}=load('lib/schedule-verification.ts')
+const {schedulePeriodBudget}=load('lib/schedule-period-budget.ts'),{normalizePlan,toDeviceSnapshot}=load('lib/schedule-device-free.ts')
+const {devicePreparation}=load('lib/schedule-device-view.ts'),{deviceDocumentPages,deviceDisplaySchedule,deviceWorkload}=load('lib/schedule-device-documents.ts')
+const {scheduleTeachingView}=load('lib/schedule-teaching-view.ts'),{readDeviceBackup}=load('lib/schedule-device-backup.ts')
+const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`
+const clock=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
+const bells=(count,duration,start=510)=>Array.from({length:count},(_,i)=>({period:i+1,label:'คาบ '+(i+1),start_time:clock(start+i*duration),end_time:clock(start+(i+1)*duration),is_break:false,sort_order:i+1}))
+const times=structuredClone(DEFAULT_PERIOD_TIMES),kindergarten=bells(5,40)
+kindergarten.splice(2,0,{period:0,label:'อาหารว่าง',start_time:'09:50',end_time:'10:05',is_break:true,sort_order:3});for(let i=3;i<kindergarten.length;i++){kindergarten[i].start_time=clock(510+(i-1)*40+15);kindergarten[i].end_time=clock(510+i*40+15)}
+kindergarten.push({period:-1,label:'พักกลางวัน',start_time:'12:05',end_time:'12:35',is_break:true,sort_order:7},{period:-2,label:'นอนพัก',start_time:'12:35',end_time:'14:00',is_break:true,sort_order:8})
+times[0].profiles={kindergarten,primary:structuredClone(DEFAULT_PERIOD_TIMES),secondary:bells(7,50)}
+assert.equal(profiles.validatePeriodProfiles(times),null)
+assert.equal(moveLunchBreak(kindergarten,4).filter(row=>row.is_break).length,3,'Moving lunch preserves snack/nap')
+assert.equal(validatePeriodTimes(kindergarten.map(row=>row.period===-2?{...row,period:0}:row))!==null,true)
+const a={id:id(900),name:'PLC',teacherIds:[id(10)],days:[3,4],start_time:'15:30',end_time:'16:30'}
+const repaired=load('lib/schedule-activity-teacher-repair.ts').repairActivityTeacherPlan({teacherActivities:[a]},[]);assert.equal(repaired.plan.teacherActivities.length,0);assert.equal(repaired.removedTeacherIds[0],id(10))
+activity.validateTeacherActivities([a],[id(10)]);assert.equal(activity.teacherActivityMinutes([a],id(10)),120)
+assert.throws(()=>activity.validateTeacherActivities([a,{...a,id:id(901)}]),/ทับ/)
+assert.throws(()=>activity.validateTeacherActivities([{...a,teacherIds:[id(99)]}],[id(10)]),/เลือกครู/)
+const lesson=(n,level,teacher=id(10))=>({id:id(n),classroomId:id(n),classroomLevel:level,teacherId:teacher,count:3,pattern:[1,1,1],label:level})
+const lessons=[lesson(1,'อ.1'),lesson(2,'ป.1'),lesson(3,'ม.1')],plan={...emptyPlan(),teacherActivities:[a]}
+const clash=[{classroomId:id(1),lessonId:id(1),day:1,period:1},{classroomId:id(3),lessonId:id(3),day:1,period:1}]
+assert.ok(checkPlanning(lessons,clash,plan.days,times,activity.teacherActivityBlocks(times,[a])).some(issue=>issue.code==='fixed_teacher_conflict'))
+const midday={...a,days:[1],start_time:'11:45',end_time:'12:45'}
+assert.ok(checkPlanning([lessons[1]],[{classroomId:id(2),lessonId:id(2),day:1,period:4}],[1],times,activity.teacherActivityBlocks(times,[midday])).some(issue=>issue.severity==='error'))
+const result=solvePlannedSchedule(lessons,[],plan,times,activity.teacherActivityBlocks(times,[a]),100000,3000)
+assert.equal(result.status,'complete',JSON.stringify(result));assert.deepEqual(Array.from(verifyCompleteSchedule(lessons,result.assignments,plan.days,times,activity.teacherActivityBlocks(times,[a]))),[])
+const rooms=lessons.map((l,i)=>({id:l.classroomId,label:[`อ.1/1`,`ป.1/1`,`ม.1/1`][i]})),teachers=[{id:id(10),name:'นาย ทดสอบ ครู',prefix:'นาย',fullName:'ทดสอบ ครู',position:'ครู'}]
+const free=normalizePlan({periods:times,rooms,teachers,teacherActivities:[a],subjects:lessons.map(l=>({id:l.id,roomId:l.classroomId,code:'ท'+l.id.slice(-2),name:'ภาษาไทย',teacherId:id(10),periods:3,pattern:[1,1,1],placeId:null})),timetable:result.assignments.map(row=>({classroomId:row.classroomId,subjectId:row.lessonId,day:row.day,period:row.period,locked:false}))})
+const prep=devicePreparation(free),budget=schedulePeriodBudget(prep)
+assert.deepEqual(Array.from(budget.map(row=>row.capacity)),[25,30,35])
+const clockRows=activity.withTeacherActivityClock(times,[a]),axis=profiles.teacherPeriodTimes(clockRows),plc=axis.find(row=>row.start_time==='15:30'&&row.end_time==='16:30')
+assert.ok(plc)
+const grid=scheduleTeachingView(deviceDisplaySchedule(free),id(10));assert.equal(grid[`3-${plc.period}`].label,'PLC')
+const classPages=deviceDocumentPages(free,'class',rooms.map(r=>r.id),1,'2569'),teacherPages=deviceDocumentPages(free,'teacher',[id(10)],1,'2569')
+assert.ok(!classPages.some(page=>Object.values(page.gridData).some(cell=>cell.line1==='PLC')))
+assert.ok(Object.values(teacherPages[0].gridData).some(cell=>cell.line1==='PLC'))
+const clockLoad=deviceWorkload({...free,subjects:free.subjects.filter(subject=>subject.roomId!==id(1)),timetable:[{classroomId:id(2),subjectId:id(2),day:1,period:4},{classroomId:id(3),subjectId:id(3),day:1,period:4}]});assert.equal(clockLoad[0].scheduled_hours,2,'Same period number at different real times counts as two teaching sessions')
+const workload=deviceWorkload(free)[0];assert.equal(workload.hours,9);assert.match(workload.note,/120 นาที/)
+const bundle={year:'2569',semester:1,terms:{1:{...free,substitutes:{}},2:{...normalizePlan({rooms,teachers,periods:times}),substitutes:{}}}}
+const restored=readDeviceBackup({format:'jarnsek-device-schedule',version:1,data:bundle});assert.equal(restored.terms[1].teacherActivities[0].name,'PLC');assert.equal(restored.terms[2].teacherActivities,undefined)
+assert.equal(toDeviceSnapshot(free,rooms.map(r=>r.id)).plan.teacherActivities[0].name,'PLC')
+console.log('PASS: 3-band solver/real partial overlaps/unequal capacities/multiple breaks, teacher PLC validation/blocking, teacher-only grid+PDF, separate minutes, term-scoped backup restore')
+
+;(async()=>{
+ const fs=require('node:fs'),{buildSchedulePdf}=require('./test-substitute-pdf.cjs'),out='tmp/pdfs/multiband';fs.mkdirSync(out,{recursive:true})
+ const students=await buildSchedulePdf({schoolName:'โรงเรียนทดสอบสามช่วงชั้น',title:'ตารางเรียน',periodTimes:times,pages:classPages,gridData:{},days:plan.days})
+ assert.equal(students.doc.getNumberOfPages(),3);assert.ok(students.events.some(e=>e.text==='อาหารว่าง'));assert.ok(students.events.some(e=>e.text==='นอนพัก'));assert.ok(!students.events.some(e=>e.text==='PLC'))
+ fs.writeFileSync(out+'/students.pdf',Buffer.from(await students.blob.arrayBuffer()))
+ const teacher=await buildSchedulePdf({schoolName:'โรงเรียนทดสอบสามช่วงชั้น',title:'ตารางครู',periodTimes:teacherPages[0].periodTimes,pages:teacherPages,gridData:{},days:plan.days})
+ assert.equal(teacher.doc.getNumberOfPages(),1);assert.ok(teacher.events.some(e=>e.text==='PLC'));assert.ok(teacher.events.some(e=>e.text==='15:30–16:30'))
+ fs.writeFileSync(out+'/teacher.pdf',Buffer.from(await teacher.blob.arrayBuffer()))
+ console.log('PASS: actual Thai PDFs: three independent student pages, all snack/lunch/nap breaks, teacher-only PLC after school')
+})().catch(error=>{console.error(error);process.exitCode=1})

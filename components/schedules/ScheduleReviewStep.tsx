@@ -110,7 +110,7 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
         {levelRooms.map(room=><label key={room.id} className={rooms.includes(room.id)?'is-selected':undefined}><input type="checkbox" checked={rooms.includes(room.id)} onChange={()=>onRooms(rooms.includes(room.id)?rooms.filter(id=>id!==room.id):[...rooms,room.id])}/>{roomName(room.id)}</label>)}
       </div>
       <div className="prep-review-selection-footer">
-        <small>เฉพาะประถมและมัธยม ไม่รวมอนุบาล</small>
+        <small>อนุบาล ประถม และมัธยม ตามชั้นที่เปิดสอน</small>
         <div><button type="button" disabled={!data.classrooms.length||rooms.length===data.classrooms.length} onClick={()=>onRooms(data.classrooms.map(room=>room.id))}>เลือกทั้งโรงเรียน</button><button type="button" disabled={!rooms.length} onClick={()=>onRooms([])}>ล้างการเลือก</button></div>
       </div>
     </section>

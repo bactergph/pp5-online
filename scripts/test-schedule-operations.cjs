@@ -25,7 +25,7 @@ for (const morning of [2,3,4]) {
 assert.throws(()=>timing.moveLunchBreak(timing.DEFAULT_PERIOD_TIMES,9))
 console.log('PASS: lunch can follow periods 2, 3, 4 with valid ordered times and unchanged teaching durations')
 const store = {
-  loadScheduleConstraints:async()=>({periodCount:6,blocks:[],blocksSupported:true}),
+  loadScheduleConstraints:async()=>({periodTimes:timing.DEFAULT_PERIOD_TIMES,periodCount:6,blocks:[],blocksSupported:true}),
   loadSchedule: async(s,y,term)=>{loadedTerm=term;return data},
   requireScheduleClass: (d,id)=>{const c=d.classrooms.find(c=>c.id===id);if(!c)throw Error('room');return c},
   lessonKey:s=>s.activity_id?'activity:'+s.activity_id:s.class_subject_id,
@@ -36,7 +36,7 @@ const api=moduleFrom('lib/schedule-operations.ts',name=>({
   'server-only':{},'@/lib/session':{getSession:async()=>({schoolId:'s',role,userId:'u'})},
   '@/lib/supabase':{createServerClient:()=>{throw Error('Unexpected DB call')}},
   '@/lib/audit':{logActivity:async()=>{}},'@/lib/schedules':{SCHEDULE_EDIT_ROLES:['admin']},
-  './schedule-joint-teaching':pure('lib/schedule-joint-teaching.ts'),'@/lib/schedule-store':store,'@/lib/schedule-solver':solver,'@/lib/schedule-preparation':preparation,
+  './schedule-period-profiles':pure('lib/schedule-period-profiles.ts'),'./schedule-teacher-activities':pure('lib/schedule-teacher-activities.ts'),'./schedule-joint-teaching':pure('lib/schedule-joint-teaching.ts'),'@/lib/schedule-store':store,'@/lib/schedule-solver':solver,'@/lib/schedule-preparation':preparation,
   '@/lib/schedule-activity':{LEARNER_DEVELOPMENT_KEY:'learner-development'},
 }[name]))
 function reset(){writes=0;data={classrooms:[{id:'a',level:'ป.1',room:1},{id:'b',level:'ป.2',room:1},{id:'empty',level:'อ.2',room:1}],lessons:[{id:'l1',classroomId:'a',teacherId:'t',count:2,label:'a · math',subjectId:'math',name:'math',activity:false},{id:'l2',classroomId:'b',teacherId:'t',count:2,label:'b · math',subjectId:'math',name:'math',activity:false}],slots:[]}}

@@ -1,14 +1,17 @@
 import type {SchedulePlan} from './schedule-planning'
 import {jointTeachingScope} from './schedule-joint-teaching'
+import {levelPeriodTimes} from './schedule-period-profiles'
+import type {PeriodTimeRow} from './schedule-helpers'
 
 type Data={plan:Pick<SchedulePlan,'days'|'rules'|'activityGroups'|'teachingGroups'>;periods:{is_break:boolean;period:number}[];classrooms:{id:string;level:string;room:number;name?:string}[];lessons:{id:string;classroomId:string;count:number;activity?:boolean;subjectId?:string}[];slots:{classroom_id:string;class_subject_id:string|null;activity_id:string|null;locked:boolean;day_of_week:number;period:number}[]}
 /** Weekly classroom capacity, not teacher load: a joint subject still occupies
  * its full quota in every classroom. Configured activity teams are counted once. */
 export function schedulePeriodBudget(data:Data,roomIds=data.classrooms.map(room=>room.id)){
   roomIds=jointTeachingScope(roomIds,data.lessons,data.plan.teachingGroups)
-  const teaching=new Set(data.periods.filter(time=>!time.is_break).map(time=>time.period)),capacity=data.plan.days.length*teaching.size
   const quota=(value:number)=>Number.isFinite(value)&&value>0?value:0
   return data.classrooms.filter(room=>roomIds.includes(room.id)).map(room=>{
+    const local=levelPeriodTimes(data.periods as PeriodTimeRow[],room.level)
+    const teaching=new Set(local.filter(time=>!time.is_break).map(time=>time.period)),capacity=data.plan.days.length*teaching.size
     const subjects=data.lessons.filter(lesson=>!lesson.activity&&lesson.classroomId===room.id).reduce((sum,lesson)=>sum+quota(data.plan.rules[lesson.id]?.count??lesson.count),0)
     const groups=(data.plan.activityGroups||[]).filter(group=>group.roomIds.includes(room.id))
     const activities=groups.reduce((sum,group)=>sum+quota(group.weeklyPeriods),0)+data.lessons.filter(lesson=>lesson.activity&&lesson.classroomId===room.id&&!groups.some(group=>group.settingId===lesson.subjectId)).reduce((sum,lesson)=>sum+quota(lesson.count),0)

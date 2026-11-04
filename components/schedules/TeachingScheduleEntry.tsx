@@ -1,5 +1,6 @@
 'use client'
-import {teacherPeriodTimes,hasPeriodProfiles} from '@/lib/schedule-period-profiles'
+import {teacherPeriodTimes,hasTeacherTimeline} from '@/lib/schedule-period-profiles'
+import {teacherActivitiesInClock,teacherActivityMinutes} from '@/lib/schedule-teacher-activities'
 import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import Link from './ScheduleLink'
@@ -42,6 +43,8 @@ const STYLES = `
   }
   .cell-room { font-weight: 800; color: #1E293B; }
   .cell-subj { font-size: 10px; font-weight: 700; color: #64748B; }
+  .teacher-time-agenda{display:none}.teacher-time-agenda section{padding:14px;border-bottom:1px solid #e0e8f4}.teacher-time-agenda h3{font-size:15px;margin:0 0 10px;color:#244d82}.teacher-time-agenda article{display:grid;grid-template-columns:90px minmax(0,1fr);gap:12px;padding:12px 0;border-top:1px solid #eef2f7}.teacher-time-agenda time{font-size:12px;color:#54708c}.teacher-time-agenda strong{display:block;font-size:14px}.teacher-time-agenda small{display:block;color:#60768e;margin-top:4px}
+  @media(max-width:640px){.teacher-time-agenda{display:block}.schedule-profile-teacher-grid{display:none}}
   .schedule-empty { padding: 28px; text-align: center; color: #64748B; font-size: 13px; font-weight: 700; }
 `
 
@@ -93,17 +96,19 @@ export default function TeachingScheduleEntry() {
   const loadGrid = useCallback(async () => {
     const request = ++requestId.current
     try {
-    const grid = await fetchTeachingScheduleGrid(selectedTeacher, selectedYear, semester)
+    const [grid,times,days] = await Promise.all([fetchTeachingScheduleGrid(selectedTeacher, selectedYear, semester),fetchPeriodTimes(selectedYear,semester),fetchScheduleDays(selectedYear,semester)])
     if (request !== requestId.current) return
     setCells(grid as Record<string, Cell>)
+    setPeriodTimes(times.times as PeriodTimeRow[])
+    setScheduleDays([...new Set([...days,...teacherActivitiesInClock(times.times).filter(activity=>activity.teacherIds.includes(selectedTeacher)).flatMap(activity=>activity.days)])].sort())
     } catch (e) {
       if (request !== requestId.current) return
       setCells({})
       setAlert({ type: 'error', title: 'โหลดตารางไม่สำเร็จ', message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาด' })
     }
-  }, [selectedTeacher, selectedYear, semester,fetchTeachingScheduleGrid])
+  }, [selectedTeacher, selectedYear, semester,fetchTeachingScheduleGrid,fetchPeriodTimes,fetchScheduleDays])
 
-  useEffect(()=>{if(!selectedYear)return;let active=true;fetchScheduleDays(selectedYear,semester).then(days=>{if(active)setScheduleDays(days)}).catch(()=>{});return()=>{active=false}},[selectedYear,semester,fetchScheduleDays])
+
   useEffect(() => { void Promise.resolve().then(init) }, [init])
 
   useEffect(() => {
@@ -144,7 +149,8 @@ export default function TeachingScheduleEntry() {
         </div>
 
         <div className="schedule-info">
-          ตารางสอนอ้างอิงจากครูผู้สอนของแต่ละรายวิชา
+          ตารางสอนใช้เวลาจริงของแต่ละช่วงชั้น รวมกิจกรรมครูที่รับผิดชอบ
+          {teacherActivityMinutes(teacherActivitiesInClock(periodTimes),selectedTeacher)>0&&<span> · กิจกรรมครู {teacherActivityMinutes(teacherActivitiesInClock(periodTimes),selectedTeacher)} นาที/สัปดาห์ (แยกจากคาบสอน)</span>}
           {canEdit && (
             <>
               {' '}— กดคาบด้านล่างเพื่อเอาวิชาออก เปลี่ยนวิชา หรือล็อกคาบว่าง หรือไปที่{' '}
@@ -188,14 +194,15 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-empty">ไม่พบครูในโรงเรียน</div>
         ) : (
           <div className="schedule-grid-card">
-            {canEdit&&!hasPeriodProfiles(periodTimes)?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<ScheduleGridTable days={scheduleDays}
+            {canEdit&&!hasTeacherTimeline(periodTimes)?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<div className="schedule-profile-teacher-grid"><ScheduleGridTable days={scheduleDays}
               periodTimes={teacherPeriodTimes(periodTimes)}
               renderCell={(day, period) => {
                 const key = `${day}-${period}`
                 const cell = cells[key]
                 return <div className="cell-view">{renderCell(cell)}</div>
               }}
-            />}
+            /></div>}
+            {hasTeacherTimeline(periodTimes)&&<div className="teacher-time-agenda" aria-label="ตารางครูตามเวลาจริง">{scheduleDays.map(day=>{const labels=['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];const events=teacherPeriodTimes(periodTimes).filter(time=>cells[`${day}-${time.period}`]?.label);return <section key={day}><h3>วัน{labels[day]}</h3>{events.length?events.map(time=><article key={time.period}><time>{time.start_time}<br/>–{time.end_time}</time><div><strong>{cells[`${day}-${time.period}`].subject_line}</strong><small>{cells[`${day}-${time.period}`].room_line}</small></div></article>):<p>ไม่มีคาบสอนหรือกิจกรรมครูที่กำหนด</p>}</section>})}</div>}
           </div>
         )}
       </div>

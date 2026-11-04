@@ -1,5 +1,7 @@
 'use client'
 import {teachingEventAt,teachingQuotaParts} from '@/lib/schedule-joint-teaching'
+import {hasPeriodProfiles,levelPeriodTimes} from '@/lib/schedule-period-profiles'
+import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 import JointSessionPicker from './JointSessionPicker'
 import type {JointLockRequest} from '@/lib/schedule-joint-lock'
 import { useRef, useState } from 'react'
@@ -253,7 +255,7 @@ export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachin
     setPlaceName('')
   }
   const teachingDays = SCHEDULE_DAYS.filter(day => days.includes(day.value))
-  const teachingPeriods = periods.filter(period => !period.is_break)
+  const teachingPeriods = (lockMode==='room'?levelPeriodTimes(periods,classrooms.find(room=>room.id===activeRoom)?.level||''):periods).filter(period => !period.is_break)
   function roomSlot(day: number, period: number) { return slots.find(item => item.classroom_id === activeRoom && item.day_of_week === day && item.period === period) }
   function teacherSlot(day: number, period: number) {
     return slots.find(item => {
@@ -446,7 +448,7 @@ export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachin
         {levelRooms.length > 0 && <div className="prep-subject-rooms" role="tablist" aria-label="ห้อง"><span>ห้อง</span>{levelRooms.map(room => <button key={room.id} type="button" aria-pressed={room.id === activeRoom} onClick={() => setRoomId(room.id)}>ห้อง {room.name}</button>)}</div>}
       </> : <div className="prep-activity-teachers"><div>{shownTeachers.map(teacher => <button type="button" key={teacher.id} aria-pressed={teacher.id === teacherId} onClick={() => setTeacherId(teacher.id)}><strong>{`${teacher.prefix || ''} ${teacher.full_name}`.trim()}</strong><small>{teacher.position || 'ไม่ระบุตำแหน่ง'}</small></button>)}</div></div>}
 <p className="prep-lock-legend"><span>สีเขียว · ติดกิจกรรม</span><span>สีฟ้า · คาบที่ล็อกเอง</span></p>
-      {(lockMode === 'teacher' && !teacherId) ? <p className="prep-teacher-empty">เลือกครูก่อน แล้วแตะคาบเพื่อกำหนดวิชาหรือล็อกคาบว่าง</p> : <div className="prep-lock-scroll"><table className="prep-lock-grid"><thead><tr><th>วัน</th>{teachingPeriods.map(period => <th key={period.period}>คาบ {period.period}</th>)}</tr></thead><tbody>{teachingDays.map(day => <tr key={day.value}><th>{day.label}</th>{teachingPeriods.map(period => {
+      {lockMode==='teacher'&&teacherId&&hasPeriodProfiles(periods)?<TeacherAvailabilityPanel yearId={year} semester={term} fixedTeacher={teacherId} periodTimes={periods} disabled={busy} refreshToken={snapshotHash||''} onChanged={onRefresh}/>: (lockMode === 'teacher' && !teacherId) ? <p className="prep-teacher-empty">เลือกครูก่อน แล้วแตะคาบเพื่อกำหนดวิชาหรือล็อกคาบว่าง</p> : <div className="prep-lock-scroll"><table className="prep-lock-grid"><thead><tr><th>วัน</th>{teachingPeriods.map(period => <th key={period.period}>คาบ {period.period}<small style={{display:'block'}}>{period.start_time}–{period.end_time}</small></th>)}</tr></thead><tbody>{teachingDays.map(day => <tr key={day.value}><th>{day.label}</th>{teachingPeriods.map(period => {
         const slot = lockMode === 'room' ? roomSlot(day.value, period.period) : teacherSlot(day.value, period.period)
         const lesson = slot?.class_subject_id ? lessons.find(item => item.id === slot.class_subject_id) : undefined
         const blocked = lockMode === 'teacher' && teacherBlocked(day.value, period.period)

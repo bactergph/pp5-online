@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),ts=require('typescript'),assert=require(
 function moduleFrom(path,deps){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,performance,require:n=>deps[n]||(n.startsWith('.')?moduleFrom(require('path').resolve(require('path').dirname(path),n+'.ts'),{}):{})});return exports}
 const schedules=moduleFrom('lib/schedules.ts',{});
 const teams=moduleFrom('lib/schedule-activity-teams.ts',{'./schedule-helpers':{}});
-for(const level of ['อ.2','อ.3','อ2','อนุบาล 2'])assert.equal(schedules.isTimetableClassroom(level),false);
+for(const level of ['อ.1','อ.2','อ.3','อ2','อนุบาล 2'])assert.equal(schedules.isTimetableClassroom(level),true);
 for(const level of ['ป.1','ป.6','ม.1','ม.6'])assert.equal(schedules.isTimetableClassroom(level),true);
 const solver=moduleFrom('lib/schedule-solver.ts',{});const planning=moduleFrom('lib/schedule-planning.ts',{'./schedule-solver':solver,'./schedule-block-repair':moduleFrom('lib/schedule-block-repair.ts',{})});const periods=[1,0,2].map((period,i)=>({period,is_break:period===0,sort_order:i+1,label:'คาบ',start_time:'0'+(8+i)+':00',end_time:(9+i<10?'0':'')+(9+i)+':00'}));periods[2].start_time='10:00';
 let session={schoolId:'school',userId:'admin',role:'admin'},captured=null,liveWrites=0,planConfig=null,planWrites=0;
@@ -41,14 +41,14 @@ const before=JSON.stringify(data.slots);const draft=await api.generate('year',1,
 const bulk=await api.activityDraft('year',1,'activity',['A','B'],[{day:1,period:1},{day:2,period:2}],false);assert.equal(bulk.locked,1);assert.equal(bulk.affected,1);assert.equal(captured.after_rows.length,4);assert.equal(captured.offerings.length,2);assert.equal(captured.unlock_cells.length,1);assert.equal(JSON.stringify(data.slots),before);
 await assert.rejects(api.activityDraft('year',1,'activity',['foreign'],[{day:1,period:1}],false),/เลือก/);await assert.rejects(api.activityDraft('year',1,'activity',['A'],[{day:1,period:0}],false),/นอกเวลา/);await assert.rejects(api.activityDraft('year',1,'activity',['A','A'],[{day:1,period:1}],false),/ซ้ำ/);
 data.classrooms.push({id:'K2',level:'อ.2',room:1},{id:'K3',level:'อ.3',room:1});
-let prepared=await api.preparation('year',1);assert.equal(prepared.classrooms.length,2);assert.ok(prepared.classrooms.every(c=>c.level.startsWith('ป.')));
-let checked=await api.preflight('year',1,prepared.classrooms.map(c=>c.id),true);assert.ok(!checked.issues.some(i=>/อ\.[23]/.test(i.message)));
-await assert.rejects(api.generate('year',1,['K2'],true),/ไม่รวมอนุบาล/);await assert.rejects(api.activityDraft('year',1,'activity',['K3'],[{day:1,period:1}],false),/เลือก/);
+let prepared=await api.preparation('year',1);assert.equal(prepared.classrooms.length,4);assert.ok(prepared.classrooms.some(c=>c.level==='อ.2'));
+let checked=await api.preflight('year',1,prepared.classrooms.map(c=>c.id),true);assert.ok(checked.issues.some(i=>/อ\.[23]/.test(i.message)),'Kindergarten readiness is checked like other classrooms');
+assert.equal((await api.generate('year',1,['K2'],true)).status,'invalid','Classrooms without subjects need setup');await api.activityDraft('year',1,'activity',['K3'],[{day:1,period:1}],false);
 // Existing kindergarten teaching still occupies the shared teacher's time and is preserved.
 data.lessons.push({id:'kindergarten',classroomId:'K2',teacherId:'T',count:1,label:'อนุบาล',name:'อนุบาล',activity:false});
 data.slots.push({classroom_id:'K2',academic_year_id:'year',day_of_week:1,period:1,class_subject_id:'kindergarten',activity_id:null,note:null,locked:false});
 prepared=await api.preparation('year',1);assert.ok(prepared.slots.some(s=>s.classroom_id==='K2'));checked=await api.preflight('year',1,['A'],true);assert.ok(checked.issues.some(i=>i.severity==='error'&&/ครูชน/.test(i.message)));
-console.log('PASS: kindergarten excluded from wizard and server scope; existing kindergarten timetable retained for teacher conflicts');
+console.log('PASS: kindergarten included in wizard and generation readiness; activity setup allowed, existing timetable retained for teacher conflicts');
 data.lessons=data.lessons.filter(l=>l.id!=='kindergarten');data.slots=data.slots.filter(s=>s.class_subject_id!=='kindergarten');
 planConfig={days:[1,2,3,4,5],rooms:[],rules:{},reduceGaps:false,maxContinuous:0,activityGroups:[{id:'11111111-1111-4111-8111-111111111111',settingId:'activity',mode:'joint',roomIds:['A','B'],teacherIds:['T'],roomTeachers:{},weeklyPeriods:1,cells:[{day:2,period:2}]}]};
 data.slots.push({classroom_id:'A',academic_year_id:'year',day_of_week:2,period:2,class_subject_id:'math',activity_id:null,note:null,locked:true});

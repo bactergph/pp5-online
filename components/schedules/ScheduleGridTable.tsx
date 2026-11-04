@@ -52,9 +52,9 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
         <thead>
           <tr>
             <th className="col-day">วัน</th>
-            {columns.map(col => (
+            {columns.map((col,index) => (
               <th
-                key={col.kind === 'period' ? `p-${col.period}` : 'break'}
+                key={col.kind === 'period' ? `p-${col.period}` : `break-${index}`}
                 className={col.kind === 'break' ? 'col-break' : 'col-period'}
               >
                 {col.kind === 'period' ? (
@@ -73,11 +73,11 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
           {SCHEDULE_DAYS.filter(d=>days.includes(d.value)).map(day => (
             <tr key={day.value}>
               <td className="day-col">{day.label}</td>
-              {columns.map(col => {
+              {columns.map((col,index) => {
                 if (col.kind === 'break') {
-                  if (compactBreak && day.value !== SCHEDULE_DAYS[0].value) return null
+                  if (compactBreak && day.value !== days[0]) return null
                   return (
-                    <td key={`${day.value}-break`} className="break-col" rowSpan={compactBreak ? SCHEDULE_DAYS.length : undefined}>
+                    <td key={`${day.value}-break-${index}`} className="break-col" rowSpan={compactBreak ? days.length : undefined}>
                       {col.header}
                     </td>
                   )

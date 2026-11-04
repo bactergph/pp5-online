@@ -14,7 +14,7 @@ export function filterSchoolMenu<T extends MenuNode>(items: T[], type: SchoolEdu
 
 export const SCHOOL_LEVEL_GROUPS = {
   primary: [
-    { title: 'อนุบาล', levels: ['อ.2', 'อ.3'] },
+    { title: 'อนุบาล', levels: ['อ.1', 'อ.2', 'อ.3'] },
     { title: 'ประถมศึกษา', levels: ['ป.1', 'ป.2', 'ป.3', 'ป.4', 'ป.5', 'ป.6'] },
     { title: 'มัธยมศึกษาตอนต้น', levels: ['ม.1', 'ม.2', 'ม.3'] },
   ],

@@ -5,7 +5,8 @@ export const WORKLOAD_OK_MAX = 18
 export const WORKLOAD_WARN_MAX = 20
 
 export type PeriodTimeRow = {
-  profiles?: Partial<Record<'primary' | 'secondary', PeriodTimeRow[]>>
+  profiles?: Partial<Record<'kindergarten' | 'primary' | 'secondary', PeriodTimeRow[]>>
+  teacherActivities?: import('./schedule-teacher-activities').TeacherScheduleActivity[]
   period: number
   label: string
   start_time: string
@@ -18,11 +19,13 @@ export const MAX_SCHEDULE_PERIODS = 8
 /** Move lunch and retain each period's duration, starting at the school's first bell. */
 export function moveLunchBreak(times: PeriodTimeRow[], afterPeriod: number): PeriodTimeRow[] {
   const lessons = times.filter(t => !t.is_break)
-  const lunch = times.find(t => t.is_break)
+  const lunch = scheduleLunchBreak(times)
   if (!lunch || !Number.isInteger(afterPeriod) || afterPeriod < 1 || afterPeriod > lessons.length) throw new Error('กรุณาเลือกคาบก่อนพักเที่ยง')
   const minute = (value: string) => {const [h,m]=value.split(':').map(Number);return h*60+m}
   const clock = (value: number) => `${String(Math.floor(value/60)).padStart(2,'0')}:${String(value%60).padStart(2,'0')}`
-  const ordered = [...lessons.slice(0,afterPeriod),lunch,...lessons.slice(afterPeriod)]
+  const without=times.filter(row=>row!==lunch)
+  const anchor=without.findIndex(row=>!row.is_break&&row.period===afterPeriod)
+  const ordered=[...without.slice(0,anchor+1),lunch,...without.slice(anchor+1)]
   let cursor = minute(times[0].start_time)
   return ordered.map((row,index)=>{
     const duration = minute(row.end_time)-minute(row.start_time)
@@ -32,12 +35,13 @@ export function moveLunchBreak(times: PeriodTimeRow[], afterPeriod: number): Per
     return result
   })
 }
+export function scheduleLunchBreak(times:PeriodTimeRow[]) { return times.find(row=>row.is_break&&/เที่ยง|กลางวัน|lunch/i.test(row.label))||times.find(row=>row.is_break) }
 export function schedulePeriods(times: PeriodTimeRow[]) {
   return (times.length ? times : DEFAULT_PERIOD_TIMES).filter(t => !t.is_break).map(t => t.period)
 }
 export function validatePeriodTimes(times: PeriodTimeRow[]) {
   const teaching = times.filter(t => !t.is_break)
-  if (!teaching.length || teaching.length > MAX_SCHEDULE_PERIODS || times.filter(t => t.is_break && t.period === 0).length !== 1 || times.length !== teaching.length + 1 || teaching.some((t, i) => t.period !== i + 1)) return 'ต้องมีคาบเรียนเรียงจาก 1 สูงสุด 8 คาบ และพักเที่ยงหนึ่งช่วง'
+  if (!teaching.length || teaching.length > MAX_SCHEDULE_PERIODS || times.length > 24 || new Set(times.map(t=>t.period)).size !== times.length || times.filter(t => t.is_break).some(t=>!Number.isInteger(t.period)||t.period>0) || teaching.some((t, i) => t.period !== i + 1)) return 'คาบเรียนต้องเรียงจาก 1 สูงสุด 8 คาบ และช่วงพักต้องไม่ใช้หมายเลขคาบเรียน'
   for (const [i, t] of times.entries()) {
     if (!t.label.trim() || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t.start_time) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t.end_time) || t.start_time >= t.end_time || (i > 0 && times[i-1].end_time > t.start_time)) return 'กรุณาระบุเวลาให้ครบ เรียงตามลำดับ และไม่ทับซ้อนกัน'
   }
@@ -186,5 +190,5 @@ export function scheduleSemesterForYear(year: ScheduleTermCalendar | null | unde
 
 /** PostgreSQL time values include seconds, while the editor uses HH:mm. */
 export function normalizePeriodTimes(times: PeriodTimeRow[]): PeriodTimeRow[] {
-  return times.map(row => ({...row, start_time:row.start_time.slice(0,5), end_time:row.end_time.slice(0,5)}))
+  return times.map(row => ({...row, start_time:row.start_time.slice(0,5), end_time:row.end_time.slice(0,5),...(row.profiles?{profiles:Object.fromEntries(Object.entries(row.profiles).map(([key,value])=>[key,normalizePeriodTimes(value!)]))}:{})}))
 }

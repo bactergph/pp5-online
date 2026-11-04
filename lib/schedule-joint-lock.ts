@@ -1,3 +1,4 @@
+import {levelPeriodTimes} from './schedule-period-profiles'
 import {validateJointTeachingGroups,jointTeachingSlotErrors,withJointTeachingGroups} from './schedule-joint-teaching'
 import {checkPlanning,solvePlannedSchedule,type SchedulePlan,type PlannedLesson} from './schedule-planning'
 import type {PeriodTimeRow} from './schedule-helpers'
@@ -22,7 +23,7 @@ export function prepareJointTeachingCancellation(data:Data,request:JointLockRequ
 export function prepareJointTeachingSession(data:Data,request:JointLockRequest,year:string){
   if(!request.expectedHash||request.expectedHash!==data.hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนย้ายหรือล็อกสอนรวม')
   const ids=request.lessonIds||[],periods=request.periods||[request.period]
-  if(!Array.isArray(ids)||!Array.isArray(periods)||request.remove!==undefined&&typeof request.remove!=='boolean'||ids.length<2||new Set(ids).size!==ids.length||!ids.includes(request.lessonId)||!data.plan.days.includes(request.day)||!periods.length||new Set(periods).size!==periods.length||periods.some(period=>!Number.isInteger(period)||!data.periods.some(time=>!time.is_break&&time.period===period))||typeof request.locked!=='boolean'||request.replaceExisting!==undefined&&typeof request.replaceExisting!=='boolean')throw Error('เลือกวิชาอย่างน้อย 2 ห้อง วัน และคาบเรียนให้ถูกต้อง')
+  if(!Array.isArray(ids)||!Array.isArray(periods)||request.remove!==undefined&&typeof request.remove!=='boolean'||ids.length<2||new Set(ids).size!==ids.length||!ids.includes(request.lessonId)||!data.plan.days.includes(request.day)||!periods.length||new Set(periods).size!==periods.length||periods.some(period=>!Number.isInteger(period)||ids.some(id=>{const lesson=data.lessons.find(item=>item.id===id);return !lesson||!levelPeriodTimes(data.periods,lesson.classroomLevel||'').some(time=>!time.is_break&&time.period===period)}))||typeof request.locked!=='boolean'||request.replaceExisting!==undefined&&typeof request.replaceExisting!=='boolean')throw Error('เลือกวิชาอย่างน้อย 2 ห้อง วัน และคาบเรียนให้ถูกต้อง')
   if(!request.remove&&!request.locked)throw Error('คาบสอนรวมเฉพาะเวลาต้องล็อกไว้ หากยกเลิกให้เอาคาบออกพร้อมกัน')
   const members=ids.map(id=>{const lesson=data.lessons.find(lesson=>lesson.id===id);if(!lesson||lesson.activity)throw Error('ไม่พบวิชาที่เลือกสอนรวม');return lesson})
   if(!members[0].teacherId||members.some(lesson=>lesson.teacherId!==members[0].teacherId)||new Set(members.map(lesson=>lesson.classroomId)).size!==members.length)throw Error('เลือกวิชาของครูคนเดียวกันจากคนละห้อง')

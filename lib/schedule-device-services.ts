@@ -1,7 +1,8 @@
 import {validatePeriodProfiles} from '@/lib/schedule-period-profiles'
 import {profileTeacherConflicts} from './schedule-profile-solver'
+import {validateTeacherActivities,withTeacherActivityClock,teacherActivityAvailability,teacherActivityRosterBusy} from './schedule-teacher-activities'
 import {repairActivityTeacherPlan} from './schedule-activity-teacher-repair'
-import {rosterPeriodClock,profileCellOverlap,hasPeriodProfiles} from './schedule-period-profiles'
+import {rosterPeriodClock,profileCellOverlap,hasPeriodProfiles,levelPeriodTimes} from './schedule-period-profiles'
 import {applyJointTeachingLock,prepareJointTeachingSession,prepareJointTeachingCancellation} from './schedule-joint-lock'
 import type { ScheduleOperations } from '../components/schedules/ScheduleServices'
 import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
@@ -52,6 +53,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
   function stale(current:FreeWizardPlan,hash:string){if(hash!==deviceScheduleKey(current))throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')}
   function fixed(next:FreeWizardPlan){const issue=devicePreflight(next,next.rooms.map(room=>room.id),false).find(issue=>issue.severity==='error'&&issue.code?.startsWith('fixed_'));if(issue)throw Error(issue.message)}
   async function put(year:string,term:number,next:FreeWizardPlan) {
+    validateTeacherActivities(next.teacherActivities,next.teachers.map(teacher=>teacher.id))
     const snapshot=toDeviceSnapshot(next,[])
     validateJointTeachingGroups(next.teachingGroups,snapshot.lessons)
     const syncErrors=jointTeachingSlotErrors(snapshot.lessons,next.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period,locked:!!cell.locked})))
@@ -63,11 +65,11 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     const removedRooms=old.rooms.filter(room=>!next.rooms.some(item=>item.id===room.id)).map(room=>room.id)
     for(const target of [next,sibling]) {
       if(target.subjects.some(subject=>removedRooms.includes(subject.roomId))||target.activities.some(activity=>activity.roomIds.some(id=>removedRooms.includes(id)))||target.timetable.some(cell=>removedRooms.includes(cell.classroomId)))throw Error('ห้องที่ลบยังมีรายวิชา กิจกรรม ตาราง อยู่')
-      const missing=(day:number,period:number)=>!next.days.includes(day)||!next.periods.some(row=>!row.is_break&&row.period===period)
-      if(target.timetable.some(cell=>missing(cell.day,cell.period))||target.blocks.some(cell=>missing(cell.day,cell.period))||target.activities.some(activity=>activity.cells.some(cell=>missing(cell.day,cell.period))))throw Error('มีตาราง กิจกรรม หรือคาบไม่ว่างใช้วันและเวลานี้อยู่ กรุณานำออกก่อนลดคาบ')
+      const missing=(day:number,period:number,room?:string)=>!next.days.includes(day)||!levelPeriodTimes(next.periods,next.rooms.find(item=>item.id===room)?.label||'').some(row=>!row.is_break&&row.period===period)
+      if(target.timetable.some(cell=>missing(cell.day,cell.period,cell.classroomId))||target.blocks.some(cell=>missing(cell.day,cell.period))||target.activities.some(activity=>activity.roomIds.some(room=>activity.cells.some(cell=>missing(cell.day,cell.period,room)))))throw Error('มีตาราง กิจกรรม หรือคาบไม่ว่างใช้วันและเวลานี้อยู่ กรุณานำออกก่อนลดคาบ')
     }
     const activityCatalog=next.activityCatalog||[]
-    const terms={...workspace.terms,[term]:{...next,substitutes:next.substitutes||{}},[other]:{...sibling,teachers:next.teachers,teacherIds:sibling.teacherIds?.filter(id=>next.teachers.some(teacher=>teacher.id===id)),blocks:sibling.blocks.filter(block=>next.teachers.some(teacher=>teacher.id===block.teacherId)),rooms:next.rooms,places:next.places,days:next.days,periods:next.periods,activityCatalog,activities:sibling.activities.map(activity=>({...activity,name:activityCatalog.find(item=>item.id===(activity.settingId||activity.id))?.label||activity.name}))}}
+    const terms={...workspace.terms,[term]:{...next,substitutes:next.substitutes||{}},[other]:{...sibling,teacherActivities:repairActivityTeacherPlan({teacherActivities:sibling.teacherActivities},next.teachers.map(teacher=>teacher.id)).plan.teacherActivities,teachers:next.teachers,teacherIds:sibling.teacherIds?.filter(id=>next.teachers.some(teacher=>teacher.id===id)),blocks:sibling.blocks.filter(block=>next.teachers.some(teacher=>teacher.id===block.teacherId)),rooms:next.rooms,places:next.places,days:next.days,periods:next.periods,activityCatalog,activities:sibling.activities.map(activity=>({...activity,name:activityCatalog.find(item=>item.id===(activity.settingId||activity.id))?.label||activity.name}))}}
     const bundle=year===deviceYear(current)?{...current,terms,semester:term as 1|2}:{...current,archives:{...current.archives,[year]:{...workspace,terms}}}
     if(!await write(bundle))throw Error('ยังไม่ได้บันทึกลงเครื่อง กรุณาดาวน์โหลดสำเนาก่อนปิดหน้านี้')
     return devicePreparation(next)
@@ -121,7 +123,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     stale(current,hash)
     const old=current.activities.find(item=>item.id===group.id)
     if(remove&&!old)throw Error('ไม่พบทีมกิจกรรม')
-    if(!remove)validateActivityTeam(group,current.rooms.map(room=>room.id),current.teacherIds??current.teachers.map(t=>t.id),(current.activityCatalog||[]).map(item=>item.id),current.days,current.periods)
+    if(!remove)validateActivityTeam(group,current.rooms.map(room=>room.id),current.teacherIds??current.teachers.map(t=>t.id),(current.activityCatalog||[]).map(item=>item.id),current.days,current.periods,current.rooms.map(room=>({id:room.id,level:room.label})))
     const overwrites=remove?[]:current.activities.filter(item=>item.id!==group.id&&(item.settingId||item.id)===group.settingId&&item.roomIds.some(id=>group.roomIds.includes(id))).map(item=>({rooms:item.roomIds.filter(id=>group.roomIds.includes(id)).map(roomId=>({roomId,previous:freeActivityTeachers(item,roomId),next:activityTeachers(group,roomId),duplicates:freeActivityTeachers(item,roomId).filter(id=>activityTeachers(group,roomId).includes(id))}))}))
     const affected=!remove&&activityTeamKeepsSchedule(old?freeActivityGroup(old):undefined,group)?[]:current.timetable.filter(cell=>!!old&&cell.activityId===old.id||!remove&&group.roomIds.includes(cell.classroomId)&&(group.cells.some(target=>target.day===cell.day&&target.period===cell.period)||current.activities.some(item=>item.id===cell.activityId&&(item.settingId||item.id)===group.settingId)))
     return {affected:affected.length,locked:affected.filter(cell=>cell.locked).length,hash:deviceScheduleKey(current),overwrites}
@@ -151,7 +153,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
   function rosterBusy(current:FreeWizardPlan,day:number):SubstituteBusy[] {
     const lessons=devicePreparation(current).lessons
     return [...current.blocks.filter(row=>row.day===day).map(row=>({teacherId:row.teacherId,period:row.period,...rosterPeriodClock(current.periods,'',row.period),kind:'block' as const})),
-      ...busyCells(current).filter(row=>row.day===day).map(row=>{const lesson=lessons.find(lesson=>lesson.id===row.lessonId);return {teacherId:row.teacherId,period:row.period,...rosterPeriodClock(current.periods,current.rooms.find(room=>room.id===row.classroomId)?.label||'',row.period),kind:row.lessonId.startsWith('activity:')?'activity' as const:'lesson' as const,label:lesson?`${lesson.code||''} ${lesson.name}`.trim():row.label,roomLabel:current.rooms.find(room=>room.id===row.classroomId)?.label||''}})]
+      ...teacherActivityRosterBusy(withTeacherActivityClock(current.periods,current.teacherActivities),day),...busyCells(current).filter(row=>row.day===day).map(row=>{const lesson=lessons.find(lesson=>lesson.id===row.lessonId);return {teacherId:row.teacherId,period:row.period,...rosterPeriodClock(current.periods,current.rooms.find(room=>room.id===row.classroomId)?.label||'',row.period),kind:row.lessonId.startsWith('activity:')?'activity' as const:'lesson' as const,label:lesson?`${lesson.code||''} ${lesson.name}`.trim():row.label,roomLabel:current.rooms.find(room=>room.id===row.classroomId)?.label||''}})]
   }
   function teacherSlots(date:string,year:string,teacher:string,term:number) {
     const current=plan(year,term),data=devicePreparation(current),day=weekday(date)
@@ -175,7 +177,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       })),
       remove:ids=>outcome(()=>mutate(selectedYear,selectedTerm,async current=>{
         for(const target of [current,plan(selectedYear,selectedTerm===1?2:1)])if(target.subjects.some(subject=>ids.includes(subject.teacherId))||target.activities.some(activity=>activity.roomIds.some(room=>freeActivityTeachers(activity,room).some(id=>ids.includes(id)))))throw Error('ครูที่เลือกยังมีภาระสอน กิจกรรมอยู่ กรุณาเปลี่ยนผู้รับผิดชอบก่อนลบ')
-        await put(selectedYear,selectedTerm,{...current,teachers:current.teachers.filter(teacher=>!ids.includes(teacher.id)),teacherIds:current.teacherIds?.filter(id=>!ids.includes(id)),blocks:current.blocks.filter(block=>!ids.includes(block.teacherId))})
+        await put(selectedYear,selectedTerm,{...current,teacherActivities:repairActivityTeacherPlan({teacherActivities:current.teacherActivities},current.teachers.filter(teacher=>!ids.includes(teacher.id)).map(teacher=>teacher.id)).plan.teacherActivities,teachers:current.teachers.filter(teacher=>!ids.includes(teacher.id)),teacherIds:current.teacherIds?.filter(id=>!ids.includes(id)),blocks:current.blocks.filter(block=>!ids.includes(block.teacherId))})
       })),
     },
     fetchScheduleInit:async()=>{
@@ -186,8 +188,8 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     fetchPreparation:async(year,term)=>outcome(async()=>preparation(year,term)),
     repairScheduleActivityTeachers:(year,term,hash)=>outcome(()=>mutate(year,term,async current=>{
       stale(current,hash)
-      const repaired=repairActivityTeacherPlan({teacherIds:current.teacherIds,activityGroups:current.activities.map(freeActivityGroup)},current.teachers.map(t=>t.id)),byId=new Map(repaired.plan.activityGroups?.map(group=>[group.id,group]))
-      const next={...current,teacherIds:repaired.plan.teacherIds,activities:current.activities.map(activity=>{const group=byId.get(activity.id)!;if(JSON.stringify(group)===JSON.stringify(freeActivityGroup(activity)))return activity;return {...activity,teacherIds:group.teacherIds,teacherId:group.teacherIds[0]||'',roomTeacherIds:group.roomTeachers,roomTeachers:Object.fromEntries(Object.entries(group.roomTeachers).map(([room,ids])=>[room,ids[0]||'']))}})}
+      const repaired=repairActivityTeacherPlan({teacherActivities:current.teacherActivities,teacherIds:current.teacherIds,activityGroups:current.activities.map(freeActivityGroup)},current.teachers.map(t=>t.id)),byId=new Map(repaired.plan.activityGroups?.map(group=>[group.id,group]))
+      const next={...current,teacherActivities:repaired.plan.teacherActivities,teacherIds:repaired.plan.teacherIds,activities:current.activities.map(activity=>{const group=byId.get(activity.id)!;if(JSON.stringify(group)===JSON.stringify(freeActivityGroup(activity)))return activity;return {...activity,teacherIds:group.teacherIds,teacherId:group.teacherIds[0]||'',roomTeacherIds:group.roomTeachers,roomTeachers:Object.fromEntries(Object.entries(group.roomTeachers).map(([room,ids])=>[room,ids[0]||'']))}})}
       const bundle=read(),workspace=year===deviceYear(bundle)?bundle:bundle.archives?.[year]
       if(!workspace)throw Error('ไม่พบปีการศึกษา')
       const terms={...workspace.terms,[term]:next},saved=year===deviceYear(bundle)?{...bundle,terms}:{...bundle,archives:{...bundle.archives,[year]:{...workspace,terms}}}
@@ -195,7 +197,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       return {removed:repaired.removedTeacherIds.length}
     })),
     fetchScheduleDays:async(year,term=1)=>plan(year,term).days,
-    fetchPeriodTimes:async()=>({times:plan().periods,isDefault:false}),
+    fetchPeriodTimes:async(year,term)=>{const current=plan(year,term);return {times:year?withTeacherActivityClock(current.periods,current.teacherActivities):current.periods,isDefault:false}},
     savePeriodTimes:async periods=>{const error=validatePeriodProfiles(periods);if(error)throw Error(error);await mutate(selectedYear,selectedTerm,current=>{const next={...current,periods};for(const target of [next,{...plan(selectedYear,selectedTerm===1?2:1),periods}]){fixed(target);const issue=devicePreflight(target,target.rooms.map(room=>room.id),false).find(issue=>issue.severity==='error'&&issue.code==='subject_day');if(issue)throw Error(issue.message)}return put(selectedYear,selectedTerm,next)});return {ok:true}},
     fetchScheduleClassrooms:async year=>devicePreparation(plan(year)).classrooms.map(room=>({...room,label:`${room.level}/${room.name}`})),
     saveTimetableClassrooms:(year,term,levels)=>outcome(()=>mutate(year,term,async current=>{
@@ -276,7 +278,8 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       stale(current,hash);validatePlan(config,current.subjects.map(subject=>subject.id))
       if(deviceDataKey(config.activityGroups||[])!==deviceDataKey(current.activities.map(freeActivityGroup)))throw Error('แก้ทีมครูผ่านเมนูกิจกรรม')
       if(config.teacherIds?.some(id=>!current.teachers.some(teacher=>teacher.id===id)))throw Error('ไม่พบครูที่เลือก')
-      const next={...current,teachingGroups:config.teachingGroups,days:config.days,teacherIds:config.teacherIds,places:config.rooms,reduceGaps:config.reduceGaps,maxContinuous:config.maxContinuous,subjects:current.subjects.map(subject=>{const rule=config.rules[subject.id];return rule?{...subject,periods:rule.count,pattern:rule.pattern,placeId:rule.roomId,spread:rule.spread,timePreference:rule.timePreference||(rule.morning?'morning' as const:'any' as const)}:subject})}
+      validateTeacherActivities(config.teacherActivities,current.teachers.map(teacher=>teacher.id))
+      const next={...current,teacherActivities:config.teacherActivities,teachingGroups:config.teachingGroups,days:config.days,teacherIds:config.teacherIds,places:config.rooms,reduceGaps:config.reduceGaps,maxContinuous:config.maxContinuous,subjects:current.subjects.map(subject=>{const rule=config.rules[subject.id];return rule?{...subject,periods:rule.count,pattern:rule.pattern,placeId:rule.roomId,spread:rule.spread,timePreference:rule.timePreference||(rule.morning?'morning' as const:'any' as const)}:subject})}
       fixed(next);return put(year,term,next)
     })),
     saveScheduleTeachingAssignments:(year,term,hash,rows)=>outcome(()=>mutate(year,term,async current=>{
@@ -383,7 +386,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       const current=plan(year,term),data=preparation(year,term),busy=busyCells(current),quotas=new Map<string,{id:string;teacherId:string;label:string;activity:boolean;target:number;used:number}>()
       for(const lesson of data.lessons)for(const teacherId of lessonTeachers(lesson))for(const part of teachingQuotaParts(lesson)){const id=part.id,key=id+':'+teacherId,used=allCells(current).filter(cell=>lessonId(cell)===lesson.id&&(part.cell?part.cell===`${cell.day}:${cell.period}`:!lesson.jointTeachingCells?.[`${cell.day}:${cell.period}`])).length,old=quotas.get(key);if(old){old.used=Math.max(old.used,used);old.target=Math.max(old.target,part.count);old.label+=' / '+lesson.label}else quotas.set(key,{id,teacherId,label:lesson.label,activity:!!lesson.activity,target:part.count,used})}
       const activityCells=new Map(activityLockCells(data.plan.activityGroups||[],data.lessons,data.slots).map(cell=>[`${cell.classroomId}:${cell.day}:${cell.period}`,cell]))
-      return {classroomLevels:Object.fromEntries(current.rooms.map(room=>[room.id,room.label])),teachers:current.teachers,blocks:current.blocks,supported:true,lessons:data.lessons.filter(lesson=>!lesson.activity).map(lesson=>({id:lesson.id,teacherId:lesson.teacherId,classroomId:lesson.classroomId,label:lesson.label})),slots:allCells(current).map(cell=>({classroomId:cell.classroomId,day:cell.day,period:cell.period,lessonId:lessonId(cell),locked:!!cell.locked})),busy:busy.map(row=>{const activity=activityCells.get(`${row.classroomId}:${row.day}:${row.period}`);return {...row,activity:!!activity,activityFixed:!!activity?.fixed}}),quotas:[...quotas.values()]}
+      return {classroomLevels:Object.fromEntries(current.rooms.map(room=>[room.id,room.label])),teachers:current.teachers,blocks:current.blocks,supported:true,lessons:data.lessons.filter(lesson=>!lesson.activity).map(lesson=>({id:lesson.id,teacherId:lesson.teacherId,classroomId:lesson.classroomId,label:lesson.label})),slots:allCells(current).map(cell=>({classroomId:cell.classroomId,day:cell.day,period:cell.period,lessonId:lessonId(cell),locked:!!cell.locked})),busy:[...teacherActivityAvailability(current.periods,current.teacherActivities),...busy.map(row=>{const activity=activityCells.get(`${row.classroomId}:${row.day}:${row.period}`);return {...row,activity:!!activity,activityFixed:!!activity?.fixed}})],quotas:[...quotas.values()]}
     },
     fetchTeachingScheduleGrid:async(teacher,year,term=1)=>scheduleTeachingView(deviceDisplaySchedule(plan(year,term)),teacher),
     getTeacherConflictAt:async(year,teacher,day,period,ignore,term=1)=>{const current=plan(year,term),rooms=[...new Set(busyCells(current).filter(cell=>cell.teacherId===teacher&&cell.day===day&&profileCellOverlap(current.periods,current.rooms.find(room=>room.id===cell.classroomId)?.label||'',cell.period,current.rooms.find(room=>room.id===ignore)?.label||'',period)&&cell.classroomId!==ignore).map(cell=>current.rooms.find(room=>room.id===cell.classroomId)?.label||''))];return {busy:rooms.length>0,rooms}},

@@ -1,18 +1,12 @@
 'use client'
-import { useScheduleOperations, useScheduleServices } from './ScheduleServices'
-import { useMemo, useState } from 'react'
+import { useScheduleOperations } from './ScheduleServices'
+import { useEffect, useMemo, useState } from 'react'
 import { SCHOOL_LEVEL_GROUPS } from '@/lib/school-education-type'
 import { isTimetableClassroom } from '@/lib/schedules'
+import { PERIOD_BANDS, periodBand, type PeriodBand } from '@/lib/schedule-period-profiles'
+import './schedule-setup.css'
 
 type Room = { id: string; level: string; room: number; name: string }
-
-function timetableLevels(rooms: Room[]) {
-  const present = new Set(rooms.map(room => room.level))
-  const upper = ['ม.4', 'ม.5', 'ม.6'].some(level => present.has(level))
-  const primary = [...present].some(level => level.startsWith('ป.') || /^อ\./.test(level))
-  const groups = upper || !primary ? SCHOOL_LEVEL_GROUPS.secondary : SCHOOL_LEVEL_GROUPS.primary
-  return groups.flatMap(group => group.levels).filter(isTimetableClassroom)
-}
 
 function namesByLevel(rooms: Room[], levels: string[]) {
   return Object.fromEntries(levels.map(level => [
@@ -21,28 +15,32 @@ function namesByLevel(rooms: Room[], levels: string[]) {
   ]))
 }
 
-export default function ClassroomLevelEditor({ classrooms, year, term, locked, busy, onSaved, onBusy }: {
+export default function ClassroomLevelEditor({ classrooms, year, term, locked, busy, onSaved, onBusy, onDirty }: {
   classrooms: Room[]
   year: string
   term: number
   locked: boolean
   busy: boolean
+  onDirty?: (value: boolean) => void
   onSaved: () => Promise<void>
   onBusy: (value: boolean) => void
 }) {
   const { saveTimetableClassrooms } = useScheduleOperations()
-  const { local } = useScheduleServices()
 
-  const levels = useMemo(() => local ? [...new Set([...SCHOOL_LEVEL_GROUPS.primary,...SCHOOL_LEVEL_GROUPS.secondary].flatMap(group=>group.levels).filter(isTimetableClassroom))] : timetableLevels(classrooms), [classrooms,local])
+
+  const levels = useMemo(() => [...new Set([...SCHOOL_LEVEL_GROUPS.primary,...SCHOOL_LEVEL_GROUPS.secondary].flatMap(group=>group.levels).filter(isTimetableClassroom))], [])
   const saved = useMemo(() => namesByLevel(classrooms, levels), [classrooms, levels])
   const signature = JSON.stringify(saved)
   const [edited, setEdited] = useState({source:signature,values:saved})
   const draft = edited.source === signature ? edited.values : saved
   const setDraft = (change:(current:Record<string,string[]>)=>Record<string,string[]>) => setEdited(current=>({source:signature,values:change(current.source===signature?current.values:saved)}))
-  const [active, setActive] = useState(levels.find(level => saved[level]?.length) || levels[0] || '')
+  const [active, setActive] = useState(levels.find(level => saved[level]?.length) || 'ป.1')
+  const [band, setBand] = useState<PeriodBand>(periodBand(classrooms[0]?.level||'')||'primary')
   const [error, setError] = useState('')
   const names = draft[active] || []
   const dirty = JSON.stringify(draft) !== signature
+
+  useEffect(()=>{onDirty?.(dirty);return()=>onDirty?.(false)},[dirty,onDirty])
 
   function openLevel(level: string, open: boolean) {
     setError('')
@@ -82,8 +80,10 @@ export default function ClassroomLevelEditor({ classrooms, year, term, locked, b
   return <section className="prep-classrooms">
     <h2>กำหนดชั้นเรียน</h2>
     <p>เลือกชั้นที่เปิดสอน จำนวนห้อง และชื่อที่แสดง ชื่อเริ่มต้นเป็น 1, 2, 3 และเปลี่ยนได้ เช่น IEP1 หรือ ESMT</p>
-    <div className="prep-subject-levels" role="tablist" aria-label="ระดับชั้น">
-      {levels.map(level => <button key={level} type="button" aria-pressed={level === active} onClick={() => setActive(level)}>{level}<small>{(draft[level] || []).length ? `${(draft[level] || []).length} ห้อง` : 'ปิด'}</small></button>)}
+    <div className="schedule-clock-tabs" role="group" aria-label="ช่วงชั้นที่เปิดสอน">{PERIOD_BANDS.map(item=><button key={item.id} type="button" disabled={busy||locked} aria-pressed={band===item.id} onClick={()=>{setBand(item.id);setActive(levels.find(level=>periodBand(level)===item.id)||'')}}><strong>{item.label}</strong><small>{item.grades} · {levels.filter(level=>periodBand(level)===item.id).reduce((sum,level)=>sum+(draft[level]?.length||0),0)} ห้อง</small></button>)}</div>
+    <div className="prep-checks"><button type="button" disabled={busy||locked} onClick={()=>{setError('');setDraft(current=>({...current,...Object.fromEntries(levels.filter(level=>periodBand(level)===band).map(level=>[level,current[level]?.length?current[level]:['1']]))}))}}>เปิดทุกชั้นในช่วงนี้ ชั้นละ 1 ห้อง</button><small>ห้องที่ตั้งไว้แล้วคงจำนวนและชื่อเดิม</small></div>
+    <fieldset disabled={busy||locked} style={{border:0,padding:0,minWidth:0}}><div className="prep-subject-levels" role="group" aria-label="ระดับชั้น">
+      {levels.filter(level=>periodBand(level)===band).map(level => <button key={level} type="button" aria-pressed={level === active} onClick={() => setActive(level)}>{level}<small>{(draft[level] || []).length ? `${(draft[level] || []).length} ห้อง` : 'ปิด'}</small></button>)}
     </div>
     {active && <div className="prep-room-editor">
       <div className="prep-room-editor-bar">
@@ -98,8 +98,9 @@ export default function ClassroomLevelEditor({ classrooms, year, term, locked, b
       {names.length > 0 && <div className="prep-room-names">{names.map((name, index) => <label key={`${active}-${index}`}><span>{active}/</span><input value={name} maxLength={20} aria-label={`ชื่อห้อง ${active} ลำดับ ${index + 1}`} onChange={event => rename(active, index, event.target.value)} /></label>)}</div>}
       {names.length === 0 && <p>ชั้นนี้ปิดอยู่ กดเปิดชั้นนี้เมื่อต้องการใช้จัดตาราง</p>}
     </div>}
+    </fieldset>
     {error && <p className="prep-error" role="alert">{error}</p>}
-    {locked && <p className="prep-notice">บันทึกวันและเวลาก่อน แล้วค่อยบันทึกชั้นเรียน</p>}
+    {locked && <p className="prep-notice">บันทึกหรือยกเลิกข้อมูลที่กำลังแก้ในขั้นอื่นก่อน</p>}
     <button type="button" className="prep-primary" disabled={busy || locked || !dirty} onClick={() => void save()}>บันทึกชั้นเรียน</button>
   </section>
 }

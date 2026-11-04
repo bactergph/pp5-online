@@ -1,5 +1,7 @@
+import {levelPeriodTimes} from './schedule-period-profiles'
 import 'server-only'
 import {validatePeriodProfiles} from './schedule-period-profiles'
+import {teacherActivityBlocks,validateTeacherActivities} from './schedule-teacher-activities'
 import {prepareJointTeachingSession,prepareJointTeachingCancellation,applyJointTeachingLock,type JointLockRequest} from './schedule-joint-lock'
 import {withJointTeachingGroups,validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingScope} from './schedule-joint-teaching'
 import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
@@ -136,11 +138,13 @@ export async function savePlan(year:string,term:number,hash:string,plan:Schedule
  const s=await actor(),current=await preparation(year,term);validatePlan(plan,current.lessons.filter(l=>!l.activity).map(l=>l.id))
  if(JSON.stringify(plan.activityGroups||[])!==JSON.stringify(current.plan.activityGroups||[]))throw Error('แก้ทีมครูผ่านเมนูกิจกรรมและครูผู้รับผิดชอบ')
  if(plan.teacherIds?.some(id=>!current.teachers.some(t=>t.id===id)))throw Error('ครูที่เลือกไม่ได้อยู่ในโรงเรียนนี้')
+ validateTeacherActivities(plan.teacherActivities,current.teachers.map(teacher=>teacher.id))
  const lessons=withJointTeachingGroups(current.lessons.map(l=>({...l,...plan.rules[l.id],count:l.activity?current.slots.filter(r=>lessonKey(r)===l.id).length:(plan.rules[l.id]?.count??l.count)})),plan,true)
  // Saving preparation may be incremental. Only conflicts with existing timetable
  // cells block it; subject names (e.g. “ชุมชน”) must never classify an issue.
  const syncErrors=jointTeachingSlotErrors(lessons,current.slots.map(toPlanned));if(syncErrors.length)throw Error(syncErrors[0])
- const issues=checkPlanning(lessons,current.slots.map(toPlanned),plan.days,current.periods,current.blocks).filter(i=>i.code?.startsWith('fixed_'))
+ const blocks=[...(current.manualBlocks??current.blocks),...teacherActivityBlocks(current.periods,plan.teacherActivities)]
+ const issues=checkPlanning(lessons,current.slots.map(toPlanned),plan.days,current.periods,blocks).filter(i=>i.code?.startsWith('fixed_'))
  if(issues.length)throw Error(issues.map(i=>i.message).join('\n'))
  const r=await createServerClient().rpc('save_schedule_plan',{p_school:s.schoolId,p_year:year,p_term:term,p_hash:hash,p_config:plan});fail(r.error)
  return preparation(year,term)
@@ -177,7 +181,7 @@ function activityPlacement(data:Preparation,year:string){
  return {slots,offerings,extra,patch,unlock,flexible}
 }
 function input(data:Preparation,scope:string[],clear:boolean,year:string){
- if(!Array.isArray(scope)||!scope.length||new Set(scope).size!==scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id))||typeof clear!=='boolean')throw Error('กรุณาเลือกห้องประถมหรือมัธยมในปีการศึกษานี้ การจัดตารางนี้ไม่รวมอนุบาล และห้ามเลือกห้องซ้ำ')
+ if(!Array.isArray(scope)||!scope.length||new Set(scope).size!==scope.length||scope.some(id=>!data.classrooms.some(c=>c.id===id))||typeof clear!=='boolean')throw Error('กรุณาเลือกห้องเรียนในปีการศึกษานี้ และห้ามเลือกห้องซ้ำ')
  validateJointTeachingGroups(data.plan.teachingGroups,data.lessons,data.plan.rules)
  scope=jointTeachingScope(scope,data.lessons,data.plan.teachingGroups)
  const placed=activityPlacement(data,year),cellKey=(s:{classroom_id:string;day_of_week:number;period:number})=>`${s.classroom_id}:${s.day_of_week}:${s.period}`,pinned=new Set(placed.slots.map(cellKey))
@@ -191,14 +195,14 @@ function input(data:Preparation,scope:string[],clear:boolean,year:string){
  const lessons=allLessons.map(l=>{const active=scope.includes(l.classroomId)&&!l.activity||autoIds.has(l.id);const count=active?(placed.flexible.get(l.id)?.count??l.count):retained.filter(s=>lessonKey(s)===l.id).length;return {...l,...placed.patch.get(l.id),count,fixedOnly:!active,pattern:active?(l.activity?Array(count).fill(1):l.pattern):undefined,teacherOptional:!active||l.teacherOptional,preferMorning:active&&!l.activity&&lessonPrefersMorning(l)}})
  return {retained,lessons,offerings:placed.offerings,unlock:placed.unlock}
 }
-function shiftManageStep<T extends {step:number}>(issue:T){return {...issue,step:({1:1,2:3,3:5,4:6,5:6,6:7} as Record<number,number>)[issue.step]||7}}
+function shiftManageStep<T extends {step:number}>(issue:T){return {...issue,step:({1:2,2:3,3:5,4:6,5:6,6:7} as Record<number,number>)[issue.step]||7}}
 export async function preflight(year:string,term:number,scope:string[],clear:boolean){
  const data=await preparation(year,term),activityIssues:ReturnType<typeof checkPlanning>=[],groupIds=new Set<string>(),roomActivities=new Set<string>()
  // Commit validates every activity team, including pinned teams outside the chosen scope.
  // Validate before placement so deleted settings/rooms and invalid quotas cannot become a seemingly ready draft.
  for(const group of data.plan.activityGroups||[]){
   const name=data.activities.find(activity=>activity.id===group.settingId)?.label||'กิจกรรม'
-  try{validateActivityTeam(group,data.classrooms.map(room=>room.id),data.teachers.map(teacher=>teacher.id),data.activities.map(activity=>activity.id),data.plan.days,data.periods)}
+  try{validateActivityTeam(group,data.classrooms.map(room=>room.id),data.teachers.map(teacher=>teacher.id),data.activities.map(activity=>activity.id),data.plan.days,data.periods,data.classrooms)}
   catch(error){activityIssues.push({severity:'error',message:`${name}: ${error instanceof Error?error.message:String(error)}`,step:4});continue}
   if(groupIds.has(group.id)||group.roomIds.some(room=>roomActivities.has(`${group.settingId}:${room}`)))activityIssues.push({severity:'error',message:`${name}: กำหนดทีมกิจกรรมซ้ำในห้องเดียวกัน กรุณารวมเป็นทีมเดียว`,step:4})
   groupIds.add(group.id);for(const room of group.roomIds)roomActivities.add(`${group.settingId}:${room}`)
@@ -241,7 +245,7 @@ export async function activityDraft(year:string,term:number,setting:string,rooms
  const data=await preparation(year,term)
  if(!data.activities.some(a=>a.id===setting)||!rooms.length||rooms.some(id=>!data.classrooms.some(c=>c.id===id))||!cells.length)throw Error('กรุณาเลือกกิจกรรม ห้อง และคาบให้ครบ')
  if(new Set(rooms).size!==rooms.length||new Set(cells.map(c=>c.day+':'+c.period)).size!==cells.length)throw Error('พบห้องหรือคาบซ้ำ')
- if(cells.some(c=>!data.plan.days.includes(c.day)||!data.periods.some(t=>!t.is_break&&t.period===c.period)))throw Error('วันหรือคาบอยู่นอกเวลาเรียน')
+ if(cells.some(c=>!data.plan.days.includes(c.day)||rooms.some(room=>!levelPeriodTimes(data.periods,data.classrooms.find(item=>item.id===room)?.level||'').some(t=>!t.is_break&&t.period===c.period))))throw Error('วันหรือคาบอยู่นอกเวลาเรียน')
  const offerings:{id:string;classroom_id:string;evaluation_setting_id:string}[]=[];const rows=[...data.slots],affected:ScheduleSlot[]=[],unlock:ScheduleSlot[]=[]
  for(const room of rooms){let lesson: {id:string;teacherId:string|null}|undefined=data.lessons.find(l=>l.activity&&l.classroomId===room&&l.subjectId===setting)
  if(!lesson&&!remove){const id=randomUUID();offerings.push({id,classroom_id:room,evaluation_setting_id:setting});lesson={id:'activity:'+id,teacherId:null}}
@@ -263,7 +267,7 @@ export async function previewActivityTeam(year:string,term:number,hash:string,gr
  if(data.hash!==hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุด')
  const old=data.plan.activityGroups?.find(g=>g.id===group.id)
  if(remove&&!old)throw Error('ไม่พบทีมกิจกรรม')
- if(!remove)validateActivityTeam(group,data.classrooms.map(c=>c.id),data.plan.teacherIds??data.teachers.map(t=>t.id),data.activities.map(a=>a.id),data.plan.days,data.periods)
+ if(!remove)validateActivityTeam(group,data.classrooms.map(c=>c.id),data.plan.teacherIds??data.teachers.map(t=>t.id),data.activities.map(a=>a.id),data.plan.days,data.periods,data.classrooms)
  if(!remove&&activityTeamKeepsSchedule(old,group))return {affected:0,locked:0,overwrites:[],hash:data.hash}
  const target=remove?old!:group
  const overwrites=remove?[]:(data.plan.activityGroups||[]).filter(g=>g.id!==group.id&&g.settingId===group.settingId&&g.roomIds.some(id=>group.roomIds.includes(id))).map(g=>({rooms:g.roomIds.filter(id=>group.roomIds.includes(id)).map(roomId=>({roomId,previous:activityTeachers(g,roomId),next:activityTeachers(group,roomId),duplicates:activityTeachers(g,roomId).filter(id=>activityTeachers(group,roomId).includes(id))}))}))
