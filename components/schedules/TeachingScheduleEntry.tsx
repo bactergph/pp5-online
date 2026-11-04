@@ -153,7 +153,7 @@ export default function TeachingScheduleEntry() {
           {teacherActivityMinutes(teacherActivitiesInClock(periodTimes),selectedTeacher)>0&&<span> · กิจกรรมครู {teacherActivityMinutes(teacherActivitiesInClock(periodTimes),selectedTeacher)} นาที/สัปดาห์ (แยกจากคาบสอน)</span>}
           {canEdit && (
             <>
-              {' '}— กดคาบด้านล่างเพื่อเอาวิชาออก เปลี่ยนวิชา หรือล็อกคาบว่าง หรือไปที่{' '}
+              {' '}· แก้รายวิชาและล็อกคาบได้ที่{' '}
               <Link href="/schedules/class/manage">จัดการตารางเรียน</Link>
             </>
           )}
