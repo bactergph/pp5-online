@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),load=require('./helpers/load-pure-ts.cjs')
+const {repairActivityTeacherPlan}=load('lib/schedule-activity-teacher-repair.ts')
+const plan={teacherIds:['a','gone'],rules:{x:{count:2}},activityGroups:[{id:'g',settingId:'s',roomIds:['room'],mode:'joint',teacherIds:['a','gone'],roomTeachers:{room:['gone','a']},weeklyPeriods:2,cells:[{day:1,period:2}]}]}
+const before=JSON.stringify(plan),repaired=repairActivityTeacherPlan(plan,['a','b'])
+assert.equal(JSON.stringify(plan),before);assert.equal(repaired.removedTeacherIds.length,1);assert.equal(repaired.affectedGroups,1)
+assert.equal(JSON.stringify(repaired.plan.activityGroups[0].teacherIds),'["a"]');assert.equal(JSON.stringify(repaired.plan.activityGroups[0].roomTeachers.room),'["a"]')
+assert.equal(JSON.stringify(repaired.plan.rules),JSON.stringify(plan.rules));assert.equal(JSON.stringify(repaired.plan.activityGroups[0].cells),JSON.stringify(plan.activityGroups[0].cells));assert.equal(repairActivityTeacherPlan(repaired.plan,['a']).removedTeacherIds.length,0)
+assert.equal(repairActivityTeacherPlan({teacherIds:['gone']},['a']).plan.teacherIds,undefined,'A completely obsolete selection restores the current personnel picker')
+assert.equal(repairActivityTeacherPlan({teacherIds:[]},['a']).plan.teacherIds.length,0,'An intentionally empty selection remains empty')
+console.log('PASS: immutable repair, valid teachers/order/rules/room assignments/activity cells retained, idempotence')

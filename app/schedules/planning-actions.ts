@@ -14,6 +14,7 @@ export async function removeScheduleInputSubjects(year:string,term:number,hash:s
 export async function saveScheduleTeachingAssignments(year:string,term:number,hash:string,rows:{lessonId:string;teacherId:string}[]){return scheduleResult(()=>saveTeachingAssignments(year,term,hash,rows))}
 export async function saveTimetableClassrooms(year:string,term:number,levels:{level:string;names:string[]}[]){return scheduleResult(()=>saveTimetableRooms(year,term,levels))}
 export async function fetchPreparation(year:string,term:number){return scheduleResult(()=>planning.preparation(year,term))}
+export async function repairScheduleActivityTeachers(year:string,term:number,hash:string){return scheduleResult(()=>planning.repairActivityTeachers(year,term,hash))}
 export async function fetchScheduleActivityCatalog(){return scheduleResult(()=>planning.activityCatalog())}
 export async function saveScheduleActivityName(id:string|null,label:string,shortLabel:string,weeklyPeriods=1){return scheduleResult(()=>planning.saveActivityName(id,label,shortLabel,weeklyPeriods))}
 export async function removeScheduleActivityName(id:string){return scheduleResult(()=>planning.removeActivityName(id))}

@@ -39,6 +39,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'loadSubstituteRosterSlots' |
   'moveClassScheduleCell' |
   'previewScheduleActivityTeam' |
+  'repairScheduleActivityTeachers' |
   'removeScheduleActivityName' |
   'removeScheduleInputSubjects' |
   'removeScheduleSubjectCell' |

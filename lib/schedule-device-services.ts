@@ -1,5 +1,6 @@
 import {validatePeriodProfiles} from '@/lib/schedule-period-profiles'
 import {profileTeacherConflicts} from './schedule-profile-solver'
+import {repairActivityTeacherPlan} from './schedule-activity-teacher-repair'
 import {rosterPeriodClock,profileCellOverlap,hasPeriodProfiles} from './schedule-period-profiles'
 import {applyJointTeachingLock,prepareJointTeachingSession,prepareJointTeachingCancellation} from './schedule-joint-lock'
 import type { ScheduleOperations } from '../components/schedules/ScheduleServices'
@@ -183,6 +184,16 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       return {canEdit:true,role:'admin',homeroomClassroomIds:[],defaultSemester:bundle.semester,defaultTeacherId:plan().teachers[0]?.id||null,years:[year,...Object.keys(bundle.archives||{})].sort().reverse().map(id=>({id,year_be:Number(id),is_active:id===year,term1_start_date:null,term1_end_date:null,term2_start_date:null,term2_end_date:null})),teachers:devicePreparation(plan()).teachers}
     },
     fetchPreparation:async(year,term)=>outcome(async()=>preparation(year,term)),
+    repairScheduleActivityTeachers:(year,term,hash)=>outcome(()=>mutate(year,term,async current=>{
+      stale(current,hash)
+      const repaired=repairActivityTeacherPlan({teacherIds:current.teacherIds,activityGroups:current.activities.map(freeActivityGroup)},current.teachers.map(t=>t.id)),byId=new Map(repaired.plan.activityGroups?.map(group=>[group.id,group]))
+      const next={...current,teacherIds:repaired.plan.teacherIds,activities:current.activities.map(activity=>{const group=byId.get(activity.id)!;if(JSON.stringify(group)===JSON.stringify(freeActivityGroup(activity)))return activity;return {...activity,teacherIds:group.teacherIds,teacherId:group.teacherIds[0]||'',roomTeacherIds:group.roomTeachers,roomTeachers:Object.fromEntries(Object.entries(group.roomTeachers).map(([room,ids])=>[room,ids[0]||'']))}})}
+      const bundle=read(),workspace=year===deviceYear(bundle)?bundle:bundle.archives?.[year]
+      if(!workspace)throw Error('ไม่พบปีการศึกษา')
+      const terms={...workspace.terms,[term]:next},saved=year===deviceYear(bundle)?{...bundle,terms}:{...bundle,archives:{...bundle.archives,[year]:{...workspace,terms}}}
+      if(!await write(saved))throw Error('ยังไม่ได้บันทึกลงเครื่อง กรุณาลองใหม่')
+      return {removed:repaired.removedTeacherIds.length}
+    })),
     fetchScheduleDays:async(year,term=1)=>plan(year,term).days,
     fetchPeriodTimes:async()=>({times:plan().periods,isDefault:false}),
     savePeriodTimes:async periods=>{const error=validatePeriodProfiles(periods);if(error)throw Error(error);await mutate(selectedYear,selectedTerm,current=>{const next={...current,periods};for(const target of [next,{...plan(selectedYear,selectedTerm===1?2:1),periods}]){fixed(target);const issue=devicePreflight(target,target.rooms.map(room=>room.id),false).find(issue=>issue.severity==='error'&&issue.code==='subject_day');if(issue)throw Error(issue.message)}return put(selectedYear,selectedTerm,next)});return {ok:true}},

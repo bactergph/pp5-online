@@ -7,6 +7,7 @@ import { activityTeachers, activityTeamWorkload, restoreActivityRoomTeachers, va
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import ActivityAssignmentFields from './ActivityAssignmentFields'
 import './activity-confirmation.css'
+import {repairActivityTeacherPlan} from '@/lib/schedule-activity-teacher-repair'
 
 const activityConfirmation = {
   customClass: { popup:'activity-confirmation', title:'activity-confirmation-title', htmlContainer:'activity-confirmation-message', actions:'activity-confirmation-actions', confirmButton:'activity-confirmation-save', cancelButton:'activity-confirmation-cancel' },
@@ -15,7 +16,7 @@ const activityConfirmation = {
 }
 
 export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, onDirty, blocked }: { data: Preparation; year: string; term: number; onSaved: () => Promise<void>; onBusy: (b: boolean) => void; onDirty: (b: boolean) => void; blocked: boolean }) {
-  const { previewScheduleActivityTeam, removeScheduleActivityName, saveScheduleActivityName, saveScheduleActivityTeam } = useScheduleOperations()
+  const { previewScheduleActivityTeam, removeScheduleActivityName, saveScheduleActivityName, saveScheduleActivityTeam,repairScheduleActivityTeachers } = useScheduleOperations()
 
   const dialog = useRef<HTMLDialogElement>(null), catalogDialog = useRef<HTMLDialogElement>(null), lock = useRef(false), opener = useRef<HTMLElement | null>(null)
   const [draft, setDraft] = useState<ActivityTeam | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
@@ -23,6 +24,14 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
   const [activityLevel, setActivityLevel] = useState(''), [activityRoom, setActivityRoom] = useState(''), [query, setQuery] = useState('')
   const [pendingTeam, setPendingTeam] = useState(false), [showTimes, setShowTimes] = useState(false)
   const groups = data.plan.activityGroups || [], workload = activityTeamWorkload(groups), eligibleTeacherIds = data.plan.teacherIds ?? data.teachers.map(t => t.id)
+  const repair=repairActivityTeacherPlan(data.plan,data.teachers.map(t=>t.id))
+  async function repairTeachers(){
+    if(blocked||busy||lock.current)return
+    const decision=await Swal.fire({...activityConfirmation,icon:'warning',title:'ปรับปรุงรายชื่อครูกิจกรรม?',text:`พบรหัสครูเดิมที่ไม่อยู่ในรายชื่อบุคลากรที่ใช้งานได้ ${repair.removedTeacherIds.length} รายการ จะนำรหัสเหล่านี้ออกจากทีมและรายการครูที่เลือก กิจกรรม ห้อง และคาบที่จัดไว้ยังอยู่ จากนั้นเลือกครูผู้รับผิดชอบปัจจุบันได้`,confirmButtonText:'ยืนยันปรับปรุงรายชื่อ'})
+    if(!decision.isConfirmed)return
+    lock.current=true;setBusy(true);onBusy(true);setError('')
+    try{const result=await repairScheduleActivityTeachers(year,term,data.hash);if(result.error)throw Error(result.error);await onSaved();setMessage(`ปรับปรุงรายชื่อแล้ว ${result.data?.removed||0} รายการ กรุณาเลือกครูผู้รับผิดชอบปัจจุบันให้แต่ละกิจกรรม`)}catch(error){setError(error instanceof Error?error.message:'ปรับปรุงรายชื่อไม่สำเร็จ')}finally{lock.current=false;setBusy(false);onBusy(false)}
+  }
   function openCatalog(item?: { id: string; label: string; short_label?: string; weeklyPeriods?: number }) {
     if (busy) return
     opener.current = document.activeElement as HTMLElement
@@ -93,6 +102,7 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
     const editorOpen = dialog.current?.open
     let committed = false
     try {
+      if(!remove&&repair.removedTeacherIds.length)throw Error('กรุณากด “ปรับปรุงรายชื่อครูกิจกรรม” ก่อน แล้วเลือกครูปัจจุบันอีกครั้ง ทีมเดิมมีรายชื่อครูที่ใช้ไม่ได้ค้างอยู่')
       if (!remove) group = { ...group, roomTeachers: Object.fromEntries(Object.entries(group.roomTeachers).filter(([id]) => group.roomIds.includes(id))) }
       if (!remove && group.roomIds.length < 2 && group.mode === 'separate') group = { ...group, mode: 'joint', teacherIds: activityTeachers(group, group.roomIds[0] || '') }
       if (!remove) validateActivityTeam(group, data.classrooms.map(c => c.id), data.teachers.map(t => t.id), activities.map(a => a.id), data.plan.days, data.periods)
@@ -166,6 +176,7 @@ export default function ActivityTeamEditor({ data, year, term, onSaved, onBusy, 
   }
   const roomCount = (roomId: string) => groups.filter(group => group.roomIds.includes(roomId)).length
   return <section className="prep-input-panel prep-teacher-panel prep-activity-teams">
+    {repair.removedTeacherIds.length>0&&<div className="prep-error" role="alert"><strong>พบรายชื่อครูเดิมที่ใช้ไม่ได้ {repair.removedTeacherIds.length} รายการ</strong><p>ครูบางรายถูกลบหรือไม่อยู่ในรายชื่อบุคลากรที่พร้อมใช้งาน จึงบันทึกครูลงกิจกรรมไม่ผ่าน กดปรับปรุงก่อน แล้วเลือกครูปัจจุบันให้กิจกรรม</p><button type="button" className="prep-primary" disabled={blocked||busy} onClick={()=>void repairTeachers()}>ปรับปรุงรายชื่อครูกิจกรรม</button></div>}
     <div className="prep-activity-catalog">
       <div className="prep-teacher-bar">
         <div className="prep-teacher-title">

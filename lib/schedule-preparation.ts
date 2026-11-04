@@ -40,6 +40,15 @@ export async function preparation(year:string,term:number){
  return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,manualBlocks:constraints.manualBlocks,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
+export async function repairActivityTeachers(year:string,term:number,hash:string){
+ const session=await actor(),db=createServerClient()
+ const result=await db.rpc('repair_schedule_activity_teachers',{p_school:session.schoolId,p_year:year,p_term:term,p_hash:hash})
+ if(result.error)throw Error(result.error.code==='PGRST202'?'กรุณาติดตั้งฐานข้อมูล 104_activity_teacher_references.sql ก่อนปรับปรุงรายชื่อครูกิจกรรม':result.error.message)
+ const removed=Number((result.data as {removed?:number}|null)?.removed||0)
+ const {logActivity}=await import('./audit')
+ await logActivity({actor:session,schoolId:session.schoolId,action:'update',module:'schedules',targetType:'activity_team',description:`ปรับปรุงรหัสครูเดิมที่ใช้ไม่ได้ในกิจกรรม ${removed} รายการ`,metadata:{academicYearId:year,semester:term,removed}})
+ return {removed}
+}
 /** Labels and grid configuration from the exact snapshot used to calculate a draft. */
 export type DraftPreview = {
  lessons:Pick<Preparation['lessons'][number],'id'|'name'|'code'|'teacherName'|'roomName'|'subjectId'>[]
