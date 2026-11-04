@@ -269,6 +269,7 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
     return {
       id: subject.id,
       classroomId: subject.roomId,
+      classroomLevel: room?.label || '',
       teacherId: subject.teacherId,
       count: subject.periods,
       label: `${room?.label || 'ห้อง'} · ${subject.name}`,
@@ -287,7 +288,7 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
   })
   const groups = plan.activities.map(freeActivityGroup)
   const activityLessons = plan.activities.flatMap(activity => activity.roomIds.map(classroomId => ({
-    id: `activity:${activity.id}:${classroomId}`, classroomId, teacherId: null,
+    id: `activity:${activity.id}:${classroomId}`, classroomId, classroomLevel:plan.rooms.find(room=>room.id===classroomId)?.label||'', teacherId: null,
     teacherIds: freeActivityTeachers(activity, classroomId), count: activity.weeklyPeriods ?? (activity.cells.length || 1),
     subjectId: activity.settingId || activity.id, name: activity.name, fullName: activity.name,
     label: `${plan.rooms.find(room => room.id === classroomId)?.label || ''} · ${activity.name}`,

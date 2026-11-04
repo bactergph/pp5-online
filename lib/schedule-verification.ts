@@ -1,6 +1,7 @@
 import {jointTeachingSlotErrors} from './schedule-joint-teaching'
 import { blocksFor, checkPlanning, type PlannedLesson, type PlannedSlot, type PlanningIssue } from './schedule-planning'
 import type { PeriodTimeRow } from './schedule-helpers'
+import {levelPeriodTimes} from './schedule-period-profiles'
 
 /** Independently verify a solver answer before calling it complete or storing it. */
 export function verifyCompleteSchedule(lessons: PlannedLesson[], rows: PlannedSlot[], days: number[], periods: PeriodTimeRow[], blocks: {teacherId:string;day:number;period:number}[]): PlanningIssue[] {
@@ -14,7 +15,7 @@ export function verifyCompleteSchedule(lessons: PlannedLesson[], rows: PlannedSl
       const fits = (pattern: number[]): boolean => {
         if (!pattern.length) return remaining.size === 0
         const first = [...remaining].sort((a,b)=>{const [ad,ap]=a.split(':').map(Number),[bd,bp]=b.split(':').map(Number);return ad-bd||ap-bp})[0]
-        for (const size of new Set(pattern)) for (const candidate of blocksFor(size, days, periods).filter(block=>`${block.day}:${block.periods[0]}`===first)) {
+        for (const size of new Set(pattern)) for (const candidate of blocksFor(size, days, levelPeriodTimes(periods,lesson.classroomLevel||'')).filter(block=>`${block.day}:${block.periods[0]}`===first)) {
           const cells = candidate.periods.map(period => `${candidate.day}:${period}`)
           if (!cells.every(cell => remaining.has(cell))) continue
           cells.forEach(cell => remaining.delete(cell))

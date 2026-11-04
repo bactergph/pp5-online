@@ -44,7 +44,7 @@ type Props = {
 }
 
 export default function ScheduleGridTable({ renderCell, periodTimes, compactBreak = false, days = [1,2,3,4,5] }: Props) {
-  const columns: ScheduleColumn[] = (periodTimes?.length ? periodTimes : DEFAULT_PERIOD_TIMES).map(t => t.is_break ? { kind: 'break', header: t.label } : { kind: 'period', period: t.period, header: String(t.period) })
+  const columns: ScheduleColumn[] = (periodTimes?.length ? periodTimes : DEFAULT_PERIOD_TIMES).map(t => t.is_break ? { kind: 'break', header: t.label } : { kind: 'period', period: t.period, header: t.label.startsWith('ช่วง')?t.label:String(t.period) })
   return (
     <>
       <style>{GRID_STYLES}</style>
@@ -59,7 +59,7 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
               >
                 {col.kind === 'period' ? (
                   <>
-                    คาบ {col.header}
+                    {col.header.startsWith('ช่วง')?col.header:`คาบ ${col.header}`}
                     {periodTimes?.length ? (
                       <span className="period-time">{periodTimeLabel(periodTimes, col.period)}</span>
                     ) : null}

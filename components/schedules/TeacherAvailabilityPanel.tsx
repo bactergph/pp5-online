@@ -5,6 +5,7 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 import {useCallback, useEffect, useRef, useState} from 'react'
 import {type PeriodTimeRow} from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
+import {hasPeriodProfiles,profileCellOverlap,levelPeriodTimes} from '@/lib/schedule-period-profiles'
 
 type Availability = Awaited<ReturnType<import('./ScheduleServices').ScheduleOperations['fetchTeacherAvailability']>>
 export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded,onChanged}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean;onChanged?:()=>Promise<void>}) {
@@ -68,7 +69,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   }
   async function chooseCell(day:number,period:number) {
     if(!data)return
-    const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
+    const busy=busyAt(day,period)
     const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
     setEditing({day,period});setError('');setNotice('')
     const title=`${['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'][day]} · คาบ ${period}`
@@ -77,6 +78,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       if(decision.isConfirmed&&data.supported)await toggle(day,period,true)
       return
     }
+    if(hasPeriodProfiles(periodTimes)&&busy){await Swal.fire({icon:'info',title:'มีสอนในช่วงเวลานี้',text:busy.label+' · โรงเรียนแยกเวลาเรียนตามระดับชั้น แก้ไขหรือนำวิชาออกได้ที่ตารางเรียนของห้องนั้น',confirmButtonText:'เข้าใจแล้ว'});return}
     if(busy?.activity){await Swal.fire({icon:'info',title:'ติดกิจกรรม '+busy.label,text:busy.activityFixed?'กิจกรรมนี้กำหนดวันและคาบไว้ แก้เวลาได้ที่ “กิจกรรมและครู”':busy.locked?'คาบกิจกรรมนี้ถูกล็อกไว้ในตาราง จึงยังคงเวลาเดิม ต้องนำคาบล็อกออกหรือแก้ที่ “กิจกรรมและครู” ก่อนจัดใหม่':'คาบกิจกรรมที่ระบบจัดอัตโนมัติ เมื่อสร้างฉบับร่างใหม่ระบบเลือกเวลาให้ได้ ถ้าต้องการเปลี่ยนครูหรือจำนวนคาบ ให้แก้ที่ “กิจกรรมและครู”',confirmButtonText:'เข้าใจแล้ว',confirmButtonColor:'#245bdb'});return}
     if(busy?.locked){
       const decision=await Swal.fire({icon:'question',title,text:'คาบเรียนนี้ล็อกอยู่ ต้องการปลดล็อกก่อนแก้ไขไหม?',showCancelButton:true,confirmButtonText:'ปลดล็อกคาบเรียน',cancelButtonText:'ยกเลิก',confirmButtonColor:'#245bdb'})
@@ -85,7 +87,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     }
     if(!busy){
       const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
-      const decision=await Swal.fire({icon:'question',title,text:blocked?'ต้องการปลดล็อกคาบว่างนี้ไหม?':'ต้องการล็อกคาบว่างนี้ไหม?',showCancelButton:true,showDenyButton:!blocked,confirmButtonText:blocked?'ปลดล็อกคาบว่าง':'ล็อกคาบว่าง',denyButtonText:'เลือกวิชา',cancelButtonText:'ยกเลิก',confirmButtonColor:'#245bdb',denyButtonColor:'#64748b'})
+      const decision=await Swal.fire({icon:'question',title,text:blocked?'ต้องการปลดล็อกคาบว่างนี้ไหม?':'ต้องการล็อกคาบว่างนี้ไหม?',showCancelButton:true,showDenyButton:!blocked&&!hasPeriodProfiles(periodTimes),confirmButtonText:blocked?'ปลดล็อกคาบว่าง':'ล็อกคาบว่าง',denyButtonText:'เลือกวิชา',cancelButtonText:'ยกเลิก',confirmButtonColor:'#245bdb',denyButtonColor:'#64748b'})
       if(decision.isConfirmed&&data.supported){void toggle(day,period,blocked);return}
       if(!decision.isDenied)return
     }
@@ -122,6 +124,11 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     finally{reservedLessons.current.delete(key);pendingRef.current.delete(key);setPending([...pendingRef.current]);release()}
   }
   const teacherQuotas=data?.quotas.filter(q=>q.teacherId===teacher)||[]
+  function busyAt(day:number,period:number){
+    if(!hasPeriodProfiles(periodTimes))return data?.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
+    const rows=data?.busy.filter(b=>b.teacherId===teacher&&b.day===day&&profileCellOverlap(periodTimes,data.classroomLevels?.[b.classroomId]||'',b.period,'',period))||[]
+    return rows.length?{...rows[0],label:rows.map(row=>{const clock=levelPeriodTimes(periodTimes,data?.classroomLevels?.[row.classroomId]||'').find(t=>!t.is_break&&t.period===row.period);return `${row.label} (${clock?.start_time}–${clock?.end_time})`}).join(' / ')}:undefined
+  }
   const target=teacherQuotas.reduce((n,q)=>n+q.target,0)
   const progress=target?Math.min(100,100*teacherQuotas.reduce((n,q)=>n+Math.min(q.target,q.used),0)/target):0
   const content=<>
@@ -135,7 +142,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
     <div className="teacher-availability-body">
       {error&&<p role="alert" className="text-sm text-rose-700">{error} <button type="button" className="ml-2 min-h-11 underline" onClick={()=>void load(true)}>โหลดข้อมูลล่าสุด</button></p>}
       {notice&&<p role="status" className="text-sm text-emerald-700">{notice}</p>}
-      <p>กดคาบเพื่อเลือกวิชา นำวิชาออก หรือล็อกคาบว่าง การแก้ไขจะปรับตารางเรียนของห้องให้ตรงกันด้วย</p>
+      <p>{hasPeriodProfiles(periodTimes)?'โรงเรียนใช้เวลาประถม–มัธยมต่างกัน ตารางนี้ใช้เวลาชุดค่าเริ่มต้นสำหรับล็อกคาบว่าง และแสดงคาบสอนที่ทับช่วงเวลาจริง แก้วิชาได้จากตารางของแต่ละห้อง':'กดคาบเพื่อเลือกวิชา นำวิชาออก หรือล็อกคาบว่าง การแก้ไขจะปรับตารางเรียนของห้องให้ตรงกันด้วย'}</p>
       {!data?<p>กำลังโหลด...</p>:<>
         {!data.supported&&<p role="alert">ยังไม่เปิดใช้การล็อกคาบครู กรุณารันฐานข้อมูล 058_schedule_eight_periods_teacher_blocks.sql</p>}
         <div className="flex flex-wrap items-end gap-3">
@@ -160,7 +167,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
         </div>
 
         <div className="schedule-grid-scroll overflow-x-auto"><ScheduleGridTable days={scheduleDays} periodTimes={periodTimes} compactBreak renderCell={(day,period)=>{
-          const busy=data.busy.find(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
+          const busy=busyAt(day,period)
           const blocked=data.blocks.some(b=>b.teacherId===teacher&&b.day===day&&b.period===period)
           const selected=editing?.day===day&&editing?.period===period
           const loading=pending.includes(`${teacher}:${day}:${period}`)

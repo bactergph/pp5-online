@@ -43,8 +43,8 @@ export async function moveCell(roomId:string,year:string,fromDay:number,fromPeri
   if(target && (lessonKey(target)||target.note)) throw Error('คาบปลายทางมีข้อมูลอยู่ กรุณาเลือกคาบว่าง')
   const lesson=ctx.data.lessons.find(l=>l.id===expectedLesson&&l.classroomId===roomId)
   if(!lesson) throw Error('ไม่พบวิชาในห้องนี้')
-  if(lesson.teacherId&&ctx.constraints.blocks.some(b=>b.teacherId===lesson.teacherId&&b.day===toDay&&b.period===toPeriod)) throw Error('ครูล็อกคาบว่างนี้ไว้')
-  if(lesson.teacherId&&ctx.data.slots.some(s=>s!==source&&s.day_of_week===toDay&&s.period===toPeriod&&ctx.data.lessons.find(l=>l.id===lessonKey(s))?.teacherId===lesson.teacherId)) throw Error('ครูมีสอนในคาบปลายทางแล้ว')
+  if(!ctx.constraints.splitTimes&&lesson.teacherId&&ctx.constraints.blocks.some(b=>b.teacherId===lesson.teacherId&&b.day===toDay&&b.period===toPeriod)) throw Error('ครูล็อกคาบว่างนี้ไว้')
+  if(!ctx.constraints.splitTimes&&lesson.teacherId&&ctx.data.slots.some(s=>s!==source&&s.day_of_week===toDay&&s.period===toPeriod&&ctx.data.lessons.find(l=>l.id===lessonKey(s))?.teacherId===lesson.teacherId)) throw Error('ครูมีสอนในคาบปลายทางแล้ว')
   const rows=ctx.data.slots.filter(s=>s!==source&&s!==target)
   rows.push({...source,day_of_week:toDay,period:toPeriod})
   await commit(ctx,year,rows,`ย้ายคาบเรียนจากวัน ${fromDay} คาบ ${fromPeriod} ไปวัน ${toDay} คาบ ${toPeriod}`)
@@ -54,7 +54,7 @@ export async function saveCell(roomId: string, year: string, day: number, period
   const ctx = await context(year, semester)
   if (period > ctx.constraints.periodCount) throw new Error('คาบนี้ยังไม่ได้ตั้งเวลาเรียน')
   const teacherId = ctx.data.lessons.find(l=>l.id===lesson)?.teacherId
-  if (teacherId && ctx.constraints.blocks.some(b=>b.teacherId===teacherId && b.day===day && b.period===period)) throw new Error('ครูล็อกคาบว่างนี้ไว้ กรุณาเลือกคาบอื่น')
+  if (!ctx.constraints.splitTimes && teacherId && ctx.constraints.blocks.some(b=>b.teacherId===teacherId && b.day===day && b.period===period)) throw new Error('ครูล็อกคาบว่างนี้ไว้ กรุณาเลือกคาบอื่น')
   requireScheduleClass(ctx.data, roomId)
   const current = ctx.data.slots.find(s => s.classroom_id === roomId && s.day_of_week === day && s.period === period)
   if(expectedLesson!==undefined && (current?lessonKey(current):null)!==expectedLesson)throw new Error('คาบนี้เปลี่ยนแล้ว กรุณาโหลดตารางล่าสุดก่อนแก้ไข')
@@ -97,7 +97,7 @@ export async function teacherAvailability(year: string, semester = 1) {
   if (error) throw new Error(error.message)
   const quotaMap=new Map<string,{id:string;teacherId:string;label:string;activity:boolean;target:number;used:number}>()
   for(const l of ctx.data.lessons)for(const teacherId of lessonTeachers(l))for(const part of teachingQuotaParts(l)){const id=part.id,key=id+':'+teacherId,used=ctx.data.slots.filter(s=>lessonKey(s)===l.id&&(part.cell?part.cell===`${s.day_of_week}:${s.period}`:!l.jointTeachingCells?.[`${s.day_of_week}:${s.period}`])).length,target=l.activity?Math.max(part.count,used,1):part.count,existing=quotaMap.get(key);if(existing){existing.target=Math.max(existing.target,target);existing.used=Math.max(existing.used,used);existing.label+=' / '+l.label}else quotaMap.set(key,{id,teacherId,label:l.label,activity:l.activity,target,used})}
-  return {quotas:[...quotaMap.values()],teachers:(data||[]).map(t=>({id:t.id,name:`${t.prefix||''} ${t.full_name}`.trim()})),blocks:ctx.constraints.manualBlocks??ctx.constraints.blocks,supported:ctx.constraints.blocksSupported,lessons:ctx.data.lessons.filter(l=>!l.activity&&l.selectable!==false).map(l=>({id:l.id,teacherId:l.teacherId,classroomId:l.classroomId,label:l.label})),slots:ctx.data.slots.map(s=>({classroomId:s.classroom_id,day:s.day_of_week,period:s.period,lessonId:lessonKey(s),locked:s.locked})),busy:[...ctx.data.slots.flatMap(s=>{const l=ctx.data.lessons.find(l=>l.id===lessonKey(s));return l&&!l.activity?lessonTeachers(l).map(teacherId=>({teacherId,day:s.day_of_week,period:s.period,label:[l.label,l.roomName].filter(Boolean).join(' · '),classroomId:s.classroom_id,lessonId:l.id,locked:s.locked,activity:false,activityFixed:false})):[]}),...activityLockCells(ctx.data.activityGroups||[],ctx.data.lessons,ctx.data.slots).flatMap(cell=>cell.teacherIds.map(teacherId=>({teacherId,day:cell.day,period:cell.period,label:cell.name,classroomId:cell.classroomId,lessonId:cell.lessonId,locked:cell.locked,activity:true,activityFixed:cell.fixed})))]}
+  return {classroomLevels:Object.fromEntries(ctx.data.classrooms.map(c=>[c.id,c.level])),quotas:[...quotaMap.values()],teachers:(data||[]).map(t=>({id:t.id,name:`${t.prefix||''} ${t.full_name}`.trim()})),blocks:ctx.constraints.manualBlocks??ctx.constraints.blocks,supported:ctx.constraints.blocksSupported,lessons:ctx.data.lessons.filter(l=>!l.activity&&l.selectable!==false).map(l=>({id:l.id,teacherId:l.teacherId,classroomId:l.classroomId,label:l.label})),slots:ctx.data.slots.map(s=>({classroomId:s.classroom_id,day:s.day_of_week,period:s.period,lessonId:lessonKey(s),locked:s.locked})),busy:[...ctx.data.slots.flatMap(s=>{const l=ctx.data.lessons.find(l=>l.id===lessonKey(s));return l&&!l.activity?lessonTeachers(l).map(teacherId=>({teacherId,day:s.day_of_week,period:s.period,label:[l.label,l.roomName].filter(Boolean).join(' · '),classroomId:s.classroom_id,lessonId:l.id,locked:s.locked,activity:false,activityFixed:false})):[]}),...activityLockCells(ctx.data.activityGroups||[],ctx.data.lessons,ctx.data.slots).flatMap(cell=>cell.teacherIds.map(teacherId=>({teacherId,day:cell.day,period:cell.period,label:cell.name,classroomId:cell.classroomId,lessonId:cell.lessonId,locked:cell.locked,activity:true,activityFixed:cell.fixed})))]}
 }
 export async function editTeacherCell(year: string, semester: number, teacherId: string, roomId: string, day: number, period: number, expectedLesson: string|null, lessonId: string|null) {
   cell(day,period)
@@ -110,7 +110,7 @@ export async function editTeacherCell(year: string, semester: number, teacherId:
   if(current&&(!old||old.teacherId!==teacherId))throw new Error('คาบนี้ไม่ใช่คาบของครูที่เลือก')
   const next=lessonId&&ctx.data.lessons.find(l=>l.id===lessonId&&l.classroomId===roomId&&l.teacherId===teacherId&&l.selectable!==false)
   if(lessonId&&!next)throw new Error('รายวิชานี้ไม่ได้กำหนดให้ครูสอนในห้องที่เลือก')
-  if(lessonId&&ctx.constraints.blocks.some(b=>b.teacherId===teacherId&&b.day===day&&b.period===period))throw new Error('กรุณาปลดล็อกคาบว่างของครูก่อนเลือกวิชา')
+  if(!ctx.constraints.splitTimes&&lessonId&&ctx.constraints.blocks.some(b=>b.teacherId===teacherId&&b.day===day&&b.period===period))throw new Error('กรุณาปลดล็อกคาบว่างของครูก่อนเลือกวิชา')
   if(period>ctx.constraints.periodCount)throw new Error('คาบนี้ยังไม่ได้ตั้งเวลาเรียน')
   const rows=ctx.data.slots.filter(s=>s!==current)
   if(lessonId)rows.push({classroom_id:roomId,academic_year_id:year,day_of_week:day,period,...lessonColumns(lessonId),note:null,locked:false})

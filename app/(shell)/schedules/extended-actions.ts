@@ -1,3 +1,6 @@
+import {profileTeacherConflicts} from '@/lib/schedule-profile-solver'
+import {hasPeriodProfiles,profileCellOverlap,rosterPeriodClock} from '@/lib/schedule-period-profiles'
+import {validatePeriodProfiles} from '@/lib/schedule-period-profiles'
 import * as substituteDocuments from '@/lib/substitute-documents'
 import 'server-only'
 import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
@@ -52,7 +55,7 @@ export async function fetchPeriodTimes() {
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
   const db = createServerClient()
   const { data, error } = await db.from('school_period_times')
-    .select('period, label, start_time, end_time, is_break, sort_order')
+    .select('period, label, start_time, end_time, is_break, sort_order, profiles')
     .eq('school_id', session.schoolId)
     .order('sort_order')
   if (error) throw new Error(error.message)
@@ -67,7 +70,7 @@ export async function fetchPeriodTimes() {
 export async function savePeriodTimes(times: PeriodTimeRow[]) {
   const session = await requireScheduleSession()
   if (!canEdit(session) || !session.schoolId) throw new Error('ไม่มีสิทธิ์')
-  const invalid = validatePeriodTimes(times)
+  const invalid = validatePeriodProfiles(times)
   if (invalid) throw new Error(invalid)
   const db = createServerClient()
   const { error } = await db.rpc('save_school_period_times', { p_school_id: session.schoolId, p_rows: times })
@@ -96,6 +99,8 @@ export async function fetchScheduleConflicts(yearId: string, semester = 1) {
   const session = await requireScheduleSession()
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
 
+  const data=await loadSchedule(session.schoolId,yearId,semester)
+  if(hasPeriodProfiles(data.periodTimes||[])){const pairs=profileTeacherConflicts(data.lessons,data.slots.map(s=>({classroomId:s.classroom_id,lessonId:lessonKey(s),day:s.day_of_week,period:s.period})),data.periodTimes||[]),conflicts=pairs.map(pair=>({teacher_id:pair.teacherId,teacher_name:data.teacherNames[pair.teacherId]||'',day:pair.day,period:pair.period,day_label:SCHEDULE_DAYS.find(d=>d.value===pair.day)?.label||'',rooms:pair.lessonIds.map(id=>{const l=data.lessons.find(l=>l.id===id);return {room:data.classrooms.find(c=>c.id===l?.classroomId)?.level||'',subject:l?.label||''}})}));return {conflicts,count:conflicts.length}}
   const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
   const teacherMap: Record<string, Record<string, Record<number, { room: string; subject: string }[]>>> = {}
 
@@ -227,7 +232,7 @@ export async function loadSubstituteRosterSlots(date:string,yearId:string,teache
   const schedule=await loadSchedule(session.schoolId,yearId,semester)
   if(teacherIds.some(id=>!schedule.teacherNames[id]))throw Error('ไม่พบครูในโรงเรียนนี้')
   const timetable=substituteTimetableForDay(schedule,substituteWeekday(date))
-  const slots=teacherIds.flatMap(absent_teacher_id=>timetable.filter(slot=>slot.teacherIds.includes(absent_teacher_id)).map(slot=>({absent_teacher_id,period:slot.period,class_subject_id:slot.class_subject_id,classroom_id:slot.classroom_id,room_label:slot.room_label,subject_label:slot.subject_label})))
+  const slots=teacherIds.flatMap(absent_teacher_id=>timetable.filter(slot=>slot.teacherIds.includes(absent_teacher_id)).map(slot=>({absent_teacher_id,...rosterPeriodClock(schedule.periodTimes||[],schedule.classrooms.find(room=>room.id===slot.classroom_id)?.level||'',slot.period),period:slot.period,class_subject_id:slot.class_subject_id,classroom_id:slot.classroom_id,room_label:slot.room_label,subject_label:slot.subject_label})))
   return {slots,missing:teacherIds.filter(id=>!slots.some(slot=>slot.absent_teacher_id===id))}
 }
 
@@ -251,9 +256,11 @@ export async function getTeacherConflictAt(
   const slots = await loadAllSlotsForYear(session.schoolId, yearId, semester)
   const rooms: string[] = []
   const constraints = await loadScheduleConstraints(session.schoolId,yearId,semester)
-  if (constraints.blocks.some(b=>b.teacherId===teacherId && b.day===day && b.period===period)) rooms.push('คาบว่างที่ครูล็อกไว้')
+  const target=ignoreClassroomId?await createServerClient().from('classrooms').select('level').eq('id',ignoreClassroomId).eq('school_id',session.schoolId).maybeSingle():null
+  const targetLevel=target?.data?.level||''
+  if (constraints.blocks.some(b=>b.teacherId===teacherId && b.day===day && profileCellOverlap(constraints.periodTimes,'',b.period,targetLevel,period))) rooms.push('คาบว่างที่ครูล็อกไว้')
   for (const row of slots) {
-    if (row.day_of_week !== day || row.period !== period) continue
+    if (row.day_of_week !== day || !profileCellOverlap(constraints.periodTimes||[],row.classrooms.level,row.period,targetLevel,period)) continue
     if (ignoreClassroomId && row.classroom_id === ignoreClassroomId) continue
     const cs = Array.isArray(row.class_subjects) ? row.class_subjects[0] : row.class_subjects
     if (cs?.teacher_id !== teacherId || !row.class_subject_id) continue

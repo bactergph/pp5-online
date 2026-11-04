@@ -1,4 +1,5 @@
 'use client'
+import {levelPeriodTimes} from '@/lib/schedule-period-profiles'
 import { useEffect, useRef, useState } from 'react'
 import type { DraftPreview, Preparation } from '@/lib/schedule-preparation'
 import type { PlanningIssue } from '@/lib/schedule-planning'
@@ -158,7 +159,7 @@ export default function ScheduleReviewStep({data,rooms,clear,issues,draft,blocke
         {!!draft.affectedRooms?.length&&<p className="prep-notice">กลุ่มกิจกรรมหรือวิชาสอนรวมทำให้คาบในห้องนอกขอบเขตเปลี่ยนด้วย: {draft.affectedRooms.map(roomName).join(', ')} กรุณาตรวจห้องเหล่านี้ก่อนยืนยัน</p>}
         {!!draft.summary?.length&&<details className="prep-review-room-summary"><summary>จำนวนคาบที่จัดได้รายห้อง</summary><ul>{draft.summary.map(room=><li key={room.roomId}><b>{roomName(room.roomId)}</b><span>จัดแล้ว {room.scheduled}/{room.target} คาบ</span></li>)}</ul></details>}
         <div className="prep-review-preview-bar"><label htmlFor="schedule-draft-room">ดูตารางห้อง<select id="schedule-draft-room" value={activeRoom} onChange={event=>setPreviewRoom(event.target.value)}>{previewRooms.map(id=><option key={id} value={id}>{roomName(id)}{!rooms.includes(id)?' (เรียนร่วม)' :''}</option>)}</select></label><p className="prep-draft-legend"><span><i className="prep-swatch prep-swatch-activity"/>กิจกรรม</span><span><i className="prep-swatch prep-swatch-subject"/>รายวิชา</span><span><i className="prep-swatch prep-swatch-empty"/>ว่าง</span></p></div>
-        <div className="prep-scroll prep-review-grid" tabIndex={0} role="region" aria-label={`ตารางฉบับร่าง ${roomName(activeRoom)} เลื่อนเพื่อดูทุกคาบ`}><ScheduleGridTable periodTimes={draft.preview?.periods||data.periods} days={draft.preview?.days||data.plan.days} renderCell={renderCell}/></div>
+        <div className="prep-scroll prep-review-grid" tabIndex={0} role="region" aria-label={`ตารางฉบับร่าง ${roomName(activeRoom)} เลื่อนเพื่อดูทุกคาบ`}><ScheduleGridTable periodTimes={levelPeriodTimes(draft.preview?.periods||data.periods,(draft.preview?.classrooms||data.classrooms).find(room=>room.id===activeRoom)?.level||'')} days={draft.preview?.days||data.plan.days} renderCell={renderCell}/></div>
         <div className="prep-review-save"><small>ระบบจะตรวจข้อมูลล่าสุดอีกครั้งก่อนบันทึกตารางเป็นชุดเดียว</small><div className="prep-review-actions"><button type="button" className="prep-review-discard" onClick={onDiscard}><FiTrash2 aria-hidden="true"/>ทิ้งฉบับร่าง</button><button type="button" className="prep-primary" onClick={onConfirm}><FiSave aria-hidden="true"/>บันทึกใช้ตารางนี้</button></div></div>
       </div>}
     </div>

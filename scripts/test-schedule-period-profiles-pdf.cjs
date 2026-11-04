@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),load=require('./helpers/load-pure-ts.cjs')
+const {DEFAULT_PERIOD_TIMES,moveLunchBreak}=load('lib/schedule-helpers.ts'),{teacherPeriodTimes,levelPeriodTimes}=load('lib/schedule-period-profiles.ts')
+const {buildPdf,buildSchedulePdf}=require('./test-substitute-pdf.cjs')
+;(async()=>{
+ const times=structuredClone(DEFAULT_PERIOD_TIMES);times[0].profiles={primary:structuredClone(DEFAULT_PERIOD_TIMES),secondary:moveLunchBreak(DEFAULT_PERIOD_TIMES,4)}
+ const out=path.resolve('tmp/pdfs/period-profiles');fs.mkdirSync(out,{recursive:true})
+ const grid={'1-4':{line1:'รายวิชาทดสอบ',line2:'ครูทดสอบ'}}
+ const pdf=await buildSchedulePdf({schoolName:'โรงเรียนขยายโอกาสทดสอบ',title:'ตารางเรียน',periodTimes:times,gridData:grid,days:[1,2,3,4,5],pages:[{title:'ประถม',gridData:grid,periodTimes:levelPeriodTimes(times,'ป.4')},{title:'มัธยม',gridData:grid,periodTimes:levelPeriodTimes(times,'ม.1')}]})
+ assert.equal(pdf.doc.getNumberOfPages(),2)
+ assert.ok(pdf.events.some(e=>e.page===1&&e.text==='12:30–13:30'))
+ assert.ok(pdf.events.some(e=>e.page===2&&e.text==='11:30–12:30'))
+ fs.writeFileSync(path.join(out,'primary-secondary.pdf'),Buffer.from(await pdf.blob.arrayBuffer()))
+ const teacher=await buildSchedulePdf({schoolName:'โรงเรียนทดสอบ',title:'ตารางครูข้ามระดับ',periodTimes:teacherPeriodTimes(times),gridData:grid,days:[1,2,3,4,5]})
+ assert.equal(teacher.doc.getNumberOfPages(),1);assert.ok(!teacher.events.some(e=>e.text==='พักเที่ยง'));assert.ok(teacher.events.some(e=>e.text==='11:30–12:30'))
+ fs.writeFileSync(path.join(out,'teacher.pdf'),Buffer.from(await teacher.blob.arrayBuffer()))
+ const substitute=await buildPdf({schoolName:'โรงเรียนทดสอบ',date:'2026-11-04',year:2569,term:'2',times,academicHead:'ครูวิชาการ',director:'ผู้อำนวยการ',teachers:[],teacherNames:{a:'ครูเจ้าของคาบ',b:'ครูสอนแทน'},entries:['ป.4/1','ม.1/1'].map(room_label=>({absent_teacher_id:'a',substitute_teacher_id:'b',period:4,room_label,subject_label:'รายวิชา',leave_type:'ลากิจ',note:null}))})
+ assert.ok(substitute.events.some(e=>e.text==='12:30-13:30'));assert.ok(substitute.events.some(e=>e.text==='11:30-12:30'))
+ assert.ok(substitute.events.some(e=>e.text==='2 รายการ / 2 ช่วงคาบ'))
+ fs.writeFileSync(path.join(out,'substitute.pdf'),Buffer.from(await substitute.result.blob.arrayBuffer()))
+ console.log('PASS: actual Thai PDFs; primary/secondary page clocks, combined teacher timeline without false lunch, substitute row-specific times')
+})().catch(error=>{console.error(error);process.exitCode=1})

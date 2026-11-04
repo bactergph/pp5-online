@@ -1,4 +1,5 @@
 'use client'
+import {levelPeriodTimes,teacherPeriodTimes} from '@/lib/schedule-period-profiles'
 import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SCHEDULE_DAYS, SCHEDULE_MORNING_PERIODS, SCHEDULE_PERIODS } from '@/lib/schedules'
@@ -309,18 +310,19 @@ export default function ScheduleExportPage() {
           if (exportType === 'class') {
             const room = classrooms.find(c => c.id === id)
             const label = (room?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
-            return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id] }
+            return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id],periodTimes:exportType==='class'?levelPeriodTimes(periodTimes,classrooms.find(c=>c.id===id)?.level||''):teacherPeriodTimes(periodTimes) }
           }
           const teacher = teachers.find(t => t.id === id)
-          return { title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix.trim()}${teacher.full_name.trim()}` : ''}`, gridData: grids[id] }
+          return { title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix.trim()}${teacher.full_name.trim()}` : ''}`, gridData: grids[id],periodTimes:teacherPeriodTimes(periodTimes) }
         })
         return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, directorName, directorPosition, printDate, fileName })
       },
     })
   }
 
-  const periods = periodTimes.length ? periodTimes.filter(t=>!t.is_break).map(t=>t.period) : SCHEDULE_PERIODS
-  const morning = periodTimes.length ? periodTimes.findIndex(t=>t.is_break) : SCHEDULE_MORNING_PERIODS
+  const displayTimes=exportType==='class'?levelPeriodTimes(periodTimes,selectedClass?.level||''):teacherPeriodTimes(periodTimes)
+  const periods = displayTimes.length ? displayTimes.filter(t=>!t.is_break).map(t=>t.period) : SCHEDULE_PERIODS
+  const morning = displayTimes.length ? (displayTimes.some(t=>t.is_break)?displayTimes.findIndex(t=>t.is_break):periods.length) : SCHEDULE_MORNING_PERIODS
   const classGroups = useMemo(() => {
     const map = new Map<string, Classroom[]>()
     for (const room of classrooms) {
@@ -514,15 +516,15 @@ export default function ScheduleExportPage() {
                 <th>วัน</th>
                 {periods.slice(0, morning).map(p => (
                   <th key={p}>
-                    คาบ {p}
-                    {periodTimes.length ? <span className="time">{periodTimeLabel(periodTimes, p)}</span> : null}
+                    {displayTimes.find(t=>!t.is_break&&t.period===p)?.label||`คาบ ${p}`}
+                    {periodTimes.length ? <span className="time">{periodTimeLabel(displayTimes, p)}</span> : null}
                   </th>
                 ))}
-                <th className="break-col">พักเที่ยง</th>
+                <>{displayTimes.some(t=>t.is_break)&&<th className="break-col">พักเที่ยง</th>}</>
                 {periods.slice(morning).map(p => (
                   <th key={p}>
-                    คาบ {p}
-                    {periodTimes.length ? <span className="time">{periodTimeLabel(periodTimes, p)}</span> : null}
+                    {displayTimes.find(t=>!t.is_break&&t.period===p)?.label||`คาบ ${p}`}
+                    {periodTimes.length ? <span className="time">{periodTimeLabel(displayTimes, p)}</span> : null}
                   </th>
                 ))}
               </tr>
@@ -532,7 +534,7 @@ export default function ScheduleExportPage() {
                 <tr key={day.value}>
                   <td className="day-col">{day.label}</td>
                   {periods.slice(0, morning).map(p => renderPrintCell(day.value, p))}
-                  <td className="break-col">พัก</td>
+                  <>{displayTimes.some(t=>t.is_break)&&<td className="break-col">พัก</td>}</>
                   {periods.slice(morning).map(p => renderPrintCell(day.value, p))}
                 </tr>
               ))}

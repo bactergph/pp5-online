@@ -1,3 +1,5 @@
+import {validatePeriodProfiles} from './schedule-period-profiles'
+import type {PeriodTimeRow} from './schedule-helpers'
 import {validateJointTeachingGroups,jointTeachingSlotErrors} from './schedule-joint-teaching'
 import { deviceTeacherLimitMessage, toDeviceSnapshot, normalizePlan, type FreeWizardPlan } from './schedule-device-free'
 import type {LocalScheduleBundle} from './schedule-device-years'
@@ -32,6 +34,7 @@ export function readDeviceBackup(raw:unknown,teacherLimit?:number):DeviceBundle 
     if(rows('activities').some(row=>row.settingId!==undefined&&!text(row.settingId))||rows('subjects').some(row=>row.subjectType!==undefined&&!['พื้นฐาน','เพิ่มเติม'].includes(String(row.subjectType))))return invalid()
     if((plan.days as unknown[]).some(day=>!integer(day)||Number(day)<1||Number(day)>7))return invalid()
     if(rows('periods').some(row=>!integer(row.period)||!text(row.label)||!text(row.start_time)||!text(row.end_time)||typeof row.is_break!=='boolean'||!integer(row.sort_order)))return invalid()
+    if(validatePeriodProfiles(plan.periods as PeriodTimeRow[]))return invalid()
     if(rows('subjects').some(row=>!text(row.roomId)||!text(row.name)||!text(row.code)||!text(row.teacherId)||!integer(row.periods)||Number(row.periods)<1||Number(row.periods)>40||!Array.isArray(row.pattern)||row.pattern.some(size=>!integer(size)||Number(size)<1||Number(size)>8)))return invalid()
     const cell=(row:Record<string,unknown>)=>!integer(row.day)||!integer(row.period)
     if(rows('timetable').some(row=>!text(row.classroomId)||!text(row.subjectId)||cell(row)||(row.activityId!==undefined&&!text(row.activityId)))||rows('blocks').some(row=>!text(row.teacherId)||cell(row)))return invalid()

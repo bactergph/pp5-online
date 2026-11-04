@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "audit:crud": "node scripts/audit-system-crud.cjs",
+    "test:schedule-period-profiles": "node scripts/test-system-crud.cjs --unit --only=test-schedule-period-profiles.cjs,test-schedule-period-profiles-db.cjs,test-schedule-period-profiles-pdf.cjs && node scripts/test-system-crud.cjs --ui --only=test-schedule-period-profiles-ui.mjs",
     "test:crud": "node scripts/test-system-crud.cjs --unit --only=test-settings-crud.cjs,test-active-academic-year-db.cjs,test-student-ledger-services.cjs,test-evaluation-save.cjs,test-classroom-teachers.cjs,test-hourly-curriculum.cjs",
     "test:crud-unit": "node scripts/test-system-crud.cjs --unit",
     "test:crud-ui": "node scripts/test-system-crud.cjs --ui",

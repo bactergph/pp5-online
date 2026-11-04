@@ -14,11 +14,12 @@ function load(file){
     if(String(url).startsWith('data:'))return fetch(url)
     assert.ok(String(url).startsWith('/fonts/')||String(url).startsWith('/brand/'),'No network in PDF tests')
     const file=path.join(root,'public',url);return new Response(fs.readFileSync(file),{headers:{'Content-Type':url.endsWith('.png')?'image/png':'font/ttf'}})
-  },require:name=>name==='jspdf'?{jsPDF:RecordedPdf}:name.startsWith('@/')?load(name.slice(2)+'.ts'):require(name)},{filename:file})
+  },require:name=>name==='jspdf'?{jsPDF:RecordedPdf}:name.startsWith('@/')?load(name.slice(2)+'.ts'):name.startsWith('.')?load(path.join(path.dirname(file),name+'.ts')):require(name)},{filename:file})
   return exports
 }
 async function buildPdf(input){const result=await load('lib/jspdf-substitute.ts').buildSubstitutePdf(input);return {...documents.at(-1),result}}
-module.exports={buildPdf}
+async function buildSchedulePdf(input){const result=await load('lib/jspdf-schedules.ts').buildSchedulePdfBlob(input);return {...documents.at(-1),...result}}
+module.exports={buildPdf,buildSchedulePdf}
 
 async function test(){
   const teacherNames={absent:'นายครูเจ้าของคาบ ทดสอบ',cover:'นางสาวครูสอนแทน ทดสอบ',second:'นายครูเจ้าของคาบ อีกท่าน'}

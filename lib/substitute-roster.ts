@@ -1,11 +1,13 @@
 import type {PeriodTimeRow} from './schedule-helpers'
 
 export type SubstituteRosterEntry = {
+  start_time?:string;end_time?:string
   id:string; absent_teacher_id:string; period:number; class_subject_id:string|null; classroom_id:string|null
   subject_label:string|null; room_label:string|null; substitute_teacher_id:string|null; leave_type:string; note:string|null
   override_conflicts?:boolean; conflict_details?:string[]; conflict_confirmed_at?:string|null
 }
-export type SubstituteBusy = {teacherId:string;period:number;kind?:'lesson'|'activity'|'block';label?:string;roomLabel?:string}
+export type SubstituteBusy = {teacherId:string;period:number;start_time?:string;end_time?:string;kind?:'lesson'|'activity'|'block';label?:string;roomLabel?:string}
+const sameTime=(a:{period:number;start_time?:string;end_time?:string},b:{period:number;start_time?:string;end_time?:string})=>a.start_time&&a.end_time&&b.start_time&&b.end_time?a.start_time<b.end_time&&b.start_time<a.end_time:a.period===b.period
 export const SUBSTITUTE_LEAVE_TYPES=['ลาป่วย','ลากิจ','ลาคลอด','ไปราชการ','อื่นๆ']
 
 export function substituteConflicts(teacherId:string,entry:SubstituteRosterEntry,entries:SubstituteRosterEntry[],busy:SubstituteBusy[],names:Record<string,string>={}) {
@@ -13,11 +15,11 @@ export function substituteConflicts(teacherId:string,entry:SubstituteRosterEntry
   if(teacherId===entry.absent_teacher_id)reasons.push('เป็นครูเจ้าของคาบ ไม่สามารถสอนแทนตนเอง')
   const leave=[...new Set(entries.filter(row=>row.absent_teacher_id===teacherId).map(row=>row.leave_type))]
   if(leave.length)reasons.push('มีรายการลาในวันนี้: '+leave.join(', '))
-  for(const row of busy.filter(row=>row.teacherId===teacherId&&row.period===entry.period)) {
+  for(const row of busy.filter(row=>row.teacherId===teacherId&&sameTime(row,entry))) {
     reasons.push(row.kind==='block'?'ล็อกไม่ว่าง'+(row.label?' · '+row.label:''):
       (row.kind==='activity'?'กิจกรรม':'ติดสอน')+' · '+[row.label||'ตามตารางเรียน',row.roomLabel].filter(Boolean).join(' · '))
   }
-  for(const row of entries.filter(row=>row.id!==entry.id&&row.period===entry.period&&row.substitute_teacher_id===teacherId)) {
+  for(const row of entries.filter(row=>row.id!==entry.id&&sameTime(row,entry)&&row.substitute_teacher_id===teacherId)) {
     reasons.push('สอนแทน'+(names[row.absent_teacher_id]?' '+names[row.absent_teacher_id]:'')+' · '+[row.room_label,row.subject_label].filter(Boolean).join(' · '))
   }
   return [...new Set(reasons)].sort((a,b)=>a.localeCompare(b,'th'))
@@ -29,6 +31,7 @@ export function indexSubstituteAvailability(entries:SubstituteRosterEntry[],busy
   for(const row of entries){absences.set(row.absent_teacher_id,[...absences.get(row.absent_teacher_id)||[],row]);if(row.substitute_teacher_id){const key=row.substitute_teacher_id+':'+row.period;assigned.set(key,[...assigned.get(key)||[],row])}}
   for(const row of busy){const key=row.teacherId+':'+row.period;occupied.set(key,[...occupied.get(key)||[],row])}
   return (teacherId:string,entry:SubstituteRosterEntry)=>{
+    if(entry.start_time&&entry.end_time)return substituteConflicts(teacherId,entry,entries,busy,names)
     const key=teacherId+':'+entry.period,cacheKey=key+':'+entry.id
     if(!cache.has(cacheKey)){const relevant=[...new Map([...(absences.get(teacherId)||[]),...(assigned.get(key)||[])].map(row=>[row.id,row])).values()];cache.set(cacheKey,substituteConflicts(teacherId,entry,relevant,occupied.get(key)||[],names))}
     return cache.get(cacheKey)!
@@ -73,11 +76,16 @@ export function validateSubstituteAcknowledgements(entries:SubstituteRosterEntry
 }
 
 export function substituteMinutes(entries:SubstituteRosterEntry[],periods:PeriodTimeRow[]) {
-  return [...new Set(entries.map(row=>row.period))].reduce((total,period)=>{
-    const time=periods.find(row=>!row.is_break&&row.period===period)
-    if(!time)return total
-    const minutes=(text:string)=>{const [h,m]=text.split(':').map(Number);return h*60+m}
-    const span=minutes(time.end_time)-minutes(time.start_time)
-    return total+(Number.isFinite(span)&&span>0?span:0)
-  },0)
+  const minutes=(text:string)=>{const [h,m]=text.split(':').map(Number);return h*60+m}
+  const spans=entries.flatMap(entry=>{
+    const level=entry.room_label||'',band=/^(ป\.?|ประถม)/.test(level)?'primary':/^(ม\.?|มัธยม)/.test(level)?'secondary':null
+    const rows=(band&&periods.find(row=>row.profiles)?.profiles?.[band])||periods
+    const time=entry.start_time&&entry.end_time?entry:rows.find(row=>!row.is_break&&row.period===entry.period)
+    if(!time?.start_time||!time.end_time)return []
+    const start=minutes(time.start_time),end=minutes(time.end_time)
+    return Number.isFinite(start)&&Number.isFinite(end)&&end>start?[{start,end}]:[]
+  }).sort((a,b)=>a.start-b.start)
+  let total=0,last=-1
+  for(const span of spans){total+=Math.max(0,span.end-Math.max(last,span.start));last=Math.max(last,span.end)}
+  return total
 }

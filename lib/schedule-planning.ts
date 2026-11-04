@@ -9,10 +9,12 @@ import { remainingSlotCapacityIssues, type SlotCapacityHelp } from './schedule-r
 import { spreadSubjectFamilies, subjectFamily } from './schedule-subject-families'
 const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacherIds??(l.teacherId?[l.teacherId]:[])
 import type { PeriodTimeRow } from './schedule-helpers'
+import {hasPeriodProfiles} from './schedule-period-profiles'
+import {checkProfilePlanning,solveProfileSchedule} from './schedule-profile-solver'
 export type TimePreference = 'any' | 'morning' | 'afternoon'
 export type LessonRule = { count: number; pattern: number[]; roomId: string | null; morning: boolean; spread: boolean; timePreference?: TimePreference }
 export type SchedulePlan = { days: number[]; rooms: { id: string; name: string }[]; rules: Record<string, LessonRule>; reduceGaps: boolean; maxContinuous: number; teacherIds?: string[]; activityGroups?: ActivityTeam[]; teachingGroups?:JointTeachingGroup[]; roomLabels?: Record<string, string> }
-export type PlannedLesson = { id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; timePreference?: TimePreference; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; jointTeachingCells?:Record<string,string>; subjectGroup?: string; fullName?: string; name?: string; teacherName?: string }
+export type PlannedLesson = { classroomLevel?:string; id: string; classroomId: string; teacherId: string | null; count: number; label: string; activity?: boolean; teacherOptional?: boolean; roomId?: string | null; pattern?: number[]; morning?: boolean; timePreference?: TimePreference; preferMorning?: boolean; spread?: boolean; fixedOnly?: boolean; teacherIds?: string[]; activityGroupId?: string; jointTeachingCells?:Record<string,string>; subjectGroup?: string; fullName?: string; name?: string; teacherName?: string }
 export function lessonPrefersMorning(lesson: { subjectGroup?: string; fullName?: string; name?: string; label?: string }) {
   return /ภาษาไทย|คณิต|วิทยาศาสตร์|วิทย์|ฟิสิกส์|เคมี|ชีววิทยา|สังคมศึกษา|ภาษาอังกฤษ|ภาษาต่างประเทศ/.test(`${lesson.subjectGroup || ''} ${lesson.fullName || ''} ${lesson.name || ''}`)
 }
@@ -35,7 +37,7 @@ function isMorningPeriod(period: number, times: PeriodTimeRow[]) {
 export type PlannedSlot = { classroomId: string; lessonId: string | null; day: number; period: number }
 export type FixedScheduleIssueCode = 'fixed_outside' | 'fixed_classroom_collision' | 'fixed_unknown_lesson' | 'fixed_classroom_mismatch' | 'fixed_teacher_conflict' | 'fixed_venue_conflict' | 'fixed_over_quota' | 'fixed_joint_mismatch' | 'subject_day'
 export type PlanningIssue = { severity: 'error' | 'warning'; message: string; step: number; manageStep?:number; code?: FixedScheduleIssueCode; details?: string[]; capacity?: SlotCapacityHelp }
-export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking'|'block_repair';elapsedMs?:number;timeLimitMs?:number}
+export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conflict';assignments:PlannedSlot[];issues:PlanningIssue[];nodes:number;limitReason?:'node_limit'|'time_limit'|null;message?:string;solver?:'profile_backtracking'|'edge_coloring'|'dense_slot_matching'|'legacy_backtracking'|'block_backtracking'|'block_repair';elapsedMs?:number;timeLimitMs?:number}
 export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
 export const SCHEDULE_SEARCH_TIME_LIMIT_MS = 45_000
 export const emptyPlan = (): SchedulePlan => ({ days: [1,2,3,4,5], rooms: [], rules: {}, reduceGaps: false, maxContinuous: 0 })
@@ -64,6 +66,7 @@ export function blocksFor(length: number, days: number[], times: PeriodTimeRow[]
   return blocks
 }
 export function checkPlanning(lessons: PlannedLesson[], fixed: PlannedSlot[], days:number[], times:PeriodTimeRow[], unavailable:{teacherId:string;day:number;period:number}[]):PlanningIssue[] {
+  if(hasPeriodProfiles(times))return checkProfilePlanning(lessons,fixed,days,times,unavailable)
   const issues:PlanningIssue[]=[];const periods=times.filter(t=>!t.is_break).map(t=>t.period),capacity=periods.length*days.length
   const err=(message:string,step=6)=>issues.push({severity:'error',message,step})
   const fixedError=(code:FixedScheduleIssueCode,message:string,step=6)=>issues.push({severity:'error',message,step,code})
@@ -638,6 +641,7 @@ function solveFlexibleActivities(lessons:PlannedLesson[],fixed:PlannedSlot[],pla
 
 /** Bounded block search. Fixed lessons may be completed into a double block. */
 export function solvePlannedSchedule(lessons:PlannedLesson[],fixed:PlannedSlot[],plan:SchedulePlan,times:PeriodTimeRow[],unavailable:{teacherId:string;day:number;period:number}[],maxNodes=SCHEDULE_SEARCH_MAX_NODES,timeLimitMs=SCHEDULE_SEARCH_TIME_LIMIT_MS):PlannedScheduleResult{
+  if(hasPeriodProfiles(times))return solveProfileSchedule(lessons,fixed,plan,times,unavailable,maxNodes,timeLimitMs)
   const started=Date.now(),requestedTimeLimitMs=timeLimitMs
   let repairNodes=0
   const finish=(result:PlannedScheduleResult):PlannedScheduleResult=>{

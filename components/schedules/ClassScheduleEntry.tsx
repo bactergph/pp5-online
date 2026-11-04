@@ -1,4 +1,5 @@
 'use client'
+import {levelPeriodTimes} from '@/lib/schedule-period-profiles'
 import { useScheduleOperations } from './ScheduleServices'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
@@ -78,11 +79,12 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
   const [subjects, setSubjects] = useState<SubjectOption[]>([])
   const [cells, setCells] = useState<Record<string, Cell>>({})
   const [quotas, setQuotas] = useState<QuotaData | null>(null)
-  const [periodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
+  const [allPeriodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
   const [conflicts, setConflicts] = useState<Record<string, string[]>>({})
   const [selectedYear, setSelectedYear] = useState('')
   const [semester, setSemester] = useState<number>(() => scheduleSemesterForYear(null))
   const [selectedClass, setSelectedClass] = useState('')
+  const periodTimes=levelPeriodTimes(allPeriodTimes,classrooms.find(c=>c.id===selectedClass)?.level||'')
   const [canEdit, setCanEdit] = useState(false)
   const [pendingCells, setPendingCells] = useState<Set<string>>(new Set())
   const pendingRef = useRef(new Set<string>())
@@ -139,14 +141,14 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
     if (!rooms.length) return
     setPdfOpen(false)
     const fileName = (rooms.length === 1 ? classTitle(rooms[0]) : `ตารางเรียน ${rooms.length} ห้อง`).replace(/[\\/:*?"<>|]/g, '-') + '.pdf'
-    const times = [...periodTimes]
+    const times = [...allPeriodTimes]
     const days = [...scheduleDays]
     enqueueFileExport({ fileName, label: rooms.length === 1 ? `ตารางเรียน · ${rooms[0].label}` : `ตารางเรียน · ${rooms.length} ห้อง`, run: async () => {
       const [ctx, grids] = await Promise.all([
         fetchScheduleExportContext(),
         fetchSchedulePdfGrids(selectedYear, semester, 'class', rooms.map(room => room.id)),
       ])
-      const pages = rooms.map(room => ({ title: classTitle(room), gridData: grids[room.id] }))
+      const pages = rooms.map(room => ({ periodTimes:levelPeriodTimes(times,room.level),title: classTitle(room), gridData: grids[room.id] }))
       return buildSchedulePdfBlob({ days, pages, title: pages[0].title, fileName, gridData: pages[0].gridData, periodTimes: times, schoolName: scheduleSchoolName(ctx.school?.name), schoolLogoUrl: ctx.school?.logo_url, academicHeadName: ctx.school?.academic_head_name || '', directorName: directorDisplayName(ctx.school, ''), directorPosition: ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา' })
     }})
   }
@@ -506,7 +508,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
         {workspace==='places'&&selectedYear&&isManage&&canEdit&&<SchedulePlacesEntry key={`${selectedYear}:${semester}:places`} yearId={selectedYear} semester={semester} onUnsavedChange={setPreparationDirty} onBusyChange={setPreparationBusy} onChanged={()=>void loadGrid()} />}
         {gridLoading && <div role="status">กำลังโหลดตารางเรียน...</div>}
 
-        {(workspace==='activity'||workspace==='prepare'||workspace==='places')?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${clearRefresh}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={periodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
+        {(workspace==='activity'||workspace==='prepare'||workspace==='places')?null:workspace==='teacher' && isManage && canEdit ? <section className="border border-stone-300 bg-white p-5"><h2 className="mb-4 text-lg font-semibold">ตารางสอน/ล็อคคาบ</h2><TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${clearRefresh}`} onChanged={loadGrid} expanded refreshToken={JSON.stringify(cells)} yearId={selectedYear} semester={semester} periodTimes={allPeriodTimes} disabled={!!busyAction||!!savingKey} /></section> : !selectedClass ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">ไม่พบห้องเรียนในปีการศึกษานี้</div>
         ) : subjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-10 text-center text-sm text-stone-500">

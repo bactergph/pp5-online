@@ -1,3 +1,5 @@
+import {hasPeriodProfiles} from './schedule-period-profiles'
+import {DEFAULT_PERIOD_TIMES,type PeriodTimeRow} from './schedule-helpers'
 import 'server-only'
 import {withJointTeachingGroups,type JointTeachingGroup} from './schedule-joint-teaching'
 import { activityTeachers, type ActivityTeam } from './schedule-activity-teams'
@@ -15,14 +17,15 @@ function weeklyCount(level: string, credits: unknown, hours: unknown) {
 export async function loadScheduleConstraints(schoolId: string, yearId: string, semester: number) {
   const db = createServerClient()
   const [times, blocks] = await Promise.all([
-    db.from('school_period_times').select('period').eq('school_id',schoolId).eq('is_break',false),
+    db.from('school_period_times').select('period,label,start_time,end_time,is_break,sort_order,profiles').eq('school_id',schoolId).order('sort_order'),
     db.from('schedule_teacher_blocks').select('teacher_id,day_of_week,period').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',semester),
   ])
   if (times.error) throw new Error(times.error.message)
   if (blocks.error && !['42P01','PGRST205'].includes(blocks.error.code)) throw new Error(blocks.error.message)
-  const periodCount = times.data?.length || 6
+  const periodTimes=(times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[]
+  const periodCount = periodTimes.filter(time=>!time.is_break).length
   const manualBlocks=(blocks.data || []).map(b=>({teacherId:b.teacher_id,day:b.day_of_week,period:b.period}))
-  return {periodCount, blocks:manualBlocks,manualBlocks,blocksSupported:!blocks.error}
+  return {periodTimes,splitTimes:hasPeriodProfiles(periodTimes),periodCount, blocks:manualBlocks,manualBlocks,blocksSupported:!blocks.error}
 }
 import { LEARNER_DEVELOPMENT_KEY, LEARNER_DEVELOPMENT_NAME } from '@/lib/schedule-activity'
 
@@ -31,6 +34,7 @@ export type ScheduleSlot = {
   class_subject_id: string | null; activity_id: string | null; note: string | null; locked: boolean
 }
 export type ScheduleLesson = {
+  classroomLevel?:string;
   id: string; classroomId: string; teacherId: string | null; count: number; label: string
   sourceHours?: number; subjectId: string; code: string; name: string; fullName?: string; subjectGroup?: string; subjectType?: string; teacherName: string; roomName?: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean; teacherIds?:string[]; activityGroupId?:string;jointTeachingCells?:Record<string,string>
 }
@@ -107,6 +111,7 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   if (planResult.error && !['42P01','PGRST205'].includes(planResult.error.code)) throw new Error(planResult.error.message)
   const plan = planResult.data?.config as {rules?:Record<string,import('./schedule-planning').LessonRule>;rooms?:{id:string;name:string}[];activityGroups?:ActivityTeam[];teachingGroups?:JointTeachingGroup[]} | undefined
   for (const lesson of lessons) {
+    lesson.classroomLevel=levels.get(lesson.classroomId)||''
     const group=lesson.activity?plan?.activityGroups?.find(g=>g.settingId===lesson.subjectId&&g.roomIds.includes(lesson.classroomId)):undefined
     if(group){lesson.teacherIds=activityTeachers(group,lesson.classroomId);lesson.teacherId=null;lesson.teacherName=lesson.teacherIds.map(id=>names.get(id)||'').join(', ');lesson.activityGroupId=group.mode==='joint'?group.id:undefined;lesson.count=group.weeklyPeriods;lesson.selectable=false}
     const rule=plan?.rules?.[lesson.id]
@@ -117,8 +122,11 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   if (otherPlan.error && !['42P01','PGRST205'].includes(otherPlan.error.code)) throw new Error(otherPlan.error.message)
   const otherRules = new Set(Object.keys((otherPlan.data?.config as {rules?:Record<string,unknown>} | undefined)?.rules || {}))
   const thisRules = new Set(Object.keys(plan?.rules || {}))
+  const bell=await db.from('school_period_times').select('period,label,start_time,end_time,is_break,sort_order,profiles').eq('school_id',schoolId).order('sort_order')
+  if(bell.error)throw Error(bell.error.message)
+  const periodTimes=(bell.data?.length?bell.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[]
   const visible = lessons.filter(lesson => lesson.activity || !(otherRules.has(lesson.id) && !thisRules.has(lesson.id)))
-  return { classrooms, lessons: withJointTeachingGroups(visible,plan||{}), slots: (slots.data || []) as ScheduleSlot[], activityGroups: plan?.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
+  return { periodTimes, classrooms, lessons: withJointTeachingGroups(visible,plan||{}), slots: (slots.data || []) as ScheduleSlot[], activityGroups: plan?.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
 }
 
 export async function persistSchedule(schoolId: string | null, yearId: string, before: ScheduleSlot[], after: ScheduleSlot[], allowUnlock = false, semester = 1) {

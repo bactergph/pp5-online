@@ -1,4 +1,5 @@
 import { devicePreflight } from './schedule-device-view'
+import {profileCellOverlap} from './schedule-period-profiles'
 import { freeActivityTeachers, teachingRows, type FreeWizardPlan, type LocalCell } from './schedule-device-free'
 
 export function deviceActivityAt(plan:FreeWizardPlan, room:string, day:number, period:number) {
@@ -46,8 +47,8 @@ export function removeDeviceSubjectCell(plan:FreeWizardPlan,room:string,day:numb
 }
 export function blockDeviceTeacher(plan:FreeWizardPlan,teacher:string,day:number,period:number,blocked:boolean) {
   if(!plan.teachers.some(item=>item.id===teacher)||!plan.days.includes(day)||!teachingRows(plan.periods).some(row=>row.period===period))throw Error('ครู วัน หรือคาบไม่ถูกต้อง')
-  if(blocked&&plan.timetable.some(cell=>cell.day===day&&cell.period===period&&plan.subjects.some(subject=>subject.id===cell.subjectId&&subject.teacherId===teacher)))throw Error('ครูมีคาบสอนอยู่ กรุณาย้ายหรือนำวิชาออกก่อน')
-  if(blocked&&plan.rooms.some(room=>{const activity=deviceActivityAt(plan,room.id,day,period);return activity&&freeActivityTeachers(activity,room.id).includes(teacher)}))throw Error('ครูรับผิดชอบกิจกรรมในคาบนี้')
+  if(blocked&&plan.timetable.some(cell=>cell.day===day&&profileCellOverlap(plan.periods,plan.rooms.find(room=>room.id===cell.classroomId)?.label||'',cell.period,'',period)&&plan.subjects.some(subject=>subject.id===cell.subjectId&&subject.teacherId===teacher)))throw Error('ครูมีคาบสอนอยู่ กรุณาย้ายหรือนำวิชาออกก่อน')
+  if(blocked&&plan.rooms.some(room=>teachingRows(plan.periods).some(time=>{const activity=deviceActivityAt(plan,room.id,day,time.period);return profileCellOverlap(plan.periods,room.label,time.period,'',period)&&activity&&freeActivityTeachers(activity,room.id).includes(teacher)})))throw Error('ครูรับผิดชอบกิจกรรมในคาบนี้')
   const blocks=plan.blocks.filter(block=>!(block.teacherId===teacher&&block.day===day&&block.period===period))
   return {...plan,blocks:blocked?[...blocks,{teacherId:teacher,day,period}]:blocks}
 }

@@ -1,4 +1,5 @@
 'use client'
+import {teacherPeriodTimes,hasPeriodProfiles} from '@/lib/schedule-period-profiles'
 import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import Link from './ScheduleLink'
@@ -187,8 +188,8 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-empty">ไม่พบครูในโรงเรียน</div>
         ) : (
           <div className="schedule-grid-card">
-            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<ScheduleGridTable days={scheduleDays}
-              periodTimes={periodTimes}
+            {canEdit&&!hasPeriodProfiles(periodTimes)?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<ScheduleGridTable days={scheduleDays}
+              periodTimes={teacherPeriodTimes(periodTimes)}
               renderCell={(day, period) => {
                 const key = `${day}-${period}`
                 const cell = cells[key]

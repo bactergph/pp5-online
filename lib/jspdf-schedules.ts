@@ -21,7 +21,7 @@ const TEXT: [number, number, number] = [0, 0, 0]
 const MUTED: [number, number, number] = [0, 0, 0]
 
 export type SchedulePdfCell = { line1: string; line2: string; line3?: string; line4?: string }
-export type SchedulePdfPage = { title: string; gridData: Record<string, SchedulePdfCell> }
+export type SchedulePdfPage = { periodTimes?:PeriodTimeRow[]; title: string; gridData: Record<string, SchedulePdfCell> }
 export type SchedulePdfInput = {
   academicHeadName?: string
   directorName?: string
@@ -176,9 +176,6 @@ function drawCell(
 
 /** สร้าง PDF ตารางเรียน/ตารางสอน ด้วย jsPDF บนเครื่องผู้ใช้ — คืน Blob ใส่คิวได้ */
 export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
-  const PERIODS = schedulePeriods(input.periodTimes)
-  const breakIndex = input.periodTimes.findIndex(t=>t.is_break)
-  const MORNING = breakIndex >= 0 ? breakIndex : SCHEDULE_MORNING_PERIODS
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true })
   await applyThaiFonts(doc)
 
@@ -190,6 +187,8 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   ]
   const signStep = 6.3
   for (const [index, sheet] of pages.entries()) {
+  const times=sheet.periodTimes||input.periodTimes
+  const PERIODS=schedulePeriods(times),breakIndex=times.findIndex(t=>t.is_break),MORNING=breakIndex>=0?breakIndex:PERIODS.length
   if (index) doc.addPage()
   let y = MARGIN_TOP
   if (logo) {
@@ -222,7 +221,8 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   y += 3
 
   const days = SCHEDULE_DAYS.filter(d => !input.days || input.days.includes(d.value))
-  const { dayW, breakW, periodW } = columnWidths(PERIODS.length)
+  const widths=columnWidths(PERIODS.length)
+  const {dayW}=widths,breakW=breakIndex>=0?widths.breakW:0,periodW=widths.periodW+(breakIndex<0?widths.breakW/PERIODS.length:0)
   const headerH = 12
   const signBlock = signStep * 3
   const maxTableBottom = PAGE_H - MARGIN_BOTTOM - signBlock - 8
@@ -232,15 +232,15 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   drawCell(doc, x, y, dayW, headerH, 'วัน', '', { fill: HEADER_BG, line1Size: 14 })
   x += dayW
   for (const p of PERIODS.slice(0, MORNING)) {
-    drawCell(doc, x, y, periodW, headerH, `คาบ ${p}`, periodTimeLabel(input.periodTimes, p), {
+    drawCell(doc, x, y, periodW, headerH, (times.find(t=>!t.is_break&&t.period===p)?.label.startsWith('ช่วง')?times.find(t=>!t.is_break&&t.period===p)!.label:`คาบ ${p}`), periodTimeLabel(times, p), {
       fill: HEADER_BG, line1Size: 14, line2Size: 11, line2Color: TEXT,
     })
     x += periodW
   }
-  drawCell(doc, x, y, breakW, headerH, 'พักเที่ยง', '', { fill: BREAK_BG, line1Size: 13, line1Bold: true })
+  if(breakW)drawCell(doc, x, y, breakW, headerH, 'พักเที่ยง', '', { fill: BREAK_BG, line1Size: 13, line1Bold: true })
   x += breakW
   for (const p of PERIODS.slice(MORNING)) {
-    drawCell(doc, x, y, periodW, headerH, `คาบ ${p}`, periodTimeLabel(input.periodTimes, p), {
+    drawCell(doc, x, y, periodW, headerH, (times.find(t=>!t.is_break&&t.period===p)?.label.startsWith('ช่วง')?times.find(t=>!t.is_break&&t.period===p)!.label:`คาบ ${p}`), periodTimeLabel(times, p), {
       fill: HEADER_BG, line1Size: 14, line2Size: 11, line2Color: TEXT,
     })
     x += periodW
@@ -256,7 +256,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
       drawCell(doc, x, y, periodW, rowH, cell?.line1 || '—', cell?.line2 || '', { line3: cell?.line3, line4: cell?.line4 })
       x += periodW
     }
-    drawCell(doc, x, y, breakW, rowH, 'พัก', '', { fill: BREAK_BG, line2Color: BREAK_TEXT })
+    if(breakW)drawCell(doc, x, y, breakW, rowH, 'พัก', '', { fill: BREAK_BG, line2Color: BREAK_TEXT })
     x += breakW
     for (const p of PERIODS.slice(MORNING)) {
       const cell = sheet.gridData[`${day.value}-${p}`]

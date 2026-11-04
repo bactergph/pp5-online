@@ -1,3 +1,4 @@
+import {levelPeriodTimes,hasPeriodProfiles} from '@/lib/schedule-period-profiles'
 import {scheduleSchoolName} from '@/lib/schedule-school-name'
 import {jsPDF} from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -29,7 +30,8 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
   }
   for(const [index,teacherId] of teacherIds.entries()){
     if(index)doc.addPage()
-    const entries=input.entries.filter(entry=>entry.absent_teacher_id===teacherId).sort((a,b)=>a.period-b.period||(a.room_label||'').localeCompare(b.room_label||'','th'))
+    const clockLabel=(entry:SubstitutePdfInput['entries'][number])=>periodTimeLabel(levelPeriodTimes(input.times,entry.room_label||''),entry.period)
+    const entries=input.entries.filter(entry=>entry.absent_teacher_id===teacherId).sort((a,b)=>(hasPeriodProfiles(input.times)?clockLabel(a).localeCompare(clockLabel(b)):a.period-b.period)||(a.room_label||'').localeCompare(b.room_label||'','th'))
     doc.setFont('THSarabunNew','bold');doc.setFontSize(18)
     const schoolLines=doc.splitTextToSize(scheduleSchoolName(input.schoolName),content) as string[]
     doc.setFontSize(15)
@@ -53,7 +55,7 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
       text(`ประจำวันที่ ${date}     ภาคเรียนที่ ${input.term} ปีการศึกษา ${input.year}`,width/2,titleY+7,15,false,true)
       doc.setDrawColor(65);doc.setLineWidth(0.25);doc.line(margin,titleY+11,width-margin,titleY+11)
       text(teacherLines,margin,teacherY,15,true)
-      text(`${entries.length} รายการ / ${new Set(entries.map(entry=>entry.period)).size} ช่วงคาบ`,margin,tableTop-2,13)
+      text(`${entries.length} รายการ / ${new Set(entries.map(entry=>hasPeriodProfiles(input.times)?clockLabel(entry)||String(entry.period):String(entry.period))).size} ช่วงคาบ`,margin,tableTop-2,13)
     }
     drawHeader()
     const widths=[13,29,22,61,48,45,content-218]
@@ -61,7 +63,7 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
       // Keep the table and its signatures together; continued pages repeat the header.
       startY:tableTop,margin:{top:tableTop,bottom:height-bodyBottom,left:margin,right:margin},
       head:[['คาบ','เวลา','ชั้น / ห้อง','รายวิชา / กิจกรรม','ครูผู้สอนแทน','หมายเหตุ','ลงชื่อหลังสอน']],
-      body:entries.map((entry,i)=>[String(entry.period),periodTimeLabel(input.times,entry.period).replaceAll('–','-'),entry.room_label||'-',entry.subject_label||'-',names.get(entry.substitute_teacher_id||'')||'ยังไม่กำหนดครู',(entry.note?.length||0)>180?`ดูหมายเหตุเพิ่มเติมข้อ ${i+1}`:entry.note||'','']),
+      body:entries.map((entry,i)=>[String(entry.period),periodTimeLabel(levelPeriodTimes(input.times,entry.room_label||''),entry.period).replaceAll('–','-'),entry.room_label||'-',entry.subject_label||'-',names.get(entry.substitute_teacher_id||'')||'ยังไม่กำหนดครู',(entry.note?.length||0)>180?`ดูหมายเหตุเพิ่มเติมข้อ ${i+1}`:entry.note||'','']),
       theme:'grid',showHead:'everyPage',rowPageBreak:'avoid',
       // A full eight-period day uses slightly less cell whitespace, retaining readable type.
       styles:{font:'THSarabunNew',fontSize:15,textColor:0,fillColor:255,lineColor:80,lineWidth:0.18,cellPadding:entries.length>=8?1.9:2.2,minCellHeight:entries.length>=8?10:10.5,valign:'middle',overflow:'linebreak'},

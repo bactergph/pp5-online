@@ -1,4 +1,5 @@
 'use server'
+import {levelPeriodTimes,profileCellOverlap} from '@/lib/schedule-period-profiles'
 import {teachingEventAt} from '@/lib/schedule-joint-teaching'
 
 import { activityTeachers, applyActivityDisplay, lessonTeachers, roomActivityDisplay } from '@/lib/schedule-activity-teams'
@@ -160,9 +161,12 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
     if (!teachers.length) continue
     const busy = data.classrooms.filter(room => {
       if (room.id === classroomId) return false
-      const other = lessonAt(data, room.id, day, period)
-      if (!other || lesson?.activityGroupId && lesson.activityGroupId === other.activityGroupId || lesson&&'id' in other&&teachingEventAt(lesson,day,period)===teachingEventAt(other,day,period)) return false
-      return lessonTeachers(other).some(id => teachers.includes(id))
+      return levelPeriodTimes(data.periodTimes||[],room.level).filter(time=>!time.is_break).some(time=>{
+        if(!profileCellOverlap(data.periodTimes||[],data.classrooms.find(c=>c.id===classroomId)?.level||'',period,room.level,time.period))return false
+        const other = lessonAt(data, room.id, day, time.period)
+        if (!other || lesson?.activityGroupId && lesson.activityGroupId === other.activityGroupId || lesson&&'id' in other&&teachingEventAt(lesson,day,period)===teachingEventAt(other,day,time.period)) return false
+        return lessonTeachers(other).some(id => teachers.includes(id))
+      })
     })
     if (busy.length) warnings[key] = busy.map(room => `${room.level}/${room.room}`)
   }

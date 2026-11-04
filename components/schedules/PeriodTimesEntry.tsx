@@ -3,6 +3,8 @@ import { useScheduleOperations } from './ScheduleServices'
 
 import { useEffect, useState } from 'react'
 import { DEFAULT_PERIOD_TIMES, moveLunchBreak, validatePeriodTimes, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import {validatePeriodProfiles,hasPeriodProfiles} from '@/lib/schedule-period-profiles'
+import PeriodProfilePicker,{selectedPeriodTimes,replacePeriodSelection,type PeriodSelection} from './PeriodProfilePicker'
 import AppAlertModal from '@/components/AppAlertModal'
 
 const STYLES = `
@@ -96,7 +98,10 @@ export default function PeriodTimesEntry() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [times, setTimes] = useState<PeriodTimeRow[]>([])
+  const [allTimes, setAllTimes] = useState<PeriodTimeRow[]>([])
+  const [band,setBand]=useState<PeriodSelection>('shared')
+  const times=selectedPeriodTimes(allTimes,band)
+  function setTimes(value:PeriodTimeRow[]|((current:PeriodTimeRow[])=>PeriodTimeRow[])){setAllTimes(current=>replacePeriodSelection(current,band,typeof value==='function'?value(selectedPeriodTimes(current,band)):value))}
   const [isDefault, setIsDefault] = useState(true)
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
 
@@ -106,7 +111,7 @@ export default function PeriodTimesEntry() {
     try {
       const data = await fetchPeriodTimes()
       if (!active) return
-      setTimes(data.times as PeriodTimeRow[])
+      setAllTimes(data.times as PeriodTimeRow[])
       setIsDefault(data.isDefault)
     } catch (e) {
       if (!active) return
@@ -124,7 +129,7 @@ export default function PeriodTimesEntry() {
   }
 
   const teachingCount = times.filter(t => !t.is_break).length
-  const invalid = validatePeriodTimes(times)
+  const invalid = validatePeriodProfiles(allTimes)
   const lunchIndex = times.findIndex(t=>t.is_break)
   const morningCount = times.slice(0,lunchIndex).filter(t=>!t.is_break).length
   function changeLunch(afterPeriod:number) {
@@ -132,7 +137,7 @@ export default function PeriodTimesEntry() {
     catch(e) {setAlert({type:'error',title:'ย้ายช่วงพักไม่สำเร็จ',message:e instanceof Error?e.message:'กรุณาตรวจสอบเวลา'})}
   }
   function addPeriod() {
-    if (teachingCount >= 8) return
+    if (teachingCount >= 8 || hasPeriodProfiles(allTimes)) return
     const last = times[times.length - 1]
     const [h,m] = last.end_time.split(':').map(Number)
     const end = Math.min(1439, h * 60 + m + 50)
@@ -143,7 +148,7 @@ export default function PeriodTimesEntry() {
     if (invalid) { setAlert({type:'error',title:'ตรวจสอบเวลาคาบ',message:invalid}); return }
     setSaving(true)
     try {
-      await savePeriodTimes(times.map((row, index) => ({ ...row, label: !row.is_break && /^คาบ(?:ที่)?\s*\d+$/.test(row.label) ? `คาบที่ ${index + 1}` : row.label })))
+      await savePeriodTimes(allTimes.map(row => ({ ...row, label: !row.is_break && /^คาบ(?:ที่)?\s*\d+$/.test(row.label) ? `คาบที่ ${row.period}` : row.label })))
       setIsDefault(false)
       setAlert({ type: 'success', title: 'บันทึกสำเร็จ', message: 'เวลาคาบเรียนถูกบันทึกแล้ว' })
     } catch (e) {
@@ -154,6 +159,10 @@ export default function PeriodTimesEntry() {
   }
 
   function resetDefault() {
+    if(hasPeriodProfiles(allTimes)){
+      if(!window.confirm('คืนค่าเวลาทั้งประถม–มัธยมเป็นค่าเริ่มต้น 6 คาบ และกลับไปใช้เวลาเดียวกันทั้งโรงเรียน?'))return
+      setAllTimes([...DEFAULT_PERIOD_TIMES]);setBand('shared');return
+    }
     if (!window.confirm('คืนค่าเวลาคาบเรียนเป็นค่าเริ่มต้น?')) return
     setTimes([...DEFAULT_PERIOD_TIMES])
   }
@@ -182,7 +191,8 @@ export default function PeriodTimesEntry() {
             : 'ใช้เวลาที่กำหนดสำหรับโรงเรียนแล้ว'}
         </div>
 
-        <div className="period-lunch-setting">
+        <PeriodProfilePicker rows={allTimes} onChange={setAllTimes} selected={band} onSelected={setBand} disabled={saving}/>
+      <div className="period-lunch-setting">
           <div><label htmlFor="lunch-after-period">พักเที่ยงหลังคาบ</label><p>ระบบจะเรียงเวลาใหม่ โดยคงระยะเวลาของคาบเรียนและช่วงพักไว้</p></div>
           <select id="lunch-after-period" value={morningCount} disabled={saving} onChange={e=>changeLunch(Number(e.target.value))}>
             {times.map((t,index)=>!t.is_break && <option key={t.period} value={t.period}>หลังคาบที่ {index+1}</option>)}
@@ -209,7 +219,7 @@ export default function PeriodTimesEntry() {
                   <td className="period-name-cell">
                     <span className="period-mobile-label" aria-hidden="true">ชื่อคาบ</span>
                     <input
-                      value={!row.is_break && /^คาบ(?:ที่)?\s*\d+$/.test(row.label) ? `คาบที่ ${index + 1}` : row.label}
+                      value={!row.is_break && /^คาบ(?:ที่)?\s*\d+$/.test(row.label) ? `คาบที่ ${row.period}` : row.label}
                       disabled={saving}
                       aria-label={`ชื่อ ${row.is_break ? 'พักเที่ยง' : `คาบ ${row.period}`}`}
                       onChange={e => updateRow(index, 'label', e.target.value)}
@@ -235,7 +245,7 @@ export default function PeriodTimesEntry() {
                       placeholder="09:20"
                     />
                   </td>
-                  <td className="period-manage-cell">{!row.is_break && row.period===teachingCount && teachingCount>1 && <button type="button" className="period-btn danger" disabled={saving} onClick={()=>setTimes(times.filter((_,i)=>i!==index))} aria-label={`ลบคาบ ${row.period}`}>ลบคาบ</button>}</td>
+                  <td className="period-manage-cell">{!row.is_break && row.period===teachingCount && teachingCount>1 && !hasPeriodProfiles(allTimes) && <button type="button" className="period-btn danger" disabled={saving} onClick={()=>setTimes(times.filter((_,i)=>i!==index))} aria-label={`ลบคาบ ${row.period}`}>ลบคาบ</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -248,7 +258,7 @@ export default function PeriodTimesEntry() {
         {invalid && <div className="period-error" role="alert">{invalid}</div>}
         <div className="period-actions">
           <div className="period-secondary-actions">
-          <button type="button" className="period-btn" disabled={saving || teachingCount>=8} onClick={addPeriod}>+ เพิ่มคาบเรียน ({teachingCount}/8)</button>
+          <button type="button" className="period-btn" disabled={saving || teachingCount>=8 || hasPeriodProfiles(allTimes)} onClick={addPeriod}>+ เพิ่มคาบเรียน ({teachingCount}/8)</button>
           <button type="button" className="period-btn" disabled={saving} onClick={resetDefault}>คืนค่าเริ่มต้น 6 คาบ</button>
           </div>
           <button type="button" className="period-btn primary" onClick={handleSave} disabled={saving}>

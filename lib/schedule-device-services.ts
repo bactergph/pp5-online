@@ -1,3 +1,6 @@
+import {validatePeriodProfiles} from '@/lib/schedule-period-profiles'
+import {profileTeacherConflicts} from './schedule-profile-solver'
+import {rosterPeriodClock,profileCellOverlap,hasPeriodProfiles} from './schedule-period-profiles'
 import {applyJointTeachingLock,prepareJointTeachingSession,prepareJointTeachingCancellation} from './schedule-joint-lock'
 import type { ScheduleOperations } from '../components/schedules/ScheduleServices'
 import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
@@ -104,7 +107,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       const lesson=data.lessons.find(item=>item.id===cell.class_subject_id)
       if(!lesson)continue
       const [day,period]=position.split('-').map(Number)
-      const conflicts=busyCells(current).filter(other=>other.day===day&&other.period===period&&other.classroomId!==room&&lessonTeachers(lesson).includes(other.teacherId)&&other.group!==teachingEventAt(lesson,day,period))
+      const conflicts=busyCells(current).filter(other=>other.day===day&&profileCellOverlap(current.periods,current.rooms.find(r=>r.id===other.classroomId)?.label||'',other.period,current.rooms.find(r=>r.id===room)?.label||'',period)&&other.classroomId!==room&&lessonTeachers(lesson).includes(other.teacherId)&&other.group!==teachingEventAt(lesson,day,period))
       if(conflicts.length)warnings[position]=[...new Set(conflicts.map(other=>current.rooms.find(item=>item.id===other.classroomId)?.label||''))]
     }
     return {grid,subjects,warnings,quotas:{items,filled:items.reduce((sum,item)=>sum+item.used,0),totalTarget:items.reduce((sum,item)=>sum+item.target,0)}}
@@ -146,14 +149,14 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
   const externalEntry=(entry:FreeSubstituteEntry)=>({id:entry.id,absent_teacher_id:entry.absentTeacherId,period:entry.period,class_subject_id:entry.subjectId||null,classroom_id:entry.roomId||null,subject_label:entry.subjectLabel,room_label:entry.roomLabel,substitute_teacher_id:entry.substituteTeacherId,leave_type:entry.leaveType,note:entry.note,override_conflicts:entry.overrideConflicts===true,conflict_details:entry.conflictDetails||[],conflict_confirmed_at:entry.conflictConfirmedAt||null,absent_teacher_name:entry.absentTeacherName,substitute_teacher_name:entry.substituteTeacherName})
   function rosterBusy(current:FreeWizardPlan,day:number):SubstituteBusy[] {
     const lessons=devicePreparation(current).lessons
-    return [...current.blocks.filter(row=>row.day===day).map(row=>({teacherId:row.teacherId,period:row.period,kind:'block' as const})),
-      ...busyCells(current).filter(row=>row.day===day).map(row=>{const lesson=lessons.find(lesson=>lesson.id===row.lessonId);return {teacherId:row.teacherId,period:row.period,kind:row.lessonId.startsWith('activity:')?'activity' as const:'lesson' as const,label:lesson?`${lesson.code||''} ${lesson.name}`.trim():row.label,roomLabel:current.rooms.find(room=>room.id===row.classroomId)?.label||''}})]
+    return [...current.blocks.filter(row=>row.day===day).map(row=>({teacherId:row.teacherId,period:row.period,...rosterPeriodClock(current.periods,'',row.period),kind:'block' as const})),
+      ...busyCells(current).filter(row=>row.day===day).map(row=>{const lesson=lessons.find(lesson=>lesson.id===row.lessonId);return {teacherId:row.teacherId,period:row.period,...rosterPeriodClock(current.periods,current.rooms.find(room=>room.id===row.classroomId)?.label||'',row.period),kind:row.lessonId.startsWith('activity:')?'activity' as const:'lesson' as const,label:lesson?`${lesson.code||''} ${lesson.name}`.trim():row.label,roomLabel:current.rooms.find(room=>room.id===row.classroomId)?.label||''}})]
   }
   function teacherSlots(date:string,year:string,teacher:string,term:number) {
     const current=plan(year,term),data=devicePreparation(current),day=weekday(date)
     return allCells(current).filter(cell=>cell.day===day).flatMap(cell=>{
       const lesson=data.lessons.find(item=>item.id===lessonId(cell))
-      return lesson&&lessonTeachers(lesson).includes(teacher)?[{period:cell.period,class_subject_id:lesson.activity?null:lesson.id,classroom_id:cell.classroomId,room_label:current.rooms.find(item=>item.id===cell.classroomId)?.label||'',subject_label:`${lesson.code} ${lesson.name}`.trim()}]:[]
+      return lesson&&lessonTeachers(lesson).includes(teacher)?[{...rosterPeriodClock(current.periods,current.rooms.find(room=>room.id===cell.classroomId)?.label||'',cell.period),period:cell.period,class_subject_id:lesson.activity?null:lesson.id,classroom_id:cell.classroomId,room_label:current.rooms.find(item=>item.id===cell.classroomId)?.label||'',subject_label:`${lesson.code} ${lesson.name}`.trim()}]:[]
     }).sort((a,b)=>a.period-b.period)
   }
   function exportContext() {
@@ -182,7 +185,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     fetchPreparation:async(year,term)=>outcome(async()=>preparation(year,term)),
     fetchScheduleDays:async(year,term=1)=>plan(year,term).days,
     fetchPeriodTimes:async()=>({times:plan().periods,isDefault:false}),
-    savePeriodTimes:async periods=>{const error=validatePeriodTimes(periods);if(error)throw Error(error);await mutate(selectedYear,selectedTerm,current=>put(selectedYear,selectedTerm,{...current,periods}));return {ok:true}},
+    savePeriodTimes:async periods=>{const error=validatePeriodProfiles(periods);if(error)throw Error(error);await mutate(selectedYear,selectedTerm,current=>{const next={...current,periods};for(const target of [next,{...plan(selectedYear,selectedTerm===1?2:1),periods}]){fixed(target);const issue=devicePreflight(target,target.rooms.map(room=>room.id),false).find(issue=>issue.severity==='error'&&issue.code==='subject_day');if(issue)throw Error(issue.message)}return put(selectedYear,selectedTerm,next)});return {ok:true}},
     fetchScheduleClassrooms:async year=>devicePreparation(plan(year)).classrooms.map(room=>({...room,label:`${room.level}/${room.name}`})),
     saveTimetableClassrooms:(year,term,levels)=>outcome(()=>mutate(year,term,async current=>{
       if(new Set(levels.map(level=>level.level)).size!==levels.length)throw Error('มีระดับชั้นซ้ำในข้อมูลที่กำลังบันทึก')
@@ -369,12 +372,13 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       const current=plan(year,term),data=preparation(year,term),busy=busyCells(current),quotas=new Map<string,{id:string;teacherId:string;label:string;activity:boolean;target:number;used:number}>()
       for(const lesson of data.lessons)for(const teacherId of lessonTeachers(lesson))for(const part of teachingQuotaParts(lesson)){const id=part.id,key=id+':'+teacherId,used=allCells(current).filter(cell=>lessonId(cell)===lesson.id&&(part.cell?part.cell===`${cell.day}:${cell.period}`:!lesson.jointTeachingCells?.[`${cell.day}:${cell.period}`])).length,old=quotas.get(key);if(old){old.used=Math.max(old.used,used);old.target=Math.max(old.target,part.count);old.label+=' / '+lesson.label}else quotas.set(key,{id,teacherId,label:lesson.label,activity:!!lesson.activity,target:part.count,used})}
       const activityCells=new Map(activityLockCells(data.plan.activityGroups||[],data.lessons,data.slots).map(cell=>[`${cell.classroomId}:${cell.day}:${cell.period}`,cell]))
-      return {teachers:current.teachers,blocks:current.blocks,supported:true,lessons:data.lessons.filter(lesson=>!lesson.activity).map(lesson=>({id:lesson.id,teacherId:lesson.teacherId,classroomId:lesson.classroomId,label:lesson.label})),slots:allCells(current).map(cell=>({classroomId:cell.classroomId,day:cell.day,period:cell.period,lessonId:lessonId(cell),locked:!!cell.locked})),busy:busy.map(row=>{const activity=activityCells.get(`${row.classroomId}:${row.day}:${row.period}`);return {...row,activity:!!activity,activityFixed:!!activity?.fixed}}),quotas:[...quotas.values()]}
+      return {classroomLevels:Object.fromEntries(current.rooms.map(room=>[room.id,room.label])),teachers:current.teachers,blocks:current.blocks,supported:true,lessons:data.lessons.filter(lesson=>!lesson.activity).map(lesson=>({id:lesson.id,teacherId:lesson.teacherId,classroomId:lesson.classroomId,label:lesson.label})),slots:allCells(current).map(cell=>({classroomId:cell.classroomId,day:cell.day,period:cell.period,lessonId:lessonId(cell),locked:!!cell.locked})),busy:busy.map(row=>{const activity=activityCells.get(`${row.classroomId}:${row.day}:${row.period}`);return {...row,activity:!!activity,activityFixed:!!activity?.fixed}}),quotas:[...quotas.values()]}
     },
     fetchTeachingScheduleGrid:async(teacher,year,term=1)=>scheduleTeachingView(deviceDisplaySchedule(plan(year,term)),teacher),
-    getTeacherConflictAt:async(year,teacher,day,period,ignore,term=1)=>{const current=plan(year,term),rooms=[...new Set(busyCells(current).filter(cell=>cell.teacherId===teacher&&cell.day===day&&cell.period===period&&cell.classroomId!==ignore).map(cell=>current.rooms.find(room=>room.id===cell.classroomId)?.label||''))];return {busy:rooms.length>0,rooms}},
+    getTeacherConflictAt:async(year,teacher,day,period,ignore,term=1)=>{const current=plan(year,term),rooms=[...new Set(busyCells(current).filter(cell=>cell.teacherId===teacher&&cell.day===day&&profileCellOverlap(current.periods,current.rooms.find(room=>room.id===cell.classroomId)?.label||'',cell.period,current.rooms.find(room=>room.id===ignore)?.label||'',period)&&cell.classroomId!==ignore).map(cell=>current.rooms.find(room=>room.id===cell.classroomId)?.label||''))];return {busy:rooms.length>0,rooms}},
     fetchScheduleConflicts:async(year,term=1)=>{
       const current=plan(year,term),busy=busyCells(current),conflicts:Awaited<ReturnType<ScheduleOperations['fetchScheduleConflicts']>>['conflicts']=[]
+      if(hasPeriodProfiles(current.periods)){const data=devicePreparation(current),pairs=profileTeacherConflicts(data.lessons,data.slots.map(s=>({classroomId:s.classroom_id,lessonId:s.activity_id?'activity:'+s.activity_id:s.class_subject_id,day:s.day_of_week,period:s.period})),current.periods);for(const pair of pairs)conflicts.push({teacher_id:pair.teacherId,teacher_name:current.teachers.find(t=>t.id===pair.teacherId)?.name||'',day:pair.day,period:pair.period,day_label:SCHEDULE_DAYS.find(d=>d.value===pair.day)?.label||'',rooms:pair.lessonIds.map(id=>{const l=data.lessons.find(l=>l.id===id);return {room:current.rooms.find(r=>r.id===l?.classroomId)?.label||'',subject:l?.label||''}})});return {conflicts,count:conflicts.length}}
       for(const teacher of current.teachers)for(const day of current.days)for(const period of current.periods.filter(row=>!row.is_break).map(row=>row.period)){
         const cells=busy.filter(cell=>cell.teacherId===teacher.id&&cell.day===day&&cell.period===period),groups=new Set(cells.map(cell=>cell.group||cell.lessonId))
         if(groups.size>1)conflicts.push({teacher_id:teacher.id,teacher_name:teacher.name,day,period,day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',rooms:cells.map(cell=>({room:current.rooms.find(room=>room.id===cell.classroomId)?.label||'',subject:cell.label}))})
@@ -410,7 +414,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     }),
     fetchSubstituteDay:async(date,year,term=1)=>{
       const current=plan(year,term),day=weekday(date)
-      return {day:{id:key(year,term,date),date,day_of_week:day,note:null},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',availability_warning:'',teacher_names:substituteDocumentNames(Object.values(current.substitutes||{}).flat().map(externalEntry),Object.fromEntries(current.teachers.map(teacher=>[teacher.id,teacher.name]))),classrooms:current.rooms.map(room=>({id:room.id,label:room.label})),busy:rosterBusy(current,day),entries:(current.substitutes[date]||[]).map(externalEntry)}
+      return {day:{id:key(year,term,date),date,day_of_week:day,note:null},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',availability_warning:'',teacher_names:substituteDocumentNames(Object.values(current.substitutes||{}).flat().map(externalEntry),Object.fromEntries(current.teachers.map(teacher=>[teacher.id,teacher.name]))),classrooms:current.rooms.map(room=>({id:room.id,label:room.label})),busy:rosterBusy(current,day),entries:(current.substitutes[date]||[]).map(entry=>({...externalEntry(entry),...rosterPeriodClock(current.periods,current.rooms.find(room=>room.id===entry.roomId)?.label||'',entry.period)}))}
     },
     loadSubstituteRosterSlots:async(date,year,teachers,term=1)=>{
       const current=plan(year,term)

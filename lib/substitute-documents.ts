@@ -1,4 +1,5 @@
 import 'server-only'
+import {rosterPeriodClock} from './schedule-period-profiles'
 import {randomUUID} from 'node:crypto'
 import {getSession} from './session'
 import {createServerClient} from './supabase'
@@ -35,8 +36,8 @@ export async function documentDay(date:string,year:string,term=1){
     loadSchedule(session.schoolId,year,term).then(data=>({data,error:''})).catch(()=>({data:null,error:'ตรวจตารางปกติไม่สำเร็จ ยังสามารถบันทึกเอกสารได้'})),
   ]);fail(users.error);fail(rooms.error)
   const names=substituteDocumentNames(document.entries,Object.fromEntries((users.data||[]).map(user=>[user.id,`${user.prefix||''}${user.full_name}`])))
-  return {day:{id:document.id,date:document.date,day_of_week:day,note:document.note},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',teacher_names:names,classrooms:(rooms.data||[]).map(room=>({id:room.id,label:`${room.level}/${room.room}`})),entries:document.entries,
-    busy:[...(blocks.data||[]).map(row=>({teacherId:row.teacher_id,period:row.period,kind:'block' as const})),...schedule.data?substituteTimetableForDay(schedule.data,day).flatMap(slot=>slot.teacherIds.map(teacherId=>({teacherId,period:slot.period,kind:slot.activity?'activity' as const:'lesson' as const,label:slot.subject_label,roomLabel:slot.room_label}))):[]] as SubstituteBusy[],availability_warning:schedule.error||(blocks.error?'ตรวจคาบว่างที่ล็อกไว้ไม่สำเร็จ':'')}
+  return {day:{id:document.id,date:document.date,day_of_week:day,note:document.note},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',teacher_names:names,classrooms:(rooms.data||[]).map(room=>({id:room.id,label:`${room.level}/${room.room}`})),entries:document.entries.map(row=>({...row,...rosterPeriodClock(schedule.data?.periodTimes||[],(rooms.data||[]).find(c=>c.id===row.classroom_id)?.level||'',row.period)})),
+    busy:[...(blocks.data||[]).map(row=>({teacherId:row.teacher_id,period:row.period,...rosterPeriodClock(schedule.data?.periodTimes||[],'',row.period),kind:'block' as const})),...schedule.data?substituteTimetableForDay(schedule.data,day).flatMap(slot=>slot.teacherIds.map(teacherId=>({teacherId,period:slot.period,...rosterPeriodClock(schedule.data?.periodTimes||[],(rooms.data||[]).find(c=>c.id===slot.classroom_id)?.level||'',slot.period),kind:slot.activity?'activity' as const:'lesson' as const,label:slot.subject_label,roomLabel:slot.room_label}))):[]] as SubstituteBusy[],availability_warning:schedule.error||(blocks.error?'ตรวจคาบว่างที่ล็อกไว้ไม่สำเร็จ':'')}
 }
 export async function saveDocument(id:string,expected:SubstituteRosterEntry[],rows:SubstituteRosterEntry[]){
   const {session,db,document}=await documentFor(id)

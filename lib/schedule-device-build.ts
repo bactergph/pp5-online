@@ -1,3 +1,4 @@
+import {validatePeriodProfiles} from '@/lib/schedule-period-profiles'
 import {jointTeachingScope,validateJointTeachingGroups} from './schedule-joint-teaching'
 import { verifyCompleteSchedule } from './schedule-verification'
 import { activityTeachers } from './schedule-activity-teams'
@@ -16,6 +17,7 @@ export type DeviceSlot = {
 }
 export type DeviceOffering = { id: string; classroom_id: string; evaluation_setting_id: string }
 export type DeviceLesson = {
+  classroomLevel?:string
   id: string
   classroomId: string
   teacherId: string | null
@@ -103,7 +105,7 @@ function activityPlacement(data: DeviceSnapshot, year: string, reserved?: Device
         const id = reservedId || newId()
         const room = data.classrooms.find(item => item.id === roomId)
         offerings.push({ id, classroom_id: roomId, evaluation_setting_id: group.settingId })
-        lesson = { id: 'activity:' + id, classroomId: roomId, teacherId: null, teacherIds: teachers, count: group.weeklyPeriods, label: `${room?.level}/${room?.room} · ${label}`, subjectId: group.settingId, code: '', name: label, fullName: label, teacherName, activity: true, teacherOptional: true, selectable: false, activityGroupId: group.mode === 'joint' ? group.id : undefined, sourceHours: 0, roomName: '', spread: true }
+        lesson = { classroomLevel:room?.level, id: 'activity:' + id, classroomId: roomId, teacherId: null, teacherIds: teachers, count: group.weeklyPeriods, label: `${room?.level}/${room?.room} · ${label}`, subjectId: group.settingId, code: '', name: label, fullName: label, teacherName, activity: true, teacherOptional: true, selectable: false, activityGroupId: group.mode === 'joint' ? group.id : undefined, sourceHours: 0, roomName: '', spread: true }
         extra.push(lesson)
       } else patch.set(lesson.id, { teacherIds: teachers, teacherId: null, activityGroupId: group.mode === 'joint' ? group.id : undefined, name: lesson.name || label, teacherName: teacherName || lesson.teacherName || '' })
       if (!group.cells.length) flexible.set(lesson.id, { count: group.weeklyPeriods, roomIds: group.roomIds, joint: group.mode === 'joint' })
@@ -172,7 +174,7 @@ export function prepareDeviceDraft(data: DeviceSnapshot, year: string, scope: st
   for (const id of scope) if (!lessons.some(lesson => lesson.classroomId === id && !lesson.activity)) issues.push({ severity: 'error', message: `${roomLabel(id)} ยังไม่มีรายวิชา`, step: 3 })
   if (!data.timesConfigured) issues.push({ severity: 'error', message: 'ยังไม่บันทึกเวลาคาบของโรงเรียน กรุณาตรวจและบันทึกเวลาเริ่ม–จบก่อนจัด', step: 1 })
   for (const lesson of lessons.filter(item => scope.includes(item.classroomId) && !item.activity && item.roomName && !data.plan.rules[item.id]?.roomId)) issues.push({ severity: 'warning', message: `${lesson.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`, step: 5 })
-  const timeError = validatePeriodTimes(data.periods)
+  const timeError = validatePeriodProfiles(data.periods)
   if (timeError) issues.push({ severity: 'error', message: timeError, step: 1 })
   return { issues, retained, lessons, offerings: placed.offerings, unlock: placed.unlock }
 }

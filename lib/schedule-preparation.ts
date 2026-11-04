@@ -1,4 +1,5 @@
 import 'server-only'
+import {validatePeriodProfiles} from './schedule-period-profiles'
 import {prepareJointTeachingSession,prepareJointTeachingCancellation,applyJointTeachingLock,type JointLockRequest} from './schedule-joint-lock'
 import {withJointTeachingGroups,validateJointTeachingGroups,jointTeachingSlotErrors,jointTeachingScope} from './schedule-joint-teaching'
 import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
@@ -20,7 +21,7 @@ export async function preparation(year:string,term:number){
  const [data,constraints,config,times,activities,teachers]=await Promise.all([
  loadSchedule(session.schoolId,year,term),loadScheduleConstraints(session.schoolId,year,term),
  db.from('schedule_plans').select('config').eq('school_id',session.schoolId).eq('academic_year_id',year).eq('semester',term).maybeSingle(),
- db.from('school_period_times').select('period,label,start_time,end_time,is_break,sort_order').eq('school_id',session.schoolId).order('sort_order'),
+ db.from('school_period_times').select('period,label,start_time,end_time,is_break,sort_order,profiles').eq('school_id',session.schoolId).order('sort_order'),
  readActivityCatalog(db,session.schoolId),
  db.from('users').select('id,prefix,full_name,position').eq('school_id',session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name').limit(1000)])
  for(const r of [config,times,teachers])fail(r.error)
@@ -150,7 +151,7 @@ function activityPlacement(data:Preparation,year:string){
    if(!lesson){
     const id=randomUUID(),room=data.classrooms.find(c=>c.id===roomId)
     offerings.push({id,classroom_id:roomId,evaluation_setting_id:group.settingId})
-    lesson={id:'activity:'+id,classroomId:roomId,teacherId:null,teacherIds:teachers,count:group.weeklyPeriods,label:`${room?.level}/${room?.room} · ${label}`,subjectId:group.settingId,code:'',name:label,fullName:label,teacherName,activity:true,teacherOptional:true,selectable:false,activityGroupId:group.mode==='joint'?group.id:undefined,sourceHours:0,roomName:'',spread:true,source:'กิจกรรมที่กำหนดไว้'} as Preparation['lessons'][number]
+    lesson={classroomLevel:room?.level,id:'activity:'+id,classroomId:roomId,teacherId:null,teacherIds:teachers,count:group.weeklyPeriods,label:`${room?.level}/${room?.room} · ${label}`,subjectId:group.settingId,code:'',name:label,fullName:label,teacherName,activity:true,teacherOptional:true,selectable:false,activityGroupId:group.mode==='joint'?group.id:undefined,sourceHours:0,roomName:'',spread:true,source:'กิจกรรมที่กำหนดไว้'} as Preparation['lessons'][number]
     extra.push(lesson)
    }else patch.set(lesson.id,{teacherIds:teachers,teacherId:null,activityGroupId:group.mode==='joint'?group.id:undefined,name:lesson.name||label,teacherName:teacherName||lesson.teacherName})
    if(!group.cells.length)flexible.set(lesson.id,{count:activityWeeklyPeriods(group.weeklyPeriods),group})
@@ -207,7 +208,7 @@ export async function preflight(year:string,term:number,scope:string[],clear:boo
  if(!data.timesConfigured)issues.push({severity:'error',message:'ยังไม่บันทึกเวลาคาบของโรงเรียน กรุณาตรวจและบันทึกเวลาเริ่ม–จบก่อนจัด',step:1})
  if(!data.blocksSupported)issues.push({severity:'error',message:'ยังไม่มีตารางครูไม่ว่าง กรุณาติดตั้ง migration 062 ก่อนตรวจและจัดตาราง',step:4})
  for(const l of lessons.filter(l=>scope.includes(l.classroomId)&&!l.activity&&l.roomName&&!data.plan.rules[l.id]?.roomId))issues.push({severity:'warning',message:`${l.label} ระบุชื่อสถานที่ แต่ยังไม่ได้เชื่อมรหัสห้องร่วม จึงยังไม่ตรวจสถานที่นี้ชน`,step:4})
- const timeError=validatePeriodTimes(data.periods);if(timeError)issues.push({severity:'error',message:timeError,step:1})
+ const timeError=validatePeriodProfiles(data.periods);if(timeError)issues.push({severity:'error',message:timeError,step:1})
  if(!Array.isArray(data.plan.days)||!data.plan.days.length)issues.push({severity:'error',message:'ยังไม่ได้เลือกวันเรียน',step:1})
  if(!clear&&retained.some(s=>scope.includes(s.classroom_id)&&s.class_subject_id&&!s.locked))issues.push({severity:'warning',message:'กำลังเติมเฉพาะช่องว่าง คาบวิชาเดิมจะอยู่ที่เดิม หากต้องการจัดใหม่ให้เลือก “จัดวิชาที่ไม่ล็อกใหม่”',step:6})
  return {data,issues:[...issues.map(shiftManageStep),...poolIssues],retained,lessons,offerings,unlock}}

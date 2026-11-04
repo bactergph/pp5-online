@@ -1,10 +1,11 @@
-import { SCHEDULE_DAYS, SCHEDULE_PERIOD_COUNT } from '@/lib/schedules'
+import { SCHEDULE_DAYS, SCHEDULE_PERIOD_COUNT } from './schedules'
 
 export const SCHEDULE_WEEKS_PER_YEAR = 40
 export const WORKLOAD_OK_MAX = 18
 export const WORKLOAD_WARN_MAX = 20
 
 export type PeriodTimeRow = {
+  profiles?: Partial<Record<'primary' | 'secondary', PeriodTimeRow[]>>
   period: number
   label: string
   start_time: string
