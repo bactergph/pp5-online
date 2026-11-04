@@ -1,6 +1,7 @@
 'use server'
 
 import 'server-only'
+import { relationOne } from '@/lib/postgrest-relation'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { deleteDriveFile } from '@/lib/google-drive'
@@ -33,7 +34,7 @@ export type ApprovedDocumentRow = {
 
 async function requireSession() {
   const session = await getSession()
-  if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (!session || !session.schoolId || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
   return session
 }
 
@@ -156,7 +157,8 @@ async function canViewDocument(
       .eq('id', row.class_document_approval_id)
       .maybeSingle()
     if (data) {
-      const classroom = data.classrooms as { homeroom_teacher_id: string | null; homeroom_teacher2_id: string | null }
+      const classroom = relationOne(data.classrooms)
+      if (!classroom) return false
       if (await canViewClassDocApproval(session, data, classroom)) return true
     }
   }
@@ -196,16 +198,13 @@ async function fetchWorkflowApprovedDocuments(
 
     for (const record of approvals || []) {
       if (exportedApprovalIds.has(record.id)) continue
-      const cs = record.class_subjects as {
-        id: string
-        academic_year_id: string
-        classrooms: { id: string; level: string; room: number }
-        subjects: { code: string; name: string }
-      }
+      const cs = relationOne(record.class_subjects)
+      if (!cs) continue
       const allowed = await canViewPp5SubjectApproval(session, record)
       if (!allowed) continue
-      const classroom = cs.classrooms
-      const subject = cs.subjects
+      const classroom = relationOne(cs.classrooms)
+      const subject = relationOne(cs.subjects)
+      if (!classroom || !subject) continue
       const approvedAt = record.director_signed_at || record.updated_at || new Date().toISOString()
       const previewTarget = {
         kind: 'pp5-subject' as const,
@@ -249,14 +248,8 @@ async function fetchWorkflowApprovedDocuments(
 
   for (const record of approvals || []) {
     if (exportedApprovalIds.has(record.id)) continue
-    const classroom = record.classrooms as {
-      id: string
-      level: string
-      room: number
-      academic_year_id: string
-      homeroom_teacher_id: string | null
-      homeroom_teacher2_id: string | null
-    }
+    const classroom = relationOne(record.classrooms)
+    if (!classroom || classroom.school_id !== session.schoolId) continue
     const allowed = await canViewClassDocApproval(session, record, classroom)
     if (!allowed) continue
     const approvedAt = record.director_signed_at || record.updated_at || new Date().toISOString()

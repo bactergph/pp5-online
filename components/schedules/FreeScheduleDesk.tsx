@@ -23,7 +23,7 @@ import DeviceSchoolSettings from './DeviceSchoolSettings'
 import {applyDeviceSchoolBasics} from '@/lib/schedule-device-school'
 import './free-schedule.css'
 import './schedule-workspace.css'
-type DeskTier='school'|'free'|'pro'
+type DeskTier='school'|'free'|'pro'|'pro_plus'
 type FreePlan=FreeWizardPlan&{substitutes:Record<string,FreeSubstituteEntry[]>}
 type FreeBundle=LocalScheduleBundle
 function blankPlan(shared?: Partial<FreePlan>): FreePlan {

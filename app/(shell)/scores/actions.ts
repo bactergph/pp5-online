@@ -7,7 +7,7 @@ import {isPersonalSubjectAccess} from '@/lib/personal-data-scope'
 
 async function requireSession() {
   const session = await getSession()
-  if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (!session || !session.schoolId || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
   return session
 }
 
@@ -47,6 +47,10 @@ async function loadScoreSubjects(
   classroomId: string,
   term: 1 | 2 = 1,
 ) {
+  const { data: room, error: roomError } = await db.from('classrooms').select('id')
+    .eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
+  if (roomError) throw new Error('โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่')
+  if (!room) throw new Error('ไม่มีสิทธิ์ดูห้องเรียนนี้')
   let q = db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
     .eq('classroom_id', classroomId).in('semester', [0, term]).order('order_number')
   if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) q = q.eq('teacher_id', session.userId)
@@ -154,6 +158,7 @@ export async function saveScores(
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
   if (rows.length === 0) return { error: 'ไม่มีข้อมูล' }
+  if (new Set(rows.map(row => row.student_id)).size !== rows.length) return { error: 'มีรายชื่อนักเรียนซ้ำ กรุณาตรวจสอบก่อนบันทึก' }
   const db = createServerClient()
 
   // ครู: บันทึกได้เฉพาะวิชาที่ตนสอน
@@ -171,9 +176,10 @@ export async function saveScores(
   }
 
   // กันแก้คะแนนที่ถูกล็อก (ลงนามแล้ว)
-  const { data: locked } = await db.from('scores')
+  const { data: locked, error: lockError } = await db.from('scores')
     .select('student_id').eq('class_subject_id', classSubjectId).eq('term', term).eq('locked', true)
   if (locked && locked.length) return { error: 'คะแนนวิชานี้ถูกล็อก (ลงนามแล้ว) แก้ไขไม่ได้' }
+  if (lockError) return { error: 'ตรวจสอบสถานะล็อกคะแนนไม่สำเร็จ กรุณาลองใหม่', count: 0 }
 
   const payload = rows.map(r => ({
     student_id: r.student_id,
@@ -204,5 +210,5 @@ export async function saveScores(
       metadata: { classSubjectId, term, count: payload.length },
     })
   }
-  return { error: error?.message, count: payload.length }
+  return { error: error?.message, count: error ? 0 : payload.length }
 }

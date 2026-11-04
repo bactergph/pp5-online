@@ -90,6 +90,10 @@ async function ok(call,label){const result=await call();assert.ok(result&&typeof
  await denied(()=>rooms.saveClassroom('rb',classroom),'foreign classroom edit');await denied(()=>rooms.saveClassroom('ra',{...classroom,homeroom_teacher_id:'tb'}),'foreign homeroom teacher');await denied(()=>rooms.saveClassroom('ra',{...classroom,homeroom_teacher2_id:'ta'}),'duplicate homeroom teacher')
  await denied(()=>rooms.deleteClassroom('rb'),'foreign classroom delete');await denied(()=>rooms.deleteClassroom('ra'),'classroom with students delete');await ok(()=>rooms.deleteClassroom('empty'),'delete empty local classroom')
  actor={...actor,role:'teacher'};await denied(()=>api.saveAcademicYear('ya',{year_be:2571}),'teacher cannot edit academic year');await denied(()=>api.deleteHoliday('hb'),'teacher cannot delete holiday')
+ actor={...actor,role:'admin',mustChangePassword:true};const beforeForced=writes.length
+ await assert.rejects(api.saveAcademicYear('ya',{year_be:2571}),/ไม่มีสิทธิ์/)
+ await assert.rejects(rooms.saveClassroom('ra',classroom),/ไม่มีสิทธิ์/)
+ assert.equal(writes.length,beforeForced,'Forced password change blocks settings and classroom writes')
  assert.ok(rpcCalls.every(call=>call.args.p_school==='a'))
  console.log(`PASS: ${checks} real CRUD action scenarios, create/edit/delete/import/assign, foreign-school guards, invalid references, duplicate course IDs, occupied deletes, stable activation and preserved data`)
 })().catch(error=>{console.error(error);process.exitCode=1})

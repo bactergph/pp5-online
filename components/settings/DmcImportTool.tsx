@@ -656,7 +656,7 @@ export default function DmcImportTool({
               <tbody>
                 {(mode === 'school' ? parsedSchool : parsed).map((r, i) => (
                   <tr key={i}>
-                    {mode === 'school' && 'level' in r && <td style={{ fontWeight: 700 }}>{r.level}/{r.room}</td>}
+                    {mode === 'school' && 'level' in r && 'room' in r && <td style={{ fontWeight: 700 }}>{String(r.level)}/{String(r.room)}</td>}
                     <td style={{ color: 'var(--text-3)' }}>{r.student_code || '-'}</td>
                     <td style={{ color: 'var(--text-3)', fontSize: 12 }}>{r.national_id || '-'}</td>
                     <td>{r.prefix}</td>

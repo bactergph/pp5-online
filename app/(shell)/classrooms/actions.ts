@@ -9,7 +9,7 @@ import { resolveSchoolEducationType, schoolLevels, type SchoolEducationType } fr
 
 async function requireSession() {
   const session = await getSession()
-  if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (!session || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
   if (session.mustChangePassword) throw new Error('กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน')
   return session
 }

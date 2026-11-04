@@ -18,7 +18,7 @@ const CAN_EDIT = ['admin', 'district', 'academic_head', 'deputy_principal', 'tea
 
 async function requireSession() {
   const session = await getSession()
-  if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (!session || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
   return session
 }
 

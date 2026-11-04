@@ -21,7 +21,7 @@ const settings = load('lib/evaluation-settings.ts')
 const physicalTraits = Array.from({ length: 8 }, (_, i) => `trait${i + 1}_score`)
 assert.deepEqual(Array.from(settings.evaluationStoredFieldKeys('character')), physicalTraits)
 assert.ok(settings.characterDefaultSettingsForBand('1').some(row => row.field_key === 'trait1_1_indicator'), 'Descriptions remain available for the assessment UI')
-let session = { userId: 'teacher', schoolId: 'school', role: 'teacher' }, denyScope = false, failSettings = false
+let session = { userId: 'teacher', schoolId: 'school', role: 'teacher' }, denyScope = false, failSettings = false, failWrite = null
 const tables = { classrooms: [{ id: 'room', level: 'ป.1', academic_year_id: 'year' }], students: [{ id: 'student', classroom_id: 'room' }], evaluation_settings: [], character_traits: [], evaluation_custom_scores: [] }
 const writes = []
 function query(table) {
@@ -36,6 +36,7 @@ function query(table) {
     order: () => q,
     maybeSingle: async () => { const r = result(); return { ...r, data: r.data?.[0] || null } },
     upsert: async (rows, options) => {
+      if (failWrite === table) return { error: { message: 'simulated write unavailable' } }
       if (table === 'character_traits') {
         const allowed = new Set(['student_id', 'academic_year_id', 'term', 'total_score', 'percentage', 'result_level', ...physicalTraits])
         const unknown = rows.flatMap(row => Object.keys(row)).find(key => !allowed.has(key))
@@ -85,6 +86,13 @@ const api = load('app/(shell)/evaluation/actions.ts', {
   // Repeated saves update the same student/year/term rather than duplicating records.
   const cleared = await api.saveEvaluationRows('character', 'room', 'year', 1, [{ student_id: 'student', values: {} }])
   assert.equal(cleared.error, null); assert.equal(tables.character_traits.length, 1); assert.equal(tables.character_traits[0].total_score, 0)
+  const save = () => api.saveEvaluationRows('character', 'room', 'year', 1, [{ student_id: 'student', values: {} }])
+  failWrite = 'character_traits'
+  let failed = await save(); assert.ok(failed.error); assert.equal(failed.count, 0)
+  failWrite = 'evaluation_custom_scores'
+  failed = await save(); assert.match(failed.error, /บันทึกค่าประเมินหลักแล้ว/); assert.equal(failed.count, 0); assert.equal(failed.partial, true)
+  failWrite = null; assert.equal((await save()).error, null)
+  session.mustChangePassword = true; await assert.rejects(save(), /ไม่มีสิทธิ์/); session.mustChangePassword = false
   let count = writes.length
   failSettings = true
   assert.ok((await api.saveEvaluationRows('character', 'room', 'year', 1, [{ student_id: 'student', values: {} }])).error)

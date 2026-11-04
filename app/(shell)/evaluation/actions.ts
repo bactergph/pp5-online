@@ -38,7 +38,7 @@ const CAN_EDIT = ['admin', 'district', 'academic_head', 'deputy_principal', 'tea
 
 async function requireSession() {
   const session = await getSession()
-  if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (!session || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
   return session
 }
 
@@ -254,6 +254,7 @@ export async function saveEvaluationRows(
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
   try{await assertPersonalHomeroom(session,classroomId,academicYearId)}catch(error){return {error:error instanceof Error?error.message:'ไม่มีสิทธิ์ห้องประจำชั้น'}}
   if (!rows.length) return { error: 'ไม่มีข้อมูล' }
+  if (new Set(rows.map(row => row.student_id)).size !== rows.length) return { error: 'มีรายชื่อนักเรียนซ้ำ กรุณาตรวจสอบก่อนบันทึก', count: 0 }
 
   const db = createServerClient()
   const schoolId = await resolveClassroomSchoolId(classroomId)
@@ -350,7 +351,7 @@ export async function saveEvaluationRows(
       error: kind === 'competency' && (error.code === 'PGRST205' || error.message.includes('competency_evaluation'))
         ? 'ยังไม่ได้ติดตั้งตาราง competency_evaluation กรุณา apply migration 015_competency_evaluation.sql'
         : error.message,
-      count: payload.length,
+      count: 0,
     }
   }
 
@@ -373,10 +374,11 @@ export async function saveEvaluationRows(
       .upsert(customRows, { onConflict: 'school_id,kind,student_id,academic_year_id,term,field_key' })
     if (customError) {
       return {
-        error: customError.message.includes('evaluation_custom_scores')
+        error: `บันทึกค่าประเมินหลักแล้ว แต่รายละเอียดเพิ่มเติมยังไม่ครบ กรุณาบันทึกซ้ำ (${customError.message.includes('evaluation_custom_scores')
           ? 'ยังไม่ได้ติดตั้งตาราง evaluation_custom_scores กรุณา apply migration 018_evaluation_custom_scores.sql'
-          : customError.message,
-        count: payload.length,
+          : customError.message})`,
+        count: 0,
+        partial: true,
       }
     }
   }

@@ -6,7 +6,7 @@ import { getSession } from '@/lib/session'
 
 async function requireSession() {
   const session = await getSession()
-  if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (!session || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
   return session
 }
 

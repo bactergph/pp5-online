@@ -1,2 +1,2 @@
-﻿export * from '../(shell)/district/schools/dedupe-actions'
+﻿export * from '../../(shell)/district/schools/dedupe-actions'
 

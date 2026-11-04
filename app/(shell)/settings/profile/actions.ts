@@ -96,7 +96,8 @@ export async function changeOwnPassword(newPassword: string, confirmPassword: st
   const { error } = await db.auth.admin.updateUserById(session.userId, { password: newPassword })
   if (error) return { error: error.message }
 
-  await db.from('users').update({ must_change_password: false }).eq('id', session.userId)
+  const { error: flagError } = await db.from('users').update({ must_change_password: false }).eq('id', session.userId)
+  if (flagError) return { error: 'เปลี่ยนรหัสผ่านแล้ว แต่ยังปรับสถานะบัญชีไม่สำเร็จ กรุณาลองอีกครั้งหรือติดต่อผู้ดูแล' }
 
   await logActivity({
     actor: session,

@@ -86,7 +86,7 @@ export async function fetchSchoolCatalog(opts?: {
   const listSchools = (includePlan: boolean) => {
     let query = client
       .from('schools')
-      .select(includePlan ? `${SCHOOL_LIST_COLUMNS},member_plan` : SCHOOL_LIST_COLUMNS, { count: 'exact' })
+      .select(includePlan ? 'id,name,department,area_office,district,province,address,phone,document_prefix,director_name,layout_tuner_enabled,member_plan' : SCHOOL_LIST_COLUMNS, { count: 'exact' })
 
     const safe = q.replace(/,/g, ' ')
     const searchOr = `name.ilike.%${safe}%,district.ilike.%${safe}%,province.ilike.%${safe}%,area_office.ilike.%${safe}%`
@@ -105,7 +105,8 @@ export async function fetchSchoolCatalog(opts?: {
 
     if (includePlan && filterPlan === 'pro') query = query.in('member_plan', ['pro','pro_plus'])
 
-    return query.order('name').range(from, from + pageSize - 1)
+    // The legacy-schema fallback selects a different column set.
+    return query.order('name').range(from, from + pageSize - 1).overrideTypes<SchoolRow[], { merge: false }>()
   }
 
   let planReady = true
@@ -116,7 +117,7 @@ export async function fetchSchoolCatalog(opts?: {
   }
   if (listed.error) throw new Error(listed.error.message)
 
-  const rows = ((listed.data || []) as SchoolRow[]).map(s => ({
+  const rows = (listed.data || []).map(s => ({
     ...s,
     admin_name: adminMap[s.id] ?? null,
     layout_tuner_enabled: s.layout_tuner_enabled !== false,

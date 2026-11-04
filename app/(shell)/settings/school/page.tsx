@@ -782,14 +782,14 @@ export default function SchoolSettingsPage() {
                 </form>
               )}
 
-              {step === 4 && (
+              {step === 4 && (school.id ? (
                 <div className="card-padded school-settings-card">
                   <div className="school-upload-stack">
                     <ImageUploadBox label="โลโก้โรงเรียน" value={school.logo_url || null} type="logo" schoolId={school.id} onUploaded={url => setSchool(s => ({ ...s, logo_url: url }))} />
                     <ImageUploadBox label="ตราโรงเรียน" value={school.stamp_url || null} type="stamp" schoolId={school.id} onUploaded={url => setSchool(s => ({ ...s, stamp_url: url }))} />
                   </div>
                 </div>
-              )}
+              ) : <p className="wizard-guide-note">บันทึกข้อมูลโรงเรียนก่อนอัปโหลดโลโก้หรือตราโรงเรียน</p>)}
 
               {step === 5 && (
                 <div className="wizard-import">

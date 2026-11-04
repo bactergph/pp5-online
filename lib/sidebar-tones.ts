@@ -12,7 +12,7 @@ export function normalizeSidebarTone(tone: SidebarTone | undefined, index: numbe
   if (tone === 'daily') return 'indigo'
   if (tone === 'health') return 'emerald'
   if (tone === 'docs') return 'amber'
-  if (tone && tone !== 'daily' && tone !== 'health' && tone !== 'docs') return tone
+  if (tone) return tone
   const cycled = SIDEBAR_TONE_CYCLE[index % SIDEBAR_TONE_CYCLE.length]
   if (cycled === 'daily' || cycled === 'health' || cycled === 'docs') return 'indigo'
   return cycled

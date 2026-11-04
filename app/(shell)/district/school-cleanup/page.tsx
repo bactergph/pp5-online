@@ -30,20 +30,25 @@ export default function DistrictSchoolCleanupPage() {
 
   async function load() {
     setLoading(true)
-    const [sum, candidates] = await Promise.all([
-      fetchCleanupSummary(),
-      fetchCleanupCandidates(search, 100),
-    ])
-    setSummary(sum)
-    setSchools(candidates.schools)
-    setSelected(prev => {
-      const next = new Set<string>()
-      for (const id of prev) {
-        if (candidates.schools.some(s => s.id === id)) next.add(id)
-      }
-      return next
-    })
-    setLoading(false)
+    try {
+      const [sum, candidates] = await Promise.all([
+        fetchCleanupSummary(),
+        fetchCleanupCandidates(search, 100),
+      ])
+      setSummary(sum)
+      setSchools(candidates.schools)
+      setSelected(prev => {
+        const next = new Set<string>()
+        for (const id of prev) {
+          if (candidates.schools.some(s => s.id === id)) next.add(id)
+        }
+        return next
+      })
+    } catch (error) {
+      notify('error', error instanceof Error ? error.message : 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [])
@@ -51,9 +56,14 @@ export default function DistrictSchoolCleanupPage() {
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    const candidates = await fetchCleanupCandidates(search, 100)
-    setSchools(candidates.schools)
-    setLoading(false)
+    try {
+      const candidates = await fetchCleanupCandidates(search, 100)
+      setSchools(candidates.schools)
+    } catch (error) {
+      notify('error', error instanceof Error ? error.message : 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setLoading(false)
+    }
   }
 
   function toggleOne(id: string) {
@@ -78,13 +88,18 @@ export default function DistrictSchoolCleanupPage() {
     if (!confirm(`${label}\n\nจะลบเฉพาะ evaluation_settings ของโรงเรียนที่เลือก\nรายชื่อโรงเรียนในระบบจะไม่ถูกลบ`)) return
 
     setCleaning(true)
-    const result = await cleanupEvaluationSettings(ids)
-    setCleaning(false)
-    if (result.error) notify('error', result.error)
-    else {
-      notify('success', `ล้างการตั้งค่าแล้ว ${result.deleted.toLocaleString()} แถว`)
-      setSelected(new Set())
-      load()
+    try {
+      const result = await cleanupEvaluationSettings(ids)
+      if (result.error) notify('error', result.error)
+      else {
+        notify('success', `ล้างการตั้งค่าแล้ว ${result.deleted.toLocaleString()} แถว`)
+        setSelected(new Set())
+        load()
+      }
+    } catch (error) {
+      notify('error', error instanceof Error ? error.message : 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setCleaning(false)
     }
   }
 
@@ -98,13 +113,18 @@ export default function DistrictSchoolCleanupPage() {
     )) return
 
     setCleaning(true)
-    const result = await cleanupAllOrphanEvaluationSettings()
-    setCleaning(false)
-    if (result.error) notify('error', result.error)
-    else {
-      notify('success', `ล้างแล้ว ${result.deleted.toLocaleString()} แถว จากโรงเรียนที่ไม่ใช้งาน ${result.orphanSchools.toLocaleString()} แห่ง`)
-      setSelected(new Set())
-      load()
+    try {
+      const result = await cleanupAllOrphanEvaluationSettings()
+      if (result.error) notify('error', result.error)
+      else {
+        notify('success', `ล้างแล้ว ${result.deleted.toLocaleString()} แถว จากโรงเรียนที่ไม่ใช้งาน ${result.orphanSchools.toLocaleString()} แห่ง`)
+        setSelected(new Set())
+        load()
+      }
+    } catch (error) {
+      notify('error', error instanceof Error ? error.message : 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setCleaning(false)
     }
   }
 

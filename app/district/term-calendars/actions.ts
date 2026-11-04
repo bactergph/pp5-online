@@ -1,2 +1,2 @@
-﻿export * from '../(shell)/district/term-calendars/actions'
+﻿export * from '../../(shell)/district/term-calendars/actions'
 

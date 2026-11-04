@@ -633,7 +633,7 @@ async function drawStudentPage(
     doc.setFontSize(noteFontPt)
     doc.setTextColor(255, 0, 0)
     const note = 'หมายเหตุ.- ภาคเรียนที่ 1 จะเป็นการรายงานความก้าวหน้าทางการเรียนของผู้เรียน ส่วนผลการพัฒนาคุณภาพผู้เรียน นั้น โรงเรียนจะรายงานให้ผู้ปกครองทราบเมื่อสิ้นปีการศึกษา เกรดที่แสดงนี้ เป็นเพียงการเทียบเคียงเกณฑ์การวัดผล ไม่ใช่เกรดจริง'
-    const noteLines = doc.splitTextToSize(note, tableWidth(layout))
+    const noteLines: string[] = doc.splitTextToSize(note, tableWidth(layout))
     y += layout.noteGapTopMm ?? 2
     const lineFactor = layout.noteLineHeight ?? 0.85
     const lineH = noteFontPt * 0.352777778 * lineFactor

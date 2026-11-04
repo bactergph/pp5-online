@@ -43,7 +43,7 @@ import { prepareClassSubjectCopy, executeClassSubjectCopy, type ClassSubjectCopy
 
 async function requireSchoolSession(allowUnassigned = false) {
   const session = await getSession()
-  if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (!session || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
   if (session.mustChangePassword) throw new Error('กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน')
   if (!allowUnassigned && !session.schoolId) throw new Error('กรุณากำหนดโรงเรียนก่อนใช้งาน')
   return session

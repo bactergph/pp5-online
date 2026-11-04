@@ -169,7 +169,7 @@ const COMPETENCY_LABELS = ['สื่อสาร', 'คิด', 'แก้ป�
 const ACTIVITY_KEYS = ['guidance_result', 'scout_result', 'club_result', 'public_service_result']
 const ACTIVITY_LABELS = ['แนะแนว', 'ลูกเสือ/เนตรนารี/ยุวกาชาติ', 'ชุมนุม', 'จิตอาสา']
 
-function studentName(student: ReportStudent) {
+function studentName(student: Pick<ReportStudent, 'prefix' | 'first_name' | 'last_name'>) {
   return `${student.prefix || ''}${student.first_name} ${student.last_name}`.trim()
 }
 
@@ -265,7 +265,7 @@ function padScoreCells(values: Array<string | number>, size: number) {
 }
 
 function sumScoreCells(values: Array<string | number>) {
-  return values.reduce((sum, value) => sum + (Number(value) || 0), 0)
+  return values.reduce<number>((sum, value) => sum + (Number(value) || 0), 0)
 }
 
 function pp5ScoreHeadLabel(label: string, max?: number | null) {
@@ -1525,21 +1525,10 @@ function CoverPage({ data, mode, subject, term, pageNumber }: { data: ReportPayl
       <h1>{title}</h1>
       <h2>โรงเรียน{data?.school?.name || '-'}</h2>
       <div className="report-cover-info">
-        {mode === 'pp5-subject' ? (
-          <>
-            <div><b>รายวิชา</b><span>{subject?.subject.name || '-'}</span></div>
-            <div><b>รหัสวิชา</b><span>{subject?.subject.code || '-'}</span></div>
-            <div><b>กลุ่มสาระ</b><span>{subject?.subject.subject_group || '-'}</span></div>
-            <div><b>ครูผู้สอน</b><span>{subject?.teacher_name || '-'}</span></div>
-          </>
-        ) : (
-          <>
-            <div><b>ชั้นเรียน</b><span>{classLabel(data?.classroom || null)}</span></div>
-            <div><b>จำนวนรายวิชา</b><span>{data?.subjects.length || 0} วิชา</span></div>
-            <div><b>จำนวนนักเรียน</b><span>{data?.students.length || 0} คน</span></div>
-            <div><b>รูปแบบ</b><span>รวมทุกวิชาและทุกการประเมิน</span></div>
-          </>
-        )}
+        <div><b>ชั้นเรียน</b><span>{classLabel(data?.classroom || null)}</span></div>
+        <div><b>จำนวนรายวิชา</b><span>{data?.subjects.length || 0} วิชา</span></div>
+        <div><b>จำนวนนักเรียน</b><span>{data?.students.length || 0} คน</span></div>
+        <div><b>รูปแบบ</b><span>รวมทุกวิชาและทุกการประเมิน</span></div>
         <div><b>ปีการศึกษา</b><span>{data?.academicYear?.year_be || '-'}</span></div>
         <div><b>ภาคเรียน</b><span>{term}</span></div>
       </div>
@@ -4304,7 +4293,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
       if (subjectCode) nameParts.push(subjectCode)
       if (subjectName) nameParts.push(subjectName)
     }
-    if (yearText) nameParts.push(yearText)
+    if (yearText) nameParts.push(String(yearText))
     return nameParts
   }
 
@@ -4737,7 +4726,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                     term={reportTerm}
                   />
                 )}
-                {mode !== 'pp6' && sections.includes('attendance') && <AttendancePage data={data} mode={mode} subject={selectedSubject} classSubjectId={classSubjectId} term={reportTerm} pageStart={pageNumbers.attendance} />}
+                {sections.includes('attendance') && <AttendancePage data={data} mode={mode} subject={selectedSubject} classSubjectId={classSubjectId} term={reportTerm} pageStart={pageNumbers.attendance} />}
                 {mode === 'pp5-subject' && sections.includes('scores') && <SubjectScorePages data={data} subject={selectedSubject} term={reportTerm} pageStart={pageNumbers.subjectScore} />}
                 {mode === 'pp5-class' && sections.includes('scores') && <ClassScorePage data={data} term={term} pageStart={pageNumbers.classScore} />}
                 {mode === 'pp5-class' && sections.includes('achievement') && withStudentChunks(data, (pageData, pageIndex) => (
@@ -4783,7 +4772,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                     term={reportTerm}
                   />
                 ))}
-                {mode !== 'pp6' && sections.includes('competency') && withStudentChunks(data, (pageData, pageIndex) => (
+                {sections.includes('competency') && withStudentChunks(data, (pageData, pageIndex) => (
                   <CompetencyEvaluationPage
                     key={`competency-${pageIndex}`}
                     data={pageData}

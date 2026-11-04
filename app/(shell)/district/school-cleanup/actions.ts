@@ -17,7 +17,8 @@ async function activeSchoolIds(db: ReturnType<typeof createServerClient>) {
   const active = new Set<string>()
   for (const table of ['users', 'classrooms'] as const) {
     for (let from = 0; ; from += 1000) {
-      const { data } = await db.from(table).select('school_id').range(from, from + 999)
+      const { data, error } = await db.from(table).select('school_id').order('id').range(from, from + 999)
+      if (error) throw new Error('ตรวจสอบโรงเรียนที่ใช้งานไม่สำเร็จ ยังไม่ได้ล้างข้อมูล กรุณาลองใหม่')
       if (!data?.length) break
       for (const row of data) {
         if (row.school_id) active.add(row.school_id)
@@ -33,15 +34,17 @@ export async function fetchCleanupSummary() {
   const db = createServerClient()
   const activeIds = await activeSchoolIds(db)
 
-  const { count: schoolCount } = await db.from('schools').select('id', { count: 'exact', head: true })
-  const { count: settingsCount } = await db.from('evaluation_settings').select('id', { count: 'exact', head: true })
+  const { count: schoolCount, error: schoolError } = await db.from('schools').select('id', { count: 'exact', head: true })
+  const { count: settingsCount, error: settingsError } = await db.from('evaluation_settings').select('id', { count: 'exact', head: true })
+  if (schoolError || settingsError) throw new Error('โหลดสรุปข้อมูลโรงเรียนไม่สำเร็จ กรุณาลองใหม่')
 
   const activeList = [...activeIds]
   let activeSettingsCount = 0
   if (activeList.length > 0) {
-    const { count } = await db.from('evaluation_settings')
+    const { count, error } = await db.from('evaluation_settings')
       .select('id', { count: 'exact', head: true })
       .in('school_id', activeList)
+    if (error) throw new Error('ตรวจสอบการตั้งค่าของโรงเรียนที่ใช้งานไม่สำเร็จ')
     activeSettingsCount = count ?? 0
   }
 
@@ -64,14 +67,16 @@ export async function fetchCleanupCandidates(search = '', limit = 80) {
   for (let from = 0; rows.length < limit; from += 1000) {
     let query = db.from('schools').select('id, name, province, district').order('name').range(from, from + 999)
     if (needle) query = query.ilike('name', `%${needle}%`)
-    const { data: schools } = await query
+    const { data: schools, error: schoolsError } = await query
+    if (schoolsError) throw new Error('โหลดรายชื่อโรงเรียนไม่สำเร็จ กรุณาลองใหม่')
     if (!schools?.length) break
 
     for (const school of schools) {
       if (activeIds.has(school.id)) continue
-      const { count } = await db.from('evaluation_settings')
+      const { count, error } = await db.from('evaluation_settings')
         .select('id', { count: 'exact', head: true })
         .eq('school_id', school.id)
+      if (error) throw new Error('ตรวจสอบการตั้งค่าโรงเรียนไม่สำเร็จ กรุณาลองใหม่')
       if (!count) continue
       rows.push({
         id: school.id,
@@ -131,7 +136,8 @@ export async function cleanupAllOrphanEvaluationSettings() {
 
   const orphanIds: string[] = []
   for (let from = 0; ; from += 1000) {
-    const { data } = await db.from('schools').select('id').range(from, from + 999)
+    const { data, error } = await db.from('schools').select('id').order('id').range(from, from + 999)
+    if (error) return { error: 'ตรวจสอบรายชื่อโรงเรียนไม่สำเร็จ ยังไม่ได้ล้างข้อมูล', deleted: 0, orphanSchools: 0 }
     if (!data?.length) break
     for (const school of data) {
       if (!activeIds.has(school.id)) orphanIds.push(school.id)
@@ -146,7 +152,7 @@ export async function cleanupAllOrphanEvaluationSettings() {
     const { error, count } = await db.from('evaluation_settings')
       .delete({ count: 'exact' })
       .in('school_id', chunk)
-    if (error) return { error: error.message, deleted }
+    if (error) return { error: error.message, deleted, orphanSchools: orphanIds.length }
     deleted += count ?? 0
   }
 

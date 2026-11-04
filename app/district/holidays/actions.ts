@@ -1,2 +1,2 @@
-﻿export * from '../(shell)/district/holidays/actions'
+﻿export * from '../../(shell)/district/holidays/actions'
 

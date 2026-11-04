@@ -21,7 +21,7 @@ type School = {
   layout_tuner_enabled: boolean
 }
 
-function schoolKey(s: { name: string; district?: string; province?: string }) {
+function schoolKey(s: { name: string; district?: string | null; province?: string | null }) {
   return `${s.name}|${s.district || ''}|${s.province || ''}`
 }
 

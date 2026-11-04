@@ -1,2 +1,2 @@
-﻿export * from '../(shell)/district/subjects/actions'
+﻿export * from '../../(shell)/district/subjects/actions'
 

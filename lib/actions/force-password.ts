@@ -56,7 +56,7 @@ export async function completeForcedPasswordChange(
   })
 
   await logActivity({
-    actor: { ...session, mustChangePassword: false },
+    actor: session,
     schoolId: session.schoolId,
     action: 'change_password',
     module: 'auth',

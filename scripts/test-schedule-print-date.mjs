@@ -5,6 +5,8 @@ import vm from 'node:vm'
 import assert from 'node:assert/strict'
 import ts from 'typescript'
 import dayjs from 'dayjs'
+import { createRequire } from 'node:module'
+const pure = createRequire(import.meta.url)('./helpers/load-pure-ts.cjs')
 import { jsPDF } from 'jspdf'
 
 function load(file, dependencies = {}) {
@@ -13,8 +15,10 @@ function load(file, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText
   vm.runInNewContext(source, { exports, require: name => {
-    assert.ok(name in dependencies, `Unexpected dependency ${name}`)
-    return dependencies[name]
+    if (name in dependencies) return dependencies[name]
+    if (name.startsWith('.')) return pure(path.resolve(path.dirname(file), name + '.ts'))
+    if (name.startsWith('@/lib/')) return pure(name.slice(2) + '.ts')
+    assert.fail(`Unexpected dependency ${name}`)
   } })
   return exports
 }

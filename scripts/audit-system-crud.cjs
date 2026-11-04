@@ -65,7 +65,7 @@ for (const file of [...files('app', name => /\.tsx?$/.test(name)), ...files('lib
   function walk(node) {
     const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1
     if (ts.isFunctionDeclaration(node) && node.name && node.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)
-      && !/Page$|Layout$/.test(node.name.text) && /^(save|create|delete|remove|update|add|bulk|clear|toggle|reset|apply|import|set|copy|assign|approve|reject|submit|confirm|withdraw|POST|PATCH|PUT|DELETE)/i.test(node.name.text)) result.actions.push({ file, line, name: node.name.text })
+      && !/Page$|Layout$/.test(node.name.text) && /^(save|create|delete|remove|update|add|bulk|clear|toggle|reset|repair|disconnect|change|apply|import|set|copy|assign|approve|reject|submit|confirm|withdraw|POST|PATCH|PUT|DELETE)/i.test(node.name.text)) result.actions.push({ file, line, name: node.name.text })
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
       const method = node.expression.name.text
       if (['insert', 'update', 'upsert', 'delete'].includes(method)) {

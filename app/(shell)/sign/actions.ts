@@ -1,5 +1,6 @@
 'use server'
 import 'server-only'
+import { relationOne } from '@/lib/postgrest-relation'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
@@ -53,7 +54,7 @@ import { getThaiMonthShort } from '@/lib/thaiDate'
 
 async function requireSession() {
   const session = await getSession()
-  if (!session) throw new Error('ไม่มีสิทธิ์')
+  if (!session || !session.schoolId || session.mustChangePassword) throw new Error('ไม่มีสิทธิ์')
   return session
 }
 
@@ -198,8 +199,9 @@ export async function fetchPp5SubjectQueue() {
   }> = []
 
   for (const cs of classSubjects) {
-    const classroom = cs.classrooms as { id: string; level: string; room: number }
-    const subject = cs.subjects as { code: string; name: string; subject_group: string }
+    const classroom = relationOne(cs.classrooms)
+    const subject = relationOne(cs.subjects)
+    if (!classroom || !subject) continue
     for (const term of classSubjectTerms((cs as { semester?: number | null }).semester)) {
       const record = (approvalMap.get(`${cs.id}:${term}`) || {
         status: 'draft',
@@ -417,7 +419,7 @@ export async function putPp5SubjectSignature(classSubjectId: string, term: numbe
     .select('id, teacher_id, classrooms!inner(school_id)')
     .eq('id', classSubjectId)
     .maybeSingle()
-  if (!cs || (cs.classrooms as { school_id: string }).school_id !== session.schoolId) {
+  if (!cs || relationOne(cs.classrooms)?.school_id !== session.schoolId) {
     return { error: 'ไม่พบรายวิชา' }
   }
   if (cs.teacher_id !== session.userId && session.role !== 'admin' && session.role !== 'district') {
@@ -432,12 +434,13 @@ export async function putPp5SubjectSignature(classSubjectId: string, term: numbe
     return { error: 'ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่ ตั้งค่า → ข้อมูลตัวเอง เพื่ออัปโหลดก่อน' }
   }
 
-  const { data: existing } = await db.from('approval_signatures')
+  const { data: existing, error: existingError } = await db.from('approval_signatures')
     .select('id, status')
     .eq('class_subject_id', classSubjectId)
     .eq('term', term)
     .maybeSingle()
 
+  if (existingError) return { error: 'ตรวจสอบสถานะเอกสารไม่สำเร็จ กรุณาลองใหม่' }
   if (existing?.status === 'in_review') return { error: 'เอกสารอยู่ระหว่างเสนอเซ็นแล้ว แก้ไขลายเซ็นไม่ได้' }
 
   const now = new Date().toISOString()
@@ -495,7 +498,7 @@ export async function proposePp5Subject(classSubjectId: string, term: number) {
     .select('id, teacher_id, classrooms!inner(school_id)')
     .eq('id', classSubjectId)
     .maybeSingle()
-  if (!cs || (cs.classrooms as { school_id: string }).school_id !== session.schoolId) {
+  if (!cs || relationOne(cs.classrooms)?.school_id !== session.schoolId) {
     return { error: 'ไม่พบรายวิชา' }
   }
   if (cs.teacher_id !== session.userId && session.role !== 'admin' && session.role !== 'district') {
@@ -589,10 +592,10 @@ export async function signPp5Subject(
     .select('id, teacher_id, subjects!inner(subject_group), classrooms!inner(school_id)')
     .eq('id', classSubjectId)
     .maybeSingle()
-  if (!cs || (cs.classrooms as { school_id: string }).school_id !== session.schoolId) {
+  if (!cs || relationOne(cs.classrooms)?.school_id !== session.schoolId) {
     return { error: 'ไม่พบรายวิชา' }
   }
-  const subjectGroup = (cs.subjects as { subject_group: string }).subject_group
+  const subjectGroup = relationOne(cs.subjects)?.subject_group || ''
 
   const { data: record } = await db.from('approval_signatures')
     .select('*')
@@ -1068,7 +1071,7 @@ export async function cancelPp5SubjectProposal(classSubjectId: string, term: num
     .select('id, teacher_id, subjects!inner(subject_group), classrooms!inner(school_id)')
     .eq('id', classSubjectId)
     .maybeSingle()
-  if (!cs || (cs.classrooms as { school_id: string }).school_id !== session.schoolId) {
+  if (!cs || relationOne(cs.classrooms)?.school_id !== session.schoolId) {
     return { error: 'ไม่พบรายวิชา' }
   }
 
@@ -1211,8 +1214,9 @@ export async function fetchPp5SubjectApprovalStatus(classSubjectId: string, term
   const { school, groupHeads } = await loadSchoolContext(session.schoolId)
 
   const { data: cs } = await db.from('class_subjects')
-    .select('teacher_id, subjects!inner(subject_group)')
+    .select('teacher_id, classrooms!inner(school_id), subjects!inner(subject_group)')
     .eq('id', classSubjectId)
+    .eq('classrooms.school_id', session.schoolId)
     .maybeSingle()
   if (!cs) return null
 
@@ -1223,7 +1227,7 @@ export async function fetchPp5SubjectApprovalStatus(classSubjectId: string, term
     .maybeSingle()
 
   const full = (record || { status: 'draft' }) as Pp5SubjectApproval
-  const subjectGroup = (cs.subjects as { subject_group: string }).subject_group
+  const subjectGroup = relationOne(cs.subjects)?.subject_group || ''
   const next = getPp5SubjectNextStep(
     { ...full, class_subject_id: classSubjectId, term },
     school, subjectGroup, groupHeads,

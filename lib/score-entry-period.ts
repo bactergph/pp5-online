@@ -3,12 +3,13 @@ import { createServerClient } from '@/lib/supabase'
 import {isPersonalSubjectAccess} from '@/lib/personal-data-scope'
 
 export async function getScoreEntryPeriod(
-  session: { schoolId: string | null; role: string; userId: string },
+  session: { schoolId: string | null; role: string; userId: string; mustChangePassword?: boolean },
   classSubjectId: string,
   term: number,
   classroomId?: string,
 ) {
   if (term !== 1 && term !== 2) return { error: 'ภาคเรียนไม่ถูกต้อง' }
+  if (session.mustChangePassword) return { error: 'กรุณาเปลี่ยนรหัสผ่านก่อนบันทึกคะแนน' }
   if (!session.schoolId) return { error: 'กรุณาเลือกโรงเรียน' }
   const db = createServerClient()
   const { data: subject, error: subjectError } = await db.from('class_subjects')

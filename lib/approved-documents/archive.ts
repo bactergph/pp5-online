@@ -1,5 +1,6 @@
 import 'server-only'
 import { after } from 'next/server'
+import { relationOne } from '@/lib/postgrest-relation'
 import { createServerClient } from '@/lib/supabase'
 import { ensureDocumentReference } from '@/lib/document-reference'
 import type { SessionPayload } from '@/lib/session'
@@ -39,8 +40,9 @@ export async function archiveApprovedPp5Subject(params: {
     .maybeSingle()
   if (!cs) return
 
-  const classroom = cs.classrooms as { id: string; level: string; room: number }
-  const subject = cs.subjects as { code: string; name: string }
+  const classroom = relationOne(cs.classrooms)
+  const subject = relationOne(cs.subjects)
+  if (!classroom || !subject || classroom.school_id !== params.schoolId) return
   const { data: teacher } = await db.from('users')
     .select('prefix, first_name, last_name')
     .eq('id', cs.teacher_id)
