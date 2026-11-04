@@ -1,3 +1,4 @@
+import {effectiveSchedulePlan,scheduleRoomEnabled} from './schedule-room-state'
 import {hasPeriodProfiles} from './schedule-period-profiles'
 import {teacherActivityBlocks,withTeacherActivityClock,type TeacherScheduleActivity} from './schedule-teacher-activities'
 import {DEFAULT_PERIOD_TIMES,type PeriodTimeRow} from './schedule-helpers'
@@ -72,11 +73,12 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   const db = createServerClient()
   const year = await db.from('academic_years').select('id').eq('id', yearId).eq('school_id', schoolId).maybeSingle()
   if (year.error || !year.data) throw new Error('ไม่พบปีการศึกษาในโรงเรียนนี้')
-  const rooms = await readAll(db.from('classrooms').select('id,level,room').eq('school_id', schoolId).eq('academic_year_id', yearId).order('level').order('room').order('id'))
+  const rooms = await readAll(db.from('classrooms').select('id,level,room,schedule_enabled').eq('school_id', schoolId).eq('academic_year_id', yearId).order('level').order('room').order('id'))
   if (rooms.error) throw new Error(rooms.error.message)
-  const classrooms = rooms.data || []
-  if (!classrooms.length) return { classrooms, lessons: [] as ScheduleLesson[], slots: [] as ScheduleSlot[], activityGroups: [] as ActivityTeam[], teacherNames: {} as Record<string, string> }
-  const ids = classrooms.map(c => c.id)
+  const allClassrooms = rooms.data || []
+  const classrooms=allClassrooms.filter(scheduleRoomEnabled)
+  if (!allClassrooms.length) return { allClassrooms,classrooms, lessons: [] as ScheduleLesson[], slots: [] as ScheduleSlot[], activityGroups: [] as ActivityTeam[], teacherNames: {} as Record<string, string> }
+  const ids = allClassrooms.map(c => c.id)
   const subjectQuery = () => db.from('class_subjects').select('*,subjects(code,name,short_name,hours_per_year,credits,subject_group,type)').in('classroom_id', ids).eq('academic_year_id', yearId).order('id')
   const readSubjects = async () => {
     let subjects = await readAll(subjectQuery().in('semester', [0, semester]))
@@ -130,7 +132,9 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   if(bell.error)throw Error(bell.error.message)
   const periodTimes=withTeacherActivityClock((bell.data?.length?bell.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[],plan?.teacherActivities)
   const visible = lessons.filter(lesson => lesson.activity || !(otherRules.has(lesson.id) && !thisRules.has(lesson.id)))
-  return { periodTimes, classrooms, lessons: withJointTeachingGroups(visible,plan||{}), slots: (slots.data || []) as ScheduleSlot[], activityGroups: plan?.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
+  const storedPlan={days:[1,2,3,4,5],rooms:[],rules:{},reduceGaps:false,maxContinuous:0,...plan} as import('./schedule-planning').SchedulePlan
+  const effective=effectiveSchedulePlan(storedPlan,allClassrooms,lessons),activeIds=new Set(classrooms.map(room=>room.id))
+  return { allClassrooms,storedPlan,allLessonRooms:lessons.map(lesson=>({id:lesson.id,classroomId:lesson.classroomId})),periodTimes, classrooms, lessons: withJointTeachingGroups(visible.filter(lesson=>activeIds.has(lesson.classroomId)),effective), slots: ((slots.data || []) as ScheduleSlot[]).filter(slot=>activeIds.has(slot.classroom_id)), activityGroups: effective.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
 }
 
 export async function persistSchedule(schoolId: string | null, yearId: string, before: ScheduleSlot[], after: ScheduleSlot[], allowUnlock = false, semester = 1) {

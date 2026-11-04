@@ -29,6 +29,7 @@ export function readDeviceBackup(raw:unknown,teacherLimit?:number):DeviceBundle 
     for(const key of arrays.filter(key=>key!=='days'))if(rows(key).some(row=>!record(row)))return invalid()
     for(const key of ['teachers','rooms','places','subjects','activities'])if(rows(key).some(row=>!text(row.id)))return invalid()
     if(rows('teachers').some(row=>!text(row.name))||rows('rooms').some(row=>!text(row.label))||rows('places').some(row=>!text(row.name)))return invalid()
+    if(rows('rooms').some(row=>row.enabled!==undefined&&typeof row.enabled!=='boolean'))return invalid()
     if(rows('teachers').some(row=>['prefix','fullName','position'].some(key=>row[key]!==undefined&&!text(row[key]))))return invalid()
     if(plan.teacherIds!==undefined&&(!Array.isArray(plan.teacherIds)||plan.teacherIds.some(id=>!text(id)||!rows('teachers').some(teacher=>teacher.id===id))||new Set(plan.teacherIds).size!==plan.teacherIds.length))return invalid()
     if(plan.activityCatalog!==undefined&&(!Array.isArray(plan.activityCatalog)||plan.activityCatalog.length>2000||plan.activityCatalog.some(item=>!record(item)||!text(item.id)||!text(item.label)||!text(item.short_label)||!integer(item.weeklyPeriods)||Number(item.weeklyPeriods)<1||Number(item.weeklyPeriods)>8)))return invalid()
@@ -48,8 +49,8 @@ export function readDeviceBackup(raw:unknown,teacherLimit?:number):DeviceBundle 
     const normalized=normalizePlan(plan as Partial<FreeWizardPlan>)
     validateTeacherActivities(normalized.teacherActivities,normalized.teachers.map(teacher=>teacher.id))
     const snapshot=toDeviceSnapshot(normalized,[])
-    validateJointTeachingGroups(normalized.teachingGroups,snapshot.lessons)
-    if(jointTeachingSlotErrors(snapshot.lessons,normalized.timetable.map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period,locked:!!cell.locked}))).length)return invalid()
+    validateJointTeachingGroups(snapshot.plan.teachingGroups,snapshot.lessons)
+    if(jointTeachingSlotErrors(snapshot.lessons,normalized.timetable.filter(cell=>normalized.rooms.some(room=>room.id===cell.classroomId&&room.enabled!==false)).map(cell=>({classroomId:cell.classroomId,lessonId:cell.subjectId||null,day:cell.day,period:cell.period,locked:!!cell.locked}))).length)return invalid()
     plans.push({...normalized,substitutes:(plan.substitutes||{}) as Record<string,FreeSubstituteEntry[]>})
   }
   const merge=<T extends {id:string}>(a:T[],b:T[])=>[...new Map([...b,...a].map(item=>[item.id,item])).values()]

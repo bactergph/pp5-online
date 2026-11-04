@@ -1,3 +1,4 @@
+import {effectiveSchedulePlan,scheduleRoomEnabled} from './schedule-room-state'
 import type {FreeSubstituteEntry} from '../components/schedules/FreeSubstituteDesk'
 import type {DeviceDocumentSettings} from './schedule-device-documents'
 import type { ActivityTeam } from './schedule-activity-teams'
@@ -58,7 +59,7 @@ export type FreeWizardPlan = {
   teacherIds?: string[]
   activityCatalog?: {id:string;label:string;short_label:string;weeklyPeriods:number}[]
   teachers: { id: string; name: string; prefix?:string; fullName?:string; position?:string }[]
-  rooms: { id: string; label: string }[]
+  rooms: { id: string; label: string; enabled?:boolean }[]
   places: FreePlace[]
   subjects: FreeSubject[]
   timetable: LocalCell[]
@@ -264,7 +265,7 @@ export function withTeachingPeriods(periods: PeriodTimeRow[], count: number) {
   return rows
 }
 
-export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): DeviceSnapshot {
+function rawDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): DeviceSnapshot {
   void _scope // Include all rooms so conflicts outside the chosen scope remain visible.
   const lessons = plan.subjects.map(subject => {
     const room = plan.rooms.find(item => item.id === subject.roomId)
@@ -316,10 +317,16 @@ export function toDeviceSnapshot(plan: FreeWizardPlan, _scope: string[]): Device
     periods: plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES,
     timesConfigured: !validatePeriodTimes(plan.periods.length ? plan.periods : DEFAULT_PERIOD_TIMES),
     classrooms: plan.rooms.filter(room => isTimetableClassroom(room.label.split('/')[0])).map(room => ({ id: room.id, level: room.label, room: 0 })),
-    lessons: withJointTeachingGroups([...lessons, ...activityLessons],plan),
+    lessons: [...lessons, ...activityLessons],
     slots: plan.timetable.map(cell => ({ classroom_id: cell.classroomId, academic_year_id: 'local', day_of_week: cell.day, period: cell.period, class_subject_id: cell.subjectId || null, activity_id: cell.activityId ? `${cell.activityId}:${cell.classroomId}` : null, note: null, locked: !!cell.locked })),
     blocks: [...plan.blocks.map(block=>({...block})),...teacherActivityBlocks(plan.periods,plan.teacherActivities)],
     activities: deviceActivityCatalog(plan),
     teachers: plan.teachers.map(teacher => ({ id: teacher.id, full_name: teacher.name })),
   }
+}
+
+export function toDeviceSnapshot(plan:FreeWizardPlan,rooms:string[],includeInactive=false){
+ const raw=rawDeviceSnapshot(plan,rooms);if(includeInactive)return {...raw,lessons:withJointTeachingGroups(raw.lessons,raw.plan)}
+ const active=new Set(plan.rooms.filter(scheduleRoomEnabled).map(room=>room.id)),effective=effectiveSchedulePlan(raw.plan,plan.rooms,raw.lessons)
+ return {...raw,plan:effective,classrooms:raw.classrooms.filter(room=>active.has(room.id)),lessons:withJointTeachingGroups(raw.lessons.filter(lesson=>active.has(lesson.classroomId)),effective),slots:raw.slots.filter(slot=>active.has(slot.classroom_id))}
 }

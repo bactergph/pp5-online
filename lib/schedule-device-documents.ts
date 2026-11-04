@@ -1,3 +1,4 @@
+import {scheduleRoomEnabled} from './schedule-room-state'
 import {levelPeriodTimes,teacherPeriodTimes,teacherBlockOverlaps} from './schedule-period-profiles'
 import {withTeacherActivityClock} from './schedule-teacher-activities'
 import {scheduleTeachingView} from './schedule-teaching-view'
@@ -16,10 +17,11 @@ export function deviceWorkload(plan:FreeWizardPlan){
 const compact=teacherTimetableName
 export function deviceDisplaySchedule(plan:FreeWizardPlan){
   const data=devicePreparation(plan)
-  return {semesterSupported:true,periodTimes:withTeacherActivityClock(plan.periods,plan.teacherActivities),classrooms:plan.rooms.map(room=>({id:room.id,level:room.label.split('/')[0],room:room.label.split('/').slice(1).join('/')})),lessons:data.lessons,slots:data.slots,activityGroups:data.plan.activityGroups||[],teacherNames:Object.fromEntries(plan.teachers.map(t=>[t.id,t.name]))}
+  return {allClassrooms:data.allClassrooms,storedPlan:data.storedPlan,allLessonRooms:data.allLessonRooms,semesterSupported:true,periodTimes:withTeacherActivityClock(plan.periods,plan.teacherActivities),classrooms:plan.rooms.filter(scheduleRoomEnabled).map(room=>({id:room.id,schedule_enabled:true,level:room.label.split('/')[0],room:room.label.split('/').slice(1).join('/')})),lessons:data.lessons,slots:data.slots,activityGroups:data.plan.activityGroups||[],teacherNames:Object.fromEntries(plan.teachers.map(t=>[t.id,t.name]))}
 }
 export function deviceDocumentPages(plan:FreeWizardPlan,kind:'class'|'teacher',ids:string[],semester:number,year:string):SchedulePdfPage[]{
   const teacherTimes=withTeacherActivityClock(plan.periods,plan.teacherActivities)
+  if(kind==='class'&&ids.some(id=>!plan.rooms.some(room=>room.id===id&&scheduleRoomEnabled(room))))throw Error('ห้องนี้ปิดอยู่ เปิดห้องก่อนพิมพ์ตาราง')
   return ids.map(id=>{
     const gridData:Record<string,SchedulePdfCell>={}
     if(kind==='teacher'){

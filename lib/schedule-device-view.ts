@@ -1,3 +1,4 @@
+import {scheduleRoomEnabled} from './schedule-room-state'
 import {validateJointTeachingGroups} from './schedule-joint-teaching'
 import type { Preparation } from './schedule-preparation'
 import type { DeviceDraft } from './schedule-device-build'
@@ -17,10 +18,10 @@ export function deviceScheduleKey(plan:FreeWizardPlan){const schedule={...plan};
 export function devicePreparation(plan: FreeWizardPlan): Preparation {
   const snapshot = toDeviceSnapshot(plan, plan.rooms.map(room => room.id))
   return {
-    ...snapshot, hash:deviceScheduleKey(plan), blocksSupported: true,manualBlocks:plan.blocks,
-    classrooms: plan.rooms.filter(room=>isTimetableClassroom(room.label.split('/')[0])).map(room => {
+    ...snapshot,storedPlan:toDeviceSnapshot(plan,[],true).plan,allLessonRooms:plan.subjects.map(subject=>({id:subject.id,classroomId:subject.roomId})),allClassrooms:plan.rooms.map(room=>({id:room.id,level:room.label.split('/')[0],room:plan.rooms.filter(item=>item.label.split('/')[0]===room.label.split('/')[0]).findIndex(item=>item.id===room.id)+1,name:room.label.split('/').slice(1).join('/')||'1',schedule_enabled:scheduleRoomEnabled(room)})),hash:deviceScheduleKey(plan), blocksSupported: true,manualBlocks:plan.blocks,
+    classrooms: plan.rooms.filter(scheduleRoomEnabled).filter(room=>isTimetableClassroom(room.label.split('/')[0])).map(room => {
       const [level, ...rest] = room.label.split('/')
-      return { id: room.id, level, room: plan.rooms.filter(item=>item.label.split('/')[0]===level).findIndex(item=>item.id===room.id)+1, name: rest.join('/') || '1' }
+      return { id: room.id, level, schedule_enabled:true, room: plan.rooms.filter(item=>item.label.split('/')[0]===level).findIndex(item=>item.id===room.id)+1, name: rest.join('/') || '1' }
     }),
     teachers: plan.teachers.map(teacher => ({id:teacher.id,prefix:teacher.prefix || '',full_name:teacher.fullName || teacher.name,position:teacher.position || ''})),
     activities: deviceActivityCatalog(plan),
@@ -31,7 +32,7 @@ export function devicePreparation(plan: FreeWizardPlan): Preparation {
 export const deviceIssueSteps = (issues: PlanningIssue[]) => issues.map(issue => ({...issue,step:issue.manageStep??(({1:2,2:3,3:5,4:6,5:6,6:7} as Record<number,number>)[issue.step] || 7)}))
 
 export function devicePreflight(plan: FreeWizardPlan, rooms: string[], clear: boolean, teacherLimit?:number) {
-  if(plan.teachingGroups?.length){try{validateJointTeachingGroups(plan.teachingGroups,toDeviceSnapshot(plan,rooms).lessons)}catch(error){return [{severity:'error' as const,message:error instanceof Error?error.message:'ตรวจกลุ่มสอนรวมไม่สำเร็จ',step:6}]}}
+  const effective=toDeviceSnapshot(plan,rooms);if(effective.plan.teachingGroups?.length){try{validateJointTeachingGroups(effective.plan.teachingGroups,effective.lessons)}catch(error){return [{severity:'error' as const,message:error instanceof Error?error.message:'ตรวจกลุ่มสอนรวมไม่สำเร็จ',step:6}]}}
   try {
     const issues:PlanningIssue[]=[]
     const limitError=deviceTeacherLimitMessage(plan.teachers.length,teacherLimit)

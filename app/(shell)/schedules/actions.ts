@@ -88,6 +88,7 @@ export async function fetchScheduleClassrooms(yearId: string) {
     .select('id, level, room, homeroom_teacher_id, homeroom_teacher2_id')
     .eq('school_id', session.schoolId)
     .eq('academic_year_id', yearId)
+    .eq('schedule_enabled', true)
     .order('level')
     .order('room')
 

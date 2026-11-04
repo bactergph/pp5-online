@@ -1,3 +1,4 @@
+import {effectiveSchedulePlan,mergeStoredSchedulePlan} from './schedule-room-state'
 import {levelPeriodTimes} from './schedule-period-profiles'
 import 'server-only'
 import {validatePeriodProfiles} from './schedule-period-profiles'
@@ -28,7 +29,10 @@ export async function preparation(year:string,term:number){
  db.from('users').select('id,prefix,full_name,position').eq('school_id',session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name').limit(1000)])
  for(const r of [config,times,teachers])fail(r.error)
  if(hash!==await snapshot(session.schoolId,year,term))throw Error('ข้อมูลเปลี่ยนระหว่างโหลด กรุณาลองใหม่')
- const plan=(config.data?.config||emptyPlan()) as SchedulePlan
+ const storedPlan=(config.data?.config||emptyPlan()) as SchedulePlan
+ const allClassrooms=data.allClassrooms||data.classrooms
+ const allLessonRooms=data.allLessonRooms||data.lessons
+ const plan=effectiveSchedulePlan(storedPlan,allClassrooms,allLessonRooms)
  const periods=normalizePeriodTimes((times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[])
  const classrooms=data.classrooms.filter(c=>isTimetableClassroom(c.level)).map(c=>({...c,name:classroomShortName(c,plan.roomLabels)}))
  const roomTitle=new Map(classrooms.map(c=>[c.id,`${c.level}/${c.name}`]))
@@ -37,9 +41,9 @@ export async function preparation(year:string,term:number){
   const label=title&&l.label.includes(' · ')?`${title} · ${l.label.split(' · ').slice(1).join(' · ')}`:l.label
   return {...l,label,...plan.rules[l.id],spread:plan.rules[l.id]?.spread??true,roomName:plan.rules[l.id]?(plan.rooms.find(r=>r.id===plan.rules[l.id].roomId)?.name||''):l.roomName,source:plan.rules[l.id]?'กำหนดภาระสอนสำหรับภาคเรียนนี้':`${l.sourceHours||0} ชั่วโมงเทียบรายปี ÷ 40 สัปดาห์`}
  }),plan)
- // Keep all existing slots/lessons for outside-scope teacher and venue conflicts,
- // but only offer non-kindergarten classrooms for import, activities and generation.
- return {hash,plan,periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,manualBlocks:constraints.manualBlocks,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
+ // Keep enabled rooms outside the selected scope for teacher and venue checks.
+ // Closed-room data remains archived and never participates in planning.
+ return {hash,plan,storedPlan,allLessonRooms,allClassrooms:allClassrooms.map(c=>({...c,name:classroomShortName(c,storedPlan.roomLabels)})),periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,manualBlocks:constraints.manualBlocks,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
 export async function repairActivityTeachers(year:string,term:number,hash:string){
@@ -131,7 +135,7 @@ export async function savePlaces(year:string,term:number,hash:string,change:Sche
  const s=await actor(),current=await preparation(year,term)
  if(current.hash!==hash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
  const plan=applySchedulePlaceChange(current,change)
- const r=await createServerClient().rpc('save_schedule_plan',{p_school:s.schoolId,p_year:year,p_term:term,p_hash:hash,p_config:plan});fail(r.error)
+ const r=await createServerClient().rpc('save_schedule_plan',{p_school:s.schoolId,p_year:year,p_term:term,p_hash:hash,p_config:mergeStoredSchedulePlan(current.storedPlan,plan,current.allClassrooms,current.allLessonRooms)});fail(r.error)
  return preparation(year,term)
 }
 export async function savePlan(year:string,term:number,hash:string,plan:SchedulePlan){
@@ -146,7 +150,7 @@ export async function savePlan(year:string,term:number,hash:string,plan:Schedule
  const blocks=[...(current.manualBlocks??current.blocks),...teacherActivityBlocks(current.periods,plan.teacherActivities)]
  const issues=checkPlanning(lessons,current.slots.map(toPlanned),plan.days,current.periods,blocks).filter(i=>i.code?.startsWith('fixed_'))
  if(issues.length)throw Error(issues.map(i=>i.message).join('\n'))
- const r=await createServerClient().rpc('save_schedule_plan',{p_school:s.schoolId,p_year:year,p_term:term,p_hash:hash,p_config:plan});fail(r.error)
+ const r=await createServerClient().rpc('save_schedule_plan',{p_school:s.schoolId,p_year:year,p_term:term,p_hash:hash,p_config:mergeStoredSchedulePlan(current.storedPlan,plan,current.allClassrooms,current.allLessonRooms)});fail(r.error)
  return preparation(year,term)
 }
 const toPlanned=(s:ScheduleSlot)=>({classroomId:s.classroom_id,lessonId:lessonKey(s),day:s.day_of_week,period:s.period})
