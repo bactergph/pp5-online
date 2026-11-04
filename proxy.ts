@@ -145,5 +145,5 @@ function rewriteWithPath(req: NextRequest, url: URL, pathname: string) {
 
 // กำหนด route ที่ proxy จะทำงาน
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|fonts|brand/examples/.*\\.webp$|.*\\.png$|.*\\.svg$|.*\\.(?:woff2?|ttf|otf)$).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|fonts|downloads(?:/|$)|brand/examples/.*\\.webp$|.*\\.png$|.*\\.svg$|.*\\.(?:woff2?|ttf|otf)$).*)'],
 }

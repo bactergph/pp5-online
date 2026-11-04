@@ -32,6 +32,7 @@ export const RESERVED_SCHOOL_PATH_SEGMENTS = new Set([
   'activity',
   'integrations',
   'fonts',
+  'downloads',
   '_next',
   'favicon.ico',
 ])
@@ -59,6 +60,7 @@ export function schoolPathPrefix(code: string | null | undefined): string {
 }
 
 export function withSchoolPrefix(code: string | null | undefined, href: string): string {
+  if (href === '/downloads' || href.startsWith('/downloads/')) return href
   if (!href.startsWith('/') || href.startsWith('/district')) return href
   const prefix = schoolPathPrefix(code)
   if (!prefix) return href
