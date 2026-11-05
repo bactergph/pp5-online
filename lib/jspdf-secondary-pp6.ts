@@ -5,10 +5,11 @@ import { secondaryTermSummary, secondaryEvaluationSummary, secondaryTermRanks, t
 import { directorDisplayName, directorActingPositionLine } from '@/lib/school-director'
 
 /** Deliberately separate from the primary annual report layout. Fonts are installed by the caller. */
-export function drawSecondaryPp6(doc: jsPDF, data: ReportPayload, students: ReportStudent[], term: 0 | 1 | 2, showGrade: boolean, ranked = false, images: { logo: string | null; homeroom: string | null; director: string | null } = { logo: null, homeroom: null, director: null }) {
+export function drawSecondaryPp6(doc: jsPDF, data: ReportPayload, students: ReportStudent[], term: 0 | 1 | 2, showGrade: boolean, ranked = false, images: { logo: string | null; homeroom: string | null; director: string | null; terms?: Partial<Record<AcademicTerm, { homeroom: string | null; director: string | null }>> } = { logo: null, homeroom: null, director: null }) {
   const terms: AcademicTerm[] = term === 0 ? [1, 2] : [term]
   let pageCount = 0
   for (const student of students) for (const activeTerm of terms) {
+    const activeImages = images.terms?.[activeTerm] || { homeroom: null, director: null }
     const summary = secondaryTermSummary(data, student.id, activeTerm)
     const chunks = Array.from({ length: Math.max(1, Math.ceil(summary.rows.length / 20)) }, (_, i) => summary.rows.slice(i * 20, (i + 1) * 20))
     for (let pageIndex = 0; pageIndex < chunks.length; pageIndex++) {
@@ -44,7 +45,7 @@ export function drawSecondaryPp6(doc: jsPDF, data: ReportPayload, students: Repo
         autoTable(doc, { startY: y - 5, margin: { left: 99, right: 14 }, tableWidth: 97, theme: 'grid', body: secondaryEvaluationSummary(data, student.id, activeTerm), styles: { font: 'THSarabunNew', fontSize: 12, cellPadding: 0.8, lineWidth: 0.15, lineColor: [137, 150, 167], textColor: [17, 24, 39] }, columnStyles: { 0: { cellWidth: 73 }, 1: { cellWidth: 24, halign: 'center' } } })
         const sigY = Math.max(y + 34, (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 15)
         doc.setFontSize(14)
-        for (const [x, name, role, signature] of [[58, data.classroom?.homeroom_teacher_name, 'ครูประจำชั้น', images.homeroom], [152, directorDisplayName(data.school), directorActingPositionLine(data.school) || 'ผู้อำนวยการโรงเรียน', images.director]] as const) {
+        for (const [x, name, role, signature] of [[58, data.classroom?.homeroom_teacher_name, 'ครูประจำชั้น', activeImages.homeroom], [152, directorDisplayName(data.school), directorActingPositionLine(data.school) || 'ผู้อำนวยการโรงเรียน', activeImages.director]] as const) {
           if (signature) doc.addImage(signature, 'PNG', x - 13, sigY - 9, 26, 8)
           doc.text('ลงชื่อ ........................................', x, sigY, { align: 'center' })
           doc.text(`(${name || '........................................'})`, x, sigY + 7, { align: 'center' })

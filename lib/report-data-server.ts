@@ -190,6 +190,7 @@ export type ReportPayload = {
   characterSettings: ReportCharacterSetting[]
   readingSettings: ReportReadingSetting[]
   subjectGroupHeads: Record<string, string>
+  termDocumentSignatures?: Partial<Record<1 | 2, ReportDocumentSignatures>>
   documentSignatures?: ReportDocumentSignatures
   /** Digital Reference หลังอนุมัติ — ใช้วาด QR บนปก */
   digitalReference?: {
@@ -756,6 +757,10 @@ export async function loadReportDataForAccess(
       ? safeRows<DbRow>(db.from('users').select('id, prefix, full_name').in('id', homeroomIds))
       : Promise.resolve([] as DbRow[]),
   ])
+  const termDocumentSignatures = isSecondaryClassLevel(classroomBase.level) && params.mode === 'pp6'
+    ? { [params.term === 2 ? 2 : 1]: documentSignatures,
+        [params.term === 2 ? 1 : 2]: await loadReportDocumentSignatures(db, { mode: 'pp6', classroomId: params.classroomId, academicYearId: params.academicYearId, term: params.term === 2 ? 1 : 2 }) }
+    : undefined
   const homeroomNameMap = Object.fromEntries(homeroomTeachers.map(teacher => [asText(teacher.id), userFullName(teacher)]))
   const classroom: ReportClassroom = {
     ...classroomBase,
@@ -786,6 +791,7 @@ export async function loadReportDataForAccess(
       readingSettings,
       subjectGroupHeads,
       documentSignatures,
+      termDocumentSignatures,
       digitalReference,
       error: null,
     } satisfies ReportPayload
@@ -953,6 +959,7 @@ export async function loadReportDataForAccess(
     readingSettings,
     subjectGroupHeads,
     documentSignatures,
+    termDocumentSignatures,
     digitalReference,
     error: null,
   } satisfies ReportPayload

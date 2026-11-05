@@ -802,16 +802,24 @@ export async function buildPp6PdfBlob(options: Pp6PdfOptions, buildOptions?: Pp6
   })
   if (!buildOptions?.skipApplyFonts) await applyThaiFonts(doc)
 
+  if (isSecondaryClassLevel(data.classroom?.level)) {
+    const logoData = await loadImage(data.school?.logo_url, 160, 0.7)
+    const terms: Array<1 | 2> = term === 0 ? [1, 2] : [term]
+    const termImages = Object.fromEntries(await Promise.all(terms.map(async activeTerm => {
+      // A report containing both semesters must never reuse the other semester's signature.
+      const signatures = data.termDocumentSignatures?.[activeTerm]
+      const [homeroom, director] = await Promise.all([loadImage(signatures?.homeroom, 220, 0.75), loadImage(signatures?.director, 220, 0.75)])
+      return [activeTerm, { homeroom, director }]
+    })))
+    drawSecondaryPp6(doc, data, students, term, showGrade, ranked, { logo: logoData, homeroom: null, director: null, terms: termImages })
+    return { blob: doc.output('blob'), fileName: (options.fileName || `ปพ.6 มัธยม_${data.classroom?.level}-${data.classroom?.room}_${data.academicYear?.year_be}_ภาค${term || '1-2'}.pdf`).replace(/[\\/:*?"<>|]/g, '-') }
+  }
   const [logoData, homeroomSig, directorSig] = await Promise.all([
     loadImage(data.school?.logo_url, 160, 0.7),
     loadImage(data.documentSignatures?.homeroom, 220, 0.75),
     loadImage(data.documentSignatures?.director, 220, 0.75),
   ])
 
-  if (isSecondaryClassLevel(data.classroom?.level)) {
-    drawSecondaryPp6(doc, data, students, term, showGrade, ranked, { logo: logoData, homeroom: homeroomSig, director: directorSig })
-    return { blob: doc.output('blob'), fileName: (options.fileName || `ปพ.6 มัธยม_${data.classroom?.level}-${data.classroom?.room}_${data.academicYear?.year_be}_ภาค${term || '1-2'}.pdf`).replace(/[\\/:*?"<>|]/g, '-') }
-  }
   const rankMap = buildPp6RankMap(data, data.subjects || [], term)
 
   for (let i = 0; i < students.length; i++) {
