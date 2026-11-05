@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import { useAppAlert } from '@/lib/use-app-alert'
+import { runDmcImport, type DmcImportProgress } from '@/lib/dmc-import-progress'
 import {
   fetchClassroomsForImport,
   importStudents,
@@ -219,6 +220,7 @@ export type DmcImportAction = {
   canImport: boolean
   importing: boolean
   label: string
+  progressLabel: string
   run: () => Promise<boolean>
 }
 
@@ -238,6 +240,10 @@ export default function DmcImportTool({
   const [mode, setMode] = useState<ImportMode>('school')
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
+  const importRunning = useRef(false)
+  const [progress, setProgress] = useState<DmcImportProgress | null>(null)
+  const progressRef = useRef<HTMLElement>(null)
+  const [previewPage, setPreviewPage] = useState(0)
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const [error, setError] = useState<string | null>(null)
 
@@ -271,9 +277,18 @@ export default function DmcImportTool({
   }
 
   useEffect(() => {
-    loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void Promise.resolve().then(loadData).catch(() => {
+      setError('โหลดปีการศึกษาและห้องเรียนไม่สำเร็จ กรุณารีเฟรชหน้า')
+      setLoading(false)
+    })
   }, [])
+
+  useEffect(() => {
+    if (!importing) return
+    const preventLeave = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', preventLeave)
+    return () => window.removeEventListener('beforeunload', preventLeave)
+  }, [importing])
 
   const headers = useMemo(() => (grid[headerRow] || []).map(c => normalizeHeader(c)), [grid, headerRow])
   const dataRows = useMemo(() => grid.slice(headerRow + 1).filter(r => r.some(c => String(c).trim() !== '')), [grid, headerRow])
@@ -380,9 +395,12 @@ export default function DmcImportTool({
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    if (importRunning.current) return
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name)
+    setProgress(null)
+    setPreviewPage(0)
     setError(null)
     clearAlert()
     setFileLoading(true)
@@ -432,46 +450,42 @@ export default function DmcImportTool({
 
   async function handleImport(): Promise<boolean> {
     const total = mode === 'school' ? parsedSchool.length : parsed.length
-    if (total === 0) return false
-    setImporting(true); setError(null)
-    const res = mode === 'school'
-      ? await importStudentsWholeSchool(targetYear, parsedSchool)
-      : await importStudents(target, parsed)
-    setImporting(false)
-    if (res.error) { setError(res.error); return false }
-
-    const parts = [`เพิ่มใหม่ ${res.inserted} คน`]
-    if (res.duplicate) parts.push(`มีเลขบัตรในระบบแล้ว ${res.duplicate} คน`)
-    if (res.failed) parts.push(`บันทึกไม่สำเร็จ ${res.failed} คน`)
-    if ('missingClass' in res && res.missingClass) parts.push(`ไม่พบห้อง ${res.missingClass} คน`)
-    if (!res.duplicate && !res.failed && !('missingClass' in res && res.missingClass) && res.skipped > 0) {
-      parts.push(`ข้าม ${res.skipped} คน`)
-    }
-    const detail = parts.join(' · ')
-    if (res.inserted === 0 && res.skipped > 0) {
-      const reason = res.firstError
-        ? `สาเหตุ: ${res.firstError}`
-        : res.duplicate === res.skipped
-          ? 'สาเหตุ: เลขบัตรประชาชนซ้ำกับที่มีอยู่ในปี/ห้องนี้แล้ว (นำเข้าซ้ำ)'
-          : 'ตรวจสอบการจับคู่คอลัมน์ชั้น/ห้อง/ชื่อ-นามสกุล แล้วลองใหม่'
-      setError(`ข้ามทั้งหมด · ${detail} · ${reason}`)
-      notify('error', `ข้ามทั้งหมด · ${detail}`)
-    } else {
-      notify('success', `นำเข้าสำเร็จ: ${detail}`)
+    if (!total || importRunning.current) return false
+    importRunning.current = true
+    setImporting(true); setError(null); clearAlert()
+    const update = (next: DmcImportProgress) => setProgress(next)
+    // The progress panel is near the footer, visible even after scrolling the preview.
+    requestAnimationFrame(() => progressRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }))
+    try {
+      const res = mode === 'school'
+        ? await runDmcImport(parsedSchool, batch => importStudentsWholeSchool(targetYear, batch), update, row => `${row.level}/${row.room}`)
+        : await runDmcImport(parsed, batch => importStudents(target, batch), update, () => targetClass ? `${targetClass.level}/${targetClass.room}` : '')
+      const skipped = res.duplicate + res.failed + res.missingClass
+      if (res.error) {
+        setError(`${res.error} · บันทึกแล้ว ${res.inserted.toLocaleString()} คน · ตรวจแล้ว ${res.processed.toLocaleString()} จาก ${total.toLocaleString()} คน`)
+        return false
+      }
+      notify('success', `นำเข้าเสร็จแล้ว · เพิ่มใหม่ ${res.inserted.toLocaleString()} คน · มีข้อมูลแล้ว ${res.duplicate.toLocaleString()} คน`)
       setGrid([]); setColMap(null); setFileName('')
+      try { await loadData() } catch { setError('นำเข้าเสร็จแล้ว แต่โหลดรายชื่อห้องใหม่ไม่สำเร็จ กรุณารีเฟรชหน้า') }
+      onImported?.({ inserted: res.inserted, skipped })
+      return true
+    } finally {
+      importRunning.current = false
+      setImporting(false)
     }
-    // โหลดชั้นเรียน/ปีใหม่ (โหมดทั้งโรงเรียนอาจสร้างห้องเพิ่ม)
-    await loadData()
-    onImported?.({ inserted: res.inserted, skipped: res.skipped })
-    return res.inserted > 0
   }
 
   const importLabel = mode === 'school'
     ? `นำเข้าทั้งโรงเรียน ${parsedSchool.length} คน`
     : `นำเข้า ${parsed.length} คน → ${targetClass?.level}/${targetClass?.room}`
-  const canImport = mode === 'school'
+  const canImport = !fileLoading && (mode === 'school'
     ? parsedSchool.length > 0 && Boolean(targetYear) && Boolean(colMap)
-    : parsed.length > 0 && Boolean(target) && Boolean(colMap)
+    : parsed.length > 0 && Boolean(target) && Boolean(colMap))
+  const progressLabel = progress ? `ตรวจแล้ว ${progress.processed.toLocaleString()} / ${progress.total.toLocaleString()} คน` : 'กำลังเตรียมนำเข้า...'
+  const previewRows = mode === 'school' ? parsedSchool : parsed
+  const previewPages = Math.max(1, Math.ceil(previewRows.length / 100))
+  const shownPage = Math.min(previewPage, previewPages - 1)
 
   useEffect(() => {
     if (!onActionChange) return
@@ -479,19 +493,20 @@ export default function DmcImportTool({
       canImport,
       importing,
       label: importLabel,
+      progressLabel,
       run: handleImport,
     })
     return () => onActionChange(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canImport, importing, importLabel, mode, target, targetYear, parsedSchool.length, parsed.length])
+  }, [canImport, importing, importLabel, progressLabel, mode, target, targetYear, parsedSchool, parsed])
 
   if (loading) return <div className="empty-state">กำลังโหลด...</div>
 
   return (
     <div className="page-stack">
       <AlertModal />
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
-
+      {error && progress?.status !== 'error' && <div className="alert alert-error" role="alert" style={{ marginBottom: 16 }}>{error}</div>}
+      <fieldset className="dmc-import-controls" disabled={importing}>
       {years.length === 0 ? (
         <div className="control-card">
           <p style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-2)' }}>ยังไม่มีปีการศึกษา</p>
@@ -619,6 +634,7 @@ export default function DmcImportTool({
         </div>
       )}
 
+      </fieldset>
       {grid.length > 0 && colMap && (
         <div className="data-card">
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
@@ -631,7 +647,7 @@ export default function DmcImportTool({
             {!hideImportButton && (
               <LoadingButton
                 loading={importing}
-                loadingText="กำลังนำเข้า..."
+                loadingText={progressLabel}
                 onClick={handleImport}
                 disabled={!canImport}
               >
@@ -654,7 +670,7 @@ export default function DmcImportTool({
                 <tr>{[...(mode === 'school' ? ['ชั้น/ห้อง'] : []), 'รหัส', 'เลขบัตร', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'เพศ', 'วันเกิด'].map(h => <th key={h}>{h}</th>)}</tr>
               </thead>
               <tbody>
-                {(mode === 'school' ? parsedSchool : parsed).map((r, i) => (
+                {previewRows.slice(shownPage * 100, (shownPage + 1) * 100).map((r, i) => (
                   <tr key={i}>
                     {mode === 'school' && 'level' in r && 'room' in r && <td style={{ fontWeight: 700 }}>{String(r.level)}/{String(r.room)}</td>}
                     <td style={{ color: 'var(--text-3)' }}>{r.student_code || '-'}</td>
@@ -669,8 +685,32 @@ export default function DmcImportTool({
               </tbody>
             </table>
           </div>
+          {previewPages > 1 && <div className="dmc-preview-pages">
+            <span>ตัวอย่าง {shownPage * 100 + 1}–{Math.min((shownPage + 1) * 100, previewRows.length)} จาก {previewRows.length.toLocaleString()} คน · นำเข้าครบทุกหน้า</span>
+            <div><button type="button" className="btn btn-secondary" disabled={shownPage === 0} onClick={() => setPreviewPage(shownPage - 1)}>ก่อนหน้า</button>
+              <button type="button" className="btn btn-secondary" disabled={shownPage + 1 >= previewPages} onClick={() => setPreviewPage(shownPage + 1)}>ถัดไป</button></div>
+          </div>}
         </div>
       )}
+
+      {progress && <section ref={progressRef} className={`dmc-save-progress dmc-save-progress--${progress.status}`} aria-label="สถานะนำเข้านักเรียน" aria-busy={importing}>
+        <div className="dmc-save-progress__heading" role="status" aria-live="polite">
+          <strong>{importing ? 'กำลังบันทึกนักเรียน' : progress.status === 'done' ? 'นำเข้าเสร็จแล้ว' : 'นำเข้ายังไม่ครบ'}</strong>
+          <b>{Math.floor(progress.processed / Math.max(1, progress.total) * 100)}%</b>
+        </div>
+        <p>{progressLabel}</p>
+        <div className="dmc-save-progress__track" role="progressbar" aria-label="นักเรียนที่ตรวจแล้ว" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.processed}>
+          <span style={{ width: `${progress.processed / Math.max(1, progress.total) * 100}%` }} />
+        </div>
+        <div className="dmc-save-progress__counts">
+          <span>บันทึกสำเร็จ <b>{progress.inserted.toLocaleString()}</b> คน</span>
+          <span>มีข้อมูลแล้ว <b>{progress.duplicate.toLocaleString()}</b> คน</span>
+          {(progress.failed > 0 || progress.missingClass > 0) && <span>ต้องตรวจสอบ <b>{(progress.failed + progress.missingClass).toLocaleString()}</b> คน</span>}
+        </div>
+        {importing && <small>ชุดที่ {progress.batch}/{progress.batches} · ห้อง {progress.classroom} · กรุณาเปิดหน้านี้ไว้จนเสร็จ</small>}
+        {!importing && progress.status === 'error' && <small>ข้อมูลที่บันทึกสำเร็จยังอยู่ ระบบจะตรวจเลขบัตรหรือรหัสนักเรียนเพื่อกันซ้ำเมื่อนำเข้าใหม่</small>}
+        {error && progress.status === 'error' && <p className="alert alert-error" role="alert">{error}</p>}
+      </section>}
 
       {grid.length === 0 && (
         <div className="card-padded">
@@ -680,7 +720,7 @@ export default function DmcImportTool({
             <li>เลือก “ทั้งโรงเรียน” เพื่อให้ระบบอ่านคอลัมน์ชั้น/ห้องแล้วสร้างห้อง + กระจายเข้าห้องให้อัตโนมัติ</li>
             <li>หรือเลือก “เฉพาะห้อง” หากต้องการนำเข้าไฟล์เดียวเข้าห้องปลายทางห้องเดียว</li>
             <li>วันเกิดรองรับ วว/ดด/ปปปป (พ.ศ. หรือ ค.ศ.) และวันที่แบบตัวเลขจาก Excel · เพศ ช/ญ</li>
-            <li>กันซ้ำด้วยเลขบัตรประชาชนในปี/ห้องปลายทาง — ถ้าข้ามหมดมักเพราะนำเข้าไฟล์เดิมซ้ำแล้ว</li>
+            <li>กันซ้ำด้วยเลขบัตรประชาชนหรือรหัสนักเรียนในปี/ห้องปลายทาง</li>
             <li>เลขที่ในห้องจะไล่ต่อจากที่มีอยู่อัตโนมัติ (ปรับภายหลังได้ที่เมนูนักเรียน)</li>
           </ul>
         </div>

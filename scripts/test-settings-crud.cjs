@@ -44,7 +44,7 @@ const db={from:query,rpc:async(name,args)=>{rpcCalls.push({name,args});if(failur
 const imports={
  crypto:require('node:crypto'),'@/lib/session':{getSession:async()=>actor},'@/lib/supabase':{createServerClient:()=>db},'@/lib/school-record-scope':guard,
  '@/lib/audit':{logActivity:async()=>{},resolveClassroomSchoolId:async id=>tables.classrooms.find(r=>r.id===id)?.school_id,resolveClassSubjectContext:async id=>({schoolId:tables.classrooms.find(r=>r.id===tables.class_subjects.find(cs=>cs.id===id)?.classroom_id)?.school_id})},
- '@/lib/personal-data-scope':{isPersonalSubjectAccess:async()=>false},'@/lib/students-cache':{invalidateClassroomStudents:()=>{},invalidateClassroomStudentsMany:()=>{}},'@/lib/school-calendar-cache':{invalidateSchoolCalendar:()=>{}},
+ '@/lib/personal-data-scope':{limitsToOwnSubjects:async()=>false},'@/lib/students-cache':{invalidateClassroomStudents:()=>{},invalidateClassroomStudentsMany:()=>{}},'@/lib/school-calendar-cache':{invalidateSchoolCalendar:()=>{}},
  '@/lib/school-shell':{getSchoolShell:async()=>({education_type:'primary'})},'@/lib/school-education-type':{schoolLevels:()=>['ป.1','ป.2']},'@/lib/class-subject-term':{classSubjectSemesterForLevel:()=>0},
 }
 const api=compile('app/(shell)/settings/actions.ts',imports),rooms=compile('app/(shell)/classrooms/actions.ts',imports)

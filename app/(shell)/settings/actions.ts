@@ -2,6 +2,7 @@
 import {schoolRecordsMatch,schoolClassSubjectsMatch,schoolStudentsMatchYear} from '@/lib/school-record-scope'
 import { centralSubjectLevel } from '@/lib/schedule-central-subjects'
 import { randomUUID } from 'crypto'
+import { readImportStudents, insertImportStudents, type ImportStudentRow, type ImportStudentSchoolRow } from '@/lib/student-import'
 import { createServerClient } from '@/lib/supabase'
 import { getSession, createSession } from '@/lib/session'
 import { clearUserFromLeaderSlots, syncSchoolLeaderSlot, syncUserRoleToSchoolLeaders } from '@/lib/school-leaders'
@@ -1301,120 +1302,26 @@ export async function fetchClassroomsForImport() {
   return data || []
 }
 
-function normalizeImportNationalId(raw: unknown): string | null {
-  if (raw == null || raw === '') return null
-  let s = String(raw).trim()
-  if (!s) return null
-  // Excel บางไฟล์อ่านเลขบัตรเป็น scientific notation
-  if (/e[+-]?\d+/i.test(s)) {
-    const n = Number(s)
-    if (Number.isFinite(n)) s = Math.round(n).toString()
-  }
-  const digits = s.replace(/\D/g, '')
-  return digits.length >= 10 ? digits : (digits || null)
-}
-
-function normalizeImportName(raw: unknown, fallback = '-'): string {
-  const s = String(raw ?? '').trim()
-  return s || fallback
-}
-
-function normalizeImportGender(raw: unknown, prefix: string): string {
-  const r = String(raw ?? '').trim()
-  if (r === 'M' || r === 'F') return r
-  if (r === 'ช' || r.includes('ชาย') || r.toLowerCase() === 'm') return 'M'
-  if (r === 'ญ' || r.includes('หญิง') || r.toLowerCase() === 'f') return 'F'
-  return prefix === 'เด็กหญิง' || prefix === 'นางสาว' || prefix === 'นาง' ? 'F' : 'M'
-}
-
-export async function importStudents(classroomId: string, rows: {
-  student_code: string | null
-  national_id: string | null
-  prefix: string
-  first_name: string
-  last_name: string
-  gender: string
-  birth_date: string | null
-  address?: string | null
-  status: string
-}[]) {
+export async function importStudents(classroomId: string, rows: ImportStudentRow[]) {
+  const empty = { inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
   const session = await requireSchoolSession()
-  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์', inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
-  if (!classroomId) return { error: 'ยังไม่ได้เลือกชั้นเรียนปลายทาง', inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
-  if (rows.length === 0) return { error: 'ไม่มีข้อมูลนักเรียน', inserted: 0, skipped: 0, duplicate: 0, failed: 0, firstError: null as string | null }
+  if (!hasRole(session, ADMIN_ROLES)) return { error: 'ไม่มีสิทธิ์', ...empty }
+  if (!classroomId) return { error: 'ยังไม่ได้เลือกชั้นเรียนปลายทาง', ...empty }
+  if (!rows.length) return { error: 'ไม่มีข้อมูลนักเรียน', ...empty }
   const db = createServerClient()
-  if (!await schoolRecordsMatch(db,session.schoolId,'classrooms',[classroomId])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',inserted:0,skipped:0,duplicate:0,failed:0,firstError:null}
-
-  // กันซ้ำด้วยเลขบัตร + หาเลขที่ล่าสุดในห้อง (เพื่อไล่เลขที่ต่อ)
-  const { data: existing } = await db.from('students')
-    .select('student_number, national_id').eq('classroom_id', classroomId)
-  const existingNat = new Set(
-    (existing || [])
-      .map(e => normalizeImportNationalId(e.national_id))
-      .filter((v): v is string => Boolean(v)),
-  )
-  let maxNo = Math.max(0, ...((existing || []).map(e => e.student_number || 0)))
-
-  let inserted = 0
-  let duplicate = 0
-  let failed = 0
-  let firstError: string | null = null
-  for (const row of rows) {
-    const nationalId = normalizeImportNationalId(row.national_id)
-    if (nationalId && existingNat.has(nationalId)) { duplicate++; continue }
-    const payload = {
-      student_code: row.student_code ? String(row.student_code).trim() || null : null,
-      national_id: nationalId,
-      prefix: normalizeImportName(row.prefix, 'เด็กชาย'),
-      first_name: normalizeImportName(row.first_name),
-      last_name: normalizeImportName(row.last_name),
-      gender: normalizeImportGender(row.gender, String(row.prefix || '')),
-      birth_date: row.birth_date || null,
-      address: row.address ?? null,
-      status: row.status || 'เรียน',
-      classroom_id: classroomId,
-      student_number: maxNo + 1,
-    }
-    const { error } = await db.from('students').insert(payload)
-    if (!error) {
-      inserted++
-      maxNo++
-      if (nationalId) existingNat.add(nationalId)
-    } else {
-      failed++
-      if (!firstError) firstError = error.message
-    }
-  }
+  if (!await schoolRecordsMatch(db, session.schoolId, 'classrooms', [classroomId])) return { error: 'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข', ...empty }
+  const existing = await readImportStudents(db, [classroomId])
+  if (existing.error) return { error: existing.error, ...empty }
+  const result = await insertImportStudents(db, rows.map(row => ({ ...row, classroom_id: classroomId })), existing.students)
+  const { error, inserted, duplicate, failed, firstError } = result
   const skipped = duplicate + failed
-  if (inserted > 0) invalidateClassroomStudents(classroomId)
+  if (inserted) invalidateClassroomStudents(classroomId)
   await logActivity({
-    actor: session,
-    schoolId: await resolveClassroomSchoolId(classroomId),
-    action: 'import',
-    module: 'students',
-    targetType: 'classroom',
-    targetId: classroomId,
+    actor: session, schoolId: session.schoolId, action: 'import', module: 'students', targetType: 'classroom', targetId: classroomId,
     description: `นำเข้านักเรียน DMC สำเร็จ ${inserted} คน ข้าม ${skipped} คน`,
     metadata: { classroomId, inserted, skipped, duplicate, failed, total: rows.length, firstError },
   })
-  return { error: null, inserted, skipped, duplicate, failed, firstError }
-}
-
-type ImportStudentRow = {
-  student_code: string | null
-  national_id: string | null
-  prefix: string
-  first_name: string
-  last_name: string
-  gender: string
-  birth_date: string | null
-  address?: string | null
-  status: string
-}
-
-type ImportStudentSchoolRow = ImportStudentRow & {
-  level: string
-  room: number | string
+  return { error, inserted, skipped, duplicate, failed, firstError }
 }
 
 function normalizeClassLevel(level: string) {
@@ -1443,11 +1350,12 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
 
   const db = createServerClient()
   if (!await schoolRecordsMatch(db,session.schoolId,'academic_years',[academicYearId])) return {error:'ไม่พบรายการในโรงเรียนนี้ หรือไม่มีสิทธิ์แก้ไข',...empty}
-  const { data: initialClassrooms } = await db.from('classrooms')
+  const { data: initialClassrooms, error: classroomsError } = await db.from('classrooms')
     .select('id, level, room, school_id')
     .eq('academic_year_id', academicYearId)
     .eq('school_id', session.schoolId || '')
 
+  if (classroomsError) return { error: `โหลดห้องเรียนไม่สำเร็จ: ${classroomsError.message}`, ...empty }
   const classroomRows = [...(initialClassrooms || [])]
   const classroomByKey = new Map(classroomRows.map(c => [normalizeClassKey(c.level, c.room), c]))
   const neededClasses = new Map<string, { level: string; room: number }>()
@@ -1481,61 +1389,19 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
   }
 
   const classroomIds = classroomRows.map(c => c.id)
-  const { data: existing } = await db.from('students')
-    .select('classroom_id, student_number, national_id')
-    .in('classroom_id', classroomIds)
-
-  const existingNat = new Set(
-    (existing || [])
-      .map(s => normalizeImportNationalId(s.national_id))
-      .filter((v): v is string => Boolean(v)),
-  )
-  const maxNoByClass = new Map<string, number>()
-  for (const classroomId of classroomIds) maxNoByClass.set(classroomId, 0)
-  for (const s of existing || []) {
-    maxNoByClass.set(s.classroom_id, Math.max(maxNoByClass.get(s.classroom_id) || 0, s.student_number || 0))
-  }
-
-  let inserted = 0
-  let duplicate = 0
-  let failed = 0
+  const existing = await readImportStudents(db, classroomIds)
+  if (existing.error) return { error: existing.error, ...empty }
   let missingClass = 0
-  let firstError: string | null = null
-  const touchedClassroomIds = new Set<string>()
-
+  const candidates = []
   for (const row of rows) {
     const classroom = classroomByKey.get(normalizeClassKey(row.level, row.room))
     if (!classroom) { missingClass++; continue }
-    const nationalId = normalizeImportNationalId(row.national_id)
-    if (nationalId && existingNat.has(nationalId)) { duplicate++; continue }
-
-    const nextNo = (maxNoByClass.get(classroom.id) || 0) + 1
-    const { error } = await db.from('students').insert({
-      student_code: row.student_code ? String(row.student_code).trim() || null : null,
-      national_id: nationalId,
-      prefix: normalizeImportName(row.prefix, 'เด็กชาย'),
-      first_name: normalizeImportName(row.first_name),
-      last_name: normalizeImportName(row.last_name),
-      gender: normalizeImportGender(row.gender, String(row.prefix || '')),
-      birth_date: row.birth_date || null,
-      address: row.address ?? null,
-      status: row.status || 'เรียน',
-      classroom_id: classroom.id,
-      student_number: nextNo,
-    })
-    if (error) {
-      failed++
-      if (!firstError) firstError = error.message
-      continue
-    }
-    inserted++
-    touchedClassroomIds.add(classroom.id)
-    maxNoByClass.set(classroom.id, nextNo)
-    if (nationalId) existingNat.add(nationalId)
+    candidates.push({ ...row, classroom_id: classroom.id })
   }
-
+  const result = await insertImportStudents(db, candidates, existing.students)
+  const { error, inserted, duplicate, failed, firstError, touchedClassroomIds } = result
   const skipped = duplicate + failed + missingClass
-  if (touchedClassroomIds.size > 0) invalidateClassroomStudentsMany(touchedClassroomIds)
+  if (touchedClassroomIds.size) invalidateClassroomStudentsMany(touchedClassroomIds)
 
   await logActivity({
     actor: session,
@@ -1548,7 +1414,7 @@ export async function importStudentsWholeSchool(academicYearId: string, rows: Im
     metadata: { academicYearId, inserted, skipped, missingClass, duplicate, failed, total: rows.length, firstError },
   })
 
-  return { error: null, inserted, skipped, missingClass, duplicate, failed, firstError }
+  return { error, inserted, skipped, missingClass, duplicate, failed, firstError }
 }
 
 // ============================================================

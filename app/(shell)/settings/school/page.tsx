@@ -281,6 +281,7 @@ export default function SchoolSettingsPage() {
   }
   // นำทางระหว่างขั้นตอน (client-side ไม่ reload) — โรงเรียนถูกเลือกแล้วจึงข้ามได้อิสระ
   function goStep(n: number) {
+    if (dmcImportAction?.importing) return
     const clamped = Math.max(0, Math.min(ONBOARDING_STEPS.length - 1, n))
     setStep(clamped)
     if (typeof window !== 'undefined') {
@@ -592,7 +593,7 @@ export default function SchoolSettingsPage() {
     const meta = ONBOARDING_STEPS[step]
     const lastIndex = ONBOARDING_STEPS.length - 1
     const isLast = step === lastIndex
-    const canNavigate = Boolean(school.id)
+    const canNavigate = Boolean(school.id) && !dmcImportAction?.importing
     const progressPct = (step / lastIndex) * 100
 
     let primaryBtn: React.ReactNode = null
@@ -607,7 +608,7 @@ export default function SchoolSettingsPage() {
           <LoadingButton
             type="button"
             loading={dmcImportAction.importing}
-            loadingText="กำลังนำเข้า..."
+            loadingText={dmcImportAction.progressLabel}
             className="btn btn-primary btn-lg"
             onClick={async () => {
               const ok = await dmcImportAction.run()
@@ -942,11 +943,11 @@ export default function SchoolSettingsPage() {
 
             <div className="wizard-footer">
               {step > 0
-                ? <button type="button" onClick={() => goStep(step - 1)} className="btn btn-secondary">← ย้อนกลับ</button>
+                ? <button type="button" disabled={dmcImportAction?.importing} onClick={() => goStep(step - 1)} className="btn btn-secondary">← ย้อนกลับ</button>
                 : <span />}
               <div className="wizard-footer-right">
                 {step > 0 && !isLast && (
-                  <button type="button" onClick={() => goStep(step + 1)} className="onboarding-later">ข้ามขั้นตอนนี้</button>
+                  <button type="button" disabled={dmcImportAction?.importing} onClick={() => goStep(step + 1)} className="onboarding-later">ข้ามขั้นตอนนี้</button>
                 )}
                 {primaryBtn}
               </div>
