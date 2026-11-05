@@ -194,7 +194,7 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-empty">ไม่พบครูในโรงเรียน</div>
         ) : (
           <div className="schedule-grid-card">
-            {canEdit&&!hasTeacherTimeline(periodTimes)?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<div className="schedule-profile-teacher-grid"><ScheduleGridTable days={scheduleDays}
+            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<div className="schedule-profile-teacher-grid"><ScheduleGridTable days={scheduleDays}
               periodTimes={teacherPeriodTimes(periodTimes)}
               renderCell={(day, period) => {
                 const key = `${day}-${period}`
@@ -202,7 +202,7 @@ export default function TeachingScheduleEntry() {
                 return <div className="cell-view">{renderCell(cell)}</div>
               }}
             /></div>}
-            {hasTeacherTimeline(periodTimes)&&<div className="teacher-time-agenda" aria-label="ตารางครูตามเวลาจริง">{scheduleDays.map(day=>{const labels=['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];const events=teacherPeriodTimes(periodTimes).filter(time=>cells[`${day}-${time.period}`]?.label);return <section key={day}><h3>วัน{labels[day]}</h3>{events.length?events.map(time=><article key={time.period}><time>{time.start_time}<br/>–{time.end_time}</time><div><strong>{cells[`${day}-${time.period}`].subject_line}</strong><small>{cells[`${day}-${time.period}`].room_line}</small></div></article>):<p>ไม่มีคาบสอนหรือกิจกรรมครูที่กำหนด</p>}</section>})}</div>}
+            {!canEdit&&hasTeacherTimeline(periodTimes)&&<div className="teacher-time-agenda" aria-label="ตารางครูตามเวลาจริง">{scheduleDays.map(day=>{const labels=['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];const events=teacherPeriodTimes(periodTimes).filter(time=>cells[`${day}-${time.period}`]?.label);return <section key={day}><h3>วัน{labels[day]}</h3>{events.length?events.map(time=><article key={time.period}><time>{time.start_time}<br/>–{time.end_time}</time><div><strong>{cells[`${day}-${time.period}`].subject_line}</strong><small>{cells[`${day}-${time.period}`].room_line}</small></div></article>):<p>ไม่มีคาบสอนหรือกิจกรรมครูที่กำหนด</p>}</section>})}</div>}
           </div>
         )}
       </div>
