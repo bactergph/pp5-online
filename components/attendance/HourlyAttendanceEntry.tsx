@@ -1,4 +1,5 @@
 'use client'
+import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
 import AcademicBandNavigation from '@/components/academic/AcademicBandNavigation'
 
@@ -575,7 +576,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
           <span>ภาคเรียนที่ <b>{term}</b></span>
           <span>รหัสวิชา <b>{subjectInfo.code || selectedSubject?.code || '-'}</b></span>
           <span>รายวิชา <b>{subjectInfo.name || selectedSubject?.name || '-'}</b></span>
-          <span>ชั่วโมง/ปี <b>{subjectInfo.hoursPerYear || '-'}</b></span>
+          <span>{isSecondaryClassLevel(classroom?.level) ? 'ชั่วโมง/ภาคเรียน' : 'ชั่วโมง/ปี'} <b>{subjectInfo.hoursPerYear ? subjectInfo.hoursPerYear / (isSecondaryClassLevel(classroom?.level) ? 2 : 1) : '-'}</b></span>
           <span>ชั่วโมง/สัปดาห์ <b>{hoursPerWeekCount}</b></span>
           <span>สัปดาห์การเรียน <b>{weeks.length}</b> สัปดาห์</span>
           <span>คาบในภาคเรียน <b>{weeks.length * hoursPerWeekCount}</b> คาบ</span>
