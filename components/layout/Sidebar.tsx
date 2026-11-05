@@ -518,7 +518,16 @@ export default function Sidebar({
 
   const sections = buildNav(navRole, isHomeroom).map(section => {
     const byEducation = filterSchoolMenu(section.items, educationType)
-    const items = byEducation
+    const secondaryPaths: Record<string, string> = { '/scores': '/scores/secondary', '/attendance/hourly': '/attendance/secondary', '/reports/pp5': '/reports/secondary/pp5', '/reports/pp6': '/reports/secondary/pp6', '/evaluation/activities': '/evaluation/secondary/activities', '/evaluation/character': '/evaluation/secondary/character', '/evaluation/reading': '/evaluation/secondary/reading', '/evaluation/competency': '/evaluation/secondary/competency' }
+    const collect = (nodes: Child[]): Child[] => nodes.flatMap(node => node.children ? collect(node.children) : node.href && secondaryPaths[node.href] ? [{ ...node, href: secondaryPaths[node.href] }] : [])
+    const secondaryChildren = collect(byEducation)
+    if (secondaryChildren.some(child => child.href === '/scores/secondary') && !secondaryChildren.some(child => child.href === '/attendance/secondary')) secondaryChildren.splice(1, 0, { href: '/attendance/secondary', label: 'เช็กชื่อรายวิชา', icon: ic(I.clock) })
+    const secondaryMenu: NavItem = { href: '/evaluation/secondary', label: 'งานวัดผลมัธยม', icon: ic(I.book), children: [{ href: '/evaluation/secondary', label: 'ภาพรวมมัธยม' }, ...secondaryChildren] }
+    const items = section.label === 'วัดและประเมินผล' && secondaryChildren.length
+      ? educationType === 'secondary'
+        ? [secondaryMenu, ...byEducation.filter(item => !collect([item]).length)]
+        : [...byEducation, secondaryMenu]
+      : byEducation
     const icon = section.label?.includes('ตั้งค่า') ? ic(SETTINGS_ICON)
       : section.label === 'วัดและประเมินผล' ? ic(I.book)
       : section.label?.includes('ตาราง') ? ic(I.calendar)

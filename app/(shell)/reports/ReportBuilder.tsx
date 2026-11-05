@@ -1,4 +1,7 @@
 'use client'
+import type { AcademicBand } from '@/lib/secondary-academic'
+import AcademicBandNavigation from '@/components/academic/AcademicBandNavigation'
+import SecondaryPp6Pages from '@/components/academic/SecondaryPp6Pages'
 
 import { reportWithSignatureVisibility } from '@/lib/report-signature-visibility'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
@@ -3593,6 +3596,7 @@ function Pp6Page({
 }) {
   const layout = usePp6SectionLayout()
   const pageStyle = usePp6PageStyle()
+  if (data && isSecondaryClassLevel(data.classroom?.level)) return <SecondaryPp6Pages data={data} term={term} individual={individual} selectedStudentId={selectedStudentId} showGrade={showGrade} ranked={ranked} pageStyle={pageStyle} />
   const subjects = data?.subjects || []
   const baseStudents = individual && selectedStudentId
     ? (data?.students || []).filter(student => student.id === selectedStudentId)
@@ -3807,7 +3811,7 @@ function Pp6Page({
   )
 }
 
-export default function ReportBuilder({ mode }: { mode: ReportMode }) {
+export default function ReportBuilder({ mode, educationBand }: { mode: ReportMode; educationBand?: AcademicBand }) {
   const searchParams = useSearchParams()
   const printMode = searchParams.get('print') === '1'
   const embedMode = searchParams.get('embed') === '1'
@@ -3849,7 +3853,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
   const { layouts: pp6PrintLayouts, setLayouts: setPp6PrintLayouts } = usePp6PrintLayoutsState()
 
   useEffect(() => {
-    fetchReportInit(mode).then(result => {
+    fetchReportInit(mode, educationBand).then(result => {
       setInit(result)
       if (deepLinkMode) return
       const years = result.years as ReportYear[]
@@ -3876,7 +3880,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
         setClassroomId(firstClassroom?.id || '')
       }
     }).catch((err: Error) => setError(err.message))
-  }, [mode, deepLinkMode])
+  }, [mode, deepLinkMode, educationBand])
 
   useEffect(() => {
     if (!deepLinkMode || !init) return
@@ -4383,6 +4387,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
 
   return (
     <div className={`page-stack report-workspace${embedMode ? ' report-workspace--embed' : ''}${printMode ? ' report-workspace--print' : ''}`}>
+      {!embedMode && !printMode && <AcademicBandNavigation band={educationBand} active={mode === 'pp6' ? 'pp6' : 'pp5'} />}
       <div className="report-layout">
         {!embedMode && !printMode && (
         <aside className="report-side-panel">
@@ -4413,7 +4418,8 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
                 <label className="form-label">ช่วงรายงาน</label>
                 <select value={pp6Term} onChange={event => setPp6Term(Number(event.target.value) as 0 | 1 | 2)} className="form-input">
                   <option value={1}>ภาคเรียนที่ 1</option>
-                  <option value={0}>ทั้งปี</option>
+                  <option value={2}>ภาคเรียนที่ 2</option>
+                  <option value={0}>{isSecondaryClassLevel(level) ? 'แสดงทั้ง 2 ภาค (แยกผลรายภาค)' : 'ทั้งปี'}</option>
                 </select>
               </div>
             ) : null}
@@ -4604,7 +4610,7 @@ export default function ReportBuilder({ mode }: { mode: ReportMode }) {
 
                 </>
               )}
-              {layoutTunerEnabled && mode === 'pp6' && (
+              {layoutTunerEnabled && mode === 'pp6' && !isSecondaryClassLevel(level) && (
               <button
                 type="button"
                 onClick={() => setPp5TunerMode(current => (current === 'pdf' ? 'off' : 'pdf'))}

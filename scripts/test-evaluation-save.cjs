@@ -56,6 +56,8 @@ function query(table) {
   return q
 }
 const api = load('app/(shell)/evaluation/actions.ts', {
+  '@/lib/class-level': load('lib/class-level.ts'),
+  '@/lib/secondary-academic': load('lib/secondary-academic.ts', {'@/lib/grade':load('lib/grade.ts')}),
   '@/lib/supabase': { createServerClient: () => ({ from: query }) },
   '@/lib/session': { getSession: async () => session },
   '@/lib/audit': { logActivity: async () => {}, resolveClassroomSchoolId: async () => 'school' },
@@ -104,5 +106,19 @@ const api = load('app/(shell)/evaluation/actions.ts', {
   assert.ok((await api.saveEvaluationRows('character', 'room', 'year', 1, [{ student_id: 'student', values: {} }])).error)
   session = null
   await assert.rejects(api.saveEvaluationRows('character', 'room', 'year', 1, [{ student_id: 'student', values: {} }]), /ไม่มีสิทธิ์/)
+  session = { userId: 'teacher', schoolId: 'school', role: 'teacher' }
+  tables.classrooms[0].level = 'ม.1'; tables.evaluation_settings = []
+  tables.evaluation_custom_scores = [{ school_id: 'school', kind: 'activities', student_id: 'student', academic_year_id: 'year', term: 0, field_key: 'guidance_result', value_text: 'ผ่าน' }]
+  for (const [term, result] of [[1,'ผ่าน'],[2,'ไม่ผ่าน']]) {
+    const values = Object.fromEntries(settings.EVALUATION_DEFAULT_SETTINGS.activities.map(row => [row.field_key, result]))
+    assert.equal((await api.saveEvaluationRows('activities','room','year',term,[{student_id:'student',values}])).error,null)
+    const got = await api.fetchEvaluationData('activities','room','year',term)
+    assert.equal(got.rows[0].guidance_result,result)
+  }
+  assert.equal(tables.evaluation_custom_scores.find(row=>row.term===0).value_text,'ผ่าน','Legacy annual results untouched')
+  await api.saveEvaluationRows('activities','room','year',1,[{student_id:'student',values:{}}])
+  assert.equal((await api.fetchEvaluationData('activities','room','year',1)).rows[0].guidance_result,null)
+  assert.equal((await api.fetchEvaluationData('activities','room','year',2)).rows[0].guidance_result,'ไม่ผ่าน')
+  assert.ok((await api.saveEvaluationRows('activities','room','year',3,[{student_id:'student',values:{}}])).error)
   console.log('PASS: actual assessment save/load for all four education bands, no nonexistent indicator columns, totals and custom criteria preserved, idempotent saves, clear, load failure and permission guards')
 })().catch(error => { console.error(error); process.exitCode = 1 })

@@ -1,5 +1,7 @@
 'use server'
 
+import { isSecondaryClassLevel } from '@/lib/class-level'
+import { secondaryActivityRows, type AcademicBand } from '@/lib/secondary-academic'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassroomSchoolId } from '@/lib/audit'
@@ -87,7 +89,7 @@ async function fetchSettingsForSchool(schoolId: string, kind: EvaluationKind, ed
   return { settings: (data || []).map(row => normalizeEvaluationSetting({ ...(row as EvaluationSetting), kind })), error: null }
 }
 
-export async function fetchEvaluationInit() {
+export async function fetchEvaluationInit(band?: AcademicBand) {
   const session = await requireSession()
   const db = createServerClient()
   const { data } = await db.from('academic_years')
@@ -113,11 +115,11 @@ export async function fetchEvaluationInit() {
     canEdit: CAN_EDIT.includes(session.role),
     years: yearList,
     activeYearId: active?.id || '',
-    classrooms,
+    classrooms: classrooms.filter(room => !band || isSecondaryClassLevel(room.level) === (band === 'secondary')),
   }
 }
 
-export async function fetchEvaluationClassrooms(yearId: string) {
+export async function fetchEvaluationClassrooms(yearId: string, band?: AcademicBand) {
   const session = await requireSession()
   const db = createServerClient()
   const { data } = await db.from('classrooms')
@@ -128,14 +130,16 @@ export async function fetchEvaluationClassrooms(yearId: string) {
     .order('room')
 
   const personalRooms=await personalHomeroomIds(session,yearId)
-  return (data || []).filter(room=>personalRooms===null||personalRooms.includes(room.id))
+  return (data || []).filter(room=>(personalRooms===null||personalRooms.includes(room.id)) && (!band || isSecondaryClassLevel(room.level) === (band === 'secondary')))
 }
 
 export async function fetchEvaluationData(kind: EvaluationKind, classroomId: string, academicYearId: string, term: 1 | 2) {
   const session = await requireSession()
   await assertPersonalHomeroom(session,classroomId,academicYearId)
   const db = createServerClient()
-  const schoolId = session.schoolId || await resolveClassroomSchoolId(classroomId)
+  const schoolId = await resolveClassroomSchoolId(classroomId)
+  if (!schoolId || schoolId !== session.schoolId) throw new Error('ไม่มีสิทธิ์เข้าถึงห้องเรียนนี้')
+  if (term !== 1 && term !== 2) throw new Error('ภาคเรียนไม่ถูกต้อง')
 
   let criteriaBand: EducationBand | undefined
   if (isBandedEvaluationKind(kind)) {
@@ -164,6 +168,14 @@ export async function fetchEvaluationData(kind: EvaluationKind, classroomId: str
   const studentIds = (students || []).map((student: { id: string }) => student.id)
   if (studentIds.length === 0) return { students: [], rows: [], settings: settingsResult.settings, error: settingsResult.error }
 
+  if (kind === 'activities') {
+    const { data: room, error: roomError } = await db.from('classrooms').select('level, academic_year_id').eq('id', classroomId).maybeSingle()
+    if (roomError || room?.academic_year_id !== academicYearId) return { students: [], rows: [], settings: settingsResult.settings, error: 'ปีการศึกษาไม่ตรงกับห้องเรียน' }
+    if (isSecondaryClassLevel(room.level)) {
+      const { data, error } = await db.from('evaluation_custom_scores').select('student_id, term, field_key, value_text').eq('school_id', schoolId).eq('kind', 'activities').eq('academic_year_id', academicYearId).eq('term', term).in('student_id', studentIds)
+      return { students: students || [], rows: secondaryActivityRows(data || [], settingsResult.settings), settings: settingsResult.settings, error: error?.message || settingsResult.error }
+    }
+  }
   const base = { academic_year_id: academicYearId }
   let table = 'character_traits'
   let query = db.from(table).select('*')
@@ -259,7 +271,7 @@ export async function saveEvaluationRows(
   const db = createServerClient()
   const schoolId = await resolveClassroomSchoolId(classroomId)
   if (schoolId!==session.schoolId) return {error:'ไม่มีสิทธิ์บันทึกข้อมูลห้องเรียนนี้',count:0}
-  const {data:roomScope,error:roomError}=await db.from('classrooms').select('academic_year_id').eq('id',classroomId).maybeSingle()
+  const {data:roomScope,error:roomError}=await db.from('classrooms').select('academic_year_id, level').eq('id',classroomId).maybeSingle()
   if (roomError||roomScope?.academic_year_id!==academicYearId) return {error:'ปีการศึกษาไม่ตรงกับห้องเรียน',count:0}
   const {data:roster,error:rosterError}=await db.from('students').select('id').eq('classroom_id',classroomId).in('id',rows.map(row=>row.student_id))
   if (rosterError||new Set((roster||[]).map(row=>row.id)).size!==new Set(rows.map(row=>row.student_id)).size) return {error:'พบนักเรียนที่ไม่ได้อยู่ในห้องนี้',count:0}
@@ -280,6 +292,17 @@ export async function saveEvaluationRows(
   const defaultKeySet = new Set(defaultKeys)
   const customSettings = activeSettings.filter(setting => !defaultKeySet.has(setting.field_key))
 
+  if (kind === 'activities' && isSecondaryClassLevel(roomScope.level)) {
+    if (term !== 1 && term !== 2) return { error: 'ภาคเรียนไม่ถูกต้อง', count: 0 }
+    const fields = activeSettings.filter(setting => setting.score_type === 'pass_fail')
+    if (!fields.length) return { error: 'ยังไม่มีรายการกิจกรรมที่เปิดใช้', count: 0 }
+    if (rows.some(row => fields.some(field => row.values[field.field_key] && !['ผ่าน', 'ไม่ผ่าน'].includes(String(row.values[field.field_key]))))) return { error: 'ผลกิจกรรมต้องเป็น ผ่าน หรือ ไม่ผ่าน', count: 0 }
+    const values = rows.flatMap(row => fields.map(field => ({ school_id: schoolId, kind, student_id: row.student_id, academic_year_id: academicYearId, term, field_key: field.field_key, value_score: null, value_text: row.values[field.field_key] || null, updated_at: new Date().toISOString() })))
+    const { error } = await db.from('evaluation_custom_scores').upsert(values, { onConflict: 'school_id,kind,student_id,academic_year_id,term,field_key' })
+    if (error) return { error: error.message, count: 0 }
+    await logActivity({ actor: session, schoolId, action: 'upsert', module: 'evaluation', targetType: 'classroom', targetId: classroomId, description: `บันทึกกิจกรรมมัธยม ภาคเรียน ${term} จำนวน ${rows.length} คน`, metadata: { kind, classroomId, academicYearId, term, count: rows.length } })
+    return { error: null, count: rows.length }
+  }
   let table = 'character_traits'
   let payload: Record<string, unknown>[] = []
 

@@ -1,0 +1,2 @@
+import EvaluationEntry from '../../EvaluationEntry'
+export default function Page() { return <EvaluationEntry kind="activities" educationBand="secondary" /> }

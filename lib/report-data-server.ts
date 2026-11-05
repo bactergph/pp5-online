@@ -1,4 +1,6 @@
 import 'server-only'
+import { isSecondaryClassLevel } from '@/lib/class-level'
+import { secondaryResultFromInput, secondaryActivityRows, type AcademicBand } from '@/lib/secondary-academic'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
@@ -54,6 +56,7 @@ export type ReportStudent = {
 export type ReportSubject = {
   class_subject_id: string
   order_number: number
+  semester?: 0 | 1 | 2
   teacher_name: string
   subject: {
     id: string
@@ -296,6 +299,7 @@ function normalizeSubject(row: DbRow): ReportSubject {
   return {
     class_subject_id: asText(row.id),
     order_number: asNumber(row.order_number),
+    semester: row.semester === 1 || row.semester === 2 ? row.semester : 0,
     teacher_name: teacherName(row),
     subject: {
       id: asText(subject?.id),
@@ -576,7 +580,7 @@ async function requireReportClassroom(
   return classroom
 }
 
-export async function fetchReportInit(mode?: ReportMode) {
+export async function fetchReportInit(mode?: ReportMode, band?: AcademicBand) {
   const session = await requireReportSession()
   const schoolId = session.schoolId || ''
   const db = createServerClient()
@@ -617,7 +621,7 @@ export async function fetchReportInit(mode?: ReportMode) {
     school,
     layoutTunerEnabled,
     years: yearsR.data || [],
-    classrooms: classrooms.map(classroom => ({
+    classrooms: classrooms.filter(room => !band || isSecondaryClassLevel(room.level) === (band === 'secondary')).map(classroom => ({
       ...classroom,
       homeroom_teacher_name: classroom.homeroom_teacher_id ? teacherNameMap[classroom.homeroom_teacher_id] || '' : '',
       homeroom_teacher2_name: classroom.homeroom_teacher2_id ? teacherNameMap[classroom.homeroom_teacher2_id] || '' : '',
@@ -625,7 +629,7 @@ export async function fetchReportInit(mode?: ReportMode) {
   }
 }
 
-const REPORT_SUBJECT_SELECT = 'id, order_number, subject_id, teacher_id, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)'
+const REPORT_SUBJECT_SELECT = 'id, semester, order_number, subject_id, teacher_id, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)'
 
 async function loadReportClassSubjects(
   db: ReturnType<typeof createServerClient>,
@@ -633,7 +637,7 @@ async function loadReportClassSubjects(
 ) {
   const build = (withSemester: boolean) => {
     let query = db.from('class_subjects')
-      .select(REPORT_SUBJECT_SELECT)
+      .select(withSemester ? REPORT_SUBJECT_SELECT : REPORT_SUBJECT_SELECT.replace('semester, ', ''))
       .eq('classroom_id', params.classroomId)
       .eq('academic_year_id', params.academicYearId)
       .order('order_number')
@@ -643,8 +647,13 @@ async function loadReportClassSubjects(
     return query
   }
   const result = await build(true)
-  if (result.error && /semester/.test(result.error.message)) return safeRows<DbRow>(build(false))
-  return (result.data || []) as DbRow[]
+  if (result.error && /semester/.test(result.error.message)) {
+    const legacy = await build(false)
+    if (legacy.error) throw new Error(legacy.error.message)
+    return (legacy.data || []) as unknown as DbRow[]
+  }
+  if (result.error) throw new Error(result.error.message)
+  return (result.data || []) as unknown as DbRow[]
 }
 
 export async function fetchReportSubjects(params: {
@@ -706,6 +715,7 @@ export async function loadReportDataForAccess(
       .order('student_number')),
     classSubjectRowsPromise,
   ])
+  if (classroomBase.academic_year_id !== params.academicYearId) throw new Error('ปีการศึกษาไม่ตรงกับห้องเรียน')
   const academicYear = yearRow || null
   const range = termRange(academicYear, params.term)
 
@@ -869,9 +879,12 @@ export async function loadReportDataForAccess(
         .in('student_id', studentIds))
       : Promise.resolve([] as ReportEvaluationRow[]),
     needsEvals
-      ? safeRows<ReportEvaluationRow>(db.from('activities_evaluation').select('*')
-        .eq('academic_year_id', params.academicYearId)
-        .in('student_id', studentIds))
+      ? isSecondaryClassLevel(classroomBase.level)
+        ? db.from('evaluation_custom_scores').select('student_id, term, field_key, value_text').eq('school_id', schoolId).eq('kind', 'activities').eq('academic_year_id', params.academicYearId).in('student_id', studentIds).in('term', params.term === 0 ? [1, 2] : [params.term]).then(result => {
+          if (result.error) throw new Error(result.error.message)
+          return secondaryActivityRows(result.data || [], activitySettings)
+        })
+        : safeRows<ReportEvaluationRow>(db.from('activities_evaluation').select('*').eq('academic_year_id', params.academicYearId).in('student_id', studentIds))
       : Promise.resolve([] as ReportEvaluationRow[]),
   ])
 
@@ -895,8 +908,8 @@ export async function loadReportDataForAccess(
       midterm_score: asNullableNumber(row.midterm_score),
       final_score: asNullableNumber(row.final_score),
       term_total: asNullableNumber(row.term_total),
-      year_total: asNullableNumber(row.year_total),
-      grade: asNullableNumber(row.grade),
+      year_total: isSecondaryClassLevel(classroomBase.level) ? null : asNullableNumber(row.year_total),
+      grade: isSecondaryClassLevel(classroomBase.level) ? secondaryResultFromInput({ term_total: asNullableNumber(row.term_total), result: asNullableText(row.result) || 'เรียน' }, asNumber(scoreConfigs.find(config => config.class_subject_id === row.class_subject_id && config.term === row.term)?.total_max)) : asNullableNumber(row.grade),
       result: asNullableText(row.result),
     })),
     scoreConfigs: scoreConfigs.map(row => ({

@@ -1,4 +1,8 @@
 'use client'
+import Swal from 'sweetalert2'
+import { isSecondaryClassLevel } from '@/lib/class-level'
+import type { AcademicBand } from '@/lib/secondary-academic'
+import AcademicBandNavigation from '@/components/academic/AcademicBandNavigation'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -229,7 +233,7 @@ function columnsFromSettings(settings: EvaluationSetting[], kind: EvaluationKind
   }))
 }
 
-export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
+export default function EvaluationEntry({ kind, educationBand }: { kind: EvaluationKind; educationBand?: AcademicBand }) {
   const config = CONFIG[kind]
   const [canEdit, setCanEdit] = useState(false)
   const [years, setYears] = useState<Year[]>([])
@@ -244,6 +248,8 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
   const [loadingRows, setLoadingRows] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [loadedContext, setLoadedContext] = useState('')
+  const entryContext = `${kind}:${yearId}:${classroomId}:${term}`
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const skipYearFetch = useRef(true)
 
@@ -263,7 +269,7 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
   )
 
   useEffect(() => {
-    void fetchEvaluationInit().then(data => {
+    void fetchEvaluationInit(educationBand).then(data => {
       const nextYears = data.years as Year[]
       const list = (data.classrooms || []) as Classroom[]
       setCanEdit(data.canEdit)
@@ -274,7 +280,7 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
       setClassroomId(list[0]?.id || '')
       setLoading(false)
     })
-  }, [])
+  }, [educationBand])
 
   useEffect(() => {
     if (!yearId) return
@@ -282,12 +288,12 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
       skipYearFetch.current = false
       return
     }
-    void fetchEvaluationClassrooms(yearId).then(data => {
+    void fetchEvaluationClassrooms(yearId, educationBand).then(data => {
       const list = data as Classroom[]
       setClassrooms(list)
       setClassroomId(list[0]?.id || '')
     })
-  }, [yearId])
+  }, [yearId, educationBand])
 
   useEffect(() => {
     if (!yearId || !classroomId) return
@@ -316,13 +322,14 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
         }
       }
 
+      setLoadedContext(data.error ? '' : `${kind}:${yearId}:${classroomId}:${term}`)
       setSettings(nextSettings)
       setStudents(nextStudents)
       setRows(nextRows)
       setDirty(false)
       setLoadingRows(false)
       if (data.error) notify('error', data.error)
-    })
+    }).catch(() => { if (!cancelled) { setLoadingRows(false); setLoadedContext(''); notify('error', 'โหลดผลประเมินไม่สำเร็จ กรุณาลองใหม่') } })
     return () => { cancelled = true }
   }, [kind, yearId, classroomId, term, config.columns])
 
@@ -367,8 +374,16 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
     return columns.reduce((sum, column) => sum + (column.type === 'score' ? Number(rows[studentId]?.[column.key] || 0) : 0), 0)
   }
 
+  async function changeContext(update: () => void) {
+    if (saving || loadingRows) return
+    if (dirty) {
+      const decision = await Swal.fire({ title: 'ยังมีผลประเมินที่ไม่ได้บันทึก', text: 'เปลี่ยนรายการจะทิ้งการแก้ไขในหน้านี้', showCancelButton: true, confirmButtonText: 'เปลี่ยนและทิ้งการแก้ไข', cancelButtonText: 'กลับไปบันทึก', icon: 'warning' })
+      if (!decision.isConfirmed) return
+    }
+    setLoadedContext(''); update()
+  }
   async function handleSave() {
-    if (!yearId || !classroomId) return
+    if (!yearId || !classroomId || saving || loadingRows || loadedContext !== entryContext || !canEdit) return
     setSaving(true)
     const payload = students.map(student => ({
       student_id: student.id,
@@ -377,8 +392,10 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
         return [column.key, column.type === 'score' ? Number(value || 0) : value || null]
       })),
     }))
-    const result = await saveEvaluationRows(kind, classroomId, yearId, term, payload)
-    setSaving(false)
+    let result
+    try { result = await saveEvaluationRows(kind, classroomId, yearId, term, payload) }
+    catch { notify('error', 'บันทึกไม่สำเร็จ การแก้ไขยังอยู่ กรุณาลองอีกครั้ง'); return }
+    finally { setSaving(false) }
     if (result.error) {
       notify('error', result.error)
       return
@@ -387,10 +404,13 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
     notify('success', `บันทึกการประเมิน ${result.count} คนเรียบร้อย`)
   }
 
-  if (loading) return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
+  if (loading) return <div className="text-center py-10 text-gray-500">
+      <AcademicBandNavigation band={educationBand} active="evaluation" />กำลังโหลด...</div>
 
   return (
     <div className="page-stack" style={{ ['--eval-accent' as string]: config.accent }}>
+      <AcademicBandNavigation band={educationBand} active="evaluation" />
+      {kind === 'activities' && isSecondaryClassLevel(selectedClassroom?.level) && <p className="alert alert-info">กิจกรรมมัธยมแยกผลตามภาคเรียน · ผลรายปีเดิมยังเก็บไว้ และไม่ถูกย้ายมาทับผลรายภาค</p>}
       <style>{STYLES}</style>
       <div className="eval-head">
         <div className="eval-mark">
@@ -407,19 +427,19 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
       <div className="control-card eval-filter">
         <div>
           <label className="form-label">ปีการศึกษา</label>
-          <select className="form-input" value={yearId} onChange={event => setYearId(event.target.value)}>
+          <select className="form-input" value={yearId} disabled={saving || loadingRows} onChange={event => { const value = event.target.value; void changeContext(() => setYearId(value)) }}>
             {years.map(year => <option key={year.id} value={year.id}>{year.year_be}{year.is_active ? ' (ปัจจุบัน)' : ''}</option>)}
           </select>
         </div>
         <div>
           <label className="form-label">ระดับชั้น / ห้อง</label>
-          <select className="form-input" value={classroomId} onChange={event => setClassroomId(event.target.value)} disabled={classrooms.length === 0}>
+          <select className="form-input" value={classroomId} onChange={event => { const value = event.target.value; void changeContext(() => setClassroomId(value)) }} disabled={saving || loadingRows || classrooms.length === 0}>
             {classrooms.length === 0 ? <option>— ไม่มีห้องเรียน —</option> : classrooms.map(room => <option key={room.id} value={room.id}>{room.level}/{room.room}</option>)}
           </select>
         </div>
         <div>
           <label className="form-label">ภาคเรียน</label>
-          <select className="form-input" value={term} onChange={event => setTerm(Number(event.target.value) as 1 | 2)}>
+          <select className="form-input" value={term} disabled={saving || loadingRows} onChange={event => { const value = Number(event.target.value) as 1 | 2; void changeContext(() => setTerm(value)) }}>
             <option value={1}>ภาคเรียนที่ 1</option>
             <option value={2}>ภาคเรียนที่ 2</option>
           </select>
@@ -432,7 +452,7 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
 
       <div className="eval-tabs">
         {[1, 2].map(item => (
-          <button key={item} type="button" className={`eval-tab ${term === item ? 'is-active' : ''}`} onClick={() => setTerm(item as 1 | 2)}>
+          <button key={item} type="button" className={`eval-tab ${term === item ? 'is-active' : ''}`} disabled={saving || loadingRows} onClick={() => { void changeContext(() => setTerm(item as 1 | 2)) }}>
             ภาคเรียนที่ {item}
           </button>
         ))}
@@ -451,7 +471,7 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
         <div className="eval-board">
           <div className="eval-board-head">
             <div>
-              <div className="eval-board-title">{students.length} คน · {kind === 'activities' ? 'ทั้งปี' : `ภาคเรียนที่ ${term}`}</div>
+              <div className="eval-board-title">{students.length} คน · {kind === 'activities' && !isSecondaryClassLevel(selectedClassroom?.level) ? 'ทั้งปี' : `ภาคเรียนที่ ${term}`}</div>
               <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>{config.subtitle}</div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -669,7 +689,7 @@ export default function EvaluationEntry({ kind }: { kind: EvaluationKind }) {
           {canEdit && (
             <div className="eval-save">
               <span style={{ color: dirty ? '#d97706' : '#64748b', fontWeight: 800 }}>{dirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกล่าสุดแล้ว'}</span>
-              <LoadingButton loading={saving} onClick={handleSave} disabled={!dirty}>
+              <LoadingButton loading={saving} onClick={handleSave} disabled={!dirty || loadingRows || loadedContext !== entryContext || !canEdit}>
                 บันทึกการประเมิน
               </LoadingButton>
             </div>

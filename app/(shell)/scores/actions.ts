@@ -2,6 +2,8 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassSubjectContext } from '@/lib/audit'
+import { isSecondaryClassLevel } from '@/lib/class-level'
+import { normalizeSecondaryScore, type AcademicBand } from '@/lib/secondary-academic'
 import { getScoreEntryPeriod } from '@/lib/score-entry-period'
 import {isPersonalSubjectAccess} from '@/lib/personal-data-scope'
 
@@ -66,7 +68,7 @@ async function loadScoreSubjects(
 }
 
 /** ปี + วิชา + ห้องของปีที่ active + วิชาในห้องแรก — ลด waterfall ตอนเปิดหน้า */
-export async function fetchScoreInit() {
+export async function fetchScoreInit(band?: AcademicBand) {
   const session = await requireSession()
   const db = createServerClient()
   const sid = session.schoolId || ''
@@ -76,7 +78,7 @@ export async function fetchScoreInit() {
   ])
   const yearList = years.data || []
   const active = yearList.find(y => y.is_active) || yearList[0]
-  const classrooms = active ? await loadScoreClassrooms(db, session, active.id) : []
+  const classrooms = (active ? await loadScoreClassrooms(db, session, active.id) : []).filter(room => !band || isSecondaryClassLevel(room.level) === (band === 'secondary'))
   const firstClassId = classrooms[0]?.id || ''
   const classSubjects = firstClassId ? await loadScoreSubjects(db, session, firstClassId) : []
 
@@ -91,10 +93,10 @@ export async function fetchScoreInit() {
   }
 }
 
-export async function fetchScoreClassrooms(yearId: string) {
+export async function fetchScoreClassrooms(yearId: string, band?: AcademicBand) {
   const session = await requireSession()
   const db = createServerClient()
-  return loadScoreClassrooms(db, session, yearId)
+  return (await loadScoreClassrooms(db, session, yearId)).filter(room => !band || isSecondaryClassLevel(room.level) === (band === 'secondary'))
 }
 
 // วิชาในห้อง — ครูเห็นเฉพาะวิชาที่ตนสอน
@@ -126,7 +128,7 @@ export async function fetchScoreEntryData(classroomId: string, classSubjectId: s
 
   let term1Scores: Record<string, unknown>[] = []
   let term1Config: { total_max: number } | null = null
-  if (term === 2 && ids.length) {
+  if (!isSecondaryClassLevel(period.classroomLevel) && term === 2 && ids.length) {
     const [term1ScoresR, term1ConfigR] = await Promise.all([
       db.from('scores').select('student_id, term_total')
         .eq('class_subject_id', classSubjectId).eq('term', 1).in('student_id', ids),
@@ -149,7 +151,7 @@ export async function saveScores(
     between_total: number
     midterm_score: number | null
     final_score: number | null
-    term_total: number
+    term_total: number | null
     year_total?: number | null
     grade: number | null
     result: string
@@ -181,7 +183,15 @@ export async function saveScores(
   if (locked && locked.length) return { error: 'คะแนนวิชานี้ถูกล็อก (ลงนามแล้ว) แก้ไขไม่ได้' }
   if (lockError) return { error: 'ตรวจสอบสถานะล็อกคะแนนไม่สำเร็จ กรุณาลองใหม่', count: 0 }
 
-  const payload = rows.map(r => ({
+  const secondary = isSecondaryClassLevel(period.classroomLevel)
+  let normalizedRows = rows
+  if (secondary) {
+    const { data: config, error } = await db.from('score_configs').select('between_scores, midterm_max, final_max, total_max').eq('class_subject_id', classSubjectId).eq('term', term).maybeSingle()
+    if (error || !config || !(Number(config.total_max) > 0)) return { error: 'กรุณากำหนดสัดส่วนคะแนนของภาคเรียนนี้ก่อน' }
+    try { normalizedRows = rows.map(row => normalizeSecondaryScore(row, config)) }
+    catch (error) { return { error: error instanceof Error ? error.message : 'คะแนนรายภาคไม่ถูกต้อง' } }
+  }
+  const payload = normalizedRows.map(r => ({
     student_id: r.student_id,
     class_subject_id: classSubjectId,
     term,
@@ -190,7 +200,7 @@ export async function saveScores(
     midterm_score: r.midterm_score,
     final_score: r.final_score,
     term_total: r.term_total,
-    year_total: r.year_total ?? null,
+    year_total: secondary ? null : r.year_total ?? null,
     grade: r.grade,
     result: r.result,
     updated_at: new Date().toISOString(),

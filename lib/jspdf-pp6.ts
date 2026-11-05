@@ -1,4 +1,6 @@
 import { jsPDF } from 'jspdf'
+import { isSecondaryClassLevel } from '@/lib/class-level'
+import { drawSecondaryPp6 } from '@/lib/jspdf-secondary-pp6'
 import type {
   ReportClassroom,
   ReportPayload,
@@ -806,6 +808,10 @@ export async function buildPp6PdfBlob(options: Pp6PdfOptions, buildOptions?: Pp6
     loadImage(data.documentSignatures?.director, 220, 0.75),
   ])
 
+  if (isSecondaryClassLevel(data.classroom?.level)) {
+    drawSecondaryPp6(doc, data, students, term, showGrade, ranked, { logo: logoData, homeroom: homeroomSig, director: directorSig })
+    return { blob: doc.output('blob'), fileName: (options.fileName || `ปพ.6 มัธยม_${data.classroom?.level}-${data.classroom?.room}_${data.academicYear?.year_be}_ภาค${term || '1-2'}.pdf`).replace(/[\\/:*?"<>|]/g, '-') }
+  }
   const rankMap = buildPp6RankMap(data, data.subjects || [], term)
 
   for (let i = 0; i < students.length; i++) {

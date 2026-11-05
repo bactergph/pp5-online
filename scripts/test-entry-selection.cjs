@@ -51,6 +51,7 @@ async function testPage(path, hourly) {
   const libs = {
     '@/lib/hourly-attendance': compile('lib/hourly-attendance.ts', () => ({})),
     '@/lib/thaiDate': { formatThaiDate: x => x },
+    '@/lib/class-level': compile('lib/class-level.ts', () => ({})),
     '@/lib/grade': compile('lib/grade.ts', () => ({})),
     '@/lib/score-transfer': compile('lib/score-transfer.ts', () => ({})),
   }
@@ -102,6 +103,6 @@ async function testHourlyValidation() {
 (async () => {
   await testHourlyValidation()
   await testPage('components/attendance/HourlyAttendanceEntry.tsx', true)
-  await testPage('app/(shell)/scores/page.tsx', false)
+  await testPage('app/(shell)/scores/ScoreEntry.tsx', false)
 })().catch(error => { console.error(error); process.exitCode = 1 })
 

@@ -26,7 +26,7 @@ runInNewContext(source, {
 const session = { schoolId: 'school-a', role: 'teacher', userId: 'teacher-a' }
 async function check() {
   records = {
-    class_subjects: { id: 'subject-a', academic_year_id: 'year-a', classroom_id: 'class-a', teacher_id: 'teacher-a' },
+    class_subjects: { id: 'subject-a', academic_year_id: 'year-a', classroom_id: 'class-a', teacher_id: 'teacher-a', classrooms: {level:'ป.1',school_id:'school-a',academic_year_id:'year-a'} },
     academic_years: { id: 'year-a', school_id: 'school-a', year_be: 2569, term1_scores_open: false, term2_scores_open: true },
   }
   const get = (s = session, term = 1, classroom) => exportsObject.getScoreEntryPeriod(s, 'subject-a', term, classroom)
@@ -46,6 +46,10 @@ async function check() {
   records.class_subjects.academic_year_id = 'year-a'
   records.academic_years.term1_scores_open = true
   assert.equal((await get()).open, true)
+  records.class_subjects.semester = 1
+  assert.ok((await get(session, 2)).error, 'Reject a semester-1 offering in semester 2')
+  records.class_subjects.classrooms.level = 'ม.1'
+  assert.equal((await get()).classroomLevel, 'ม.1')
   console.log('PASS: 9 score-entry period checks (term, year, school, teacher, classroom, admin, reopening)')
 }
 check().catch(error => { console.error(error); process.exitCode = 1 })

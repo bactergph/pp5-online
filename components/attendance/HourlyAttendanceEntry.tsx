@@ -1,4 +1,6 @@
 'use client'
+import type { AcademicBand } from '@/lib/secondary-academic'
+import AcademicBandNavigation from '@/components/academic/AcademicBandNavigation'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
@@ -59,7 +61,7 @@ function studentName(student: Student) {
   return `${student.prefix || ''}${student.first_name} ${student.last_name}`.trim()
 }
 
-export default function HourlyAttendanceEntry() {
+export default function HourlyAttendanceEntry({ educationBand }: { educationBand?: AcademicBand } = {}) {
   const [loading, setLoading] = useState(true)
   const [gridLoading, setGridLoading] = useState(false)
   const [userRole, setUserRole] = useState('')
@@ -106,7 +108,7 @@ export default function HourlyAttendanceEntry() {
   const showWeekTabs = weekChunks.length > 1
 
   useEffect(() => {
-    void fetchScoreInit().then(d => {
+    void fetchScoreInit(educationBand).then(d => {
       setCanEdit(d.canEdit)
       setUserRole(String(d.role || ''))
       setYears(d.years as Year[])
@@ -125,7 +127,7 @@ export default function HourlyAttendanceEntry() {
       setError('โหลดรายการไม่สำเร็จ กรุณารีเฟรชหน้าแล้วลองใหม่')
       setLoading(false)
     })
-  }, [])
+  }, [educationBand])
 
   useEffect(() => {
     if (!selectedYear) return
@@ -134,7 +136,7 @@ export default function HourlyAttendanceEntry() {
       return
     }
     let cancelled = false
-    void fetchScoreClassrooms(selectedYear).then(cs => {
+    void fetchScoreClassrooms(selectedYear, educationBand).then(cs => {
       if (cancelled) return
       const list = cs as Classroom[]
       skipClassFetch.current = false
@@ -144,7 +146,7 @@ export default function HourlyAttendanceEntry() {
       setSelectedCS('')
     }).catch(() => { if (!cancelled) setError('โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่') })
     return () => { cancelled = true }
-  }, [selectedYear])
+  }, [selectedYear, educationBand])
 
   useEffect(() => {
     if (!selectedClass) return
@@ -501,6 +503,7 @@ export default function HourlyAttendanceEntry() {
 
   return (
     <div className="page-stack hourly-attendance-page">
+      <AcademicBandNavigation band={educationBand} active="attendance" />
       <style>{HOURLY_STYLES}</style>
 
       <div className="hourly-head">
