@@ -259,19 +259,21 @@ export async function fetchClassroomAdminContext(band?: AcademicBand) {
       .eq('id', sid)
       .maybeSingle(),
   ])
+  if (yearsRes.error || classroomsRes.error) throw new Error('โหลดปีการศึกษาหรือห้องเรียนไม่สำเร็จ')
   const classrooms = (classroomsRes.data || []).filter(room => !band || isSecondaryClassLevel(room.level) === (band === 'secondary'))
   const classroomIds = classrooms.map(c => c.id)
   const teacherIds = Array.from(new Set(classrooms.flatMap(c => [c.homeroom_teacher_id, c.homeroom_teacher2_id]).filter(Boolean)))
 
   const [studentsRes, teachersRes] = await Promise.all([
     classroomIds.length > 0
-      ? db.from('students').select('classroom_id').in('classroom_id', classroomIds)
-      : Promise.resolve({ data: [] }),
+      ? fetchAllRows<{ classroom_id: string }>((from, to) => db.from('students')
+        .select('classroom_id').in('classroom_id', classroomIds).order('id').range(from, to))
+      : Promise.resolve([]),
     teacherIds.length > 0
       ? db.from('users').select('id, prefix, full_name').in('id', teacherIds)
       : Promise.resolve({ data: [] }),
   ])
-  const countMap = (studentsRes.data || []).reduce((acc: Record<string, number>, row: { classroom_id: string }) => {
+  const countMap = studentsRes.reduce((acc: Record<string, number>, row: { classroom_id: string }) => {
       acc[row.classroom_id] = (acc[row.classroom_id] || 0) + 1
       return acc
     }, {})

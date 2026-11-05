@@ -2,7 +2,7 @@
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassroomSchoolId, resolveStudentSchoolId } from '@/lib/audit'
-import { invalidateClassroomStudents } from '@/lib/students-cache'
+import { invalidateClassroomStudents, invalidateClassroomStudentsMany } from '@/lib/students-cache'
 
 async function requireSession() {
   const s = await getSession()
@@ -11,6 +11,7 @@ async function requireSession() {
   return s
 }
 const CAN_MANAGE = ['admin', 'district', 'academic_head', 'deputy_principal']
+const CAN_DELETE_ALL = ['admin', 'district']
 async function ownsClassroom(schoolId:string|null,classroomId:unknown) {
   if (!schoolId || typeof classroomId!=='string') return false
   const {data,error}=await createServerClient().from('classrooms').select('id').eq('id',classroomId).eq('school_id',schoolId).maybeSingle()
@@ -41,6 +42,7 @@ export async function fetchStudentInit() {
   }
   return {
     canManage: CAN_MANAGE.includes(session.role),
+    canDeleteAll: CAN_DELETE_ALL.includes(session.role),
     years: yearList,
     activeYearId: active?.id || '',
     classrooms,
@@ -142,4 +144,45 @@ export async function deleteStudent(id: string) {
     })
   }
   return { error: error?.message }
+}
+
+async function studentDeleteScope(schoolId: string, yearId: string) {
+  const db = createServerClient()
+  const { data: year, error: yearError } = await db.from('academic_years')
+    .select('id, year_be').eq('id', yearId).eq('school_id', schoolId).maybeSingle()
+  if (yearError || !year) return { error: 'ไม่พบปีการศึกษาในโรงเรียนนี้', classroomIds: [] as string[], yearBe: null }
+  const { data: rooms, error } = await db.from('classrooms').select('id')
+    .eq('school_id', schoolId).eq('academic_year_id', yearId)
+  return { error: error?.message || null, classroomIds: (rooms || []).map(room => room.id as string), yearBe: year.year_be as number }
+}
+
+export async function fetchStudentDeleteSummary(yearId: string) {
+  const session = await requireSession()
+  if (!CAN_DELETE_ALL.includes(session.role)) return { error: 'เฉพาะผู้ดูแลโรงเรียนเท่านั้นที่ลบนักเรียนทั้งหมดได้', count: 0, classrooms: 0 }
+  const scope = await studentDeleteScope(session.schoolId!, yearId)
+  if (scope.error) return { error: scope.error, count: 0, classrooms: 0 }
+  if (!scope.classroomIds.length) return { error: null, count: 0, classrooms: 0 }
+  const { count, error } = await createServerClient().from('students')
+    .select('id', { count: 'exact', head: true }).in('classroom_id', scope.classroomIds)
+  return { error: error?.message || null, count: count || 0, classrooms: scope.classroomIds.length }
+}
+
+export async function deleteAllStudents(yearId: string, confirmation: string) {
+  const session = await requireSession()
+  if (!CAN_DELETE_ALL.includes(session.role)) return { error: 'ไม่มีสิทธิ์ลบนักเรียนทั้งหมด', deleted: 0 }
+  if (confirmation !== 'ลบทั้งหมด') return { error: 'กรุณาพิมพ์ ลบทั้งหมด ให้ตรงก่อนยืนยัน', deleted: 0 }
+  const scope = await studentDeleteScope(session.schoolId!, yearId)
+  if (scope.error) return { error: scope.error, deleted: 0 }
+  if (!scope.classroomIds.length) return { error: null, deleted: 0 }
+  // A single, school/year-scoped DELETE is atomic; related rows follow the existing FK cascades.
+  const { count, error } = await createServerClient().from('students')
+    .delete({ count: 'exact' }).in('classroom_id', scope.classroomIds)
+  if (error) return { error: error.message, deleted: 0 }
+  invalidateClassroomStudentsMany(scope.classroomIds)
+  await logActivity({
+    actor: session, schoolId: session.schoolId, action: 'delete', module: 'students', targetType: 'academic_year', targetId: yearId,
+    description: `ลบนักเรียนทั้งหมดในปีการศึกษา ${scope.yearBe} จำนวน ${count || 0} คน`,
+    metadata: { academicYearId: yearId, deleted: count || 0, classrooms: scope.classroomIds.length, confirmation: 'typed' },
+  })
+  return { error: null, deleted: count || 0 }
 }

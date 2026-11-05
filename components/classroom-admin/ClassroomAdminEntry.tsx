@@ -237,6 +237,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     [mode, activityType],
   )
   const [loading, setLoading] = useState(true)
+  const [contextError, setContextError] = useState('')
   const [isPending, startTransition] = useTransition()
   const [role, setRole] = useState('')
   const [canEdit, setCanEdit] = useState(false)
@@ -341,6 +342,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   useEffect(() => {
     const isPrint = searchParams.get('print') === '1'
     fetchClassroomAdminContext(educationBand).then(data => {
+      setContextError('')
       setRole(data.role)
       setCanEdit(data.canEdit)
       setLayoutTunerEnabled(data.layoutTunerEnabled !== false)
@@ -365,6 +367,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         setYearId(activeYear?.id || '')
         setClassroomId(firstClassroom?.id || '')
       }
+      setLoading(false)
+    }).catch(() => {
+      setContextError('โหลดรายชื่อห้องและจำนวนนักเรียนไม่สำเร็จ กรุณาลองใหม่')
       setLoading(false)
     })
   }, [searchParams, educationBand])
@@ -1869,6 +1874,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const sharedHtmlPreview = classroomId && yearId && students.length > 0 ? <ClassroomDocumentHtmlPreview key={`${classroomId}:${yearId}:${monthKey}:${month}:${mode}:${activityType}`} revision={String(previewRevision)} classroomId={classroomId} yearId={yearId} monthKey={isMonthlyMode ? monthKey : setMonthInKey(monthKey || currentMonthKey(), month)} term={boardTerm} report={mode === 'attendance' ? 'attendance' : mode === 'weightHeight' ? 'health' : mode === 'healthInspection' ? 'inspection' : activityType!} layouts={printLayouts} draft={{students,attendance:monthlyAttendanceValues,activities:activityType ? {[activityType]:monthlyActivityValues} : undefined,health:weightRows,inspection:inspectionRows}}/> : null
 
   if (loading && !printMode) return <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>กำลังโหลด...</div>
+  if (contextError) return <div className="alert alert-error" role="alert"><p>{contextError}</p><button type="button" className="btn btn-secondary" onClick={() => window.location.reload()}>ลองใหม่</button></div>
 
   return (
     <ClassroomAdminPrintLayoutsProvider layouts={printLayouts}>

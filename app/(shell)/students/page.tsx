@@ -6,6 +6,7 @@ import { formatThaiDate, calculateAge } from '@/lib/thaiDate'
 import LoadingButton from '@/components/LoadingButton'
 import ThaiDatePicker from '@/components/ThaiDatePicker'
 import AppAlertModal from '@/components/AppAlertModal'
+import DeleteAllStudentsDialog from '@/components/students/DeleteAllStudentsDialog'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number }
@@ -24,6 +25,8 @@ const blank = {
 
 export default function StudentsPage() {
   const [canManage, setCanManage] = useState(false)
+  const [canDeleteAll, setCanDeleteAll] = useState(false)
+  const [deleteYear, setDeleteYear] = useState<Year | null>(null)
   const [years, setYears] = useState<Year[]>([])
   const [selectedYear, setSelectedYear] = useState('')
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
@@ -59,6 +62,7 @@ export default function StudentsPage() {
   async function init() {
     const d = await fetchStudentInit()
     setCanManage(d.canManage)
+    setCanDeleteAll(d.canDeleteAll)
     setYears(d.years as Year[])
     const cs = (d.classrooms || []) as Classroom[]
     setClassrooms(cs)
@@ -146,6 +150,8 @@ export default function StudentsPage() {
 
   return (
     <>
+      {deleteYear && <DeleteAllStudentsDialog yearId={deleteYear.id} yearBe={deleteYear.year_be} onClose={() => setDeleteYear(null)}
+        onDeleted={count => { setDeleteYear(null); setStudents([]); void loadStudents(selectedClass); setAlertModal({ type: 'success', title: 'ลบนักเรียนแล้ว', message: `ลบนักเรียนทั้งหมดในปีการศึกษา ${deleteYear.year_be} แล้ว ${count.toLocaleString()} คน` }) }} />}
       <AppAlertModal
         open={alertModal !== null}
         type={alertModal?.type || 'success'}
@@ -153,7 +159,7 @@ export default function StudentsPage() {
         message={alertModal?.message}
         onClose={() => setAlertModal(null)}
       />
-      <div className="page-stack">
+      <div className="page-stack students-page">
       <div className="page-hero">
         <div>
           <span className="page-hero-kicker">Student registry</span>
@@ -164,6 +170,7 @@ export default function StudentsPage() {
           <div className="page-actions">
             <Link href="/settings/import-dmc" className="btn btn-secondary">นำเข้านักเรียน DMC</Link>
             <button onClick={openAdd} className="btn btn-primary">+ เพิ่มนักเรียน</button>
+            {canDeleteAll && <button type="button" className="btn btn-secondary" onClick={() => setDeleteYear(years.find(year => year.id === selectedYear) || null)}>ลบนักเรียนทั้งหมด</button>}
           </div>
         )}
       </div>
