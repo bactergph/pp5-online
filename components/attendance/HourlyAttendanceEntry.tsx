@@ -1,8 +1,6 @@
 'use client'
 import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
-import AcademicBandNavigation from '@/components/academic/AcademicBandNavigation'
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import {
@@ -504,7 +502,6 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
 
   return (
     <div className="page-stack hourly-attendance-page">
-      <AcademicBandNavigation band={educationBand} active="attendance" />
       <style>{HOURLY_STYLES}</style>
 
       <div className="hourly-head">

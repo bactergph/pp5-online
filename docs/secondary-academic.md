@@ -4,9 +4,9 @@
 
 ## เข้าใช้งาน
 
-วัดและประเมินผล → งานวัดผลมัธยม → ภาพรวมมัธยม
+วัดและประเมินผล → งานวัดผลมัธยม → คะแนนรายภาค
 
-- /evaluation/secondary: ขั้นตอนเริ่มใช้งานและทางลัด
+- /evaluation/secondary: ส่งต่อไปหน้าคะแนนมัธยม
 - /scores/secondary: คะแนนของห้องมัธยมเท่านั้น
 - /attendance/secondary: เวลาเรียนรายวิชา แยกห้อง วิชา ปี และภาคเรียน
 - /evaluation/secondary/{activities,character,reading,competency}: ประเมินรายภาค

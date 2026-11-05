@@ -2,8 +2,6 @@
 import Swal from 'sweetalert2'
 import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
-import AcademicBandNavigation from '@/components/academic/AcademicBandNavigation'
-
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchEvaluationClassrooms,
@@ -404,12 +402,10 @@ export default function EvaluationEntry({ kind, educationBand }: { kind: Evaluat
     notify('success', `บันทึกการประเมิน ${result.count} คนเรียบร้อย`)
   }
 
-  if (loading) return <div className="text-center py-10 text-gray-500">
-      <AcademicBandNavigation band={educationBand} active="evaluation" />กำลังโหลด...</div>
+  if (loading) return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
 
   return (
     <div className="page-stack" style={{ ['--eval-accent' as string]: config.accent }}>
-      <AcademicBandNavigation band={educationBand} active="evaluation" />
       {kind === 'activities' && isSecondaryClassLevel(selectedClassroom?.level) && <p className="alert alert-info">กิจกรรมมัธยมแยกผลตามภาคเรียน · ผลรายปีเดิมยังเก็บไว้ และไม่ถูกย้ายมาทับผลรายภาค</p>}
       <style>{STYLES}</style>
       <div className="eval-head">

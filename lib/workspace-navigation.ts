@@ -32,7 +32,6 @@ const routes:Record<string,[string,string]>={
   '/classrooms':['ข้อมูลโรงเรียน','ชั้นเรียนและห้องเรียน'],
   '/students':['ข้อมูลโรงเรียน','นักเรียน'],
   '/scores':['วัดและประเมินผล','บันทึกคะแนน'],
-  '/evaluation/secondary':['งานวัดผลมัธยม','ภาพรวมมัธยม'],
   '/evaluation/secondary/activities':['งานวัดผลมัธยม','กิจกรรมรายภาค'],
   '/evaluation/secondary/character':['งานวัดผลมัธยม','คุณลักษณะอันพึงประสงค์'],
   '/evaluation/secondary/reading':['งานวัดผลมัธยม','อ่าน คิดวิเคราะห์ และเขียน'],

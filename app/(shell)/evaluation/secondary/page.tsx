@@ -1,2 +1,6 @@
-import SecondaryAcademicHome from '@/components/academic/SecondaryAcademicHome'
-export default function Page() { return <SecondaryAcademicHome /> }
+import { redirect } from 'next/navigation'
+
+/** เลิกใช้หน้าภาพรวมมัธยม */
+export default function SecondaryOverviewRedirect() {
+  redirect('/scores/secondary')
+}

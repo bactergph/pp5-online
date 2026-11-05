@@ -1,6 +1,5 @@
 'use client'
 import type { AcademicBand } from '@/lib/secondary-academic'
-import AcademicBandNavigation from '@/components/academic/AcademicBandNavigation'
 import SecondaryPp6Pages from '@/components/academic/SecondaryPp6Pages'
 
 import { reportWithSignatureVisibility } from '@/lib/report-signature-visibility'
@@ -4387,7 +4386,6 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
 
   return (
     <div className={`page-stack report-workspace${embedMode ? ' report-workspace--embed' : ''}${printMode ? ' report-workspace--print' : ''}`}>
-      {!embedMode && !printMode && <AcademicBandNavigation band={educationBand} active={mode === 'pp6' ? 'pp6' : 'pp5'} />}
       <div className="report-layout">
         {!embedMode && !printMode && (
         <aside className="report-side-panel">

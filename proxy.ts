@@ -39,6 +39,7 @@ const LEGACY_SIGN_REDIRECTS: Record<string, string> = {
   'sign/pp5': '/documents/sign?tab=subject',
   'sign/pp6': '/documents/sign?tab=class_pp6',
   'sign/classroom-admin': '/classroom-admin/sign',
+  'evaluation/secondary': '/scores/secondary',
 }
 
 function legacySignRedirect(req: NextRequest, target: string, schoolCode?: string) {

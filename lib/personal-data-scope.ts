@@ -25,6 +25,12 @@ export async function personalScope(access:Access){
   return readPersonalDataScope(access.schoolId,access.userId)
 }
 export async function isPersonalSubjectAccess(access:Access){return (await personalScope(access))!==null}
+const SCHOOL_MANAGER_ROLES=new Set(['admin','district','academic_head','deputy_principal'])
+/** ครู และบัญชีส่วนตัวที่ไม่ได้เป็นผู้ดูแลโรงเรียน เห็นเฉพาะวิชาที่ตนสอน */
+export async function limitsToOwnSubjects(access:Access){
+  if(SCHOOL_MANAGER_ROLES.has(access.role))return false
+  return access.role==='teacher'||await isPersonalSubjectAccess(access)
+}
 export async function personalHomeroomIds(access:Access,yearId?:string):Promise<string[]|null>{
   const scope=await personalScope(access)
   if(!scope)return null

@@ -5,7 +5,7 @@ import { logActivity, resolveClassSubjectContext } from '@/lib/audit'
 import { isSecondaryClassLevel } from '@/lib/class-level'
 import { normalizeSecondaryScore, type AcademicBand } from '@/lib/secondary-academic'
 import { getScoreEntryPeriod } from '@/lib/score-entry-period'
-import {isPersonalSubjectAccess} from '@/lib/personal-data-scope'
+import {limitsToOwnSubjects} from '@/lib/personal-data-scope'
 
 async function requireSession() {
   const session = await getSession()
@@ -22,7 +22,7 @@ async function loadScoreClassrooms(
 ) {
   const schoolId = session.schoolId || ''
 
-  if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) {
+  if (await limitsToOwnSubjects(session)) {
     const { data } = await db.from('class_subjects')
       .select('classrooms!inner(id, level, room)')
       .eq('teacher_id', session.userId)
@@ -55,12 +55,12 @@ async function loadScoreSubjects(
   if (!room) throw new Error('ไม่มีสิทธิ์ดูห้องเรียนนี้')
   let q = db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
     .eq('classroom_id', classroomId).in('semester', [0, term]).order('order_number')
-  if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) q = q.eq('teacher_id', session.userId)
+  if (await limitsToOwnSubjects(session)) q = q.eq('teacher_id', session.userId)
   const result = await q
   if (result.error && /semester/.test(result.error.message)) {
     let fallback = db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
       .eq('classroom_id', classroomId).order('order_number')
-    if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) fallback = fallback.eq('teacher_id', session.userId)
+    if (await limitsToOwnSubjects(session)) fallback = fallback.eq('teacher_id', session.userId)
     const plain = await fallback
     return plain.data || []
   }
@@ -171,7 +171,7 @@ export async function saveScores(
   if (studentsError || new Set(students?.map(student => student.id)).size !== new Set(rows.map(row => row.student_id)).size) {
     return { error: 'ข้อมูลนักเรียนไม่ตรงกับห้องเรียน' }
   }
-  if ((session.role === 'teacher'||await isPersonalSubjectAccess(session))) {
+  if (await limitsToOwnSubjects(session)) {
     const { data: cs } = await db.from('class_subjects')
       .select('id').eq('id', classSubjectId).eq('teacher_id', session.userId).maybeSingle()
     if (!cs) return { error: 'บันทึกคะแนนได้เฉพาะวิชาที่ตนสอน' }

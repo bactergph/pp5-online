@@ -1,6 +1,6 @@
 import 'server-only'
 import { createServerClient } from '@/lib/supabase'
-import {isPersonalSubjectAccess} from '@/lib/personal-data-scope'
+import {limitsToOwnSubjects} from '@/lib/personal-data-scope'
 
 export async function getScoreEntryPeriod(
   session: { schoolId: string | null; role: string; userId: string; mustChangePassword?: boolean },
@@ -20,7 +20,7 @@ export async function getScoreEntryPeriod(
   const room = (Array.isArray(subject.classrooms) ? subject.classrooms[0] : subject.classrooms) as { level: string; school_id: string; academic_year_id: string } | null
   if (!room || room.school_id !== session.schoolId || room.academic_year_id !== subject.academic_year_id) return { error: 'ไม่พบรายวิชาหรือห้องเรียนในโรงเรียนนี้' }
   if (subject.semester && subject.semester !== term) return { error: 'รายวิชานี้ไม่ได้เปิดในภาคเรียนที่เลือก' }
-  if ((session.role === 'teacher'||await isPersonalSubjectAccess(session)) && subject.teacher_id !== session.userId) return { error: 'บันทึกได้เฉพาะรายวิชาที่ตนรับผิดชอบ' }
+  if (await limitsToOwnSubjects(session) && subject.teacher_id !== session.userId) return { error: 'บันทึกได้เฉพาะรายวิชาที่ตนรับผิดชอบ' }
   const { data: year, error } = await db.from('academic_years')
     .select('year_be, term1_scores_open, term2_scores_open')
     .eq('id', subject.academic_year_id).eq('school_id', session.schoolId).maybeSingle()

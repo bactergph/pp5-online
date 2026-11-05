@@ -12,7 +12,6 @@ import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
 import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
-import AcademicBandNavigation from '@/components/academic/AcademicBandNavigation'
 import { calcGrade, gradeLabel, gradeColor, RESULT_OPTIONS } from '@/lib/grade'
 import { scoreTransferData, parseScoreTransfer } from '@/lib/score-transfer'
 
@@ -435,7 +434,6 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
         </div>
       )}
     <div className="page-stack score-entry-page">
-      <AcademicBandNavigation band={educationBand} active="scores" />
       {isSecondary && <p className="alert alert-info">มัธยมศึกษา · ตัดผลการเรียนแยกภาคเรียน คะแนนและเกรดไม่รวมข้ามภาคเรียน</p>}
 
       {entryMessage && !loadingGrid && (
@@ -494,7 +492,11 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
                 : 'ยังไม่มีชั้นเรียนในปีนี้ — ไปเพิ่มที่เมนู "ชั้นเรียน" ก่อน'}
             </div>
           ) : items.length === 0 ? (
-            <div className="alert alert-error">ไม่มีวิชาให้บันทึกในห้องนี้ (ยังไม่เปิดสอน หรือคุณไม่ได้สอนวิชาในห้องนี้)</div>
+            <div className="alert alert-error">
+              {userRole === 'teacher'
+                ? 'ไม่มีวิชาให้บันทึกในห้องนี้ (ยังไม่เปิดสอนในภาคนี้ หรือคุณไม่ได้สอนวิชาในห้องนี้)'
+                : 'ยังไม่มีรายวิชาที่เปิดสอนในห้องนี้สำหรับภาคเรียนที่เลือก — ไปกำหนดที่เมนู "กำหนดวิชาเรียน"'}
+            </div>
           ) : loadingGrid ? (
             <div className="text-center py-10 text-gray-500">กำลังโหลดคะแนน...</div>
           ) : !config ? (

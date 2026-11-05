@@ -4,7 +4,7 @@ import { secondaryResultFromInput, secondaryActivityRows, type AcademicBand } fr
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
-import {assertPersonalHomeroom,isPersonalSubjectAccess,personalHomeroomIds} from '@/lib/personal-data-scope'
+import {assertPersonalHomeroom,limitsToOwnSubjects,personalHomeroomIds} from '@/lib/personal-data-scope'
 import { loadReportDigitalReference } from '@/lib/document-reference'
 import { loadReportDocumentSignatures, type ReportDocumentSignatures } from '@/lib/report-signatures'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
@@ -671,7 +671,7 @@ export async function fetchReportSubjects(params: {
     classroomId: params.classroomId,
     academicYearId: params.academicYearId,
     term: params.term,
-    teacherId: (session.role === 'teacher'||await isPersonalSubjectAccess(session)) && (params.mode||'pp5-subject') === 'pp5-subject' ? session.userId : undefined,
+    teacherId: await limitsToOwnSubjects(session) && (params.mode||'pp5-subject') === 'pp5-subject' ? session.userId : undefined,
   })
 
   return rows.map(normalizeSubject)
@@ -691,7 +691,7 @@ export async function loadReportDataForAccess(
 ): Promise<ReportPayload> {
   const schoolId = access.schoolId || ''
   const db = createServerClient()
-  const ownSubjects=(access.role==='teacher'||await isPersonalSubjectAccess(access))&&(params.mode||'pp5-subject')==='pp5-subject'
+  const ownSubjects=await limitsToOwnSubjects(access)&&(params.mode||'pp5-subject')==='pp5-subject'
 
   const classSubjectRowsPromise = loadReportClassSubjects(db, {
     classroomId: params.classroomId,

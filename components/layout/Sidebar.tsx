@@ -522,7 +522,7 @@ export default function Sidebar({
     const collect = (nodes: Child[]): Child[] => nodes.flatMap(node => node.children ? collect(node.children) : node.href && secondaryPaths[node.href] ? [{ ...node, href: secondaryPaths[node.href] }] : [])
     const secondaryChildren = collect(byEducation)
     if (secondaryChildren.some(child => child.href === '/scores/secondary') && !secondaryChildren.some(child => child.href === '/attendance/secondary')) secondaryChildren.splice(1, 0, { href: '/attendance/secondary', label: 'เช็กชื่อรายวิชา', icon: ic(I.clock) })
-    const secondaryMenu: NavItem = { href: '/evaluation/secondary', label: 'งานวัดผลมัธยม', icon: ic(I.book), children: [{ href: '/evaluation/secondary', label: 'ภาพรวมมัธยม' }, ...secondaryChildren] }
+    const secondaryMenu: NavItem = { href: secondaryChildren[0]?.href || '/scores/secondary', label: 'งานวัดผลมัธยม', icon: ic(I.book), children: secondaryChildren }
     const items = section.label === 'วัดและประเมินผล' && secondaryChildren.length
       ? educationType === 'secondary'
         ? [secondaryMenu, ...byEducation.filter(item => !collect([item]).length)]
