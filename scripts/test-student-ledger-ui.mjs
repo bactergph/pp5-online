@@ -2,7 +2,9 @@
 import fs from 'node:fs';import path from 'node:path';import http from 'node:http';import vm from 'node:vm';import ts from 'typescript';import assert from 'node:assert/strict';import puppeteer from 'puppeteer-core';import webpackPackage from 'next/dist/compiled/webpack/webpack.js'
 const {webpack}=webpackPackage,root=process.cwd(),out=path.resolve(process.argv.includes('--homeroom')?'tmp/homeroom-attendance-ui':'tmp/student-ledger-ui');fs.mkdirSync(out,{recursive:true})
 const exportsApi={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/student-value-ledger.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsApi})
+const roster=process.argv.includes('--roster');
 const students=[{id:'s1',student_number:1,prefix:'เด็กชาย',first_name:'ใจดี',last_name:'ทดสอบ',gender:'male',birth_date:null,status:'active'},{id:'s2',student_number:2,prefix:'เด็กหญิง',first_name:'แบ่งปัน',last_name:'ทดสอบ',gender:'female',birth_date:null,status:'active'}]
+if(roster){students.forEach(s=>s.last_name='รัตนพิพัฒนกุลทดสอบนามสกุลยาว');for(let i=3;i<=50;i++)students.push({id:'s'+i,student_number:i,prefix:i%2?'เด็กชาย':'เด็กหญิง',first_name:'นักเรียนจำลอง'+i,last_name:'รัตนพิพัฒนกุลทดสอบนามสกุลยาว',gender:i%2?'male':'female',birth_date:null,status:'active'})}
 const homeroom=process.argv.includes('--homeroom'),attendanceOnly=process.argv.includes('--attendance-only'),attendance={s1:{5:'ล'},s2:{3:'ข'}},attendanceWrites=[]
 const buckets={saving:{s1:{3:10.25},s2:{3:2.5}},merit:{s1:{3:5,4:2},s2:{3:3}}},writes=[];let fail=false
 const write=(name,source)=>{const file=path.join(out,name);fs.writeFileSync(file,source);return file}
@@ -21,7 +23,7 @@ const server=http.createServer(async(req,res)=>{try{
  if(req.url==='/favicon.ico'){res.writeHead(204);res.end();return}
  if(req.url==='/rpc'){
   let body='';for await(const chunk of req)body+=chunk;const {method,args}=JSON.parse(body);let result={error:null}
-  if(method==='fetchClassroomAdminContext'){if(homeroom)assert.equal(args[0],'secondary');result={role:'admin',canEdit:true,layoutTunerEnabled:false,currentUserName:'ครูทดสอบ',schoolName:'โรงเรียนทดสอบ',schoolLogoUrl:null,directorName:'นายผู้อำนวยการ ทดสอบ',years:[{id:'year',year_be:2569,is_active:true}],classrooms:[{id:'room',level:homeroom?'ม.1':'ป.1',room:1,academic_year_id:'year',student_count:2},{id:'second',level:homeroom?'ม.2':'ป.2',room:1,academic_year_id:'year',student_count:2}]}}
+  if(method==='fetchClassroomAdminContext'){if(homeroom)assert.equal(args[0],'secondary');result={role:'admin',canEdit:true,layoutTunerEnabled:false,currentUserName:'ครูทดสอบ',schoolName:'โรงเรียนทดสอบ',schoolLogoUrl:null,directorName:'นายผู้อำนวยการ ทดสอบ',years:[{id:'year',year_be:2569,is_active:true}],classrooms:[{id:'room',level:homeroom?'ม.1':'ป.1',room:1,academic_year_id:'year',student_count:students.length},{id:'second',level:homeroom?'ม.2':'ป.2',room:1,academic_year_id:'year',student_count:students.length}]}}
   if(method==='fetchMonthlyAttendance')result={error:null,students,records:args[2]==='2026-11'?attendance:{},holidays:[],weekendSchoolDays:[],days:30}
   if(method==='saveMonthlyAttendance'){attendanceWrites.push(args);for(const row of args[2]){attendance[row.student_id]??={};if(row.status==='ม')delete attendance[row.student_id][row.day];else attendance[row.student_id][row.day]=row.status}result={error:null}}
   if(method==='fetchMonthlyActivity'){await new Promise(resolve=>setTimeout(resolve,args[0]==='room'?100:5));result={error:null,students,records:args[0]==='second'?{s1:{3:100}}:buckets[args[3]],holidays:[],weekendSchoolDays:[],days:new Date(Number(args[2].slice(0,4)),Number(args[2].slice(5,7)),0).getDate()}}
@@ -50,16 +52,35 @@ try{
 
   await page.setViewport({width:1440,height:1000});await page.goto(origin+'/?kind=attendance',{waitUntil:'domcontentloaded'});await page.click('[data-month-tab="11"]');await page.waitForSelector('button[aria-label^="เด็กชายใจดี"]')
   if(homeroom){assert.match(await page.$eval('.classroom-admin-board-title',el=>el.innerText),/เช็กชื่อโฮมรูม/);assert.ok(await page.$eval('.classroom-admin-class-select',el=>[...el.options].every(o=>!o.textContent.includes('ป.'))))}
+  if(roster){
+    assert.equal(await page.$$('td.attendance-roster-name').then(items=>items.length),50);
+    for(const width of [1440,390]){
+      await page.setViewport({width,height:1000});
+      const before=await page.$eval('.attendance-roster-name',cell=>{const cs=getComputedStyle(cell);return{left:cell.getBoundingClientRect().left,overflow:cs.textOverflow,whiteSpace:cs.whiteSpace,clipped:cell.scrollWidth>cell.clientWidth+1,verticalClip:cell.scrollHeight>cell.clientHeight+1}});
+      assert.notEqual(before.overflow,'ellipsis');assert.equal(before.whiteSpace,'normal');assert.equal(before.clipped,false);assert.equal(before.verticalClip,false);
+      assert.equal(await page.$eval('.attendance-roster-family',cell=>cell.textContent.trim()),students[0].last_name);
+      await page.$eval('.classroom-admin-month-table-wrap',el=>{el.scrollLeft=el.scrollWidth});
+      const after=await page.$eval('.attendance-roster-name',el=>el.getBoundingClientRect().left);assert.ok(Math.abs(after-before.left)<2,'Name stays visible after scrolling to month end');
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+      await page.$eval('.classroom-admin-month-table-wrap',el=>{el.scrollLeft=0;el.scrollTop=180;el.scrollIntoView({block:'start'})});
+      assert.equal(await page.$eval('.classroom-admin-day-head:nth-child(2)',el=>{const box=el.getBoundingClientRect();return document.elementFromPoint(box.left+box.width/2,box.top+box.height/2)?.closest('th')===el}),true,'Numeric day header is not covered by bulk actions after vertical scroll');
+      await page.screenshot({path:path.join(out,'roster-'+width+'.png'),fullPage:false});
+      await page.$eval('.classroom-admin-month-table-wrap',el=>{el.scrollLeft=0;el.scrollTop=0});
+    }
+    await page.setViewport({width:1440,height:1000});
+  }
   const cell=day=>'button[aria-label^="เด็กชายใจดี"][aria-label*="วันที่ '+day+':"]'
   assert.equal(await page.$eval(cell(2),el=>el.textContent),'ม');assert.equal(await page.$eval(cell(3),el=>el.textContent),'ม');assert.equal(await page.$eval(cell(4),el=>el.textContent),'');assert.equal(await page.$eval(cell(4),el=>el.disabled),true)
   assert.equal(await page.$eval(cell(5),el=>el.textContent),'ล','Saved future leave is not erased or hidden');assert.equal(attendanceWrites.length,0,'Opening page never writes attendance')
   await page.click(cell(2));await page.waitForFunction(()=>document.querySelector('button[aria-label^="เด็กชายใจดี"][aria-label*="วันที่ 2:"]').textContent==='ล');assert.equal(attendanceWrites[0][2][0].status,'ล');assert.equal(Object.hasOwn(attendance.s1,4),false)
   await page.evaluate(()=>{window.__attendanceNow='2026-11-04T05:00:00Z';window.dispatchEvent(new Event('focus'))});await page.waitForFunction(()=>document.querySelector('button[aria-label^="เด็กชายใจดี"][aria-label*="วันที่ 4:"]').textContent==='ม');assert.equal(attendanceWrites.length,1,'Midnight refresh never creates rows')
+  if(!roster){
   await click('.classroom-admin-print-cluster button','PDF');await page.waitForFunction(()=>window.__pp5PdfExportStore?.jobs.some(job=>job.status==='ready'));const pdf=await page.evaluate(async()=>{const store=window.__pp5PdfExportStore,job=store.jobs.find(job=>job.status==='ready');return Array.from(new Uint8Array(await store.blobs.get(job.id).arrayBuffer()))});fs.writeFileSync(path.join(out,'attendance-current.pdf'),Buffer.from(pdf));await page.click('[data-pdf-action="dismiss"]')
+  }
   for(const width of [390,1440]){await page.setViewport({width,height:1000});await page.screenshot({path:path.join(out,'attendance-cutoff-'+width+'.png'),fullPage:true})}
   await page.click('[data-month-tab="12"]');await page.waitForFunction(()=>{const el=document.querySelector('button[aria-label^="เด็กชายใจดี"][aria-label*="วันที่ 2:"]');return el?.disabled&&el.textContent===''});assert.equal(await page.$eval(cell(2),el=>el.textContent),'','Future month has no default attendance')
   await page.click('[data-month-tab="11"]');await page.waitForFunction(()=>document.querySelector('button[aria-label^="เด็กชายใจดี"][aria-label*="วันที่ 2:"]').textContent==='ล');assert.equal(attendance.s1[2],'ล');assert.deepEqual(errors,[])
-  console.log('PASS: production daily UI cutoff, saved future leave, old sparse write format, day rollover without writes, future month, actual PDF and mobile')
+  console.log(roster ? 'PASS: 50 complete long student names, sticky identity columns after month-end scroll, 390/1440px layout, attendance save, sparse records and date cutoff' : 'PASS: production daily UI cutoff, saved future leave, old sparse write format, day rollover without writes, future month, actual PDF and mobile')
  }else{
  await page.setViewport({width:1440,height:1000});await go('merit');assert.equal(await page.$eval(first,el=>el.value),'5')
  await fill(first,'8');await click('[role=tab]','สรุปคะแนนความดี');await page.waitForSelector('.student-ledger-table');assert.equal(buckets.merit.s1[3],8);assert.match(await page.$eval('.student-ledger-metrics',el=>el.textContent),/13/,'Summary waits for blur save')

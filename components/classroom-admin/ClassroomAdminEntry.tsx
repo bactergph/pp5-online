@@ -1,7 +1,8 @@
 'use client'
+import './attendance-roster.css'
 import type { AcademicBand } from '@/lib/secondary-academic'
 import { setAcademicMonth, calendarYearBe } from '@/lib/academic-month'
-import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { flushSync } from 'react-dom'
 import {
@@ -1878,7 +1879,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
   return (
     <ClassroomAdminPrintLayoutsProvider layouts={printLayouts}>
-    <div data-ledger-view={isNumericMode?ledgerView:undefined} className={`page-stack classroom-admin-page${printMode ? ' classroom-admin-page--print' : ''}`}>
+    <div data-ledger-view={isNumericMode?ledgerView:undefined} className={`page-stack classroom-admin-page${printMode ? ' classroom-admin-page--print' : ''}${mode === 'attendance' ? ' classroom-admin-page--attendance' : ''}`}>
       <AlertModal />
       <style>{CLASSROOM_ADMIN_PRINT_STYLES}</style>
       {!printMode && (
@@ -2305,7 +2306,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           )}
           <div className="classroom-admin-month-table-wrap">
           <table
-            className={`thai-table classroom-admin-month-table${isNumericMode ? ' classroom-admin-saving-table' : ''}`}
+            className={`thai-table classroom-admin-month-table${isNumericMode ? ' classroom-admin-saving-table' : ''}${mode === 'attendance' ? ' classroom-admin-attendance-table' : ''}`}
+            style={mode === 'attendance' ? { '--attendance-day-count': days.length } as CSSProperties : undefined}
           >
             <colgroup>
               <col style={{ width: 40 }} />
@@ -2463,7 +2465,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 return (
                   <tr key={row.student.id}>
                     <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{row.student.student_number}</td>
-                    <td className="classroom-admin-student-cell">{studentName(row.student)}</td>
+                    <td className={`classroom-admin-student-cell${mode === 'attendance' ? ' attendance-roster-name' : ''}`} title={studentName(row.student)}>
+                      {mode === 'attendance' ? <><span className="attendance-roster-given">{(row.student.prefix || '').trim()}{row.student.first_name}</span><span className="attendance-roster-family"> {row.student.last_name}</span></> : studentName(row.student)}
+                    </td>
                     {renderMonthlyDayCells(bodyRowIndex, row.student)}
                     {summary && (
                       <>

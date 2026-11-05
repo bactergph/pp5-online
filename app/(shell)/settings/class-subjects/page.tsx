@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
 import {
@@ -33,6 +33,7 @@ export default function ClassSubjectsPage() {
   const [openTeacherPicker, setOpenTeacherPicker] = useState<string | null>(null)
   const [alertModal, setAlertModal] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+  const initialClassroom = useRef('')
 
   function semesterFor(classId: string): 0 | 1 | 2 {
     const room = classrooms.find(item => item.id === classId)
@@ -56,17 +57,21 @@ export default function ClassSubjectsPage() {
   }, [selectedClass, term, classrooms])
 
   async function init() {
+    const params = new URLSearchParams(window.location.search)
     const d = await fetchClassSubjectInit()
     setCanManage(d.canManage)
     setYears(d.years as Year[]); setTeachers(d.teachers as Teacher[]); setSubjects(d.subjects as Subject[])
-    const active = (d.years as Year[]).find(y => y.is_active) || (d.years as Year[])[0]
+    initialClassroom.current = params.get('classroom') || ''
+    if (params.get('term') === '1' || params.get('term') === '2') setTerm(Number(params.get('term')) as 1 | 2)
+    const active = (d.years as Year[]).find(y => y.id === params.get('year')) || (d.years as Year[]).find(y => y.is_active) || (d.years as Year[])[0]
     if (active) setSelectedYear(active.id)
     setLoading(false)
   }
   async function loadClassrooms(yearId: string) {
     const cs = await fetchClassroomsLite(yearId) as Classroom[]
     setClassrooms(cs)
-    setSelectedClass(cs[0]?.id || '')
+    setSelectedClass(cs.find(room => room.id === initialClassroom.current)?.id || cs[0]?.id || '')
+    initialClassroom.current = ''
   }
   async function loadItems(classId: string, semester: 0 | 1 | 2) {
     setTeacherDrafts({}); setRoomDrafts({})

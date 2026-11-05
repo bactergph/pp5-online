@@ -1,6 +1,9 @@
 /* Score entry only: a working table, with scroll contained inside the board. */
 .score-entry-page { gap: 20px; min-width: 0; color: #18202f; }
 .score-entry-head, .score-entry-title { display: flex; align-items: center; gap: 14px; }
+.score-entry-head { justify-content: space-between; flex-wrap: wrap; }
+.score-setup-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.score-entry-page .score-setup-link { flex: 0 0 auto; width: auto; height: auto; }
 .score-entry-title-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; color: #245bdb; background: #eaf1ff; flex-shrink: 0; }
 .score-entry-title h1 { font-size: 27px; font-weight: 700; line-height: 1.5; margin: 0; }
 .score-entry-title p { font-size: 14px; color: #525e70; margin: 4px 0 0; }
@@ -41,6 +44,7 @@
 .score-config-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 @media(max-width:1200px) { .score-entry-filter-card { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(max-width:640px) {
+  .score-entry-page .score-setup-link, .score-setup-actions, .score-setup-actions .btn { width: 100%; white-space: normal; }
   .score-entry-page { gap: 16px; }
   .score-entry-title h1 { font-size: 24px; }
   .score-entry-title-mark { width: 40px; height: 40px; }

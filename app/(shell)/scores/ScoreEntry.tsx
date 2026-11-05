@@ -14,6 +14,7 @@ import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
 import { calcGrade, gradeLabel, gradeColor, RESULT_OPTIONS } from '@/lib/grade'
 import { scoreTransferData, parseScoreTransfer } from '@/lib/score-transfer'
+import { schoolCodeFromPathname, withSchoolPrefix } from '@/lib/school-path'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Subject = { id: string; code: string; name: string }
@@ -69,6 +70,8 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   const skipClassFetch = useRef(true)
 
   const isSecondary = isSecondaryClassLevel(classrooms.find(room => room.id === selectedClass)?.level)
+  const canConfigureScores = ['admin', 'district', 'academic_head', 'deputy_principal', 'teacher'].includes(userRole)
+  const canConfigureCourses = ['admin', 'district', 'academic_head', 'deputy_principal'].includes(userRole)
   const subjectMap = Object.fromEntries(subjects.map(s => [s.id, s]))
 
   useEffect(() => {
@@ -220,9 +223,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   }, [selectedClass, selectedCS, term, items])
 
   const scoreConfigHref = useMemo(() => {
-    const base = /\/scores\/?$/.test(pathname)
-      ? pathname.replace(/\/scores\/?$/, '/score-config')
-      : '/score-config'
+    const base = withSchoolPrefix(schoolCodeFromPathname(pathname), '/score-config')
     const params = new URLSearchParams()
     if (selectedYear) params.set('year', selectedYear)
     if (selectedClass) params.set('classroom', selectedClass)
@@ -230,6 +231,14 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
     const qs = params.toString()
     return qs ? `${base}?${qs}` : base
   }, [pathname, selectedYear, selectedClass, term])
+  const classSubjectsHref = scoreConfigHref.replace(/\/score-config(?=\?|$)/, '/settings/class-subjects')
+
+  function guardSetupNavigation(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (saving || transferBusy || dirty) {
+      event.preventDefault()
+      if (dirty) notify('error', 'กรุณาบันทึกคะแนนที่แก้ไขก่อนเปิดหน้ากำหนดคะแนน')
+    }
+  }
 
   function setUnit(sid: string, idx: number, raw: string) {
     const max = config?.between_scores[idx] ?? 0
@@ -453,6 +462,8 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
             <p>กรอกคะแนนตามสัดส่วนที่กำหนด · ปีการศึกษา {years.find(y => y.id === selectedYear)?.year_be || ''}</p>
           </div>
         </div>
+        {canConfigureScores && selectedYear && <Link href={scoreConfigHref} onClick={guardSetupNavigation}
+          className="btn btn-secondary score-setup-link" aria-disabled={saving || transferBusy}>กำหนดสัดส่วนคะแนน</Link>}
       </div>
 
       {years.length === 0 ? (
@@ -492,10 +503,16 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
                 : 'ยังไม่มีชั้นเรียนในปีนี้ — ไปเพิ่มที่เมนู "ชั้นเรียน" ก่อน'}
             </div>
           ) : items.length === 0 ? (
-            <div className="alert alert-error">
+            <div className="alert alert-error score-config-cta">
+              <div className="score-config-cta-text">
               {userRole === 'teacher'
                 ? 'ไม่มีวิชาให้บันทึกในห้องนี้ (ยังไม่เปิดสอนในภาคนี้ หรือคุณไม่ได้สอนวิชาในห้องนี้)'
                 : 'ยังไม่มีรายวิชาที่เปิดสอนในห้องนี้สำหรับภาคเรียนที่เลือก — ไปกำหนดที่เมนู "กำหนดวิชาเรียน"'}
+              </div>
+              <div className="score-setup-actions">
+                {canConfigureCourses && selectedClass && <Link href={classSubjectsHref} className="btn btn-primary" onClick={guardSetupNavigation}>กำหนดวิชาเรียน</Link>}
+                {canConfigureScores && selectedClass && <Link href={scoreConfigHref} className="btn btn-secondary" onClick={guardSetupNavigation}>กำหนดสัดส่วนคะแนน</Link>}
+              </div>
             </div>
           ) : loadingGrid ? (
             <div className="text-center py-10 text-gray-500">กำลังโหลดคะแนน...</div>
@@ -506,8 +523,8 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
                 {selectedSubject ? <> ของวิชา <b>[{selectedSubject.code}] {selectedSubject.name}</b></> : ' ของวิชานี้'}
                 {' '}(ภาคเรียนที่ {term}) — กำหนดอัตราส่วนก่อนจึงจะกรอกคะแนนได้
               </div>
-              {canEdit && selectedClass && (
-                <Link href={scoreConfigHref} className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
+              {canConfigureScores && selectedClass && (
+                <Link href={scoreConfigHref} onClick={guardSetupNavigation} className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
                   กำหนดอัตราส่วนทุกวิชาในห้องนี้
                 </Link>
               )}

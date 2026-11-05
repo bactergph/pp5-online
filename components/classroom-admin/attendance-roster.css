@@ -1,0 +1,50 @@
+/* On-screen attendance only. The printed form keeps its existing layout. */
+@media screen {
+  .classroom-admin-page .classroom-admin-attendance-table {
+    --roster-number-width: 40px;
+    --roster-name-width: 260px;
+    --roster-day-width: 40px;
+    width: calc(var(--roster-number-width) + var(--roster-name-width) + var(--attendance-day-count) * var(--roster-day-width) + 184px);
+    min-width: calc(var(--roster-number-width) + var(--roster-name-width) + var(--attendance-day-count) * var(--roster-day-width) + 184px);
+  }
+  .classroom-admin-page .classroom-admin-attendance-table col:first-child { width: var(--roster-number-width) !important; }
+  .classroom-admin-page .classroom-admin-attendance-table col:nth-child(2) { width: var(--roster-name-width) !important; }
+  .classroom-admin-page .classroom-admin-attendance-table col:nth-child(n + 3) { width: var(--roster-day-width) !important; }
+  .classroom-admin-page .classroom-admin-attendance-table col:nth-last-child(-n + 4) { width: 46px !important; }
+  .classroom-admin-page .classroom-admin-attendance-table thead tr:first-child th:first-child,
+  .classroom-admin-page .classroom-admin-attendance-table tbody td:first-child {
+    position: sticky; left: 0; width: var(--roster-number-width); min-width: var(--roster-number-width); max-width: var(--roster-number-width);
+  }
+  .classroom-admin-page .classroom-admin-attendance-table thead tr:first-child th:nth-child(2),
+  .classroom-admin-page .classroom-admin-attendance-table tbody td:nth-child(2) {
+    position: sticky; left: var(--roster-number-width); width: var(--roster-name-width); min-width: var(--roster-name-width); max-width: var(--roster-name-width);
+    padding: 8px 12px !important; text-align: left; box-shadow: 3px 0 0 #dbe7ed;
+  }
+  .classroom-admin-page .classroom-admin-attendance-table .attendance-roster-name {
+    white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
+    line-height: 1.5; font-size: 14px; vertical-align: middle;
+  }
+  .attendance-roster-given { display: block; font-weight: 700; }
+  .attendance-roster-family { display: block; color: #475569; font-weight: 500; }
+  .classroom-admin-page .classroom-admin-attendance-table tbody td { height: 58px; }
+  /* Days in later header rows are not the two identity columns covered by rowSpan. */
+  .classroom-admin-page .classroom-admin-attendance-table thead tr:nth-child(n + 2) th {
+    left: auto; width: auto; max-width: none; min-width: 0; z-index: 4;
+  }
+  .classroom-admin-page .classroom-admin-attendance-table thead tr:first-child > .classroom-admin-month-title { top: 0; height: 28px !important; z-index: 6; }
+  .classroom-admin-page .classroom-admin-attendance-table thead tr:nth-child(2) th { top: 28px; height: 24px; }
+  .classroom-admin-page .classroom-admin-attendance-table thead tr:nth-child(3) th { top: 52px; height: 24px; }
+  .classroom-admin-page .classroom-admin-attendance-table thead tr:nth-child(4) th { top: 76px; height: 52px; }
+  .classroom-admin-page .classroom-admin-attendance-table .classroom-admin-month-cell { height: 34px; min-height: 34px; }
+}
+@media screen and (max-width: 760px) {
+  .classroom-admin-page .classroom-admin-attendance-table {
+    --roster-number-width: 36px;
+    --roster-name-width: clamp(132px, 38vw, 180px);
+    --roster-day-width: 42px;
+  }
+  .classroom-admin-page .classroom-admin-attendance-table .attendance-roster-name { font-size: 13px; }
+  .classroom-admin-page .classroom-admin-attendance-table tbody td:nth-child(2) { padding: 8px !important; }
+  .classroom-admin-page--attendance .classroom-admin-attendance-toolbar-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .classroom-admin-page--attendance .classroom-admin-attendance-toolbar-actions .btn { width: 100%; min-width: 0; min-height: 40px; padding: 6px; white-space: normal; }
+}
