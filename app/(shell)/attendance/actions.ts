@@ -22,22 +22,25 @@ async function requireSession() {
   return session
 }
 
-async function assertClassSubjectAccess(classSubjectId: string, session: Awaited<ReturnType<typeof requireSession>>) {
+async function assertClassSubjectAccess(classSubjectId: string, session: Awaited<ReturnType<typeof requireSession>>, term: 1 | 2) {
+  if (term !== 1 && term !== 2) throw new Error('ภาคเรียนไม่ถูกต้อง')
   const db = createServerClient()
   if (await limitsToOwnSubjects(session)) {
     const { data } = await db.from('class_subjects')
-      .select('id, classroom_id, subject_id, academic_year_id')
+      .select('id, classroom_id, subject_id, academic_year_id, semester')
       .eq('id', classSubjectId)
       .eq('teacher_id', session.userId)
       .maybeSingle()
     if (!data) throw new Error('บันทึกได้เฉพาะวิชาที่ตนสอน')
+    if (data.semester && data.semester !== term) throw new Error('รายวิชานี้ไม่ได้เปิดในภาคเรียนที่เลือก')
     return data
   }
   const { data } = await db.from('class_subjects')
-    .select('id, classroom_id, subject_id, academic_year_id')
+    .select('id, classroom_id, subject_id, academic_year_id, semester')
     .eq('id', classSubjectId)
     .maybeSingle()
   if (!data) throw new Error('ไม่พบรายวิชาในห้องนี้')
+  if (data.semester && data.semester !== term) throw new Error('รายวิชานี้ไม่ได้เปิดในภาคเรียนที่เลือก')
   return data
 }
 
@@ -48,7 +51,7 @@ export async function fetchHourlyGrid(params: {
   term: 1 | 2
 }) {
   const session = await requireSession()
-  const cs = await assertClassSubjectAccess(params.classSubjectId, session)
+  const cs = await assertClassSubjectAccess(params.classSubjectId, session, params.term)
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา กรุณาเลือกรายวิชาใหม่' }
   if (cs.academic_year_id !== params.academicYearId) return { error: 'ปีการศึกษาไม่ตรงกับรายวิชา กรุณาเลือกห้องและรายวิชาใหม่' }
 
@@ -161,7 +164,7 @@ export async function saveHourlyCell(params: {
 }) {
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
-  const cs = await assertClassSubjectAccess(params.classSubjectId, session)
+  const cs = await assertClassSubjectAccess(params.classSubjectId, session, params.term)
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา' }
 
   const db = createServerClient()
@@ -236,7 +239,7 @@ export async function fillHourlyPresentAll(params: {
 }) {
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์', filled: 0 }
-  const cs = await assertClassSubjectAccess(params.classSubjectId, session)
+  const cs = await assertClassSubjectAccess(params.classSubjectId, session, params.term)
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา', filled: 0 }
 
   const db = createServerClient()
@@ -289,7 +292,7 @@ export async function fillHourlyPresentColumn(params: {
 }) {
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์', filled: 0 }
-  const cs = await assertClassSubjectAccess(params.classSubjectId, session)
+  const cs = await assertClassSubjectAccess(params.classSubjectId, session, params.term)
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา', filled: 0 }
 
   const db = createServerClient()
@@ -342,7 +345,7 @@ export async function clearHourlyPresentColumn(params: {
 }) {
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์', deleted: 0 }
-  const cs = await assertClassSubjectAccess(params.classSubjectId, session)
+  const cs = await assertClassSubjectAccess(params.classSubjectId, session, params.term)
   if (cs.classroom_id !== params.classroomId) return { error: 'ห้องเรียนไม่ตรงกับรายวิชา', deleted: 0 }
 
   const db = createServerClient()
@@ -401,7 +404,7 @@ export async function clearHourlyAttendanceAll(params: {
 }) {
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์', deleted: 0 }
-  await assertClassSubjectAccess(params.classSubjectId, session)
+  await assertClassSubjectAccess(params.classSubjectId, session, params.term)
 
   const db = createServerClient()
   const grid = await fetchHourlyGrid(params)

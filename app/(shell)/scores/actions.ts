@@ -3,6 +3,8 @@ import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassSubjectContext } from '@/lib/audit'
 import { isSecondaryClassLevel } from '@/lib/class-level'
+import { academicTermForDate } from '@/lib/academic-term'
+import { dailyAttendanceToday } from '@/lib/daily-attendance'
 import { normalizeSecondaryScore, type AcademicBand } from '@/lib/secondary-academic'
 import { getScoreEntryPeriod } from '@/lib/score-entry-period'
 import {limitsToOwnSubjects} from '@/lib/personal-data-scope'
@@ -62,25 +64,37 @@ async function loadScoreSubjects(
       .eq('classroom_id', classroomId).order('order_number')
     if (await limitsToOwnSubjects(session)) fallback = fallback.eq('teacher_id', session.userId)
     const plain = await fallback
+    if (plain.error) throw new Error('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่')
     return plain.data || []
   }
+  if (result.error) throw new Error('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่')
   return result.data || []
 }
 
 /** ปี + วิชา + ห้องของปีที่ active + วิชาในห้องแรก — ลด waterfall ตอนเปิดหน้า */
-export async function fetchScoreInit(band?: AcademicBand) {
+export async function fetchScoreInit(band?: AcademicBand, initialTerm: 1 | 2 | 'current' = 1) {
   const session = await requireSession()
   const db = createServerClient()
   const sid = session.schoolId || ''
   const [years, subjects] = await Promise.all([
-    db.from('academic_years').select('id, year_be, is_active').eq('school_id', sid).order('year_be', { ascending: false }),
+    db.from('academic_years').select('id, year_be, is_active, term1_start_date, term1_end_date, term2_start_date, term2_end_date').eq('school_id', sid).order('year_be', { ascending: false }),
     db.from('subjects').select('id, code, name').eq('school_id', sid).order('code'),
   ])
   const yearList = years.data || []
   const active = yearList.find(y => y.is_active) || yearList[0]
   const classrooms = (active ? await loadScoreClassrooms(db, session, active.id) : []).filter(room => !band || isSecondaryClassLevel(room.level) === (band === 'secondary'))
   const firstClassId = classrooms[0]?.id || ''
-  const classSubjects = firstClassId ? await loadScoreSubjects(db, session, firstClassId) : []
+  const secondary = isSecondaryClassLevel(classrooms[0]?.level)
+  const calendarTerm = initialTerm === 'current' && secondary ? academicTermForDate(active, dailyAttendanceToday()) : null
+  let term: 1 | 2 = initialTerm === 2 ? 2 : calendarTerm || 1
+  let classSubjects = firstClassId ? await loadScoreSubjects(db, session, firstClassId, term) : []
+  // Legacy secondary schools may only have semester 2 offerings and no calendar yet.
+  // Choose an available semester on first load, without changing a user's explicit choice.
+  if (initialTerm === 'current' && secondary && !calendarTerm && !classSubjects.length && firstClassId) {
+    const otherTerm = term === 1 ? 2 : 1
+    const alternative = await loadScoreSubjects(db, session, firstClassId, otherTerm)
+    if (alternative.length) { term = otherTerm; classSubjects = alternative }
+  }
 
   return {
     role: session.role,
@@ -90,6 +104,7 @@ export async function fetchScoreInit(band?: AcademicBand) {
     activeYearId: active?.id || '',
     classrooms,
     classSubjects,
+    initialTerm: term,
   }
 }
 

@@ -1,4 +1,7 @@
 'use client'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { isSchoolCodeSegment } from '@/lib/school-path'
 import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -75,6 +78,11 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
   const [items, setItems] = useState<CS[]>([])
   const [selectedCS, setSelectedCS] = useState('')
   const [term, setTerm] = useState<1 | 2>(1)
+  const [subjectListContext, setSubjectListContext] = useState('')
+  const [view, setView] = useState<'entry' | 'summary'>('entry')
+  const pathname = usePathname()
+  const pathFirst = pathname.split('/').filter(Boolean)[0]
+  const schoolPrefix = pathFirst && isSchoolCodeSegment(pathFirst) ? `/${pathFirst}` : ''
 
   const [students, setStudents] = useState<Student[]>([])
   const [weeks, setWeeks] = useState<TeachingWeek[]>([])
@@ -97,7 +105,8 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
   const skipYearFetch = useRef(true)
   const skipClassFetch = useRef(true)
   const gridContext = `${selectedYear}:${selectedClass}:${selectedCS}:${term}`
-  const canEdit = gridCanEdit && !legacyMoving && !gridLoading && loadedGrid === gridContext
+  const subjectsReady = subjectListContext === `${selectedClass}:${term}`
+  const canEdit = subjectsReady && gridCanEdit && !legacyMoving && !gridLoading && loadedGrid === gridContext
   const attendanceBusy = legacyMoving || bulkFilling || clearingAll || Object.keys(savingCells).length > 0 || Object.keys(fillingColumnKeys).length > 0
 
   const subjectMap = useMemo(() => Object.fromEntries(subjects.map(s => [s.id, s])), [subjects])
@@ -107,7 +116,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
   const showWeekTabs = weekChunks.length > 1
 
   useEffect(() => {
-    void fetchScoreInit(educationBand).then(d => {
+    void fetchScoreInit(educationBand, 'current').then(d => {
       setCanEdit(d.canEdit)
       setUserRole(String(d.role || ''))
       setYears(d.years as Year[])
@@ -118,6 +127,9 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
       setItems(csList)
       skipYearFetch.current = true
       skipClassFetch.current = true
+      const initialTerm = d.initialTerm === 2 ? 2 : 1
+      setTerm(initialTerm)
+      setSubjectListContext(`${list[0]?.id || ''}:${initialTerm}`)
       setSelectedYear(d.activeYearId || '')
       setSelectedClass(list[0]?.id || '')
       setSelectedCS(csList[0]?.id || '')
@@ -158,8 +170,9 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
       if (cancelled) return
       const list = data as CS[]
       setItems(list)
+      setSubjectListContext(`${selectedClass}:${term}`)
       setSelectedCS(current => list.some(item => item.id === current) ? current : (list[0]?.id || ''))
-    }).catch(() => { if (!cancelled) setError('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่') })
+    }).catch(() => { if (!cancelled) { setSubjectListContext(''); setError('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่') } })
     return () => { cancelled = true }
   }, [selectedClass, term])
 
@@ -484,6 +497,11 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
     }
   }
 
+  function changeTerm(next: 1 | 2) {
+    if (attendanceBusy || next === term) return
+    setTerm(next); setSelectedCS(''); setItems([]); setStudents([]); setWeeks([]); setRecords({}); setLoadedGrid(''); setSubjectListContext(''); setError('')
+  }
+
   function studentSummary(studentId: string, scopeWeeks: TeachingWeek[]) {
     const statuses: HourlyStatus[] = []
     for (const week of scopeWeeks) {
@@ -495,6 +513,8 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
   }
 
   const classroom = classrooms.find(c => c.id === selectedClass)
+  const ready = subjectsReady && loadedGrid === gridContext && !gridLoading
+  const selectedYearLabel = years.find(year => year.id === selectedYear)?.year_be || ''
 
   if (loading) {
     return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
@@ -506,7 +526,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
 
       <div className="hourly-head">
         <div>
-          <h1 className="hourly-title">เช็คเวลาเรียนรายวิชา</h1>
+          <h1 className="hourly-title">เช็กชื่อรายวิชา{isSecondaryClassLevel(classroom?.level) ? ' · รายภาคเรียน' : ''}</h1>
           <p className="hourly-subtitle">ช่องว่าง = มา · คลิกเพื่อวน / → ข → ล → ป</p>
         </div>
         <div className="hourly-legend">
@@ -520,53 +540,56 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
 
       <div className="filter-bar control-card hourly-filter">
         <div className="hourly-filter-field hourly-filter-field--year">
-          <label className="form-label">ปีการศึกษา</label>
-          <select value={selectedYear} disabled={attendanceBusy} onChange={e => { setSelectedYear(e.target.value); setSelectedClass(''); setSelectedCS(''); setClassrooms([]); setItems([]); setStudents([]); setWeeks([]); setRecords({}); setError(''); }} className="form-input">
+          <label className="form-label" htmlFor="hourly-year">ปีการศึกษา</label>
+          <select id="hourly-year" value={selectedYear} disabled={attendanceBusy} onChange={e => { setSelectedYear(e.target.value); setSelectedClass(''); setSelectedCS(''); setClassrooms([]); setItems([]); setStudents([]); setWeeks([]); setRecords({}); setError(''); }} className="form-input">
             {years.map(y => <option key={y.id} value={y.id}>{y.year_be}{y.is_active ? ' (ปัจจุบัน)' : ''}</option>)}
-          </select>
-        </div>
-        <div className="hourly-filter-field hourly-filter-field--class">
-          <label className="form-label">ห้องเรียน</label>
-          <select value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedCS(''); setItems([]); setStudents([]); setWeeks([]); setRecords({}); setError(''); }} className="form-input" disabled={attendanceBusy || classrooms.length === 0}>
-            <option value="">{classrooms.length === 0 ? '— ไม่มีห้อง —' : '— เลือกห้อง —'}</option>
-            {classrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room}</option>)}
-          </select>
-        </div>
-        <div className="hourly-filter-field hourly-filter-field--subject">
-          <label className="form-label">รายวิชา</label>
-          <select value={selectedCS} onChange={e => setSelectedCS(e.target.value)} className="form-input" disabled={attendanceBusy || items.length === 0}>
-            <option value="">{items.length === 0 ? '— ไม่มีวิชา —' : '— เลือกรายวิชา —'}</option>
-            {items.map(it => {
-              const s = subjectMap[it.subject_id]
-              return <option key={it.id} value={it.id}>[{s?.code}] {s?.name}</option>
-            })}
           </select>
         </div>
         <div className="hourly-filter-field hourly-filter-field--term">
           <label className="form-label">ภาคเรียน</label>
           <div className="hourly-term-toggle">
             {([1, 2] as const).map(t => (
-              <button key={t} type="button" disabled={attendanceBusy} onClick={() => setTerm(t)} className={term === t ? 'btn btn-primary' : 'btn btn-secondary'}>
+              <button key={t} type="button" disabled={attendanceBusy} aria-pressed={term === t} onClick={() => changeTerm(t)} className={term === t ? 'btn btn-primary' : 'btn btn-secondary'}>
                 ภาคเรียนที่ {t}
               </button>
             ))}
           </div>
         </div>
+        <div className="hourly-filter-field hourly-filter-field--class">
+          <label className="form-label" htmlFor="hourly-class">ห้องเรียน</label>
+          <select id="hourly-class" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedCS(''); setItems([]); setStudents([]); setWeeks([]); setRecords({}); setError(''); }} className="form-input" disabled={attendanceBusy || classrooms.length === 0}>
+            <option value="">{classrooms.length === 0 ? '— ไม่มีห้อง —' : '— เลือกห้อง —'}</option>
+            {classrooms.map(c => <option key={c.id} value={c.id}>{c.level}/{c.room}</option>)}
+          </select>
+        </div>
+        <div className="hourly-filter-field hourly-filter-field--subject">
+          <label className="form-label" htmlFor="hourly-subject">รายวิชา · ภาคเรียนที่ {term}</label>
+          <select id="hourly-subject" value={selectedCS} onChange={e => setSelectedCS(e.target.value)} className="form-input" disabled={attendanceBusy || !subjectsReady || items.length === 0}>
+            <option value="">{!subjectsReady ? '— กำลังโหลดรายวิชา —' : items.length === 0 ? `— ไม่มีวิชาในภาคเรียนที่ ${term} —` : '— เลือกรายวิชา —'}</option>
+            {items.map(it => {
+              const s = subjectMap[it.subject_id]
+              return <option key={it.id} value={it.id}>[{s?.code}] {s?.name}</option>
+            })}
+          </select>
+        </div>
+
       </div>
 
       {classrooms.length === 0 && userRole === 'teacher' && (
         <div className="alert alert-error">ยังไม่มีห้องที่คุณได้รับมอบหมายสอนในปีนี้</div>
       )}
-      {items.length === 0 && selectedClass && (
-        <div className="alert alert-error">ไม่มีวิชาที่คุณสอนในห้องนี้</div>
+      {subjectsReady && items.length === 0 && selectedClass && (
+        <div className="alert alert-info hourly-empty" role="status">ยังไม่มีรายวิชา{userRole === 'teacher' ? 'ที่คุณได้รับมอบหมาย' : 'ที่เปิดสอน'}ในห้องนี้สำหรับภาคเรียนที่ {term}/{selectedYearLabel}
+          <button type="button" className="btn btn-secondary" disabled={attendanceBusy} onClick={() => changeTerm(term === 1 ? 2 : 1)}>ดูภาคเรียนที่ {term === 1 ? 2 : 1}</button>
+        </div>
       )}
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error hourly-error" role="alert">{error}{error.includes('วันเปิด–ปิดภาคเรียน') && (userRole === 'teacher' ? <span>แจ้งผู้ดูแลโรงเรียนให้ตั้งวันเปิด–ปิดภาคเรียนที่ {term}/{selectedYearLabel}</span> : <Link className="btn btn-secondary" href={`${schoolPrefix}/settings/academic-year`}>ตั้งวันเปิด–ปิดภาคเรียนที่ {term}</Link>)}</div>}
       {scheduleWarning && loadedGrid === gridContext && <div className="control-card" role="status" style={{ background: '#fffbef', color: '#854d0e' }}>{scheduleWarning}</div>}
       {loadedGrid === gridContext && <LegacyHourlyRecords key={gridContext} records={legacyRecords} students={students} weeks={weeks}
         hoursPerWeek={hoursPerWeekCount} canEdit={canEdit && !attendanceBusy} onReload={loadGrid} onBusyChange={setLegacyMoving}
         context={{ classroomId: selectedClass, classSubjectId: selectedCS, academicYearId: selectedYear, term }} />}
 
-      {selectedCS && !gridLoading && weeks.length > 0 && (
+      {selectedCS && ready && weeks.length > 0 && (
         <div className="control-card hourly-meta">
           <span>แบบบันทึกเวลาเรียนรายวิชา</span>
           <span>ชั้น <b>{classroom ? `${classroom.level}/${classroom.room}` : '-'}</b></span>
@@ -583,13 +606,27 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
         </div>
       )}
 
+      {selectedCS && ready && weeks.length > 0 && <div className="hourly-view-tabs" role="tablist" aria-label="บันทึกและสรุปเวลาเรียนรายวิชา">
+        <button type="button" role="tab" aria-selected={view === 'entry'} onClick={() => setView('entry')}>บันทึกคาบเรียน</button>
+        <button type="button" role="tab" aria-selected={view === 'summary'} onClick={() => setView('summary')}>สรุปภาคเรียนที่ {term}</button>
+      </div>}
+      {view === 'summary' && selectedCS && ready && weeks.length > 0 && <section className="data-card hourly-term-summary" aria-label={`สรุปเวลาเรียน ภาคเรียนที่ ${term}`}>
+        <h2>สรุปเวลาเรียน ภาคเรียนที่ {term}/{selectedYearLabel}</h2>
+        <p>{subjectInfo.code} · {subjectInfo.name} · ห้อง {classroom?.level}/{classroom?.room}</p>
+        <p className="hourly-summary-note">รวมทุกสัปดาห์ในภาคเรียนที่เลือก ({weeks.length} สัปดาห์ · {weeks.length * hoursPerWeekCount} คาบ) ช่องว่างนับเป็นมาตามรูปแบบเดิม</p>
+        <p className="hourly-summary-scroll-hint">เลื่อนตารางแนวนอนเพื่อดูผลครบทุกช่อง</p>
+        <div className="hourly-term-summary-scroll"><table><thead><tr><th>เลขที่</th><th>ชื่อ–นามสกุล</th><th>มา</th><th>ขาด</th><th>ลา</th><th>ป่วย</th><th>รวมคาบ</th><th>มาเรียน (%)</th></tr></thead><tbody>
+          {students.map(student => { const summary = studentSummary(student.id, weeks); return <tr key={student.id}><td>{student.student_number}</td><td>{studentName(student)}</td><td>{summary.present}</td><td>{summary.absent}</td><td>{summary.leave}</td><td>{summary.sick}</td><td>{summary.total}</td><td>{summary.percent.toFixed(1)}%</td></tr> })}
+        </tbody></table></div>
+      </section>}
+
       {gridLoading || bulkFilling || clearingAll ? (
         <div className="text-center py-10 text-gray-500">
           {clearingAll ? 'กำลังลบข้อมูล...' : bulkFilling ? 'กำลังเช็คมาทั้งหมด...' : 'กำลังโหลดตาราง...'}
         </div>
-      ) : weeks.length === 0 && selectedCS ? (
+      ) : weeks.length === 0 && selectedCS && !error ? (
         <div className="alert alert-error">ยังไม่ได้กำหนดปฏิทินภาคเรียน — ไปตั้งค่าที่เมนู ปีการศึกษา ก่อน</div>
-      ) : selectedCS && weeks.length > 0 ? (
+      ) : view === 'entry' && selectedCS && ready && weeks.length > 0 ? (
         <div className="data-card dense-grid-card hourly-grid-card">
           <div className="hourly-grid-toolbar">
             <span className="hourly-grid-toolbar-note">ช่องว่าง = มา · คลิกช่องเพื่อวน / → ข → ล → ป</span>
@@ -654,7 +691,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
                       <span className="hourly-week-head-date">{week.dateLabel}</span>
                     </th>
                   ))}
-                  <th rowSpan={2} className="hourly-summary-head hourly-total-head">รวม</th>
+                  <th rowSpan={2} className="hourly-summary-head hourly-total-head">มาในช่วงนี้</th>
                 </tr>
                 <tr className="hourly-slot-row">
                   {visibleWeeks.map(week => (
@@ -715,6 +752,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
                             ].filter(Boolean).join(' ')}>
                               <button
                                 type="button"
+                                aria-label={`${studentName(student)} ภาคเรียนที่ ${term} สัปดาห์ ${week.weekNumber} คาบ ${slot} ${HOURLY_STATUS_LABELS[status || '/']}`}
                                 className={`hourly-cell ${status ? STATUS_CLASS[status] : 'hourly-status-empty'} ${savingCells[key] ? 'is-saving' : ''}`}
                                 disabled={!canEdit}
                                 onClick={() => void toggleCell(student.id, week, slot)}
@@ -767,9 +805,26 @@ const HOURLY_STYLES = `
   }
   @media (max-width: 720px) {
     .hourly-filter-field--year,
+    .hourly-filter-field--term,
     .hourly-filter-field--class,
     .hourly-filter-field--subject { flex: 1 1 100%; width: auto; max-width: none; }
+    .hourly-term-toggle .btn { flex:1; min-height:44px; }
   }
+  .hourly-view-tabs { display:flex; gap:6px; padding:6px; border:1px solid #bfdbd5; border-radius:14px; background:#eff9f6; }
+  .hourly-view-tabs button { flex:1; min-height:44px; border:0; border-radius:10px; padding:10px 12px; font-weight:800; color:#3b5e59; background:transparent; }
+  .hourly-view-tabs button[aria-selected=true] { background:#0f766e; color:#fff; box-shadow:0 3px 8px #0f766e22; }
+  .hourly-term-summary { padding:18px; }
+  .hourly-term-summary h2 { margin:0 0 6px; font-size:18px; font-weight:800; }
+  .hourly-summary-note { font-size:13px; color:#64748b; margin:8px 0 14px; }
+  .hourly-attendance-page .hourly-error,.hourly-attendance-page .hourly-empty { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+  .hourly-summary-scroll-hint { display:none; font-size:12px; color:#64748b; }
+  @media(max-width:720px){ .hourly-summary-scroll-hint { display:block; margin-bottom:8px; } }
+  .hourly-term-summary-scroll { overflow-x:auto; }
+  .hourly-term-summary table { width:100%; min-width:620px; border-collapse:collapse; font-size:14px; }
+  .hourly-term-summary th,.hourly-term-summary td { border:1px solid #d5e4e0; padding:10px; text-align:center; }
+  .hourly-term-summary th { background:#e9f6f1; }
+  .hourly-term-summary td:nth-child(2) { text-align:left; }
+  .hourly-filter .alert { width:100%; }
   .hourly-meta {
     display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 12px 14px; font-size: 13px; color: #475569; font-weight: 700;
   }

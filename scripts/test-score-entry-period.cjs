@@ -21,7 +21,7 @@ const db = { from(table) {
 const exportsObject = {}
 runInNewContext(source, {
   exports: exportsObject,
-  require: name => name === 'server-only' ? {} : name === '@/lib/personal-data-scope' ? {isPersonalSubjectAccess:async()=>personal} : { createServerClient: () => db },
+  require: name => name === 'server-only' ? {} : name === '@/lib/personal-data-scope' ? {limitsToOwnSubjects:async session=>!['admin','academic_head','deputy_principal','principal','district'].includes(session.role)&&(session.role==='teacher'||personal)} : { createServerClient: () => db },
 })
 const session = { schoolId: 'school-a', role: 'teacher', userId: 'teacher-a' }
 async function check() {
@@ -39,7 +39,8 @@ async function check() {
   assert.equal((await get({ ...session, role: 'admin' })).open, false)
   personal=true
   assert.equal((await get({...session,role:'admin'})).open,false)
-  assert.ok((await get({...session,role:'admin',userId:'other-owner'})).error)
+  assert.equal((await get({...session,role:'admin',userId:'other-owner'},2)).open,true,'School managers retain access to all subjects')
+  assert.ok((await get({...session,role:'teacher',userId:'other-owner'},2)).error,'Teachers still need their own subject assignment')
   personal=false
   records.class_subjects.academic_year_id = 'year-b'
   assert.ok((await get(session, 2)).error)

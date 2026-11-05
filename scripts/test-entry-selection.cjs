@@ -51,6 +51,7 @@ async function testPage(path, hourly) {
   const libs = {
     '@/lib/hourly-attendance': compile('lib/hourly-attendance.ts', () => ({})),
     '@/lib/thaiDate': { formatThaiDate: x => x },
+    '@/lib/school-path': compile('lib/school-path.ts', () => ({})),
     '@/lib/class-level': compile('lib/class-level.ts', () => ({})),
     '@/lib/grade': compile('lib/grade.ts', () => ({})),
     '@/lib/score-transfer': compile('lib/score-transfer.ts', () => ({})),
@@ -86,7 +87,7 @@ async function testHourlyValidation() {
     return chain
   } }
   const actions = compile('app/(shell)/attendance/actions.ts', name => {
-    if (name === '@/lib/personal-data-scope') return {isPersonalSubjectAccess:async()=>false}
+    if (name === '@/lib/personal-data-scope') return {isPersonalSubjectAccess:async()=>false,limitsToOwnSubjects:async()=>false}
     if (name === '@/lib/supabase') return { createServerClient: () => db }
     if (name === '@/lib/session') return { getSession: async () => ({ role: 'admin', schoolId: 'school' }) }
     if (name === '@/lib/supabase-paginate') return { fetchAllRows: async () => [] }

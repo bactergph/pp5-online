@@ -46,7 +46,7 @@ const db = { from(table) {
   }; return chain
 } }
 const actions = load('app/(shell)/attendance/actions.ts', {
-  '@/lib/personal-data-scope':{isPersonalSubjectAccess:async()=>false},'@/lib/supabase': { createServerClient: () => db }, '@/lib/session': { getSession: async () => ({ role: 'admin', schoolId: 'school', userId: 'teacher' }) },
+  '@/lib/personal-data-scope':{isPersonalSubjectAccess:async()=>false,limitsToOwnSubjects:async()=>false},'@/lib/supabase': { createServerClient: () => db }, '@/lib/session': { getSession: async () => ({ role: 'admin', schoolId: 'school', userId: 'teacher' }) },
   '@/lib/hourly-attendance': hourly, '@/lib/supabase-paginate': load('lib/supabase-paginate.ts'),
   '@/lib/audit': { logActivity: async () => {}, resolveClassSubjectContext: async () => ({ schoolId: 'school' }) },
 })
@@ -75,5 +75,12 @@ const base = { classroomId: 'room', classSubjectId: 'subject', academicYearId: '
   assert.ok(tables.hourly_attendance.some(row => row.week_number === 2 && row.hour_number === 1 && row.status === 'ข'))
   const statuses = teachingWeeks.map(week => hourly.resolveHourlyStatus(grid.records[hourly.hourlyCellKey('student', week.weekNumber, 1)]))
   assert.equal(hourly.summarizeHourlyStatuses(statuses).total, 20)
+  tables.class_subjects[0].semester = 2
+  for(const run of [()=>actions.fetchHourlyGrid(base),()=>actions.saveHourlyCell({...base,studentId:'student',weekNumber:1,slot:1,anchorDate:'2026-05-18',status:'ข'}),()=>actions.clearHourlyAttendanceAll(base)]) await assert.rejects(run,/ภาคเรียน/,'Reject cross-semester reads and writes')
+  tables.academic_years[0].term2_start_date='2026-11-02';tables.academic_years[0].term2_end_date='2027-03-19'
+  tables.hourly_attendance.push({id:'term2',student_id:'student',class_subject_id:'subject',term:2,week_number:2,hour_number:1,status:'ล',date:'2026-11-09'})
+  const second=await actions.fetchHourlyGrid({...base,term:2})
+  assert.equal(second.records['student:2:1'],'ล')
+  assert.equal(second.records['student:1:5'],undefined,'Do not mix term-1 records into term-2 summaries')
   console.log('Hourly curriculum tests passed: real 1–6 weekly slots, 20 term slots, report numbering, schedule warnings, legacy preservation and safe move failures.')
 })().catch(error => { console.error(error); process.exitCode = 1 })
