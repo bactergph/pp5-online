@@ -1,4 +1,5 @@
 'use client'
+import type { AcademicBand } from '@/lib/secondary-academic'
 import { setAcademicMonth, calendarYearBe } from '@/lib/academic-month'
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -115,6 +116,7 @@ type Holiday = { date: string; name?: string | null }
 type WeekendSchoolDay = { date: string; name?: string | null }
 
 type Props = {
+  educationBand?: AcademicBand
   mode: Mode
   title: string
   description: string
@@ -227,7 +229,7 @@ function usesAttendanceDefault(mode: Mode, activityType?: ActivityType) {
   return mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType))
 }
 
-export default function ClassroomAdminEntry({ mode, title, description, activityType, activityLabel }: Props) {
+export default function ClassroomAdminEntry({ mode, title, description, activityType, activityLabel, educationBand }: Props) {
   const searchParams = useSearchParams()
   const printMode = searchParams.get('print') === '1'
   const documentTitle = useMemo(
@@ -338,7 +340,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
   useEffect(() => {
     const isPrint = searchParams.get('print') === '1'
-    fetchClassroomAdminContext().then(data => {
+    fetchClassroomAdminContext(educationBand).then(data => {
       setRole(data.role)
       setCanEdit(data.canEdit)
       setLayoutTunerEnabled(data.layoutTunerEnabled !== false)
@@ -365,7 +367,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
       }
       setLoading(false)
     })
-  }, [searchParams])
+  }, [searchParams, educationBand])
 
   useEffect(() => {
     if (!printMode) return

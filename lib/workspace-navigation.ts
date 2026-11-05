@@ -42,6 +42,7 @@ const routes:Record<string,[string,string]>={
   '/reports/secondary/pp6':['งานวัดผลมัธยม','ปพ.6 มัธยม'],
   '/score-config':['วัดและประเมินผล','สัดส่วนคะแนน'],
   '/attendance':['งานสอนรายวิชา','เช็กเวลาเรียน'],
+  '/attendance/homeroom':['งานประจำชั้น','เช็กชื่อโฮมรูม'],
   '/schedules/class':['ตารางเรียน / ตารางสอน','ตารางเรียน'],
   '/schedules/class/manage':['ตารางเรียน / ตารางสอน','จัดการตารางเรียน'],
   '/schedules/teaching':['ตารางเรียน / ตารางสอน','ตารางสอน'],

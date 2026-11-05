@@ -1,4 +1,6 @@
 'use server'
+import { isSecondaryClassLevel } from '@/lib/class-level'
+import type { AcademicBand } from '@/lib/secondary-academic'
 import { isStudentValueKind, validLedgerValue, ledgerDateRange, summarizeStudentValues, type StudentValueKind } from '@/lib/student-value-ledger'
 import { fetchTermClosedDays } from '@/lib/term-calendar-server'
 import { createServerClient } from '@/lib/supabase'
@@ -229,7 +231,7 @@ async function upsertDailyActivities(rows: Record<string, unknown>[]) {
   return db.from('daily_activities').upsert(fallbackRows, { onConflict: 'student_id,date,activity_type' })
 }
 
-export async function fetchClassroomAdminContext() {
+export async function fetchClassroomAdminContext(band?: AcademicBand) {
   const session = await requireClassroomAdminSession()
   const db = createServerClient()
   const sid = session.schoolId || ''
@@ -257,7 +259,7 @@ export async function fetchClassroomAdminContext() {
       .eq('id', sid)
       .maybeSingle(),
   ])
-  const classrooms = classroomsRes.data || []
+  const classrooms = (classroomsRes.data || []).filter(room => !band || isSecondaryClassLevel(room.level) === (band === 'secondary'))
   const classroomIds = classrooms.map(c => c.id)
   const teacherIds = Array.from(new Set(classrooms.flatMap(c => [c.homeroom_teacher_id, c.homeroom_teacher2_id]).filter(Boolean)))
 

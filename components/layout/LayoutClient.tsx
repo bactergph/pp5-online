@@ -22,6 +22,7 @@ const TITLE_BY_PREFIX: { prefix: string; title: string }[] = [
   { prefix: '/classrooms', title: 'ชั้นเรียน' },
   { prefix: '/students', title: 'นักเรียน' },
   { prefix: '/scores', title: 'บันทึกคะแนน' },
+  { prefix: '/attendance/homeroom', title: 'เช็กชื่อโฮมรูม' },
   { prefix: '/attendance', title: 'เช็คเวลาเรียนรายวิชา' },
   { prefix: '/evaluation', title: 'การประเมิน' },
   { prefix: '/reports', title: 'รายงาน' },
@@ -45,6 +46,7 @@ function titleFromPath(pathname: string, fallback?: string) {
 }
 
 type Props = {
+  hasSecondaryClasses?: boolean
   educationType?: SchoolEducationType
   children: React.ReactNode
   title?: string
@@ -76,6 +78,7 @@ function LayoutClientInner({
   hasSchool = false,
   isActingDirector = false,
   educationType = 'primary',
+  hasSecondaryClasses = false,
   membership = null,
   membershipAd = null,
 }: Props) {
@@ -166,6 +169,7 @@ function LayoutClientInner({
       <NavigationProgress />
       <Sidebar
         educationType={educationType}
+        hasSecondaryClasses={hasSecondaryClasses}
         isOpen={sidebarOpen}
         onClose={closeSidebar}
         userRole={userRole}

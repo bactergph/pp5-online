@@ -9,6 +9,7 @@ export function workspaceAppearance(pathname:string,schoolCode:string|null=null)
   if(schoolCode&&path.startsWith('/'+schoolCode+'/'))path=path.slice(schoolCode.length+1)
   else if(!schoolCode){const parts=path.split('/');if(parts.length>2&&isSchoolCodeSegment(parts[1]))path='/'+parts.slice(2).join('/')}
   if(within(path,'/district'))return {tone:'navy',label:'ดูแลระบบ'}
+  if(within(path,'/attendance/homeroom'))return {tone:'amber',label:'เช็กชื่อโฮมรูม'}
   if(['/classroom-admin','/export/classroom-admin','/sign/classroom-admin'].some(prefix=>within(path,prefix)))return {tone:'amber',label:'ธุรการชั้นเรียน'}
   if(['/homeroom/pp6','/reports/pp6','/export/pp6','/sign/pp6','/reports/individual'].some(prefix=>within(path,prefix)))return {tone:'violet',label:'รายงาน ปพ.6'}
   if(['/schedules','/export/schedules'].some(prefix=>within(path,prefix)))return {tone:'blue',label:'ตารางเรียน / ตารางสอน'}

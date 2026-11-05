@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { verifySession } from '@/lib/dal'
-import { getSchoolShell } from '@/lib/school-shell'
+import { getSchoolShell, getSchoolHasSecondaryClasses } from '@/lib/school-shell'
 import { hasRoleInList, resolveNavRole } from '@/lib/roles'
 import { readMembership } from '@/lib/member-plan'
 import { membershipAllows, membershipHome, type Membership } from '@/lib/membership'
@@ -26,6 +26,7 @@ export default async function AppLayout({ children, title, requireRole }: Props)
   let schoolName: string | null = null
   let isActingDirector = false
   let educationType: SchoolEducationType = 'primary'
+  let hasSecondaryClasses = false
   if (session.schoolId && session.role !== 'district') {
     const data = await getSchoolShell(session.schoolId)
     schoolCode = data?.code ?? null
@@ -40,6 +41,8 @@ export default async function AppLayout({ children, title, requireRole }: Props)
       educationType = resolveSchoolEducationType(data.education_type, (rooms.data || []).map(row => row.level))
     }
   }
+
+  if (session.schoolId && session.role !== 'district') hasSecondaryClasses = educationType === 'secondary' || await getSchoolHasSecondaryClasses(session.schoolId)
 
   const navRole = resolveNavRole(session.role, isActingDirector)
   const accessRole = isActingDirector ? 'principal' : session.role
@@ -66,6 +69,7 @@ export default async function AppLayout({ children, title, requireRole }: Props)
       schoolProgramName={schoolProgramName}
       schoolName={schoolName}
       educationType={educationType}
+      hasSecondaryClasses={hasSecondaryClasses}
       hasSchool={Boolean(session.schoolId)}
       isActingDirector={isActingDirector}
       membership={membership}
