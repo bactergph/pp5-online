@@ -41,6 +41,7 @@ export async function saveSubjectDetails(year:string,term:number,hash:string,les
 function failWrite(error: { message?: string; code?: string } | null, fallback: string) {
   if (!error) return
   const message = error.message || ''
+  if (error.code === '23505' && fallback === 'บันทึกวิชาของห้องไม่สำเร็จ') throw Error('รายวิชาของห้องมีรายการซ้ำหรือเปลี่ยนระหว่างบันทึก กรุณาโหลดข้อมูลล่าสุดแล้วลองใหม่')
   if (error.code === '23514' || /subjects_group_check|subject_group/.test(message)) throw Error('กลุ่มสาระไม่ถูกต้อง')
   if (/invalid input syntax for type uuid/.test(message)) throw Error('รายวิชายังไม่กำหนดครู จึงบันทึกไม่ได้')
   if (/^[\u0E00-\u0E7F]/.test(message)) throw Error(message)
@@ -91,6 +92,7 @@ export async function importScheduleTeachers(year: string, term: number, rows: {
 export async function importScheduleSubjects(year: string, term: number, hash: string, rows: SubjectInputRow[]) {
   const session = await getSession()
   if (!session?.schoolId || session.mustChangePassword || !SCHEDULE_EDIT_ROLES.includes(session.role as typeof SCHEDULE_EDIT_ROLES[number])) throw Error('ไม่มีสิทธิ์จัดตารางเรียน')
+  if (term !== 1 && term !== 2) throw Error('กรุณาเลือกภาคเรียนที่ 1 หรือ 2')
   validateSubjectInputs(rows)
   const current = await preparation(year, term)
   if (hash !== current.hash) throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')
@@ -100,7 +102,8 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
   }
   const db = createServerClient()
   const roomLevel = (classroomId: string) => current.classrooms.find(room => room.id === classroomId)?.level || ''
-  const offerings = new Map(current.lessons.filter(lesson => !lesson.activity).map(lesson => [`${lesson.classroomId}|${lesson.code.trim().toLowerCase()}`, lesson]))
+  type ImportOffering = { id: string; classroomId: string; code: string; name: string; fullName?: string; teacherId?: string | null; semester?: number }
+  const offerings = new Map<string, ImportOffering>(current.lessons.filter(lesson => !lesson.activity).map(lesson => [`${lesson.classroomId}|${lesson.code.trim().toLowerCase()}`, lesson]))
   let levelColumn = true
   let listed: { id: string; code: string; name: string; level: string | null }[]
   try {
@@ -110,6 +113,25 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
     listed = (await fetchPages<{ id: string; code: string; name: string }>((from, to) => db.from('subjects').select('id,code,name').eq('school_id', session.schoolId).range(from, to), 'โหลดรายวิชาเดิมไม่สำเร็จ')).map(item => ({ ...item, level: null }))
   }
   const catalog = listed.map(item => ({ id: item.id, code: item.code.trim(), name: item.name, level: item.level || '' }))
+  // Preparation is a visible timetable projection: an annual primary offering can be
+  // hidden until this semester has a rule. Read stored offerings before deciding to insert.
+  const stored = await fetchPages<{ id: string; classroom_id: string; subject_id: string; teacher_id: string | null; semester: number }>(
+    (from, to) => db.from('class_subjects').select('id,classroom_id,subject_id,teacher_id,semester')
+      .eq('academic_year_id', year).in('classroom_id', [...new Set(rows.map(row => row.classroomId))])
+      .in('semester', [0, term]).order('id').range(from, to), 'โหลดรายวิชาของห้องเดิมไม่สำเร็จ')
+  const subjectById = new Map(catalog.map(subject => [subject.id, subject]))
+  const preferred = new Set<string>()
+  const targetSemester = (room: string) => /^(ม\.|มัธยม)/.test(roomLevel(room)) ? term : 0
+  stored.sort((a, b) => Number(b.semester === targetSemester(b.classroom_id)) - Number(a.semester === targetSemester(a.classroom_id)))
+  for (const item of stored) {
+    if (item.semester !== 0 && item.semester !== targetSemester(item.classroom_id)) continue
+    const subject = subjectById.get(item.subject_id)
+    if (!subject) continue
+    const key = `${item.classroom_id}|${subject.code.toLowerCase()}`
+    if (preferred.has(key)) continue
+    preferred.add(key)
+    offerings.set(key, { id: item.id, classroomId: item.classroom_id, code: subject.code, name: subject.name, fullName: subject.name, teacherId: item.teacher_id, semester: item.semester })
+  }
   const findSubject = (code: string, level: string) => {
     const key = code.trim().toLowerCase()
     const exact = catalog.find(item => item.code.toLowerCase() === key && item.level === level)
@@ -167,7 +189,9 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
       if (!subject?.id) throw Error('บันทึกรายวิชาไม่สำเร็จ')
       fresh.push({ classroom_id: row.classroomId, subject_id: subject.id, teacher_id: row.teacherId || null, academic_year_id: year, semester, key })
     } else if (row.teacherId && offering.teacherId !== row.teacherId) {
-      const placed = await db.from('class_schedule_slots').select('id', { count: 'exact', head: true }).eq('class_subject_id', offering.id).eq('semester', term)
+      let placedQuery = db.from('class_schedule_slots').select('id', { count: 'exact', head: true }).eq('class_subject_id', offering.id)
+      if (offering.semester !== 0) placedQuery = placedQuery.eq('semester', term)
+      const placed = await placedQuery
       failWrite(placed.error, 'ตรวจคาบในตารางก่อนเปลี่ยนครูไม่สำเร็จ')
       if ((placed.count ?? 0) > 0) throw Error(`วิชา ${code} มีคาบสอนแล้ว กรุณานำคาบออกก่อนเปลี่ยนครู`)
       const updated = await db.from('class_subjects').update({ teacher_id: row.teacherId }).eq('id', offering.id)
