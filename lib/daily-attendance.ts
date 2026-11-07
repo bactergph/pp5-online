@@ -48,10 +48,11 @@ export function resolveDailyStatus(saved?: DailyDbStatus | string | null, date?:
   return toDailyDisplay(saved as DailyDbStatus | null) ?? 'ม'
 }
 
-/** ข้อความในช่อง: ช่องว่างที่เก็บแล้ว = ว่างเปล่า; ไม่มีแถว = ม */
+/** ข้อความในช่อง: มาแสดงเป็นถูก; ช่องว่างที่เก็บแล้ว = ว่างเปล่า */
 export function dailyCellText(saved?: DailyDbStatus | string | null, date?: string, asOf = dailyAttendanceToday()): string {
   const status = resolveDailyStatus(saved, date, asOf)
-  return status === DAILY_BLANK ? '' : status
+  if (status === DAILY_BLANK) return ''
+  return status === 'ม' ? '✓' : status
 }
 
 /** วนคลิก ม → ล → ป → ข → ช่องว่าง → ม */

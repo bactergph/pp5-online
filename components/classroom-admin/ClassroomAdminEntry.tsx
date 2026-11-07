@@ -129,7 +129,7 @@ type AttendanceToolbarPendingAction = 'fill' | 'delete' | null
 type AttendanceConfirmPhase = 'idle' | 'countdown' | 'armed'
 
 const ATTENDANCE_OPTIONS = [
-  { value: 'ม', label: 'มา (ม)' },
+  { value: 'ม', label: 'มา (✓)' },
   { value: 'ล', label: 'ลากิจ' },
   { value: 'ป', label: 'ลาป่วย' },
   { value: 'ข', label: 'ขาด' },
@@ -2271,7 +2271,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <div className="classroom-admin-attendance-toolbar">
               <span className="classroom-admin-attendance-toolbar-note">
                 {mode === 'attendance'
-                  ? 'แสดงมา (ม) อัตโนมัติถึงวันนี้ · วันล่วงหน้าเว้นว่าง · คลิกวน ม → ล → ป → ข → ช่องว่าง'
+                  ? 'แสดงมา (✓) อัตโนมัติถึงวันนี้ · วันล่วงหน้าเว้นว่าง · คลิกวน ✓ → ล → ป → ข → ช่องว่าง'
                   : `ช่องว่าง = ยังไม่ทำ · คลิกเพื่อสลับ ${CLASSROOM_ADMIN_CHECK_MARK}`}
               </span>
               {canEdit ? (

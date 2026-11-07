@@ -178,7 +178,8 @@ function activityPlacement(data:Preparation,year:string){
     seen.add(key)
     const previous=data.slots.find(s=>s.classroom_id===roomId&&s.day_of_week===cell.day&&s.period===cell.period)
     if(previous?.locked&&lessonKey(previous)!==lesson.id)unlock.push(previous)
-    slots.push({classroom_id:roomId,academic_year_id:year,day_of_week:cell.day,period:cell.period,...lessonColumns(lesson.id),note:null,locked:!!(previous&&lessonKey(previous)===lesson.id&&previous.locked)})
+    const columns=lessonColumns(lesson.id)
+    slots.push({classroom_id:roomId,academic_year_id:year,day_of_week:cell.day,period:cell.period,...columns,note:columns.note??null,locked:!!(previous&&lessonKey(previous)===lesson.id&&previous.locked)})
    }
   }
  }
@@ -236,7 +237,7 @@ export async function generate(year:string,term:number,scope:string[],clear:bool
  const result=solvePlannedSchedule(lessons,retained.map(toPlanned),data.plan,data.periods,data.blocks)
  if(result.status!=='complete')return {...result,issues:[...issues,...result.issues.map(shiftManageStep)],id:null,rows:[] as ScheduleSlot[],assigned:0,locked:0}
  const covered=new Set(retained.map(s=>`${s.classroom_id}:${s.day_of_week}:${s.period}`))
- const rows=[...retained,...result.assignments.filter(a=>!covered.has(`${a.classroomId}:${a.day}:${a.period}`)).map(a=>({classroom_id:a.classroomId,academic_year_id:year,day_of_week:a.day,period:a.period,...lessonColumns(a.lessonId),note:null,locked:false}))]
+ const rows=[...retained,...result.assignments.filter(a=>!covered.has(`${a.classroomId}:${a.day}:${a.period}`)).map(a=>{const columns=lessonColumns(a.lessonId);return {classroom_id:a.classroomId,academic_year_id:year,day_of_week:a.day,period:a.period,...columns,note:columns.note??null,locked:false}})]
  const verified=verifyCompleteSchedule(lessons,rows.map(toPlanned),data.plan.days,data.periods,data.blocks).map(shiftManageStep)
  if(verified.some(issue=>issue.severity==='error'))return {status:'invalid' as const,issues:[...issues,...verified],id:null,rows:[] as ScheduleSlot[],assigned:0,locked:0}
  const selected=new Set(scope),same=(a:ScheduleSlot,b:ScheduleSlot)=>a.classroom_id===b.classroom_id&&a.day_of_week===b.day_of_week&&a.period===b.period&&lessonKey(a)===lessonKey(b)&&a.note===b.note&&a.locked===b.locked
@@ -258,7 +259,7 @@ export async function activityDraft(year:string,term:number,setting:string,rooms
  if(remove&&(!old||lessonKey(old)!==lesson?.id))continue
  if(!remove&&old&&lessonKey(old)===lesson?.id)continue
  if(old){affected.push(old);if(old.locked)unlock.push(old);rows.splice(rows.indexOf(old),1)}
- if(!remove&&lesson)rows.push({classroom_id:room,academic_year_id:year,day_of_week:c.day,period:c.period,...lessonColumns(lesson.id),note:null,locked:false})
+ if(!remove&&lesson){const columns=lessonColumns(lesson.id);rows.push({classroom_id:room,academic_year_id:year,day_of_week:c.day,period:c.period,...columns,note:columns.note??null,locked:false})}
  }}
  const activityLessons=[...data.lessons,...offerings.map(o=>({id:'activity:'+o.id,classroomId:o.classroom_id,teacherId:null,count:0,label:data.activities.find(a=>a.id===setting)?.label||'กิจกรรม',activity:true,teacherOptional:true}))].map(l=>({...l,count:l.activity?rows.filter(s=>lessonKey(s)===l.id).length:l.count}))
  const conflicts=checkPlanning(activityLessons,rows.map(toPlanned),data.plan.days,data.periods,data.blocks).filter(i=>['fixed_teacher_conflict','fixed_venue_conflict','fixed_outside','fixed_classroom_collision'].includes(i.code||''))

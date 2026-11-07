@@ -210,6 +210,8 @@ export async function fetchScheduleExportContext() {
 
 export async function fetchSubstituteHistory(yearId:string,semester=1,before?:string):Promise<SubstituteHistoryPage>{return substituteDocuments.documentHistory(yearId,semester,before)}
 
+export async function fetchSubstituteStats(yearId:string,semester=1){return substituteDocuments.documentSubstituteStats(yearId,semester)}
+
 export async function fetchSubstituteDay(date:string,yearId:string,semester=1){return substituteDocuments.documentDay(date,yearId,semester)}
 
 export async function loadSubstituteSlotsForTeacher(

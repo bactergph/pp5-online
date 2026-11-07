@@ -15,11 +15,12 @@ import type { AcademicBand } from '@/lib/secondary-academic'
 import { calcGrade, gradeLabel, gradeColor, RESULT_OPTIONS } from '@/lib/grade'
 import { scoreTransferData, parseScoreTransfer } from '@/lib/score-transfer'
 import { schoolCodeFromPathname, withSchoolPrefix } from '@/lib/school-path'
+import { readContentUnits, subjectWithUnits } from '@/lib/class-subject-offer'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Subject = { id: string; code: string; name: string }
 type Classroom = { id: string; level: string; room: number }
-type CS = { id: string; classroom_id: string; subject_id: string; order_number: number }
+type CS = { id: string; classroom_id: string; subject_id: string; order_number: number; content_units?: unknown }
 type Student = { id: string; student_number: number; student_code: string | null; prefix: string | null; first_name: string; last_name: string; status: string }
 type Config = { unit_count: number; between_scores: number[]; midterm_max: number; final_max: number; total_max: number }
 type Row = { unit_scores: number[]; midterm: number | null; final: number | null; result: string }
@@ -401,7 +402,9 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
 
   const uc = config?.between_scores?.length || 0
   const overMax = (val: number, max: number) => Number.isFinite(val) && val > max
-  const selectedSubject = selectedCS ? subjectMap[items.find(item => item.id === selectedCS)?.subject_id || ''] : null
+  const selectedItem = items.find(item => item.id === selectedCS)
+  const selectedSubject = selectedItem ? subjectMap[selectedItem.subject_id] : null
+  const selectedSubjectName = subjectWithUnits(selectedSubject?.name || '', readContentUnits(selectedItem?.content_units))
   const selectedClassroom = classrooms.find(item => item.id === selectedClass)
   const betweenMax = config?.between_scores.reduce((a, b) => a + b, 0) || 0
   const showMidterm = (config?.midterm_max ?? 0) > 0
@@ -422,7 +425,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
           <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="score-import-title" style={{ maxWidth: 600, maxHeight: '85vh', overflow: 'auto' }}>
             <h2 id="score-import-title" style={{ fontSize: 20, fontWeight: 700 }}>ตรวจสอบก่อนนำเข้าคะแนน</h2>
             <p style={{ overflowWrap: 'anywhere' }}>{importPreview.filename}</p>
-            <p>ปี {years.find(year => year.id === selectedYear)?.year_be} · ห้อง {selectedClassroom?.level}/{selectedClassroom?.room} · {selectedSubject?.name} · ภาคเรียนที่ {term}</p>
+            <p>ปี {years.find(year => year.id === selectedYear)?.year_be} · ห้อง {selectedClassroom?.level}/{selectedClassroom?.room} · {selectedSubjectName} · ภาคเรียนที่ {term}</p>
             <p>นักเรียน {Object.keys(importPreview.rows).length} คน · แสดงตัวอย่างไม่เกิน 8 คน</p>
             <p>คะแนนของนักเรียนในไฟล์จะถูกแทนที่ รวมถึงช่องว่างที่จะล้างคะแนนเดิม นักเรียนที่ไม่อยู่ในไฟล์จะคงคะแนนเดิม</p>
             <div style={{ overflowX: 'auto', margin: '16px 0' }}>
@@ -490,7 +493,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
               <select id="score-subject" value={selectedCS} onChange={e => { const value = e.target.value; void changeSelection(() => setSelectedCS(value)) }} disabled={saving || transferBusy || items.length === 0}>
                 {items.length === 0 ? <option>— ไม่มีวิชา —</option> : items.map(it => {
                   const s = subjectMap[it.subject_id]
-                  return <option key={it.id} value={it.id}>[{s?.code}] {s?.name}</option>
+                  return <option key={it.id} value={it.id}>[{s?.code}] {subjectWithUnits(s?.name || '', readContentUnits(it.content_units))}</option>
                 })}
               </select>
             </div>
@@ -520,7 +523,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
             <div className="alert alert-error score-config-cta">
               <div className="score-config-cta-text">
                 ยังไม่ได้ตั้ง <b>อัตราส่วนคะแนน</b>
-                {selectedSubject ? <> ของวิชา <b>[{selectedSubject.code}] {selectedSubject.name}</b></> : ' ของวิชานี้'}
+                {selectedSubject ? <> ของวิชา <b>[{selectedSubject.code}] {selectedSubjectName}</b></> : ' ของวิชานี้'}
                 {' '}(ภาคเรียนที่ {term}) — กำหนดอัตราส่วนก่อนจึงจะกรอกคะแนนได้
               </div>
               {canConfigureScores && selectedClass && (
@@ -563,7 +566,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
               <div className="score-grid-card">
                 <div className="score-grid-top">
                   <div>
-                    <strong>รายวิชา: {selectedSubject ? `${selectedSubject.code} ${selectedSubject.name}` : '-'}</strong>
+                    <strong>รายวิชา: {selectedSubject ? `${selectedSubject.code} ${selectedSubjectName}` : '-'}</strong>
                     <span> · ห้อง {selectedClassroom ? `${selectedClassroom.level}/${selectedClassroom.room}` : '-'}</span>
                   </div>
                 </div>

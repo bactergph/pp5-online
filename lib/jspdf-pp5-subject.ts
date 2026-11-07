@@ -13,6 +13,7 @@ import {
   buildTeachingWeeks,
   hourlyCellKey,
   hoursPerWeek,
+  hourlyCellText,
   resolveHourlyStatus,
   schoolDayCalendarFromLists,
   summarizeHourlyStatuses,
@@ -379,7 +380,7 @@ function subjectWeekMonthLabel(week: SubjectCalendarWeek) {
 }
 
 function hourlyStatusCellContent(status: HourlyStatus | undefined) {
-  return resolveHourlyStatus(status)
+  return hourlyCellText(status)
 }
 
 function setStroke(doc: jsPDF, rgb: [number, number, number] = BORDER, width = 0.3) {

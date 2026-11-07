@@ -12,8 +12,9 @@ export default function SubstituteSavedHistory({year,term,revision,disabled,pdfD
   onPdf:(record:SubstituteHistoryRecord,names:Record<string,string>)=>void
   onDelete:(record:SubstituteHistoryRecord)=>void
 }) {
-  const {fetchSubstituteHistory}=useScheduleOperations()
+  const {fetchSubstituteHistory,fetchSubstituteStats}=useScheduleOperations()
   const [page,setPage]=useState<SubstituteHistoryPage>({days:[],teacher_names:{},nextBefore:null})
+  const [stats,setStats]=useState<Array<{teacherId:string;periods:number;name:string}>>([])
   const [loadedScope,setLoadedScope]=useState(''),[loading,setLoading]=useState(false),[error,setError]=useState(''),[search,setSearch]=useState('')
   const [status,setStatus]=useState('all'),[expanded,setExpanded]=useState('')
   const scope=`${year}:${term}`,request=useRef(0)
@@ -29,6 +30,7 @@ export default function SubstituteSavedHistory({year,term,revision,disabled,pdfD
     finally {if(ticket===request.current)setLoading(false)}
   },[fetchSubstituteHistory,year,term])
   useEffect(()=>{const counter=request;let cancelled=false;void Promise.resolve().then(()=>{if(!cancelled)void load()});return()=>{cancelled=true;counter.current++}},[load,revision])
+  useEffect(()=>{if(!year)return;let cancelled=false;void fetchSubstituteStats(year,term).then(rows=>{if(!cancelled)setStats(rows)}).catch(()=>{if(!cancelled)setStats([])});return()=>{cancelled=true}},[fetchSubstituteStats,year,term,revision])
   const teacherNames={...names,...page.teacher_names},days=loadedScope===scope?page.days:[]
   const records=substituteHistoryRecords(days).sort((a,b)=>b.day.date.localeCompare(a.day.date)||(teacherNames[a.absentId]||'').localeCompare(teacherNames[b.absentId]||'','th'))
   const dateText=(date:string)=>new Intl.DateTimeFormat('th-TH',{dateStyle:'long',timeZone:'Asia/Bangkok'}).format(new Date(date+'T12:00:00+07:00'))
@@ -40,6 +42,7 @@ export default function SubstituteSavedHistory({year,term,revision,disabled,pdfD
   })
   return <section id="substitute-saved-history" tabIndex={-1} className="sub-roster-saved" aria-labelledby="sub-saved-title" aria-busy={loading}>
     <div className="sub-roster-section-head sub-history-heading"><div><h2 id="sub-saved-title">รายการสอนแทนที่บันทึกแล้ว</h2><p>แยกตามครูและวันที่ · เปิดดูคาบ ดาวน์โหลด PDF หรือแก้ไขได้จากแถวเดียวกัน</p></div><span>{records.length} รายการที่โหลด · {days.length} วัน</span></div>
+    {!!stats.length&&<div className="sub-history-stats"><h3>สถิติครูสอนแทนในภาคเรียนนี้</h3><table><thead><tr><th>ครูสอนแทน</th><th>จำนวนคาบ</th></tr></thead><tbody>{stats.map(row=><tr key={row.teacherId}><td>{row.name||teacherNames[row.teacherId]||'ครูสอนแทน'}</td><td>{row.periods} คาบ</td></tr>)}</tbody></table></div>}
     <div className="sub-history-toolbar"><label className="sub-roster-search sub-history-search"><FiSearch aria-hidden="true"/><input type="search" aria-label="ค้นหารายการที่บันทึกแล้ว" placeholder="ค้นหาครูหรือวันที่ เช่น 2026-11-02" value={search} onChange={event=>setSearch(event.target.value)}/></label><label className="sub-history-status-filter"><span>สถานะ</span><select aria-label="กรองสถานะรายการสอนแทน" value={status} onChange={event=>setStatus(event.target.value)}><option value="all">ทั้งหมด</option><option value="pending">รอครูสอนแทน</option><option value="complete">กำหนดครูครบแล้ว</option><option value="busy">มีข้อสังเกตเวลาว่าง</option></select></label><button type="button" disabled={disabled||loading||!year} onClick={()=>void load()}><FiRefreshCw aria-hidden="true"/>โหลดรายการใหม่</button></div>
     {unsavedChanges&&<p className="sub-history-hint">มีร่างที่ยังไม่บันทึก · PDF ใช้ข้อมูลที่บันทึกแล้ว หากจะแก้ไขหรือลบรายการ ให้ <a href="#sub-roster-workbench">บันทึกหรือยกเลิกร่างด้านบน</a> ก่อน</p>}
     {error&&<p className="sub-roster-error" role="alert">{error} <button type="button" disabled={disabled||loading} onClick={()=>void load()}>ลองใหม่</button></p>}

@@ -11,11 +11,13 @@ import {
 } from '@/app/scores/actions'
 import { fetchHourlyGrid, saveHourlyCell, fillHourlyPresentAll, fillHourlyPresentColumn, clearHourlyPresentColumn, clearHourlyAttendanceAll } from '@/app/attendance/actions'
 import { formatThaiDate } from '@/lib/thaiDate'
+import { readContentUnits, subjectWithUnits } from '@/lib/class-subject-offer'
 import LegacyHourlyRecords, { type LegacyHourlyRecord } from './LegacyHourlyRecords'
 import {
   chunkWeeks,
   globalSlotNumber,
   hourlyCellKey,
+  hourlyCellText,
   HOURLY_STATUS_LABELS,
   nextHourlyStatusFromSaved,
   resolveHourlyStatus,
@@ -41,7 +43,7 @@ type ConfirmPhase = 'idle' | 'countdown' | 'armed'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number }
-type CS = { id: string; classroom_id: string; subject_id: string }
+type CS = { id: string; classroom_id: string; subject_id: string; content_units?: unknown }
 type Subject = { id: string; code: string; name: string }
 type Student = {
   id: string
@@ -527,12 +529,12 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
       <div className="hourly-head">
         <div>
           <h1 className="hourly-title">เช็กชื่อรายวิชา{isSecondaryClassLevel(classroom?.level) ? ' · รายภาคเรียน' : ''}</h1>
-          <p className="hourly-subtitle">ช่องว่าง = มา · คลิกเพื่อวน / → ข → ล → ป</p>
+          <p className="hourly-subtitle">ช่องว่าง = มา · คลิกเพื่อวน ✓ → ข → ล → ป</p>
         </div>
         <div className="hourly-legend">
           {(['/', 'ข', 'ล', 'ป'] as HourlyStatus[]).map(s => (
             <span key={s} className={`hourly-legend-item ${STATUS_CLASS[s]}`}>
-              <b>{s}</b> {HOURLY_STATUS_LABELS[s]}
+              <b>{hourlyCellText(s)}</b> {HOURLY_STATUS_LABELS[s]}
             </span>
           ))}
         </div>
@@ -568,7 +570,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
             <option value="">{!subjectsReady ? '— กำลังโหลดรายวิชา —' : items.length === 0 ? `— ไม่มีวิชาในภาคเรียนที่ ${term} —` : '— เลือกรายวิชา —'}</option>
             {items.map(it => {
               const s = subjectMap[it.subject_id]
-              return <option key={it.id} value={it.id}>[{s?.code}] {s?.name}</option>
+              return <option key={it.id} value={it.id}>[{s?.code}] {subjectWithUnits(s?.name || '', readContentUnits(it.content_units))}</option>
             })}
           </select>
         </div>
@@ -595,7 +597,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
           <span>ชั้น <b>{classroom ? `${classroom.level}/${classroom.room}` : '-'}</b></span>
           <span>ภาคเรียนที่ <b>{term}</b></span>
           <span>รหัสวิชา <b>{subjectInfo.code || selectedSubject?.code || '-'}</b></span>
-          <span>รายวิชา <b>{subjectInfo.name || selectedSubject?.name || '-'}</b></span>
+          <span>รายวิชา <b>{subjectWithUnits(subjectInfo.name || selectedSubject?.name || '-', readContentUnits(items.find(item => item.id === selectedCS)?.content_units))}</b></span>
           <span>{isSecondaryClassLevel(classroom?.level) ? 'ชั่วโมง/ภาคเรียน' : 'ชั่วโมง/ปี'} <b>{subjectInfo.hoursPerYear ? subjectInfo.hoursPerYear / (isSecondaryClassLevel(classroom?.level) ? 2 : 1) : '-'}</b></span>
           <span>ชั่วโมง/สัปดาห์ <b>{hoursPerWeekCount}</b></span>
           <span>สัปดาห์การเรียน <b>{weeks.length}</b> สัปดาห์</span>
@@ -612,7 +614,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
       </div>}
       {view === 'summary' && selectedCS && ready && weeks.length > 0 && <section className="data-card hourly-term-summary" aria-label={`สรุปเวลาเรียน ภาคเรียนที่ ${term}`}>
         <h2>สรุปเวลาเรียน ภาคเรียนที่ {term}/{selectedYearLabel}</h2>
-        <p>{subjectInfo.code} · {subjectInfo.name} · ห้อง {classroom?.level}/{classroom?.room}</p>
+        <p>{subjectInfo.code} · {subjectWithUnits(subjectInfo.name || '', readContentUnits(items.find(item => item.id === selectedCS)?.content_units))} · ห้อง {classroom?.level}/{classroom?.room}</p>
         <p className="hourly-summary-note">รวมทุกสัปดาห์ในภาคเรียนที่เลือก ({weeks.length} สัปดาห์ · {weeks.length * hoursPerWeekCount} คาบ) ช่องว่างนับเป็นมาตามรูปแบบเดิม</p>
         <p className="hourly-summary-scroll-hint">เลื่อนตารางแนวนอนเพื่อดูผลครบทุกช่อง</p>
         <div className="hourly-term-summary-scroll"><table><thead><tr><th>เลขที่</th><th>ชื่อ–นามสกุล</th><th>มา</th><th>ขาด</th><th>ลา</th><th>ป่วย</th><th>รวมคาบ</th><th>มาเรียน (%)</th></tr></thead><tbody>
@@ -629,7 +631,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
       ) : view === 'entry' && selectedCS && ready && weeks.length > 0 ? (
         <div className="data-card dense-grid-card hourly-grid-card">
           <div className="hourly-grid-toolbar">
-            <span className="hourly-grid-toolbar-note">ช่องว่าง = มา · คลิกช่องเพื่อวน / → ข → ล → ป</span>
+            <span className="hourly-grid-toolbar-note">ช่องว่าง = มา · คลิกช่องเพื่อวน ✓ → ข → ล → ป</span>
             {canEdit ? (
               <div className="hourly-grid-toolbar-actions">
                 <button
@@ -757,7 +759,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
                                 disabled={!canEdit}
                                 onClick={() => void toggleCell(student.id, week, slot)}
                               >
-                                {status ?? ''}
+                                {status ? hourlyCellText(status) : ''}
                               </button>
                             </td>
                           )

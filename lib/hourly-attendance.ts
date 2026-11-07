@@ -201,6 +201,12 @@ export function resolveHourlyStatus(saved: HourlyStatus | null | undefined): Hou
   return saved ?? '/'
 }
 
+/** มาเรียนแสดงเป็นเครื่องหมายถูก ค่าที่เก็บยังเป็น / */
+export function hourlyCellText(saved: HourlyStatus | null | undefined) {
+  const status = resolveHourlyStatus(saved)
+  return status === '/' ? '✓' : status
+}
+
 /** Callers that build status lists for expected slots should use resolveHourlyStatus(map.get(key)) so missing counts as present. */
 export function summarizeHourlyStatuses(statuses: HourlyStatus[]): HourlySummary {
   let present = 0

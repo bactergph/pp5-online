@@ -7,7 +7,7 @@ import {createServerClient} from './supabase'
 import {SCHEDULE_EDIT_ROLES,SCHEDULE_DAYS} from './schedules'
 import {loadSchedule} from './schedule-store'
 import {substituteWeekday,substituteTimetableForDay} from './schedule-substitute'
-import {substituteRosterSnapshot,type SubstituteRosterEntry,type SubstituteBusy} from './substitute-roster'
+import {substituteRosterSnapshot,summarizeSubstituteTeachers,type SubstituteRosterEntry,type SubstituteBusy} from './substitute-roster'
 import {substituteDocumentNames,prepareSubstituteDocument,type SubstituteDocumentEntry} from './substitute-document-model'
 import {pageSubstituteHistory,validateSubstituteHistoryScope,SUBSTITUTE_HISTORY_PAGE_DAYS,type SubstituteHistoryDay} from './substitute-history'
 
@@ -23,6 +23,24 @@ export async function documentHistory(year:string,term=1,before?:string){
   const result=await query;fail(result.error)
   const page=pageSubstituteHistory((result.data||[]) as unknown as SubstituteHistoryDay[],before)
   return {...page,teacher_names:substituteDocumentNames(page.days.flatMap(day=>day.entries))}
+}
+export async function documentSubstituteStats(year:string,term=1){
+  const session=await actor(),db=createServerClient();validateSubstituteHistoryScope(year,term)
+  const owner=await db.from('academic_years').select('id').eq('id',year).eq('school_id',session.schoolId).maybeSingle();fail(owner.error);if(!owner.data)throw Error('ไม่พบปีการศึกษาของโรงเรียนนี้')
+  const rows:{entries:SubstituteDocumentEntry[]}[]=[]
+  for(let from=0;from<5000;from+=500){
+    const result=await db.from('substitute_documents').select('entries').eq('school_id',session.schoolId).eq('academic_year_id',year).eq('semester',term).order('date').range(from,from+499)
+    fail(result.error)
+    const page=(result.data||[]) as unknown as {entries:SubstituteDocumentEntry[]}[]
+    rows.push(...page)
+    if(page.length<500)break
+  }
+  const summary = summarizeSubstituteTeachers(rows)
+  const ids = summary.map(row => row.teacherId)
+  const users = ids.length ? await db.from('users').select('id,prefix,full_name').in('id', ids).eq('school_id', session.schoolId) : { data: [], error: null }
+  fail(users.error)
+  const names = Object.fromEntries((users.data || []).map(user => [user.id, `${user.prefix || ''}${user.full_name}`]))
+  return summary.map(row => ({ ...row, name: names[row.teacherId] || '' }))
 }
 export async function documentDay(date:string,year:string,term=1){
   const session=await actor(),db=createServerClient(),day=substituteWeekday(date);validateSubstituteHistoryScope(year,term)

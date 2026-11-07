@@ -7,6 +7,7 @@ import {
   setClassSubjectTeacher,
 } from '../actions'
 import { isSecondaryClassLevel } from '@/lib/class-level'
+import { readContentUnitRows, readContentUnits, readScoreTerms, weeklyOfferingPeriods, type ContentUnit } from '@/lib/class-subject-offer'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Teacher = { id: string; prefix: string; full_name: string }
@@ -15,7 +16,10 @@ type Subject = {
   subject_group: string; type: string; hours_per_year: number; credits: number; max_score: number
 }
 type Classroom = { id: string; level: string; room: number }
-type CS = { id: string; subject_id: string; teacher_id: string | null; order_number: number; room_name?: string | null }
+type CS = { id: string; subject_id: string; teacher_id: string | null; co_teacher_ids?: string[] | null; content_units?: unknown; score_terms?: unknown; order_number: number; room_name?: string | null }
+type UnitForm = { name: string; periods: string; useMain: boolean; teacherName: string }
+type UnitDraft = { enabled: boolean; rows: [UnitForm, UnitForm] }
+const blankUnit = (): UnitForm => ({ name: '', periods: '', useMain: true, teacherName: '' })
 
 export default function ClassSubjectsPage() {
   const [canManage, setCanManage] = useState(false)
@@ -30,6 +34,8 @@ export default function ClassSubjectsPage() {
   const [loading, setLoading] = useState(true)
   const [roomDrafts,setRoomDrafts] = useState<Record<string,string>>({})
   const [teacherDrafts, setTeacherDrafts] = useState<Record<string, string>>({})
+  const [unitDrafts, setUnitDrafts] = useState<Record<string, UnitDraft>>({})
+  const [termDrafts, setTermDrafts] = useState<Record<string, Array<1 | 2>>>({})
   const [openTeacherPicker, setOpenTeacherPicker] = useState<string | null>(null)
   const [alertModal, setAlertModal] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -51,7 +57,7 @@ export default function ClassSubjectsPage() {
     }
     Promise.resolve().then(() => {
       setItems([])
-      setTeacherDrafts({}); setRoomDrafts({})
+      setTeacherDrafts({}); setRoomDrafts({}); setUnitDrafts({});  setTermDrafts({})
       setOpenTeacherPicker(null)
     })
   }, [selectedClass, term, classrooms])
@@ -74,7 +80,7 @@ export default function ClassSubjectsPage() {
     initialClassroom.current = ''
   }
   async function loadItems(classId: string, semester: 0 | 1 | 2) {
-    setTeacherDrafts({}); setRoomDrafts({})
+    setTeacherDrafts({}); setRoomDrafts({}); setUnitDrafts({});  setTermDrafts({})
     setOpenTeacherPicker(null)
     setItems(await fetchClassSubjects(classId, semester) as CS[])
   }
@@ -102,23 +108,45 @@ export default function ClassSubjectsPage() {
     if (!shouldFilter) return teachers
     return teachers.filter(t => `${t.prefix} ${t.full_name}`.toLowerCase().includes(normalized))
   }
-  const pendingTeacherChanges = items.reduce((count, item) => {
-    if ((roomDrafts[item.id] ?? item.room_name ?? "").trim() !== (item.room_name || "")) return count+1
-    if (!(item.id in teacherDrafts)) return count
-    const desired = teacherIdByName(teacherDrafts[item.id])
-    if (desired === null) return count + 1
-    return desired !== (item.teacher_id || '') ? count + 1 : count
-  }, 0)
+  const annualRoom = !classrooms.some(item => item.id === selectedClass && isSecondaryClassLevel(item.level))
+  function termsOf(item: CS) {
+    return termDrafts[item.id] || readScoreTerms(item.score_terms)
+  }
+  function unitsOf(item: CS): UnitDraft {
+    if (unitDrafts[item.id]) return unitDrafts[item.id]
+    const saved = readContentUnitRows(item.content_units)
+    const form = (unit?: ContentUnit): UnitForm => unit ? { name: unit.name, periods: unit.periods ? String(unit.periods) : '', useMain: unit.useMainTeacher, teacherName: unit.useMainTeacher ? '' : teacherName(unit.teacherId) } : blankUnit()
+    return saved.length ? { enabled: true, rows: [form(saved[0]), form(saved[1])] } : { enabled: false, rows: [blankUnit(), blankUnit()] }
+  }
+  function unitPayload(item: CS) {
+    const draft = unitsOf(item)
+    if (!draft.enabled) return []
+    return draft.rows.flatMap(row => {
+      if (!row.name.trim() && !row.periods.trim()) return []
+      const teacherId = row.useMain ? null : teacherIdByName(row.teacherName)
+      return [{ name: row.name.trim(), periods: Number(row.periods), teacherId, useMainTeacher: row.useMain, unresolved: !row.useMain && teacherId === null }]
+    })
+  }
+  function offeringChanged(item: CS) {
+    const roomChanged = (roomDrafts[item.id] ?? item.room_name ?? '').trim() !== (item.room_name || '')
+    const input = item.id in teacherDrafts ? teacherDrafts[item.id] : teacherName(item.teacher_id)
+    const desired = teacherIdByName(input)
+    const teacherChanged = desired === null || desired !== (item.teacher_id || '')
+    const saved = readContentUnitRows(item.content_units).map(unit => `${unit.name}|${unit.periods}|${unit.useMainTeacher}|${unit.teacherId || ''}`)
+    const next = unitPayload(item).map(unit => `${unit.name}|${Number.isFinite(unit.periods) ? unit.periods : ''}|${unit.useMainTeacher}|${unit.teacherId || ''}`)
+    const termsChanged = annualRoom && termsOf(item).join() !== readScoreTerms(item.score_terms).join()
+    return roomChanged || teacherChanged || saved.join(';') !== next.join(';') || termsChanged
+  }
+  const pendingTeacherChanges = items.reduce((count, item) => count + (offeringChanged(item) ? 1 : 0), 0)
   async function handleSaveTeachers() {
-    const changes = items.map(item => {
-      const roomChanged = (roomDrafts[item.id] ?? item.room_name ?? "").trim() !== (item.room_name || "")
-      if (!(item.id in teacherDrafts) && !roomChanged) return null
+    const changes: Array<{ item: CS; teacherId?: string; error?: string }> = []
+    for (const item of items) {
+      if (!offeringChanged(item)) continue
       const input = teacherDrafts[item.id] ?? teacherName(item.teacher_id)
       const desired = teacherIdByName(input)
-      if (desired === null) return { item, error: input.trim() }
-      if (desired === (item.teacher_id || '') && !roomChanged) return null
-      return { item, teacherId: desired }
-    }).filter(Boolean) as Array<{ item: CS; teacherId?: string; error?: string }>
+      if (desired === null) changes.push({ item, error: input.trim() })
+      else changes.push({ item, teacherId: desired })
+    }
 
     const invalid = changes.find(change => change.error)
     if (invalid?.error) {
@@ -133,7 +161,19 @@ export default function ClassSubjectsPage() {
     setSavingEdit(true)
     setAlertModal(null)
     for (const change of changes) {
-      const { error } = await setClassSubjectTeacher(change.item.id, change.teacherId || null, (roomDrafts[change.item.id] ?? change.item.room_name ?? "").trim())
+      const units = unitPayload(change.item)
+      if (units.some(unit => unit.unresolved)) {
+        setSavingEdit(false)
+        notify('error', `ไม่พบชื่อครูของวิชาย่อย "${units.find(unit => unit.unresolved)?.name || ''}"`)
+        return
+      }
+      const room = classrooms.find(room => room.id === selectedClass)
+      const subject = subjectMap[change.item.subject_id]
+      const { error } = await setClassSubjectTeacher(change.item.id, change.teacherId || null, (roomDrafts[change.item.id] ?? change.item.room_name ?? '').trim(), {
+        contentUnits: units.map(({ name, periods, teacherId, useMainTeacher }) => ({ name, periods, teacherId, useMainTeacher })),
+        weeklyPeriods: weeklyOfferingPeriods(room?.level || '', subject?.credits, subject?.hours_per_year),
+        ...(annualRoom ? { scoreTerms: termsOf(change.item) } : {}),
+      })
       if (error) {
         setSavingEdit(false)
         notify('error', error)
@@ -142,10 +182,10 @@ export default function ClassSubjectsPage() {
       }
     }
     setSavingEdit(false)
-    setTeacherDrafts({}); setRoomDrafts({})
+    setTeacherDrafts({}); setRoomDrafts({}); setUnitDrafts({});  setTermDrafts({})
     setOpenTeacherPicker(null)
     loadItems(selectedClass, semesterFor(selectedClass))
-    notify('success', `บันทึกครูและสถานที่เรียน ${changes.length} รายการเรียบร้อย`)
+    notify('success', `บันทึกรายวิชา ${changes.length} รายการเรียบร้อย`)
   }
   if (loading) return <div className="text-center py-10 text-gray-500">กำลังโหลด...</div>
 
@@ -190,6 +230,8 @@ export default function ClassSubjectsPage() {
             <div className="alert alert-error">ยังไม่มีชั้นเรียนในปีนี้ — ไปเพิ่มที่เมนู &quot;ชั้นเรียน&quot; ก่อน</div>
           ) : (
             <>
+              <p className="class-subject-offer-note">ครูประจำวิชาเป็นชื่อหลักในตาราง หากเลือกมีวิชาย่อย โควตาคาบจะแบ่งตามชื่อและผู้สอนของแต่ละวิชาย่อย ตารางเรียนและตารางสอนจะแสดงคนที่สอนวิชาย่อยนั้น คะแนนยังใช้รหัสวิชาเดียว</p>
+              <datalist id="class-subject-unit-names">{[...new Set(items.flatMap(item => readContentUnitRows(item.content_units).map(unit => unit.name)))].map(name => <option key={name} value={name} />)}</datalist>
               <div className="data-card class-subjects-table-card">
                 <table className="thai-table class-subjects-table" style={{ width: '100%', whiteSpace: 'nowrap' }}>
                   <colgroup>
@@ -220,6 +262,37 @@ export default function ClassSubjectsPage() {
                           <td className="class-subject-name-cell">
                             <span>{s?.name || '(วิชาถูกลบ)'}</span>
                             {s?.type && <span className="badge badge-gray" style={{ marginLeft: 8 }}>{s.type}</span>}
+                            {canManage ? (
+                              <div className="class-subject-units">
+                                <div className="class-subject-unit-switch" role="group" aria-label={`วิชาย่อย ${s?.name || ''}`}>
+                                  <button type="button" aria-pressed={!unitsOf(cs).enabled} disabled={savingEdit} onClick={() => setUnitDrafts(current => ({ ...current, [cs.id]: { ...unitsOf(cs), enabled: false } }))}>ไม่มี</button>
+                                  <button type="button" aria-pressed={unitsOf(cs).enabled} disabled={savingEdit} onClick={() => setUnitDrafts(current => ({ ...current, [cs.id]: { ...unitsOf(cs), enabled: true } }))}>มีวิชาย่อย</button>
+                                  <span>{weeklyOfferingPeriods(classrooms.find(room => room.id === selectedClass)?.level || '', s?.credits, s?.hours_per_year) || '—'} คาบ/สัปดาห์</span>
+                                </div>
+                                {unitsOf(cs).enabled && (
+                                  <div className="class-subject-unit-table">
+                                    {unitsOf(cs).rows.map((row, index) => (
+                                      <div className="class-subject-unit-row" key={index}>
+                                        <input className="form-input" list="class-subject-unit-names" maxLength={80} disabled={savingEdit} aria-label={`ชื่อวิชาย่อย ${index + 1} ${s?.name || ''}`} placeholder={`วิชาย่อย ${index + 1}`} value={row.name} onChange={event => setUnitDrafts(current => ({ ...current, [cs.id]: { ...unitsOf(cs), rows: unitsOf(cs).rows.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) as [UnitForm, UnitForm] } }))} />
+                                        <input className="form-input" inputMode="numeric" disabled={savingEdit} aria-label={`จำนวนคาบวิชาย่อย ${index + 1} ${s?.name || ''}`} placeholder="คาบ" value={row.periods} onChange={event => setUnitDrafts(current => ({ ...current, [cs.id]: { ...unitsOf(cs), rows: unitsOf(cs).rows.map((item, itemIndex) => itemIndex === index ? { ...item, periods: event.target.value.replace(/\D/g, '').slice(0, 2) } : item) as [UnitForm, UnitForm] } }))} />
+                                        <label><input type="checkbox" checked={row.useMain} disabled={savingEdit} onChange={event => setUnitDrafts(current => ({ ...current, [cs.id]: { ...unitsOf(cs), rows: unitsOf(cs).rows.map((item, itemIndex) => itemIndex === index ? { ...item, useMain: event.target.checked } : item) as [UnitForm, UnitForm] } }))} /> ใช้ครูประจำวิชา</label>
+                                        {!row.useMain && (
+                                          <input className="form-input" list={`class-subject-teachers-${cs.id}`} disabled={savingEdit} aria-label={`ผู้สอนวิชาย่อย ${index + 1} ${s?.name || ''}`} placeholder="เลือกผู้สอน" value={row.teacherName} onChange={event => setUnitDrafts(current => ({ ...current, [cs.id]: { ...unitsOf(cs), rows: unitsOf(cs).rows.map((item, itemIndex) => itemIndex === index ? { ...item, teacherName: event.target.value } : item) as [UnitForm, UnitForm] } }))} />
+                                        )}
+                                      </div>
+                                    ))}
+                                    <datalist id={`class-subject-teachers-${cs.id}`}>{teachers.map(teacher => <option key={teacher.id} value={`${teacher.prefix} ${teacher.full_name}`} />)}</datalist>
+                                  </div>
+                                )}
+                                {annualRoom && (
+                                  <div className="class-subject-terms">
+                                    {([1, 2] as const).map(value => (
+                                      <label key={value}><input type="checkbox" checked={termsOf(cs).includes(value)} onChange={event => { const next = (event.target.checked ? [...new Set([...termsOf(cs), value])] : termsOf(cs).filter(term => term !== value)).sort() as Array<1 | 2>; if (!next.length) return; setTermDrafts(current => ({ ...current, [cs.id]: next })) }} /> เปิดคะแนนภาค {value}</label>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : <small>{readContentUnitRows(cs.content_units).map(unit => `${unit.name}${unit.periods ? ` ${unit.periods} คาบ` : ''}`).join(' · ') || readContentUnits(cs.content_units).join(' · ')}</small>}
                           </td>
                           <td className="class-subject-teacher-cell">
                             {canManage ? (
@@ -242,7 +315,7 @@ export default function ClassSubjectsPage() {
                                       }}
                                       className="form-input"
                                       style={{ padding: '7px 9px', fontSize: 13 }}
-                                      placeholder="เลือกครู หรือพิมพ์ค้นหา"
+                                      placeholder="ครูประจำวิชา"
                                     />
                                     {changed && <span className="badge badge-warning" style={{ marginTop: 6 }}>รอบันทึก</span>}
                                     {openTeacherPicker === cs.id && (
@@ -301,10 +374,10 @@ export default function ClassSubjectsPage() {
               {canManage && items.length > 0 && (
                 <div className="teacher-assignment-actions action-bar" style={{ marginTop: 12 }}>
                   <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-                    {pendingTeacherChanges > 0 ? `มี ${pendingTeacherChanges} รายการรอบันทึก` : 'ยังไม่มีการเปลี่ยนครูผู้สอน'}
+                    {pendingTeacherChanges > 0 ? `มี ${pendingTeacherChanges} รายการรอบันทึก` : 'ยังไม่มีการเปลี่ยนแปลง'}
                   </div>
                   <LoadingButton loading={savingEdit} onClick={handleSaveTeachers} disabled={pendingTeacherChanges === 0}>
-                    บันทึกครูและสถานที่เรียน
+                    บันทึกรายวิชา
                   </LoadingButton>
                 </div>
               )}

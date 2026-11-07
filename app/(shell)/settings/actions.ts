@@ -8,6 +8,7 @@ import { getSession, createSession } from '@/lib/session'
 import { clearUserFromLeaderSlots, syncSchoolLeaderSlot, syncUserRoleToSchoolLeaders } from '@/lib/school-leaders'
 import { formatStaffName } from '@/lib/roles'
 import {assertPersonalHomeroom,limitsToOwnSubjects} from '@/lib/personal-data-scope'
+import {assertContentUnitRows,assertScoreTerms,coTeachersFromUnits,splitOfferingTeachers,storedContentUnits,teacherOwnsOffering,type ContentUnit} from '@/lib/class-subject-offer'
 import { logActivity, resolveClassroomSchoolId, resolveClassSubjectContext } from '@/lib/audit'
 import { classSubjectSemesterForLevel, type ClassSubjectSemester } from '@/lib/class-subject-term'
 import {
@@ -2493,11 +2494,13 @@ export async function fetchClassSubjectInit() {
 export async function fetchScoreClassSubjects(classroomId: string) {
   const session = await requireSchoolSession()
   const db = createServerClient()
-  let q = db.from('class_subjects').select('id, subject_id, teacher_id, order_number')
+  const own = await limitsToOwnSubjects(session)
+  const result = await db.from('class_subjects').select('id, subject_id, teacher_id, co_teacher_ids, order_number')
     .eq('classroom_id', classroomId).order('order_number')
-  if (await limitsToOwnSubjects(session)) q = q.eq('teacher_id', session.userId)
-  const { data } = await q
-  return data || []
+  const rows = result.error && /co_teacher_ids/.test(result.error.message)
+    ? (await db.from('class_subjects').select('id, subject_id, teacher_id, order_number').eq('classroom_id', classroomId).order('order_number')).data || []
+    : result.data || []
+  return own ? rows.filter(row => teacherOwnsOffering(row, session.userId)) : rows
 }
 
 // ห้องเรียนสำหรับตั้งอัตราส่วนคะแนน — ครูเห็นเฉพาะห้องที่ตนสอน
@@ -2507,13 +2510,14 @@ export async function fetchScoreClassroomsLite(yearId: string) {
   const schoolId = session.schoolId || ''
 
   if (await limitsToOwnSubjects(session)) {
-    const { data } = await db.from('class_subjects')
-      .select('classrooms!inner(id, level, room)')
-      .eq('teacher_id', session.userId)
-      .eq('academic_year_id', yearId)
-      .eq('classrooms.school_id', schoolId)
+    const roomSelect = 'classrooms!inner(id, level, room)'
+    const [{ data }, shared] = await Promise.all([
+      db.from('class_subjects').select(roomSelect).eq('teacher_id', session.userId).eq('academic_year_id', yearId).eq('classrooms.school_id', schoolId),
+      db.from('class_subjects').select(roomSelect).contains('co_teacher_ids', [session.userId]).eq('academic_year_id', yearId).eq('classrooms.school_id', schoolId),
+    ])
+    const combined = [...(data || []), ...(shared.error ? [] : shared.data || [])]
     const map = new Map<string, { id: string; level: string; room: number }>()
-    for (const row of data || []) {
+    for (const row of combined) {
       const classroom = Array.isArray(row.classrooms) ? row.classrooms[0] : row.classrooms
       if (classroom?.id) map.set(classroom.id, classroom)
     }
@@ -2719,19 +2723,33 @@ export async function reorderClassSubjects(classroomId: string, semester?: Class
   }
 }
 
-export async function setClassSubjectTeacher(id: string, teacherId: string | null, roomName?: string) {
+export async function setClassSubjectTeacher(id: string, teacherId: string | null, roomName?: string, detail?: { contentUnits?: ContentUnit[]; weeklyPeriods?: number; coTeacherIds?: string[]; scoreTerms?: number[] }) {
   const session = await requireSchoolSession()
   if (!hasRole(session, ACADEMIC_MANAGE_ROLES)) return { error: 'ไม่มีสิทธิ์' }
   const db = createServerClient()
   const target = await db.from('class_subjects').select('id,classrooms!inner(school_id)').eq('id',id).eq('classrooms.school_id',session.schoolId).maybeSingle()
   if (target.error || !target.data) return {error:'ไม่มีสิทธิ์แก้ไขรายวิชานี้'}
-  if (teacherId) {
-    const teacher = await db.from('users').select('id').eq('id',teacherId).eq('school_id',session.schoolId).maybeSingle()
-    if (teacher.error || !teacher.data) return {error:'ครูผู้สอนต้องอยู่ในโรงเรียนนี้'}
+  let teachers: { teacherId: string | null; coTeacherIds: string[] }
+  let units: ContentUnit[] | undefined
+  try {
+    teachers = splitOfferingTeachers([teacherId || ''])
+    if (detail?.contentUnits) units = assertContentUnitRows(detail.contentUnits, detail.weeklyPeriods)
+  }
+  catch (error) { return { error: error instanceof Error ? error.message : 'รายชื่อครูไม่ถูกต้อง' } }
+  const coTeacherIds = units ? coTeachersFromUnits(teachers.teacherId, units) : detail?.coTeacherIds
+  const teacherIds = [teachers.teacherId, ...(coTeacherIds || [])].filter((item): item is string => !!item)
+  if (teacherIds.length) {
+    const teacher = await db.from('users').select('id').in('id', teacherIds).eq('school_id', session.schoolId)
+    if (teacher.error || new Set(teacher.data?.map(row => row.id)).size !== teacherIds.length) return {error:'ครูผู้สอนต้องอยู่ในโรงเรียนนี้'}
   }
   if (roomName !== undefined && (typeof roomName !== 'string' || roomName.trim().length>120)) return {error:'ชื่อสถานที่เรียนต้องไม่เกิน 120 ตัวอักษร'}
-  const payload = {teacher_id:teacherId || null,...(roomName===undefined?{}:{room_name:roomName.trim() || null})}
+  let terms: Array<1 | 2> | undefined
+  try {
+    if (detail?.scoreTerms) terms = assertScoreTerms(detail.scoreTerms)
+  } catch (error) { return { error: error instanceof Error ? error.message : 'ข้อมูลรายวิชาไม่ถูกต้อง' } }
+  const payload = {teacher_id:teachers.teacherId,...(roomName===undefined?{}:{room_name:roomName.trim() || null}),...(units===undefined?{}:{content_units:storedContentUnits(units)}),...(coTeacherIds===undefined?{}:{co_teacher_ids:coTeacherIds}),...(terms===undefined?{}:{score_terms:terms})}
   let {error} = await db.from('class_subjects').update(payload).eq('id',id)
+  if (error && /content_units|co_teacher_ids|score_terms/.test(error.message)) return {error:'กรุณารันไฟล์ 107_class_subject_units.sql ใน Supabase ก่อนบันทึกเนื้อหาย่อย ครูร่วม หรือภาคที่เปิดคะแนน'}
   if (error && /room_name/.test(error.message)) {
     if (roomName?.trim()) return {error:'กรุณารันไฟล์ 059_class_subject_room_name.sql ใน Supabase ก่อนบันทึกสถานที่เรียน'}
     const fallback = await db.from('class_subjects').update({teacher_id:teacherId || null}).eq('id',id)
@@ -2817,14 +2835,22 @@ export async function removeAllClassSubjects(classroomId: string, semester?: Cla
 // Score Configs — อัตราส่วนคะแนน (ต่อ class_subject × ภาคเรียน)
 // ============================================================
 
+async function ownedClassSubjectIds(db: ReturnType<typeof createServerClient>, userId: string, ids: string[]) {
+  const [primary, shared] = await Promise.all([
+    db.from('class_subjects').select('id').in('id', ids).eq('teacher_id', userId),
+    db.from('class_subjects').select('id').in('id', ids).contains('co_teacher_ids', [userId]),
+  ])
+  if (primary.error) throw Error('ตรวจสอบสิทธิ์รายวิชาไม่สำเร็จ')
+  return new Set([...(primary.data || []), ...(shared.error ? [] : shared.data || [])].map(row => row.id))
+}
+
 export async function fetchScoreConfigs(classSubjectIds: string[], term: number) {
   const session=await requireSchoolSession()
   if (classSubjectIds.length === 0) return []
   const db = createServerClient()
   if(await limitsToOwnSubjects(session)){
-    const {data,error}=await db.from('class_subjects').select('id').in('id',classSubjectIds).eq('teacher_id',session.userId)
-    if(error)throw Error('ตรวจสอบสิทธิ์รายวิชาไม่สำเร็จ')
-    classSubjectIds=(data||[]).map(row=>row.id)
+    const owned = await ownedClassSubjectIds(db, session.userId, classSubjectIds)
+    classSubjectIds = [...owned]
     if(!classSubjectIds.length)return []
   }
   const { data } = await db.from('score_configs').select('*')
@@ -2844,9 +2870,7 @@ export async function saveScoreConfigs(rows: {
   if (rows.some(r=>![1,2].includes(r.term))) return {error:'ภาคเรียนไม่ถูกต้อง'}
   // ครู: แก้ได้เฉพาะวิชาที่ตนสอน
   if (await limitsToOwnSubjects(session)) {
-    const ids = rows.map(r => r.class_subject_id)
-    const { data: mine } = await db.from('class_subjects').select('id').in('id', ids).eq('teacher_id', session.userId)
-    const mineSet = new Set((mine || []).map((m: { id: string }) => m.id))
+    const mineSet = await ownedClassSubjectIds(db, session.userId, rows.map(r => r.class_subject_id))
     if (rows.some(r => !mineSet.has(r.class_subject_id))) return { error: 'แก้อัตราส่วนได้เฉพาะวิชาที่ตนสอน' }
   }
   const { error } = await db.from('score_configs').upsert(rows, { onConflict: 'class_subject_id,term' })

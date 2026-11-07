@@ -23,7 +23,7 @@ import { solveScheduleOnDevice } from './schedule-device-run'
 import type { DeviceDraft } from './schedule-device-build'
 import type { FreeSubstituteEntry } from '../components/schedules/FreeSubstituteDesk'
 import {pageSubstituteHistory,validateSubstituteHistoryScope} from './substitute-history'
-import {substituteRosterSnapshot,type SubstituteBusy} from './substitute-roster'
+import {substituteRosterSnapshot,summarizeSubstituteTeachers,type SubstituteBusy} from './substitute-roster'
 import { SCHEDULE_DAYS } from './schedules'
 import { verifyCompleteSchedule } from './schedule-verification'
 import { applySchedulePlaceChange } from './schedule-places'
@@ -423,6 +423,11 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     fetchSchedulePdfGrids:async(year,term,kind,ids)=>{
       if(kind==='class')return Object.fromEntries(deviceDocumentPages(plan(year,term),'class',ids,term,year).map((page,index)=>[ids[index],page.gridData]))
       return Object.fromEntries(deviceDocumentPages(plan(year,term),'teacher',ids,term,year).map((page,index)=>[ids[index],page.gridData]))
+    },
+    fetchSubstituteStats:async(year,term=1)=>{
+      validateSubstituteHistoryScope(year,term)
+      const current=plan(year,term)
+      return summarizeSubstituteTeachers(Object.values(current.substitutes||{}).map(rows=>({entries:rows.map(externalEntry)}))).map(row=>({...row,name:current.teachers.find(teacher=>teacher.id===row.teacherId)?.name||''}))
     },
     fetchSubstituteHistory:async(year,term=1,before)=>{
       validateSubstituteHistoryScope(year,term,before)

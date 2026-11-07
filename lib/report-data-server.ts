@@ -5,6 +5,7 @@ import { secondaryResultFromInput, secondaryActivityRows, type AcademicBand } fr
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import {assertPersonalHomeroom,limitsToOwnSubjects,personalHomeroomIds} from '@/lib/personal-data-scope'
+import {readContentUnits,scoreTermVisible,subjectWithUnits,teacherOwnsOffering} from '@/lib/class-subject-offer'
 import { loadReportDigitalReference } from '@/lib/document-reference'
 import { loadReportDocumentSignatures, type ReportDocumentSignatures } from '@/lib/report-signatures'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
@@ -244,12 +245,13 @@ async function fetchTeacherTeachingClassrooms(
   userId: string,
   schoolId: string,
 ) {
-  const rows = await safeRows<DbRow>(
-    db.from('class_subjects')
-      .select('classrooms!inner(id, level, room, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id, school_id)')
-      .eq('teacher_id', userId)
-      .eq('classrooms.school_id', schoolId),
-  )
+  const roomSelect = 'classrooms!inner(id, level, room, academic_year_id, homeroom_teacher_id, homeroom_teacher2_id, school_id)'
+  const [primary, shared] = await Promise.all([
+    db.from('class_subjects').select(roomSelect).eq('teacher_id', userId).eq('classrooms.school_id', schoolId),
+    db.from('class_subjects').select(roomSelect).contains('co_teacher_ids', [userId]).eq('classrooms.school_id', schoolId),
+  ])
+  if (primary.error) throw new Error(primary.error.message)
+  const rows = [...(primary.data || []), ...(shared.error ? [] : shared.data || [])] as DbRow[]
   const map = new Map<string, ReportClassroom>()
   for (const row of rows) {
     const classroom = row.classrooms as DbRow
@@ -305,7 +307,7 @@ function normalizeSubject(row: DbRow): ReportSubject {
     subject: {
       id: asText(subject?.id),
       code: asText(subject?.code),
-      name: asText(subject?.name),
+      name: subjectWithUnits(asText(subject?.name), readContentUnits(row.content_units)),
       short_name: asNullableText(subject?.short_name),
       subject_group: asText(subject?.subject_group),
       type: asNullableText(subject?.type),
@@ -630,7 +632,7 @@ export async function fetchReportInit(mode?: ReportMode, band?: AcademicBand) {
   }
 }
 
-const REPORT_SUBJECT_SELECT = 'id, semester, order_number, subject_id, teacher_id, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)'
+const REPORT_SUBJECT_SELECT = 'id, semester, order_number, subject_id, teacher_id, co_teacher_ids, content_units, score_terms, subjects(id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score), users(prefix, full_name)'
 
 async function loadReportClassSubjects(
   db: ReturnType<typeof createServerClient>,
@@ -643,18 +645,30 @@ async function loadReportClassSubjects(
       .eq('academic_year_id', params.academicYearId)
       .order('order_number')
     if (withSemester && (params.term === 1 || params.term === 2)) query = query.in('semester', [0, params.term])
-    if (params.teacherId) query = query.eq('teacher_id', params.teacherId)
     if (params.classSubjectId) query = query.eq('id', params.classSubjectId)
     return query
   }
   const result = await build(true)
+  if (result.error && /co_teacher_ids|content_units|score_terms/.test(result.error.message)) {
+    const legacySelect = REPORT_SUBJECT_SELECT.replace('co_teacher_ids, content_units, score_terms, ', '')
+    let query = db.from('class_subjects').select(legacySelect).eq('classroom_id', params.classroomId).eq('academic_year_id', params.academicYearId).order('order_number')
+    if (params.term === 1 || params.term === 2) query = query.in('semester', [0, params.term])
+    if (params.teacherId) query = query.eq('teacher_id', params.teacherId)
+    if (params.classSubjectId) query = query.eq('id', params.classSubjectId)
+    const legacy = await query
+    if (legacy.error) throw new Error(legacy.error.message)
+    return (legacy.data || []) as unknown as DbRow[]
+  }
   if (result.error && /semester/.test(result.error.message)) {
     const legacy = await build(false)
     if (legacy.error) throw new Error(legacy.error.message)
     return (legacy.data || []) as unknown as DbRow[]
   }
   if (result.error) throw new Error(result.error.message)
-  return (result.data || []) as unknown as DbRow[]
+  return ((result.data || []) as unknown as DbRow[]).filter(row => {
+    if (params.teacherId && !teacherOwnsOffering({ teacher_id: asNullableText(row.teacher_id), co_teacher_ids: Array.isArray(row.co_teacher_ids) ? row.co_teacher_ids as string[] : [] }, params.teacherId)) return false
+    return params.term !== 1 && params.term !== 2 || scoreTermVisible(row.semester === 1 || row.semester === 2 ? row.semester : 0, row.score_terms, params.term)
+  })
 }
 
 export async function fetchReportSubjects(params: {

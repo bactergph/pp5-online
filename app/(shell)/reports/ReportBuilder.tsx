@@ -31,6 +31,7 @@ import {
   hoursPerWeek,
   buildHourlyStatusMap,
   hourlyCellKey,
+  hourlyCellText,
   resolveHourlyStatus,
   schoolDayCalendarFromLists,
   summarizeHourlyStatuses,
@@ -1545,7 +1546,7 @@ function CoverPage({ data, mode, subject, term, pageNumber }: { data: ReportPayl
 }
 
 function hourlyStatusCellContent(status: HourlyStatus | undefined) {
-  return resolveHourlyStatus(status)
+  return hourlyCellText(status)
 }
 
 function studentHourlySummary(
@@ -2351,7 +2352,7 @@ function ClassAttendancePages({ data, term, pageStart = 1 }: { data: ReportPaylo
                             ? '-'
                             : (recordedValue || (isAttendanceSchoolDay(slot.date, slot.key, holidayMap, openWeekendMap) ? 'ม' : '')))
                           : ''
-                        const display = !student || rawValue === '-' ? '' : rawValue === 'ม' || rawValue === '/' ? 'ม' : rawValue
+                        const display = !student || rawValue === '-' ? '' : rawValue === 'ม' || rawValue === '/' ? '✓' : rawValue
                         return (
                           <td
                             key={`${student?.id || 'empty'}-w${weekNumber}-${slot.weekday}`}

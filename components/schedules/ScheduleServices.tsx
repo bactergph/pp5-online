@@ -30,6 +30,7 @@ export type ScheduleOperations = Omit<Pick<Actions,
   'fetchScheduleWorkload' |
   'fetchSubstituteDay' |
   'fetchSubstituteHistory' |
+  'fetchSubstituteStats' |
   'fetchSubstitutePdfContext' |
   'fetchTeacherAvailability' |
   'fetchTeachingScheduleGrid' |

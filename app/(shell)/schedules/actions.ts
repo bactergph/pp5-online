@@ -419,6 +419,11 @@ export async function fetchSubstituteHistory(year:string,term=1,before?:string) 
   return mod.fetchSubstituteHistory(year,term,before)
 }
 
+export async function fetchSubstituteStats(year:string,term=1) {
+  const mod=await import('./extended-actions')
+  return mod.fetchSubstituteStats(year,term)
+}
+
 export async function deleteSubstituteRosterEntries(dayId:string,expected:import('@/lib/substitute-roster').SubstituteRosterEntry[],ids:string[]) {
   const mod=await import('./extended-actions')
   return scheduleResult(()=>mod.deleteSubstituteRosterEntries(dayId,expected,ids))

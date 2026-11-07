@@ -64,7 +64,7 @@ export async function saveCell(roomId: string, year: string, day: number, period
   if (current?.locked) throw new Error('กรุณาปลดล็อกคาบก่อนแก้ไข')
   if (lesson && !ctx.data.lessons.some(l => l.id === lesson && l.classroomId === roomId && l.selectable !== false)) throw new Error('ไม่พบรายวิชาหรือกิจกรรมในห้องนี้')
   const rows = ctx.data.slots.filter(s => s !== current)
-  if (lesson || note?.trim()) rows.push({ classroom_id: roomId, academic_year_id: year, day_of_week: day, period, ...lessonColumns(lesson), note: lesson ? null : note?.trim() || null, locked: false })
+  if (lesson || note?.trim()) { const columns=lessonColumns(lesson); rows.push({ classroom_id: roomId, academic_year_id: year, day_of_week: day, period, ...columns, note: lesson ? columns.note ?? null : note?.trim() || null, locked: false }) }
   await commit(ctx, year, rows, `แก้ไขตารางเรียน วัน ${day} คาบ ${period}`)
   return { ok: true }
 }
@@ -116,7 +116,7 @@ export async function editTeacherCell(year: string, semester: number, teacherId:
   if(!ctx.constraints.splitTimes&&lessonId&&ctx.constraints.blocks.some(b=>b.teacherId===teacherId&&b.day===day&&b.period===period))throw new Error('กรุณาปลดล็อกคาบว่างของครูก่อนเลือกวิชา')
   if(!roomHasPeriod(ctx,roomId,period))throw new Error('คาบนี้ยังไม่ได้ตั้งเวลาเรียน')
   const rows=ctx.data.slots.filter(s=>s!==current)
-  if(lessonId)rows.push({classroom_id:roomId,academic_year_id:year,day_of_week:day,period,...lessonColumns(lessonId),note:null,locked:false})
+  if(lessonId){const columns=lessonColumns(lessonId);rows.push({classroom_id:roomId,academic_year_id:year,day_of_week:day,period,...columns,note:columns.note??null,locked:false})}
   await commit(ctx,year,rows,lessonId?'เปลี่ยนวิชาจากตารางสอนครู':'นำวิชาออกจากตารางสอนครู')
   return {ok:true}
 }
@@ -192,7 +192,7 @@ export async function scheduleActivityLevel(year:string,semester:number,settingI
     if(existing?.locked)throw new Error(`ห้อง ${room.level}/${room.room} ล็อกคาบนี้ไว้ กรุณาปลดล็อกก่อนลงกิจกรรม`)
     if(rows.some(s=>s.classroom_id===room.id&&lessonKey(s)===lesson.id))throw new Error(`กิจกรรมนี้ลงครบแล้วในห้อง ${room.level}/${room.room}`)
     if(existing)rows.splice(rows.indexOf(existing),1)
-    rows.push({classroom_id:room.id,academic_year_id:year,day_of_week:day,period,...lessonColumns(lesson.id),note:null,locked:false});added++
+    const columns=lessonColumns(lesson.id);rows.push({classroom_id:room.id,academic_year_id:year,day_of_week:day,period,...columns,note:columns.note??null,locked:false});added++
   }
   await commit(ctx,year,rows,`ลงกิจกรรมระดับชั้น ${levels.join(', ')} · ${added} ห้อง`)
   return {added,rooms:rooms.length}

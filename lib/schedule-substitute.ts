@@ -1,4 +1,5 @@
 import { lessonTeachers, roomActivityDisplay } from './schedule-activity-teams'
+import { scheduledLessonId } from './class-subject-offer'
 import type { loadSchedule } from './schedule-store'
 import {jointTeachingSubjectLabel} from './schedule-joint-teaching'
 
@@ -8,7 +9,7 @@ export function substituteTimetableForDay(schedule: Awaited<ReturnType<typeof lo
     const display = roomActivityDisplay(schedule.activityGroups || [], room.id, schedule.lessons, schedule.teacherNames)
     const lessons = [...schedule.lessons, ...display.lessons]
     const periods = new Map(schedule.slots.filter(slot => slot.classroom_id === room.id && slot.day_of_week === day)
-      .map(slot => [slot.period, slot.activity_id ? `activity:${slot.activity_id}` : slot.class_subject_id]))
+      .map(slot => [slot.period, scheduledLessonId(slot)]))
     for (const cell of display.cells) if (cell.day === day) periods.set(cell.period, cell.lessonId)
     return [...periods].flatMap(([period, id]) => {
       const lesson = lessons.find(item => item.id === id)

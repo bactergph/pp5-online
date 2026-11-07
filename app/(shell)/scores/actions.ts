@@ -8,6 +8,7 @@ import { dailyAttendanceToday } from '@/lib/daily-attendance'
 import { normalizeSecondaryScore, type AcademicBand } from '@/lib/secondary-academic'
 import { getScoreEntryPeriod } from '@/lib/score-entry-period'
 import {limitsToOwnSubjects} from '@/lib/personal-data-scope'
+import {scoreTermVisible,teacherOwnsOffering} from '@/lib/class-subject-offer'
 
 async function requireSession() {
   const session = await getSession()
@@ -25,13 +26,14 @@ async function loadScoreClassrooms(
   const schoolId = session.schoolId || ''
 
   if (await limitsToOwnSubjects(session)) {
-    const { data } = await db.from('class_subjects')
-      .select('classrooms!inner(id, level, room)')
-      .eq('teacher_id', session.userId)
-      .eq('academic_year_id', yearId)
-      .eq('classrooms.school_id', schoolId)
+    const roomSelect = 'classrooms!inner(id, level, room)'
+    const [{ data }, shared] = await Promise.all([
+      db.from('class_subjects').select(roomSelect).eq('teacher_id', session.userId).eq('academic_year_id', yearId).eq('classrooms.school_id', schoolId),
+      db.from('class_subjects').select(roomSelect).contains('co_teacher_ids', [session.userId]).eq('academic_year_id', yearId).eq('classrooms.school_id', schoolId),
+    ])
+    const rows = [...(data || []), ...(shared.error ? [] : shared.data || [])]
     const map = new Map<string, { id: string; level: string; room: number }>()
-    for (const row of data || []) {
+    for (const row of rows) {
       const joined = row.classrooms
       const classroom = (Array.isArray(joined) ? joined[0] : joined) as { id: string; level: string; room: number } | null
       if (classroom?.id) map.set(classroom.id, classroom)
@@ -55,20 +57,27 @@ async function loadScoreSubjects(
     .eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
   if (roomError) throw new Error('โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่')
   if (!room) throw new Error('ไม่มีสิทธิ์ดูห้องเรียนนี้')
-  let q = db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
+  const own = await limitsToOwnSubjects(session)
+  type OfferingRow = { id: string; classroom_id: string; subject_id: string; teacher_id: string | null; co_teacher_ids?: string[] | null; content_units?: unknown; score_terms?: unknown; order_number: number; semester?: number | null }
+  const full = 'id, classroom_id, subject_id, teacher_id, co_teacher_ids, content_units, score_terms, order_number, semester'
+  const result = await db.from('class_subjects').select(full)
     .eq('classroom_id', classroomId).in('semester', [0, term]).order('order_number')
-  if (await limitsToOwnSubjects(session)) q = q.eq('teacher_id', session.userId)
-  const result = await q
-  if (result.error && /semester/.test(result.error.message)) {
-    let fallback = db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
-      .eq('classroom_id', classroomId).order('order_number')
-    if (await limitsToOwnSubjects(session)) fallback = fallback.eq('teacher_id', session.userId)
-    const plain = await fallback
-    if (plain.error) throw new Error('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่')
-    return plain.data || []
+  let rows = (result.data || []) as OfferingRow[]
+  let error = result.error
+  if (error && /co_teacher_ids|content_units|score_terms/.test(error.message)) {
+    const legacy = await db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number, semester')
+      .eq('classroom_id', classroomId).in('semester', [0, term]).order('order_number')
+    rows = (legacy.data || []) as OfferingRow[]
+    error = legacy.error
   }
-  if (result.error) throw new Error('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่')
-  return result.data || []
+  if (error && /semester/.test(error.message)) {
+    const plain = await db.from('class_subjects').select('id, classroom_id, subject_id, teacher_id, order_number')
+      .eq('classroom_id', classroomId).order('order_number')
+    if (plain.error) throw new Error('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่')
+    return ((plain.data || []) as OfferingRow[]).filter(row => !own || teacherOwnsOffering(row, session.userId))
+  }
+  if (error) throw new Error('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่')
+  return rows.filter(row => scoreTermVisible(row.semester, row.score_terms, term) && (!own || teacherOwnsOffering(row, session.userId)))
 }
 
 /** ปี + วิชา + ห้องของปีที่ active + วิชาในห้องแรก — ลด waterfall ตอนเปิดหน้า */
@@ -187,9 +196,11 @@ export async function saveScores(
     return { error: 'ข้อมูลนักเรียนไม่ตรงกับห้องเรียน' }
   }
   if (await limitsToOwnSubjects(session)) {
-    const { data: cs } = await db.from('class_subjects')
-      .select('id').eq('id', classSubjectId).eq('teacher_id', session.userId).maybeSingle()
-    if (!cs) return { error: 'บันทึกคะแนนได้เฉพาะวิชาที่ตนสอน' }
+    const owned = await db.from('class_subjects').select('id, teacher_id, co_teacher_ids').eq('id', classSubjectId).maybeSingle()
+    const row = owned.error && /co_teacher_ids/.test(owned.error.message)
+      ? (await db.from('class_subjects').select('id, teacher_id').eq('id', classSubjectId).eq('teacher_id', session.userId).maybeSingle()).data
+      : owned.data && teacherOwnsOffering(owned.data, session.userId) ? owned.data : null
+    if (!row) return { error: 'บันทึกคะแนนได้เฉพาะวิชาที่ตนสอน' }
   }
 
   // กันแก้คะแนนที่ถูกล็อก (ลงนามแล้ว)

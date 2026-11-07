@@ -13,6 +13,7 @@ import {
 } from '@/lib/hourly-attendance'
 import { fetchAllRows } from '@/lib/supabase-paginate'
 import {limitsToOwnSubjects} from '@/lib/personal-data-scope'
+import {scoreTermVisible,teacherOwnsOffering} from '@/lib/class-subject-offer'
 
 const CAN_EDIT = ['admin', 'district', 'academic_head', 'deputy_principal', 'teacher']
 
@@ -25,22 +26,17 @@ async function requireSession() {
 async function assertClassSubjectAccess(classSubjectId: string, session: Awaited<ReturnType<typeof requireSession>>, term: 1 | 2) {
   if (term !== 1 && term !== 2) throw new Error('ภาคเรียนไม่ถูกต้อง')
   const db = createServerClient()
-  if (await limitsToOwnSubjects(session)) {
-    const { data } = await db.from('class_subjects')
-      .select('id, classroom_id, subject_id, academic_year_id, semester')
-      .eq('id', classSubjectId)
-      .eq('teacher_id', session.userId)
-      .maybeSingle()
-    if (!data) throw new Error('บันทึกได้เฉพาะวิชาที่ตนสอน')
-    if (data.semester && data.semester !== term) throw new Error('รายวิชานี้ไม่ได้เปิดในภาคเรียนที่เลือก')
-    return data
-  }
-  const { data } = await db.from('class_subjects')
-    .select('id, classroom_id, subject_id, academic_year_id, semester')
+  const loaded = await db.from('class_subjects')
+    .select('id, classroom_id, subject_id, academic_year_id, semester, teacher_id, co_teacher_ids, score_terms')
     .eq('id', classSubjectId)
     .maybeSingle()
-  if (!data) throw new Error('ไม่พบรายวิชาในห้องนี้')
-  if (data.semester && data.semester !== term) throw new Error('รายวิชานี้ไม่ได้เปิดในภาคเรียนที่เลือก')
+  const result = loaded.error && /co_teacher_ids|score_terms/.test(loaded.error.message)
+    ? await db.from('class_subjects').select('id, classroom_id, subject_id, academic_year_id, semester, teacher_id').eq('id', classSubjectId).maybeSingle()
+    : loaded
+  const data = result.data as { id: string; classroom_id: string; subject_id: string; academic_year_id: string; semester: number | null; teacher_id: string | null; co_teacher_ids?: string[] | null; score_terms?: unknown } | null
+  if (result.error || !data) throw new Error('ไม่พบรายวิชาในห้องนี้')
+  if (!scoreTermVisible(data.semester, data.score_terms, term)) throw new Error('รายวิชานี้ไม่ได้เปิดในภาคเรียนที่เลือก')
+  if (await limitsToOwnSubjects(session) && !teacherOwnsOffering(data, session.userId)) throw new Error('บันทึกได้เฉพาะวิชาที่ตนสอน')
   return data
 }
 

@@ -89,3 +89,19 @@ export function substituteMinutes(entries:SubstituteRosterEntry[],periods:Period
   for(const span of spans){total+=Math.max(0,span.end-Math.max(last,span.start));last=Math.max(last,span.end)}
   return total
 }
+
+/** คาบสอนจริงในวันนั้น ไม่นับคาบที่ล็อกว่าง */
+export function teachingPeriodCount(busy: SubstituteBusy[], teacherId: string) {
+  return new Set(busy.filter(row => row.teacherId === teacherId && row.kind !== 'block').map(row => row.period)).size
+}
+
+export function summarizeSubstituteTeachers(days: Array<{ entries?: Array<{ substitute_teacher_id?: string | null }> | null }>) {
+  const counts = new Map<string, number>()
+  for (const day of days) {
+    for (const entry of day.entries || []) {
+      if (!entry.substitute_teacher_id) continue
+      counts.set(entry.substitute_teacher_id, (counts.get(entry.substitute_teacher_id) || 0) + 1)
+    }
+  }
+  return [...counts.entries()].map(([teacherId, periods]) => ({ teacherId, periods })).sort((a, b) => b.periods - a.periods || a.teacherId.localeCompare(b.teacherId))
+}
