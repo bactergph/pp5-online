@@ -1,6 +1,9 @@
 'use client'
 import {levelPeriodTimes} from '@/lib/schedule-period-profiles'
-import { useScheduleOperations } from './ScheduleServices'
+import { useScheduleServices } from './ScheduleServices'
+import ScheduleUnitDialog, { buildScheduleUnitSource, type ScheduleUnitSource } from './ScheduleUnitDialog'
+import { saveClassScheduleUnits } from '@/app/(shell)/schedules/actions'
+import type { ContentUnit } from '@/lib/class-subject-offer'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 
@@ -25,6 +28,7 @@ import './schedule-workspace.css'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 type Classroom = { id: string; level: string; room: number; label: string }
+type TeacherOption = { id: string; prefix?: string | null; full_name: string }
 type SubjectOption = {
   id: string
   teacher_id: string | null
@@ -33,6 +37,11 @@ type SubjectOption = {
   room_name?: string
   teacher_name: string
   label: string
+  activity?: boolean
+  offering_id?: string
+  subject_title?: string
+  main_teacher_id?: string | null
+  content_units?: ContentUnit[]
 }
 type Cell = { class_subject_id: string | null; note: string | null; locked: boolean; expected_lesson_id?: string | null }
 type QuotaData = {
@@ -55,7 +64,9 @@ function setAlert(alert: {type:'success'|'error';title:string;message?:string}) 
 }
 
 export default function ClassScheduleEntry({ mode, initialWorkspace='class', initialStep=1, onSchoolSettings, schoolSettingsDisabled }: Props) {
-  const { fetchScheduleDays, fetchClassScheduleBundle, fetchSchedulePdfGrids, fetchScheduleExportContext, fetchScheduleClassrooms, fetchScheduleInit, saveClassScheduleCell, moveClassScheduleCell, clearScheduleScope, previewScheduleClear, copyClassSchedule, fetchPeriodTimes, fetchScheduleQuotas, getTeacherConflictAt, toggleScheduleCellLock } = useScheduleOperations()
+  const services = useScheduleServices()
+  const { fetchScheduleDays, fetchClassScheduleBundle, fetchSchedulePdfGrids, fetchScheduleExportContext, fetchScheduleClassrooms, fetchScheduleInit, saveClassScheduleCell, moveClassScheduleCell, clearScheduleScope, previewScheduleClear, copyClassSchedule, fetchPeriodTimes, fetchScheduleQuotas, getTeacherConflictAt, toggleScheduleCellLock } = services.operations
+  const localSchedule = !!services.local
   const [toolsClearScope,setToolsClearScope]=useState<'room'|'level'|'school'>('room')
   const [clearRefresh,setClearRefresh]=useState(0)
 
@@ -77,6 +88,8 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
   const [years, setYears] = useState<Year[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [subjects, setSubjects] = useState<SubjectOption[]>([])
+  const [teachers, setTeachers] = useState<TeacherOption[]>([])
+  const [unitSource, setUnitSource] = useState<ScheduleUnitSource | null>(null)
   const [cells, setCells] = useState<Record<string, Cell>>({})
   const [quotas, setQuotas] = useState<QuotaData | null>(null)
   const [allPeriodTimes, setPeriodTimes] = useState<PeriodTimeRow[]>([])
@@ -174,6 +187,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
         fetchPeriodTimes(),
       ])
       setCanEdit(data.canEdit)
+      setTeachers((data.teachers || []) as TeacherOption[])
       setYears(data.years as Year[])
       setPeriodTimes(periodData.times as PeriodTimeRow[])
       const active = (data.years as Year[]).find(y => y.is_active) || (data.years as Year[])[0]
@@ -216,6 +230,39 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
       }
     } finally { if (request === gridRequest.current) setGridLoading(false) }
   }, [selectedClass, selectedYear, semester,fetchClassScheduleBundle,fetchScheduleDays])
+
+  const unitOfferings = useMemo(() => {
+    const rows = new Map<string, SubjectOption>()
+    for (const subject of subjects) {
+      if (isActivityLessonId(subject.id) || subject.activity) continue
+      const id = subject.offering_id || subject.id.split('#')[0]
+      const current = rows.get(id)
+      if (!current || subject.id === id) rows.set(id, subject)
+    }
+    return [...rows.entries()].map(([id, subject]) => {
+      const parts = subjects.filter(item => (item.offering_id || item.id.split('#')[0]) === id && item.id.includes('#'))
+      return { id, lessonId: subject.id, code: subject.subject_code, title: subject.subject_title || subject.subject_name, summary: parts.map(part => `${part.subject_name} ${quotas?.items.find(item => item.class_subject_id === part.id)?.target || ''}`.trim()).join(' · ') }
+    })
+  }, [subjects, quotas])
+  function openUnits(lessonId: string) {
+    const subject = subjects.find(item => item.id === lessonId)
+    const offeringId = subject?.offering_id || lessonId.split('#')[0]
+    const parts = subjects.filter(item => (item.offering_id || item.id.split('#')[0]) === offeringId && !isActivityLessonId(item.id) && !item.activity)
+    const first = parts.find(item => item.id === offeringId) || parts[0]
+    if (!first) return
+    const weekly = parts.reduce((sum, part) => sum + (quotas?.items.find(item => item.class_subject_id === part.id)?.target || 0), 0)
+    const periods = [0, 1].map(index => {
+      const part = parts.find(item => item.id === `${offeringId}#${index}`)
+      return part ? quotas?.items.find(item => item.class_subject_id === part.id)?.target || null : null
+    }) as [number | null, number | null]
+    setUnitSource(buildScheduleUnitSource({ offeringId, code: first.subject_code, title: first.subject_title || first.subject_name, teacherId: first.main_teacher_id ?? first.teacher_id, weekly, units: first.content_units || [], periods, split: parts.some(part => part.id.includes('#')), names: [...new Set(subjects.flatMap(item => (item.content_units || []).map(unit => unit.name)))] }))
+  }
+  async function saveUnits(value: { teacherId: string; units: ContentUnit[]; weekly: number }) {
+    if (!unitSource) return
+    const result = await saveClassScheduleUnits(unitSource.offeringId, selectedYear, semester, value.teacherId, value.units, value.weekly)
+    if (result.error) throw Error(result.error)
+    await loadGrid()
+  }
 
   async function refreshPreparation() {
     try {
@@ -517,7 +564,10 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
           </div>
         ) : (
           <div className={isManage&&canEdit?'grid items-start gap-4 xl:grid-cols-[240px_minmax(0,1fr)]':''}>
-          {isManage&&canEdit&&<ScheduleLessonPalette lessons={remainingLessons} filter={paletteFilter} onFilter={setPaletteFilter} showCompleted={showCompleted} onShowCompleted={setShowCompleted} selected={paletteSelection} onSelect={setPaletteSelection} disabled={cellBlocked} onDrag={id=>{setPaletteSelection(null);setDragLesson({id,context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}}/>}
+          {isManage&&canEdit&&<div className="grid gap-4">
+            {!localSchedule && unitOfferings.length > 0 && <aside className="rounded-2xl border border-stone-300 bg-white p-4" aria-label="วิชาย่อย"><h2 className="font-semibold text-stone-900">วิชาย่อย</h2><p className="mt-1 text-xs leading-5 text-stone-500">แบ่งคาบในรหัสวิชาเดิมได้ไม่เกิน 2 ชื่อ คะแนนยังใช้รหัสเดียว</p><div className="mt-3 grid max-h-52 gap-1 overflow-auto">{unitOfferings.map(item => <button key={item.id} type="button" className="rounded-lg border border-stone-200 px-2 py-2 text-left text-xs hover:border-amber-400" onClick={() => openUnits(item.lessonId)}><b className="block text-sm">{item.code || item.title}</b><span className="text-stone-600">{item.title}</span><span className="mt-1 block text-stone-500">{item.summary || 'ยังไม่แบ่ง'}</span></button>)}</div></aside>}
+            <ScheduleLessonPalette lessons={remainingLessons} filter={paletteFilter} onFilter={setPaletteFilter} showCompleted={showCompleted} onShowCompleted={setShowCompleted} selected={paletteSelection} onSelect={setPaletteSelection} disabled={cellBlocked} onDrag={id=>{setPaletteSelection(null);setDragLesson({id,context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}}/>
+          </div>}
           <section className="schedule-board min-w-0" aria-label="ตารางเรียนรายสัปดาห์">
             <div className="schedule-board-head"><div><h2>ห้อง {selectedClassroom?.label}</h2><p>ภาคเรียนที่ {semester} · ปีการศึกษา {selectedYearObj?.year_be}</p></div><span className="schedule-count-pill">ช่องตาราง {Object.values(cells).filter(c => c.class_subject_id).length} / {periodTimes.filter(t=>!t.is_break).length*scheduleDays.length}</span></div>
             <div className="schedule-day-switch" role="tablist" aria-label="เลือกวันบนมือถือ">{SCHEDULE_DAYS.filter(day => scheduleDays.includes(day.value)).map(day => <button key={day.value} type="button" aria-pressed={(scheduleDays.includes(mobileDay) ? mobileDay : scheduleDays[0]) === day.value} onClick={() => setMobileDay(day.value)}>{day.label}</button>)}</div>
@@ -635,6 +685,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
           </div>
         </div>
       )}
+      {!localSchedule && <ScheduleUnitDialog source={unitSource} teachers={teachers} onClose={() => setUnitSource(null)} onSave={saveUnits} />}
 
     </>
   )

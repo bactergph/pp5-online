@@ -4,6 +4,10 @@ import {teachingEventAt} from '@/lib/schedule-joint-teaching'
 
 import { activityTeachers, applyActivityDisplay, lessonTeachers, roomActivityDisplay } from '@/lib/schedule-activity-teams'
 import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
+import { preparation, savePlan } from '@/lib/schedule-preparation'
+import { setClassSubjectTeacher } from '@/app/(shell)/settings/actions'
+import type { ContentUnit } from '@/lib/class-subject-offer'
+import type { LessonRule } from '@/lib/schedule-planning'
 import {scheduleTeachingView} from '@/lib/schedule-teaching-view'
 import { scheduleResult } from '@/lib/schedule-action-result'
 import * as scheduleOps from '@/lib/schedule-operations'
@@ -105,8 +109,9 @@ export async function fetchScheduleClassrooms(yearId: string) {
 type ScheduleData = Awaited<ReturnType<typeof loadSchedule>>
 type GridCell = { class_subject_id: string | null; note: string | null; locked: boolean; expected_lesson_id: string | null }
 
-function subjectRow(lesson: { id: string; teacherId: string | null; code?: string; name: string; teacherName: string; roomName?: string; activity?: boolean }) {
-  return { id: lesson.id, teacher_id: lesson.teacherId, subject_code: lesson.code || '', subject_name: lesson.name, teacher_name: lesson.teacherName, room_name: lesson.roomName || '', label: `${lesson.code || ''} ${lesson.name}`.trim(), activity: !!lesson.activity }
+function subjectRow(lesson: { id: string; teacherId: string | null; code?: string; name: string; teacherName: string; roomName?: string; activity?: boolean; fullName?: string; offeringId?: string; mainTeacherId?: string | null; subjectTitle?: string; contentUnits?: ContentUnit[] }) {
+  return { id: lesson.id, teacher_id: lesson.teacherId, subject_code: lesson.code || '', subject_name: lesson.name, teacher_name: lesson.teacherName, room_name: lesson.roomName || '', label: `${lesson.code || ''} ${lesson.name}`.trim(), activity: !!lesson.activity,
+    offering_id: lesson.offeringId || lesson.id.split('#')[0], subject_title: lesson.subjectTitle || lesson.fullName || lesson.name, main_teacher_id: lesson.mainTeacherId ?? lesson.teacherId, content_units: lesson.contentUnits || [] }
 }
 
 function classRoomView(data: ScheduleData, classroomId: string) {
@@ -180,6 +185,44 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
     subjects: view.lessons.filter(lesson => lesson.selectable !== false || used.has(lesson.id)).map(subjectRow),
     quotas: { items, filled: items.reduce((sum, lesson) => sum + lesson.used, 0), totalTarget: items.reduce((sum, lesson) => sum + lesson.target, 0) },
   }
+}
+
+function singlePattern(count: number) { return Array(count).fill(1) }
+function offeringRule(count: number, keep?: LessonRule): LessonRule {
+  if (keep && keep.count === count) return keep
+  return { roomId: keep?.roomId ?? null, morning: keep?.morning ?? false, spread: keep?.spread ?? true, ...(keep?.timePreference ? { timePreference: keep.timePreference } : {}), count, pattern: singlePattern(count) }
+}
+export async function saveClassScheduleUnits(classSubjectId: string, yearId: string, semester: number, teacherId: string | null, units: ContentUnit[], weeklyPeriods: number) {
+  const session = await requireScheduleSession()
+  if (!canEditSchedule(session) || !session.schoolId) return { error: 'ไม่มีสิทธิ์' }
+  if (!/^[0-9a-f-]{36}$/i.test(classSubjectId) || (semester !== 1 && semester !== 2) || !Number.isInteger(weeklyPeriods) || weeklyPeriods < 1 || weeklyPeriods > 40) return { error: 'ข้อมูลวิชาย่อยไม่ถูกต้อง' }
+  const db = createServerClient()
+  const offering = await db.from('class_subjects').select('id,academic_year_id,classrooms!inner(school_id)').eq('id', classSubjectId).eq('academic_year_id', yearId).eq('classrooms.school_id', session.schoolId).maybeSingle()
+  if (offering.error || !offering.data) return { error: 'ไม่พบรายวิชาในภาคเรียนนี้' }
+  const stored = await db.from('schedule_plans').select('config').eq('school_id', session.schoolId).eq('academic_year_id', yearId).eq('semester', semester).maybeSingle()
+  if (stored.error && !['42P01', 'PGRST205'].includes(stored.error.code || '')) return { error: stored.error.message }
+  const groups = ((stored.data?.config as { teachingGroups?: { lessonIds?: string[] }[] } | null)?.teachingGroups || [])
+  const related = [classSubjectId, `${classSubjectId}#0`, `${classSubjectId}#1`]
+  if (groups.some(group => (group.lessonIds || []).some(id => related.includes(id)))) return { error: 'วิชานี้ถูกใช้ในสอนรวมหลายห้อง ยกเลิกสอนรวมก่อนแบ่งวิชาย่อย' }
+  const saved = await setClassSubjectTeacher(classSubjectId, teacherId, undefined, { contentUnits: units, weeklyPeriods: units.length ? weeklyPeriods : undefined })
+  if (saved.error) return saved
+  try {
+    const current = await preparation(yearId, semester)
+    const rules: Record<string, LessonRule> = { ...current.plan.rules }
+    for (const index of [0, 1]) {
+      const id = `${classSubjectId}#${index}`
+      const periods = units[index]?.periods
+      const live = current.lessons.some(lesson => lesson.id === id)
+      if (!live || !periods) delete rules[id]
+      else if (rules[id] && rules[id].count !== periods) rules[id] = offeringRule(periods, rules[id])
+    }
+    if (rules[classSubjectId] && rules[classSubjectId].count !== weeklyPeriods) rules[classSubjectId] = offeringRule(weeklyPeriods, rules[classSubjectId])
+    else if (!rules[classSubjectId] && units.length) rules[classSubjectId] = offeringRule(weeklyPeriods)
+    if (JSON.stringify(rules) !== JSON.stringify(current.plan.rules)) await savePlan(yearId, semester, current.hash, { ...current.plan, rules })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'บันทึกวิชาย่อยแล้ว แต่ยังปรับภาระสอนไม่สำเร็จ' }
+  }
+  return { error: null }
 }
 
 export async function saveClassScheduleCell(classroomId: string, yearId: string, day: number, period: number, lesson: string | null, note: string | null = null, semester = 1, expectedLesson?:string|null) {

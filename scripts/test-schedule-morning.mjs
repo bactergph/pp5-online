@@ -36,6 +36,9 @@ assert.equal(planning.lessonMorningPriority({name:'ศิลปะ',timePreferen
 assert.equal(planning.lessonMorningPriority({name:'คณิตศาสตร์',timePreference:'afternoon'}),-3)
 assert.equal(planning.lessonMorningPriority({name:'ศิลปะ',timePreference:'morning'}),3)
 assert.throws(()=>planning.validatePlan({...planning.emptyPlan(),rules:{invalid:{count:1,pattern:[1],roomId:null,morning:false,spread:true,timePreference:'evening'}}},['invalid']),/ช่วงเวลา/)
+const parentRule='11111111-1111-4111-8111-111111111111'
+planning.validatePlan({...planning.emptyPlan(),rules:{[parentRule]:{count:2,pattern:[1,1],roomId:null,morning:false,spread:true}}},[parentRule+'#0',parentRule+'#1'])
+assert.throws(()=>planning.validatePlan({...planning.emptyPlan(),rules:{[parentRule]:{count:1,pattern:[1],roomId:null,morning:false,spread:true}}},['other']),/ภาระสอน/)
 const basic=[lesson('english','ภาษาอังกฤษ'),lesson('art','ศิลปะ'),lesson('math','คณิตศาสตร์'),lesson('science','วิทยาศาสตร์')]
 const prioritized=solve(basic)
 assert.ok(prioritized.assignments.filter(row=>['math','science'].includes(row.lessonId)).every(row=>row.period<=2))

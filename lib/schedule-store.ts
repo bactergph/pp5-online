@@ -44,6 +44,7 @@ export type ScheduleLesson = {
   classroomLevel?:string;
   id: string; classroomId: string; teacherId: string | null; count: number; label: string
   sourceHours?: number; subjectId: string; code: string; name: string; fullName?: string; subjectGroup?: string; subjectType?: string; teacherName: string; roomName?: string; activity: boolean; teacherOptional?: boolean; selectable?: boolean; teacherIds?:string[]; activityGroupId?:string;jointTeachingCells?:Record<string,string>
+  offeringId?: string; mainTeacherId?: string | null; subjectTitle?: string; contentUnits?: ContentUnit[]
 }
 export const slotFields = 'classroom_id,academic_year_id,day_of_week,period,class_subject_id,activity_id,note,locked'
 export const lessonKey = (row: ScheduleSlot) => scheduledLessonId(row)
@@ -103,12 +104,14 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   const levels = new Map(classrooms.map(c => [c.id, c.level]))
   const names = new Map((teachers.data || []).map(t => [t.id, `${t.prefix || ''} ${t.full_name}`.trim()]))
   const labels = new Map(classrooms.map(c => [c.id, `${c.level}/${c.room}`]))
-  const lessons: ScheduleLesson[] = (subjects.data || []).filter(row => row.semester == null || Number(row.semester) === 0 || Number(row.semester) === semester).flatMap(row => {
+  let lessons: ScheduleLesson[] = (subjects.data || []).filter(row => row.semester == null || Number(row.semester) === 0 || Number(row.semester) === semester).map(row => {
     const s = Array.isArray(row.subjects) ? row.subjects[0] : row.subjects
+    const units = readContentUnitRows(row.content_units)
     const lesson: ScheduleLesson = { id: row.id, classroomId: row.classroom_id, teacherId: row.teacher_id, count: weeklyCount(levels.get(row.classroom_id) || '', s?.credits, s?.hours_per_year),
       label: `${labels.get(row.classroom_id)} · ${s?.name || ''}`, sourceHours: s?.hours_per_year || 0, subjectId: row.subject_id, code: s?.code || '',
-      name: s?.short_name || s?.name || '', fullName:s?.name||'',subjectGroup:s?.subject_group||'',subjectType:s?.type||'พื้นฐาน',teacherName: names.get(row.teacher_id) || '', roomName: row.room_name || "", activity: false }
-    return splitOfferingLesson(lesson, readContentUnitRows(row.content_units), names)
+      name: s?.short_name || s?.name || '', fullName:s?.name||'',subjectGroup:s?.subject_group||'',subjectType:s?.type||'พื้นฐาน',teacherName: names.get(row.teacher_id) || '', roomName: row.room_name || "", activity: false,
+      offeringId: row.id, mainTeacherId: row.teacher_id, subjectTitle: s?.name || s?.short_name || '', contentUnits: units }
+    return lesson
   })
   for (const row of activities.data || []) {
     const a = Array.isArray(row.evaluation_settings) ? row.evaluation_settings[0] : row.evaluation_settings
@@ -120,6 +123,12 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   const planResult = await db.from('schedule_plans').select('config').eq('school_id',schoolId).eq('academic_year_id',yearId).eq('semester',semester).maybeSingle()
   if (planResult.error && !['42P01','PGRST205'].includes(planResult.error.code)) throw new Error(planResult.error.message)
   const plan = planResult.data?.config as {rules?:Record<string,import('./schedule-planning').LessonRule>;rooms?:{id:string;name:string}[];activityGroups?:ActivityTeam[];teachingGroups?:JointTeachingGroup[];teacherActivities?:TeacherScheduleActivity[]} | undefined
+  for (const lesson of lessons) {
+    if (lesson.activity) continue
+    const parentRule = plan?.rules?.[lesson.id]
+    if (parentRule && Number.isInteger(parentRule.count) && parentRule.count > 0) lesson.count = parentRule.count
+  }
+  lessons = lessons.flatMap(lesson => splitOfferingLesson(lesson, lesson.contentUnits || [], names))
   for (const lesson of lessons) {
     lesson.classroomLevel=levels.get(lesson.classroomId)||''
     const group=lesson.activity?plan?.activityGroups?.find(g=>g.settingId===lesson.subjectId&&g.roomIds.includes(lesson.classroomId)):undefined
@@ -140,19 +149,21 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   const bell=await db.from('school_period_times').select('period,label,start_time,end_time,is_break,sort_order,profiles').eq('school_id',schoolId).order('sort_order')
   if(bell.error)throw Error(bell.error.message)
   const periodTimes=withTeacherActivityClock((bell.data?.length?bell.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[],plan?.teacherActivities)
-  const visible = lessons.filter(lesson => lesson.activity || !(otherRules.has(lesson.id) && !thisRules.has(lesson.id)))
+  const ruleOwned = (rules: Set<string>, id: string) => rules.has(id) || rules.has(id.split('#')[0])
+  const visible = lessons.filter(lesson => lesson.activity || !(ruleOwned(otherRules, lesson.id) && !ruleOwned(thisRules, lesson.id)))
   const storedPlan={days:[1,2,3,4,5],rooms:[],rules:{},reduceGaps:false,maxContinuous:0,...plan} as import('./schedule-planning').SchedulePlan
   const effective=effectiveSchedulePlan(storedPlan,allClassrooms,lessons),activeIds=new Set(classrooms.map(room=>room.id))
   return { allClassrooms,storedPlan,allLessonRooms:lessons.map(lesson=>({id:lesson.id,classroomId:lesson.classroomId})),periodTimes, classrooms, lessons: withJointTeachingGroups(visible.filter(lesson=>activeIds.has(lesson.classroomId)),effective), slots: ((slots.data || []) as ScheduleSlot[]).filter(slot=>activeIds.has(slot.classroom_id)), activityGroups: effective.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }
 }
 
 function splitOfferingLesson(lesson: ScheduleLesson, units: ContentUnit[], names: Map<string, string>) {
-  const ready = units.length > 0 && units.every(unit => unit.periods > 0) && units.reduce((sum, unit) => sum + unit.periods, 0) === lesson.count
-  if (!ready) return [lesson]
-  const room = lesson.label.split(' · ')[0]
+  const base = { ...lesson, offeringId: lesson.offeringId || lesson.id, mainTeacherId: lesson.mainTeacherId ?? lesson.teacherId, subjectTitle: lesson.subjectTitle || lesson.fullName || lesson.name, contentUnits: units }
+  const ready = units.length > 0 && units.every(unit => unit.periods > 0) && units.reduce((sum, unit) => sum + unit.periods, 0) === base.count
+  if (!ready) return [base]
+  const room = base.label.split(' · ')[0]
   return units.map((unit, index) => {
-    const teacherId = unit.useMainTeacher ? lesson.teacherId : unit.teacherId
-    return { ...lesson, id: `${lesson.id}#${index}`, teacherId, teacherName: names.get(teacherId || '') || '', count: unit.periods, name: unit.name, fullName: unit.name, label: `${room} · ${unit.name}` }
+    const teacherId = unit.useMainTeacher ? base.teacherId : unit.teacherId
+    return { ...base, id: `${base.id}#${index}`, teacherId, teacherName: names.get(teacherId || '') || '', count: unit.periods, name: unit.name, fullName: unit.name, label: `${room} · ${unit.name}` }
   })
 }
 

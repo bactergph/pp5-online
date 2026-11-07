@@ -42,6 +42,14 @@ export type PlannedScheduleResult = {status:'invalid'|'complete'|'timeout'|'conf
 export const SCHEDULE_SEARCH_MAX_NODES = 2_000_000
 export const SCHEDULE_SEARCH_TIME_LIMIT_MS = 45_000
 export const emptyPlan = (): SchedulePlan => ({ days: [1,2,3,4,5], rooms: [], rules: {}, reduceGaps: false, maxContinuous: 0 })
+/** A parent offering rule stays valid after its periods are split into unit:0 and unit:1. */
+function planRuleKnown(id: string, lessonIds: string[]) {
+  if (lessonIds.includes(id)) return true
+  const child = /^(.*)#([01])$/.exec(id)
+  const parent = child ? child[1] : id
+  if (child && lessonIds.includes(parent)) return true
+  return lessonIds.includes(`${parent}#0`) || lessonIds.includes(`${parent}#1`)
+}
 export function validatePlan(plan: SchedulePlan, lessonIds: string[]) {
   validateTeacherActivities(plan.teacherActivities)
   if (!Array.isArray(plan.days) || !plan.days.length || new Set(plan.days).size !== plan.days.length || plan.days.some(d=>!Number.isInteger(d)||d<1||d>5)) throw Error('เลือกวันเรียนจันทร์–ศุกร์อย่างน้อยหนึ่งวัน')
@@ -51,7 +59,7 @@ export function validatePlan(plan: SchedulePlan, lessonIds: string[]) {
   if (plan.teacherIds && (!Array.isArray(plan.teacherIds) || plan.teacherIds.length>1000 || new Set(plan.teacherIds).size!==plan.teacherIds.length || plan.teacherIds.some(id=>!/^[-0-9a-f]{36}$/i.test(id)))) throw Error('รายการครูที่เลือกไม่ถูกต้อง')
   if (plan.roomLabels && (typeof plan.roomLabels !== 'object' || Array.isArray(plan.roomLabels) || Object.keys(plan.roomLabels).length > 500 || Object.entries(plan.roomLabels).some(([id, name]) => !/^[-0-9a-f]{36}$/i.test(id) || typeof name !== 'string' || !name.trim() || name.trim().length > 20))) throw Error('ชื่อห้องไม่ถูกต้อง')
   for(const [id,r] of Object.entries(plan.rules)) {
-    if (!lessonIds.includes(id) || !Number.isInteger(r.count)||r.count<1||r.count>40 || !Array.isArray(r.pattern)||!r.pattern.length||r.pattern.some(n=>!Number.isInteger(n)||n<1||n>8)||r.pattern.reduce((a,b)=>a+b,0)!==r.count) throw Error('ภาระสอนและผลรวมรูปแบบคาบต้องตรงกัน')
+    if (!planRuleKnown(id, lessonIds) || !Number.isInteger(r.count)||r.count<1||r.count>40 || !Array.isArray(r.pattern)||!r.pattern.length||r.pattern.some(n=>!Number.isInteger(n)||n<1||n>8)||r.pattern.reduce((a,b)=>a+b,0)!==r.count) throw Error('ภาระสอนและผลรวมรูปแบบคาบต้องตรงกัน')
     if (r.roomId && !plan.rooms.some(room=>room.id===r.roomId)) throw Error('ไม่พบห้องสถานที่ที่เลือก')
     if(typeof r.morning!=='boolean'||typeof r.spread!=='boolean')throw Error('เงื่อนไขรายวิชาไม่ถูกต้อง')
     if(r.timePreference!==undefined&&!['any','morning','afternoon'].includes(r.timePreference))throw Error('ช่วงเวลาที่ต้องการไม่ถูกต้อง')

@@ -114,7 +114,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     if(!current.rooms.some(item=>item.id===room&&scheduleRoomEnabled(item)))throw Error('ไม่พบห้องเรียน')
     const grid:Record<string,{class_subject_id:string|null;expected_lesson_id:string|null;note:string|null;locked:boolean}>={}
     for(const cell of allCells(current).filter(cell=>cell.classroomId===room))grid[`${cell.day}-${cell.period}`]={class_subject_id:lessonId(cell),expected_lesson_id:lessonId(cell),note:null,locked:!!cell.locked}
-    const subjects=data.lessons.filter(lesson=>lesson.classroomId===room).map(lesson=>({id:lesson.id,teacher_id:lesson.teacherId,subject_code:lesson.code,subject_name:lesson.name,teacher_name:lesson.teacherName,room_name:lesson.roomName||'',label:lesson.label,activity:!!lesson.activity}))
+    const subjects=data.lessons.filter(lesson=>lesson.classroomId===room).map(lesson=>({id:lesson.id,teacher_id:lesson.teacherId,subject_code:lesson.code,subject_name:lesson.name,teacher_name:lesson.teacherName,room_name:lesson.roomName||'',label:lesson.label,activity:!!lesson.activity,offering_id:lesson.id.split('#')[0],subject_title:lesson.fullName||lesson.name,main_teacher_id:lesson.teacherId,content_units:[]}))
     const items=data.lessons.filter(lesson=>lesson.classroomId===room&&!lesson.activity).map(lesson=>{const used=current.timetable.filter(cell=>cell.subjectId===lesson.id).length;return {class_subject_id:lesson.id,code:lesson.code,name:lesson.name,target:lesson.count,used,remaining:lesson.count-used}})
     const warnings:Record<string,string[]>={}
     for(const [position,cell] of Object.entries(grid)) {

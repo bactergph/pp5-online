@@ -57,7 +57,7 @@ function numberRange(values: number[]) {
   return min === max ? number(min) : `${number(min)}–${number(max)}`
 }
 
-export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachingGroupsChange, classrooms, lessons, activityLessons=[],activityGroups=[],onEditActivities,initialTeacherId,teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh, operations }: {
+export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachingGroupsChange, classrooms, lessons, activityLessons=[],activityGroups=[],onEditActivities,initialTeacherId,teachers, rules, teacherAssignments, slots, places, blocks, days, periods, year, term, busy, ready, onCommit, onRefresh, onUnits, operations }: {
   activityLessons?:ScheduleLesson[]
   activityGroups?:ActivityTeam[]
   onEditActivities?:()=>void
@@ -81,6 +81,7 @@ export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachin
   ready: boolean
   onCommit: (change: WorkloadChange) => Promise<void>
   onRefresh: () => Promise<void>
+  onUnits?: (lessonId: string) => void
   operations?: WorkloadOperations
 }) {
   const [sessionMode,setSessionMode]=useState(false)
@@ -410,7 +411,7 @@ export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachin
     if (!answer.isConfirmed) return
     await commit({ assignments: [{ lessonId: lesson.id, teacherId: '' }] })
   }
-  const rowProps = { busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit: openLesson, hasLessons: lessons.length > 0 }
+  const rowProps = { busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit: openLesson, onUnits, hasLessons: lessons.length > 0 }
   return <section className="prep-input-panel prep-teacher-panel prep-workload">
     <WorkloadSaveFeedback status={saveStatus} />
     <div className="prep-load-toolbar"><span>ครูสอนพร้อมกันหลายห้อง</span><JointTeachingEditor buttonRef={jointTrigger} groups={teachingGroups} lessons={lessons.map(lesson=>({...lesson,...rules[lesson.id],teacherId:teacherAssignments[lesson.id]??lesson.teacherId}))} teachers={teachers} classrooms={classrooms} busy={busy||pendingLocks.length>0} onSave={onTeachingGroupsChange} onRemove={cancelTeachingGroup}/></div>
@@ -579,15 +580,15 @@ export default function WorkloadEditor({ snapshotHash, teachingGroups, onTeachin
   </section>
 }
 
-function WorkloadRows({ items, showRoom, busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit, onRemove, hasLessons }: {
+function WorkloadRows({ items, showRoom, busy, ruleOf, teacherOf, teacherName, roomLabel, venueOf, onEdit, onUnits, onRemove, hasLessons }: {
   items: ScheduleLesson[]; showRoom: boolean; busy: boolean; hasLessons: boolean
   ruleOf: (lesson: ScheduleLesson) => LessonRule; teacherOf: (lesson: ScheduleLesson) => string
   teacherName: (id: string) => string; roomLabel: (id: string) => string; venueOf: (lesson: ScheduleLesson) => string
-  onEdit: (id: string) => void; onRemove?: (lesson: ScheduleLesson) => Promise<void>
+  onEdit: (id: string) => void; onUnits?: (id: string) => void; onRemove?: (lesson: ScheduleLesson) => Promise<void>
 }) {
   if (!items.length) return <p className="prep-teacher-empty">{hasLessons ? 'ไม่พบรายวิชาที่ค้นหา' : 'ยังไม่มีรายวิชา เพิ่มในขั้นรายวิชาก่อน'}</p>
   return <ul className="prep-load-list">{items.map(lesson => {
     const current = ruleOf(lesson), name = teacherName(teacherOf(lesson))
-    return <li key={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}{showRoom && <small>{roomLabel(lesson.classroomId)}</small>}{lesson.activityGroupId?.startsWith('teaching:')&&<small>สอนรวมหลายห้อง</small>}</span><span className={name ? undefined : 'prep-load-missing'}>{name || 'ยังไม่กำหนดครู'}</span><span>{current.count} คาบ<small>{patternText(current.pattern)}</small></span><small>{venueOf(lesson)}</small><span className="prep-row-actions"><button type="button" className="prep-row-edit" disabled={busy} onClick={() => onEdit(lesson.id)}>แก้ไข</button>{onRemove && <button type="button" className="prep-row-delete" disabled={busy} onClick={() => void onRemove(lesson)}>ลบ</button>}</span></li>
+    return <li key={lesson.id}><b>{lesson.code}</b><span>{lesson.fullName || lesson.name}{showRoom && <small>{roomLabel(lesson.classroomId)}</small>}{lesson.activityGroupId?.startsWith('teaching:')&&<small>สอนรวมหลายห้อง</small>}</span><span className={name ? undefined : 'prep-load-missing'}>{name || 'ยังไม่กำหนดครู'}</span><span>{current.count} คาบ<small>{patternText(current.pattern)}</small></span><small>{venueOf(lesson)}</small><span className="prep-row-actions">{onUnits && <button type="button" className="prep-row-edit" disabled={busy} onClick={() => onUnits(lesson.id)}>วิชาย่อย</button>}<button type="button" className="prep-row-edit" disabled={busy} onClick={() => onEdit(lesson.id)}>แก้ไข</button>{onRemove && <button type="button" className="prep-row-delete" disabled={busy} onClick={() => void onRemove(lesson)}>ลบ</button>}</span></li>
   })}</ul>
 }

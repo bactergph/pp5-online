@@ -1,5 +1,7 @@
 'use client'
-import { useScheduleGuard, useScheduleOperations } from './ScheduleServices'
+import { useScheduleGuard, useScheduleOperations, useScheduleServices } from './ScheduleServices'
+import ScheduleUnitDialog, { buildScheduleUnitSource, type ScheduleUnitSource } from './ScheduleUnitDialog'
+import { saveClassScheduleUnits } from '@/app/(shell)/schedules/actions'
 import { useEffect, useState, useRef } from 'react'
 import Swal from 'sweetalert2'
 import type { Preparation } from '@/lib/schedule-preparation'
@@ -21,7 +23,9 @@ const titles=['กำหนดชั้น','วันและเวลา','�
 const descriptions=['เลือกช่วงชั้นที่เปิดสอน จำนวนห้อง และชื่อห้อง','ตั้งวันเรียน เวลา และช่วงพักแยกตามช่วงชั้น','เลือกครูหรือวางรายชื่อจาก Excel','กำหนดกิจกรรม ชั้น/ห้อง และทีมครูก่อนรายวิชา','เตรียมรายวิชาให้พอดีกับคาบที่เหลือหลังหักกิจกรรม','กำหนดครู คาบต่อสัปดาห์ และล็อกคาบที่ไม่ให้จัดตารางย้าย','ตรวจข้อขัดแย้งและสร้างฉบับร่าง']
 const alert=Swal.mixin({confirmButtonColor:'#245bdb',cancelButtonText:'ยกเลิก',confirmButtonText:'ยืนยัน',reverseButtons:true})
 export default function SchedulePreparation({yearId,semester,initialRooms,initialStep=1,onChanged,onUnsavedChange,onBusyChange}:{yearId:string;semester:number;initialRooms?:string[];initialStep?:number;onChanged:()=>void;onUnsavedChange?:(value:boolean)=>void;onBusyChange?:(value:boolean)=>void}){
+  const localSchedule = !!useScheduleServices().local
   const { clearScheduleScope, previewScheduleClear, fetchPreparation, saveScheduleTeachingAssignments, savePreparation, checkPreparation, createScheduleDraft, confirmScheduleDraft, discardScheduleDraft, savePeriodTimes, removeScheduleSubjectCell, editTeacherScheduleCell, saveClassScheduleCell, setTeacherAvailabilityBlock, toggleScheduleCellLock, setJointTeachingScheduleCell } = useScheduleOperations()
+  const [unitSource, setUnitSource] = useState<ScheduleUnitSource | null>(null)
 
  const [data,setData]=useState<Preparation|null>(null),[step,setStep]=useState(initialStep),[error,setError]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[message,setMessage]=useState('')
  const [rooms,setRooms]=useState<string[]>(initialRooms||[]),[clear,setClear]=useState(false),[issues,setIssues]=useState<PlanningIssue[]|null>(null),[draft,setDraft]=useState<ScheduleDraftView|null>(null)
@@ -108,6 +112,24 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
   finally{navigationLock.current=false;setNavigating(false)}
  }
  async function reload(){const r=await fetchPreparation(yearId,semester);if(r.error||!r.data)throw Error(r.error||'โหลดไม่สำเร็จ');setData(r.data);setRooms(previous=>{const active=r.data!.classrooms.map(room=>room.id);const kept=previous.filter(id=>active.includes(id));return kept.length?kept:active});setDirty(false);setTimeDirty(false);setTeacherAssignments({});setIssues(null);setDraft(null);onChanged()}
+ function openUnits(lessonId: string) {
+  if (!data) return
+  const lesson = data.lessons.find(item => item.id === lessonId)
+  if (!lesson || lesson.activity) return
+  const offeringId = lesson.offeringId || lesson.id.split('#')[0]
+  const parts = data.lessons.filter(item => item.classroomId === lesson.classroomId && !item.activity && (item.offeringId || item.id.split('#')[0]) === offeringId)
+  const weekly = parts.reduce((sum, item) => sum + (item.count || 0), 0)
+  const periods = [0, 1].map(index => parts.find(item => item.id === `${offeringId}#${index}`)?.count || null) as [number | null, number | null]
+  const units = parts.find(item => item.contentUnits?.length)?.contentUnits || []
+  const main = parts.find(item => item.id === offeringId)
+  setUnitSource(buildScheduleUnitSource({ offeringId, code: lesson.code, title: lesson.subjectTitle || lesson.fullName || lesson.name, teacherId: lesson.mainTeacherId ?? main?.teacherId ?? lesson.teacherId, weekly, units, periods, split: parts.some(item => item.id.includes('#')), names: [...new Set(data.lessons.flatMap(item => (item.contentUnits || []).map(unit => unit.name)))] }))
+ }
+ async function saveUnits(value: { teacherId: string; units: import('@/lib/class-subject-offer').ContentUnit[]; weekly: number }) {
+  if (!unitSource) return
+  const result = await saveClassScheduleUnits(unitSource.offeringId, yearId, semester, value.teacherId, value.units, value.weekly)
+  if (result.error) throw Error(result.error)
+  await reload()
+ }
  async function saveTeachingGroups(groups:NonNullable<Preparation['plan']['teachingGroups']>){
  if(!data||runLock.current)throw Error('กำลังบันทึก กรุณารอก่อน')
  if(dirty||timeDirty||hasInputDirty||classroomsDirty)throw Error('บันทึกข้อมูลที่กำลังแก้ก่อนสร้างกลุ่มสอนรวม')
@@ -169,7 +191,7 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  {step===2&&<><h2>วันและเวลาคาบเรียน</h2><p>เลือกวันเรียน แล้วปรับเวลาและช่วงพักได้ที่นี่</p><div className="prep-checks">{SCHEDULE_DAYS.map(day=><label key={day.value}><input type="checkbox" checked={data.plan.days.includes(day.value)} onChange={()=>edit(d=>({...d,plan:{...d.plan,days:d.plan.days.includes(day.value)?d.plan.days.filter(v=>v!==day.value):[...d.plan.days,day.value].sort()}}))}/>{day.label}</label>)}</div><WizardPeriodEditor levels={data.classrooms.map(room=>room.level)} rows={data.periods} configured={data.timesConfigured} dirty={dirty||timeDirty} onSave={()=>void run(save)} onChange={periods=>{setData({...data,periods});setTimeDirty(true);setIssues(null);setDraft(null)}}/></>}
 
 
- {step===6&&<WorkloadEditor initialTeacherId={lockTeacher} snapshotHash={data.hash} teachingGroups={data.plan.teachingGroups||[]} onTeachingGroupsChange={saveTeachingGroups} classrooms={data.classrooms} lessons={teaching} teachers={data.teachers.filter(t=>eligibleTeachers.includes(t.id))} rules={data.plan.rules} teacherAssignments={teacherAssignments} activityLessons={data.lessons.filter(lesson=>lesson.activity)} activityGroups={data.plan.activityGroups||[]} onEditActivities={()=>void changeStep(4)} slots={data.slots} places={data.plan.rooms} blocks={data.manualBlocks??data.blocks} days={data.plan.days} periods={data.periods} year={yearId} term={semester} busy={busy} ready={workloadReady} onCommit={saveWorkload} onRefresh={refreshLocks} operations={{setJointTeachingScheduleCell,removeScheduleSubjectCell,editTeacherScheduleCell,saveClassScheduleCell,setTeacherAvailabilityBlock,toggleScheduleCellLock}}/>}
+ {step===6&&<WorkloadEditor initialTeacherId={lockTeacher} snapshotHash={data.hash} teachingGroups={data.plan.teachingGroups||[]} onTeachingGroupsChange={saveTeachingGroups} classrooms={data.classrooms} lessons={teaching} teachers={data.teachers.filter(t=>eligibleTeachers.includes(t.id))} rules={data.plan.rules} teacherAssignments={teacherAssignments} activityLessons={data.lessons.filter(lesson=>lesson.activity)} activityGroups={data.plan.activityGroups||[]} onEditActivities={()=>void changeStep(4)} slots={data.slots} places={data.plan.rooms} blocks={data.manualBlocks??data.blocks} days={data.plan.days} periods={data.periods} year={yearId} term={semester} busy={busy} ready={workloadReady} onCommit={saveWorkload} onRefresh={refreshLocks} onUnits={localSchedule?undefined:openUnits} operations={{setJointTeachingScheduleCell,removeScheduleSubjectCell,editTeacherScheduleCell,saveClassScheduleCell,setTeacherAvailabilityBlock,toggleScheduleCellLock}}/>}
 
  {step===7&&<ScheduleReviewStep data={data} rooms={rooms} clear={clear} issues={issues} draft={draft} blocked={hasUnsavedInput} workingLabel={busy?workingLabel:undefined}
  onRooms={next=>{setRooms(next);setIssues(null);setDraft(null)}} onClear={next=>{setClear(next);setIssues(null);setDraft(null)}} onFix={goFix}
@@ -180,5 +202,7 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  onConfirm={()=>void run(async()=>{if(!draft?.id||dirty||timeDirty||hasUnsavedInput)throw Error('ข้อมูลเตรียมตารางเปลี่ยนแล้ว กรุณาบันทึกและสร้างฉบับร่างใหม่');const locked=draft.locked||0;const outside=draft.affectedRooms||[];if(!(await alert.fire({icon:'question',title:'ยืนยันใช้ฉบับร่างนี้?',text:`บันทึกตารางเป็นชุดเดียว${outside.length?` รวมกิจกรรมร่วมในห้องนอกขอบเขตอีก ${outside.length} ห้อง`:''}${locked?` และแทนที่คาบล็อก ${locked} ช่อง`:''} ระบบจะตรวจว่าข้อมูลล่าสุดยังตรงกับฉบับร่าง`,showCancelButton:true})).isConfirmed)return;const result=await confirmScheduleDraft(draft.id,locked>0);if(result.error)throw Error(result.error);setDraft(null);await reload();setMessage('บันทึกใช้ตารางแล้ว');await alert.fire({icon:'success',title:'บันทึกตารางแล้ว',text:result.data?.committed?'ตารางเรียนและตารางครูใช้ข้อมูลชุดนี้แล้ว':'ฉบับร่างนี้ถูกบันทึกใช้ไปแล้ว ไม่มีการบันทึกซ้ำ'})},'กำลังตรวจข้อมูลล่าสุดและบันทึกตาราง…')}
  onDiscard={()=>void run(async()=>{if(!draft?.id||!(await alert.fire({icon:'warning',title:'ทิ้งฉบับร่างนี้?',showCancelButton:true})).isConfirmed)return;const result=await discardScheduleDraft(draft.id);if(result.error)throw Error(result.error);setDraft(null);setMessage('ยกเลิกร่างแล้ว ตารางจริงไม่เปลี่ยน')},'กำลังยกเลิกฉบับร่าง…')}/>}
  </fieldset>{busy&&step!==7&&<p className="prep-working" role="status">{workingLabel}</p>}<footer className="prep-wizard-footer"><button type="button" disabled={step===1||busy||navigating} onClick={()=>void changeStep(step-1)}><FiArrowLeft aria-hidden="true"/>ย้อนกลับ</button><span>{step===7?'ตรวจร่างก่อนยืนยัน ตารางจริงยังไม่เปลี่ยน':`ถัดไป: ${titles[step]}`}</span>{step<7&&<button type="button" className="prep-primary" disabled={busy||navigating} onClick={()=>void changeStep(step+1)}>ขั้นถัดไป<FiArrowRight aria-hidden="true"/></button>}{step===7&&<span className="prep-review-hint"><FiCheck aria-hidden="true"/>ยืนยันได้เมื่อมีฉบับร่างพร้อมตรวจ</span>}</footer>
- </section></SchedulePendingEdits.Provider>
+ </section>
+ {!localSchedule && <ScheduleUnitDialog source={unitSource} teachers={data.teachers} onClose={() => setUnitSource(null)} onSave={saveUnits} />}
+ </SchedulePendingEdits.Provider>
 }
