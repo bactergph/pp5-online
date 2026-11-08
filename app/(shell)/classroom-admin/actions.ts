@@ -6,7 +6,7 @@ import { fetchTermClosedDays } from '@/lib/term-calendar-server'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
-import { DAILY_BLANK, isDailyPresent } from '@/lib/daily-attendance'
+import { DAILY_BLANK, dailyAttendanceToday, isDailyPresent, syncedActivityDone } from '@/lib/daily-attendance'
 import { fetchAllRows } from '@/lib/supabase-paginate'
 import { getClassroomStudentsCached } from '@/lib/students-cache'
 import { getHolidaysCached, getWeekendSchoolDaysCached } from '@/lib/school-calendar-cache'
@@ -719,7 +719,8 @@ async function buildSyncedActivityEffectiveDone(
   function isDone(studentId: string, day: number) {
     const key = `${studentId}:${day}`
     if (manualMap.has(key)) return manualMap.get(key)! === 1
-    return attendanceMap.get(key) ?? true
+    if (attendanceMap.has(key)) return attendanceMap.get(key) === true
+    return isoDateFromMonthDay(monthKey, day) <= dailyAttendanceToday()
   }
 
   return { students, range, isDone }
@@ -738,9 +739,11 @@ export async function fillActivityDoneAll(
   if (!monthKey || !isAttendanceSyncedActivity(activityType)) return { error: 'ไม่รองรับกิจกรรมนี้', filled: 0 }
 
   const { students, range, isDone } = await buildSyncedActivityEffectiveDone(classroomId, monthKey, activityType)
+  const asOf = dailyAttendanceToday()
   const rows: { student_id: string; day: number; value: number }[] = []
   for (const student of students) {
     for (let day = 1; day <= range.days; day += 1) {
+      if (isoDateFromMonthDay(monthKey, day) > asOf) continue
       if (!isDone(student.id, day)) rows.push({ student_id: student.id, day, value: 1 })
     }
   }
@@ -782,6 +785,7 @@ export async function fillActivityDoneColumn(
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, filled: 0 }
   if (!monthKey || day < 1 || !isAttendanceSyncedActivity(activityType)) return { error: 'ข้อมูลไม่ครบ', filled: 0 }
+  if (isoDateFromMonthDay(monthKey, day) > dailyAttendanceToday()) return { error: 'ยังไม่ถึงวันที่นี้', filled: 0 }
 
   const students = await fetchStudentsForClassroom(classroomId)
   const rows = students.map(student => ({ student_id: student.id, day, value: 1 }))
@@ -822,6 +826,7 @@ export async function clearActivityDoneColumn(
   const access = await getClassroomForAccess(classroomId, session)
   if (access.error || !access.classroom) return { error: access.error, cleared: 0 }
   if (!monthKey || day < 1 || !isAttendanceSyncedActivity(activityType)) return { error: 'ข้อมูลไม่ครบ', cleared: 0 }
+  if (isoDateFromMonthDay(monthKey, day) > dailyAttendanceToday()) return { error: 'ยังไม่ถึงวันที่นี้', cleared: 0 }
 
   const students = await fetchStudentsForClassroom(classroomId)
   const rows = students.map(student => ({ student_id: student.id, day, value: 0 }))
@@ -863,9 +868,11 @@ export async function clearActivityMonth(
   if (!monthKey || !isAttendanceSyncedActivity(activityType)) return { error: 'ไม่รองรับกิจกรรมนี้', cleared: 0 }
 
   const { students, range } = await buildSyncedActivityEffectiveDone(classroomId, monthKey, activityType)
+  const asOf = dailyAttendanceToday()
   const rows: { student_id: string; day: number; value: number }[] = []
   for (const student of students) {
     for (let day = 1; day <= range.days; day += 1) {
+      if (isoDateFromMonthDay(monthKey, day) > asOf) continue
       rows.push({ student_id: student.id, day, value: 0 })
     }
   }
@@ -914,8 +921,8 @@ export async function fetchDailyActivity(classroomId: string, date: string, acti
 
   const attendanceDefaults = isAttendanceSyncedActivity(activityType)
     ? {
-      ...Object.fromEntries(students.map(s => [s.id, 1])),
-      ...Object.fromEntries((attendanceRes.data || []).map(r => [r.student_id, isDailyPresent(r.status as AttendanceStatus) ? 1 : 0])),
+      ...Object.fromEntries(students.map(s => [s.id, syncedActivityDone(undefined, date) ? 1 : 0])),
+      ...Object.fromEntries((attendanceRes.data || []).map(r => [r.student_id, syncedActivityDone(r.status as AttendanceStatus, date) ? 1 : 0])),
     }
     : {}
 
@@ -945,6 +952,7 @@ export async function saveDailyActivity(
   const rosterError=await studentRowsError(classroomId,rows)
   if (rosterError) return {error:rosterError,count:0}
   if (!date || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
+  if (isAttendanceSyncedActivity(activityType) && date > dailyAttendanceToday()) return { error: 'ยังไม่ถึงวันที่นี้', count: 0 }
   if (!['saving','merit','milk','cleaning','brushing','lunch'].includes(activityType)) return { error:'ประเภทบันทึกไม่ถูกต้อง', count:0 }
   if(isStudentValueKind(activityType)) {
     if(![1,2].includes(term)||!/^\d{4}-\d{2}-\d{2}$/.test(date))return {error:'วันที่หรือภาคเรียนไม่ถูกต้อง',count:0}
@@ -1010,11 +1018,12 @@ export async function fetchMonthlyActivity(classroomId: string, academicYearId: 
     fetchWeekendSchoolDaysForRange(academicYearId, range.start, range.end),
   ])
 
+  const asOf = dailyAttendanceToday()
   const attendanceDefaults: Record<string, Record<number, number>> = attendanceSynced
     ? students.reduce((acc: Record<string, Record<number, number>>, student) => {
       acc[student.id] = {}
       for (let day = 1; day <= range.days; day += 1) {
-        acc[student.id][day] = 1
+        acc[student.id][day] = syncedActivityDone(undefined, isoDateFromMonthDay(monthKey, day), asOf) ? 1 : 0
       }
       return acc
     }, {})
@@ -1023,7 +1032,7 @@ export async function fetchMonthlyActivity(classroomId: string, academicYearId: 
   if (attendanceSynced) {
     ;(attendanceRes.data || []).forEach(row => {
       attendanceDefaults[row.student_id] = attendanceDefaults[row.student_id] || {}
-      attendanceDefaults[row.student_id][dayOf(row.date)] = isDailyPresent(row.status as AttendanceStatus) ? 1 : 0
+      attendanceDefaults[row.student_id][dayOf(row.date)] = syncedActivityDone(row.status as AttendanceStatus, row.date, asOf) ? 1 : 0
     })
   }
 
@@ -1050,6 +1059,7 @@ export async function saveMonthlyActivity(
   const rosterError=await studentRowsError(classroomId,rows)
   if (rosterError) return {error:rosterError,count:0}
   if (!monthKey || rows.length === 0) return { error: 'ไม่มีข้อมูลให้บันทึก', count: 0 }
+  if (isAttendanceSyncedActivity(activityType) && rows.some(row => isoDateFromMonthDay(monthKey, row.day) > dailyAttendanceToday())) return { error: 'ยังไม่ถึงวันที่นี้', count: 0 }
 
   if (!['saving','merit','milk','cleaning','brushing','lunch'].includes(activityType)) return { error:'ประเภทบันทึกไม่ถูกต้อง', count:0 }
   if (isStudentValueKind(activityType)) {

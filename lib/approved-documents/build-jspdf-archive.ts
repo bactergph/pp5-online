@@ -1,7 +1,7 @@
 import 'server-only'
 import { createServerClient } from '@/lib/supabase'
 import { jsPDF } from 'jspdf'
-import { isDailyPresentOrDefault } from '@/lib/daily-attendance'
+import { syncedActivityDone } from '@/lib/daily-attendance'
 import {
   buildClassroomAdminBookPdfBlob,
   type ClassroomAdminBookMonthData,
@@ -193,7 +193,7 @@ async function loadMonthData(params: {
       bucket[student.id] = {}
       schoolDays.forEach(day => {
         bucket[student.id][day] = ATTENDANCE_SYNC_ACTIVITY_TYPES.includes(type)
-          ? isDailyPresentOrDefault(attendance[student.id]?.[day]) ? 1 : 0
+          ? syncedActivityDone(attendance[student.id]?.[day], dateOf(params.monthKey, day)) ? 1 : 0
           : 0
       })
     })

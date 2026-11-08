@@ -2,7 +2,7 @@
 import { fetchTermClosedDays } from '@/lib/term-calendar-server'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
-import { isDailyPresentOrDefault } from '@/lib/daily-attendance'
+import { syncedActivityDone } from '@/lib/daily-attendance'
 import { loadClassDocReportSignatures } from '@/lib/report-signatures'
 import {
   fetchClassDocApprovalStatus,
@@ -234,7 +234,7 @@ export async function fetchClassroomAdminExportData(classroomId: string, academi
       activities[type][student.id] = {}
       schoolDays.forEach(day => {
         activities[type][student.id][day] = ATTENDANCE_SYNC_ACTIVITY_TYPES.includes(type)
-          ? isDailyPresentOrDefault(attendance[student.id]?.[day]) ? 1 : 0
+          ? syncedActivityDone(attendance[student.id]?.[day], dateOf(monthKey, day)) ? 1 : 0
           : 0
       })
     })

@@ -70,6 +70,12 @@ export function isDailyPresentOrDefault(status?: DailyDbStatus | string | null) 
   return status == null || status === 'ม'
 }
 
+/** ดื่มนม อาหารกลางวัน แปรงฟัน และความสะอาดตามการมาเรียน แต่ไม่เติมวันล่วงหน้าเอง */
+export function syncedActivityDone(savedAttendance: string | null | undefined, date: string, asOf = dailyAttendanceToday()) {
+  if ((savedAttendance == null || savedAttendance === '') && date > asOf) return false
+  return isDailyPresentOrDefault(savedAttendance)
+}
+
 /** สรุป ม/ป/ล/ข — ข้ามช่องว่างที่เก็บแล้ว (ไม่นับ) */
 export function summarizeDailyStatuses(
   schoolDays: number[],

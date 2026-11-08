@@ -6,7 +6,7 @@ const api = {}
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/daily-attendance.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, { exports: api, Intl, Date })
-const { dailyCellText: cell, summarizeDailyStatuses: summary, dailyAttendanceToday: today } = api
+const { dailyCellText: cell, summarizeDailyStatuses: summary, dailyAttendanceToday: today, syncedActivityDone: done } = api
 const asOf = '2026-11-03'
 assert.equal(cell(undefined, '2026-11-02', asOf), '✓')
 assert.equal(cell(undefined, asOf, asOf), '✓')
@@ -28,4 +28,10 @@ assert.equal(cell(undefined), '✓', 'Undated sparse readers show present as a c
 assert.equal(api.toDailyDb('ม'), 'ม')
 assert.equal(today(new Date('2026-11-02T16:59:59Z')), '2026-11-02')
 assert.equal(today(new Date('2026-11-02T17:00:00Z')), '2026-11-03', 'Cutoff follows Thailand midnight, not UTC')
+assert.equal(done(undefined, '2026-11-02', asOf), true)
+assert.equal(done(undefined, asOf, asOf), true)
+assert.equal(done(undefined, '2026-11-04', asOf), false)
+assert.equal(done('ข', '2026-11-02', asOf), false)
+assert.equal(done('ม', '2026-11-04', asOf), true, 'An explicit saved present still counts')
+assert.equal(done('-', asOf, asOf), false)
 console.log('PASS: today-inclusive display, future defaults blank, saved rows preserved, totals, rollover and Bangkok midnight')

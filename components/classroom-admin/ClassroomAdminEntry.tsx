@@ -839,7 +839,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   async function toggleMonthlyDayPresent(day: number) {
     if (!canEdit || !classroomId || !hasMonthlyBulkTools || attendanceBulkFilling || attendanceClearingAll || !attendanceToolbarConfirmIdle) return
     if (!isSchoolDay(day)) return
-    if (mode === 'attendance' && dayDate(monthKey, day) > attendanceAsOf) return
+    if ((mode === 'attendance' || isAttendanceDefaultMode) && dayDate(monthKey, day) > attendanceAsOf) return
     if (attendanceFillingDays[day]) return
     const cellKeys = students.map(student => `${student.id}-${day}`)
     const clearing = dayColumnClearing(day)
@@ -1710,8 +1710,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     const closedWeekend = isClosedWeekend(day)
     const openWeekend = isOpenWeekend(day)
     const schoolDay = isSchoolDay(day)
-    const futureAttendance = mode === 'attendance' && dateKey > attendanceAsOf
-    const disabled = !canEdit || !schoolDay || futureAttendance || (hasMonthlyBulkTools && !attendanceToolbarConfirmIdle)
+    const futureLocked = dateKey > attendanceAsOf && (mode === 'attendance' || isAttendanceDefaultMode)
+    const disabled = !canEdit || !schoolDay || futureLocked || (hasMonthlyBulkTools && !attendanceToolbarConfirmIdle)
     const cellKey = `${student.id}-${day}`
     const cellClass = [
       'classroom-admin-month-cell',
@@ -1730,8 +1730,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           type="button"
           className={`${cellClass} ${attendanceCellClass(student.id, day)}`}
           disabled={disabled}
-          title={holiday || (futureAttendance ? 'ยังไม่ถึงวันที่นี้' : cycleStatus ? DAILY_STATUS_LABELS[cycleStatus] : 'คลิกเพื่อบันทึก')}
-          aria-label={`${studentName(student)} วันที่ ${day}: ${futureAttendance && !shown ? 'ยังไม่ถึงวันที่นี้' : shown || 'ช่องว่าง'}`}
+          title={holiday || (futureLocked ? 'ยังไม่ถึงวันที่นี้' : cycleStatus ? DAILY_STATUS_LABELS[cycleStatus] : 'คลิกเพื่อบันทึก')}
+          aria-label={`${studentName(student)} วันที่ ${day}: ${futureLocked && !shown ? 'ยังไม่ถึงวันที่นี้' : shown || 'ช่องว่าง'}`}
           onClick={() => {
             if (!schoolDay || !cycleStatus) return
             const next = toDailyDb(nextDailyDisplay(cycleStatus))
@@ -1752,7 +1752,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
         type="button"
         className={`${cellClass} ${value ? 'is-present' : ''}`}
         disabled={disabled}
-        title={holiday || (value ? 'ทำแล้ว' : 'ยังไม่ทำ')}
+        title={holiday || (futureLocked ? 'ยังไม่ถึงวันที่นี้' : value ? 'ทำแล้ว' : 'ยังไม่ทำ')}
       onClick={() => autoSaveActivity(student.id, day, value ? 0 : 1)}
       >
       {schoolDay && value ? CLASSROOM_ADMIN_CHECK_MARK : ''}
@@ -2072,7 +2072,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           </div>
           <div className="classroom-admin-board-flags">
             {!canEdit && <span className="badge badge-gray">ดูอย่างเดียว</span>}
-            {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากมาเรียน · แก้รายช่องได้</span>}
+            {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากมาเรียนถึงวันนี้ · วันล่วงหน้ายังไม่บันทึก</span>}
             {tableLoading && <span className="badge badge-gray">กำลังโหลดตาราง...</span>}
           </div>
         </div>
@@ -2272,7 +2272,9 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               <span className="classroom-admin-attendance-toolbar-note">
                 {mode === 'attendance'
                   ? 'แสดงมา (✓) อัตโนมัติถึงวันนี้ · วันล่วงหน้าเว้นว่าง · คลิกวน ✓ → ล → ป → ข → ช่องว่าง'
-                  : `ช่องว่าง = ยังไม่ทำ · คลิกเพื่อสลับ ${CLASSROOM_ADMIN_CHECK_MARK}`}
+                  : isAttendanceDefaultMode
+                    ? `แสดง ${CLASSROOM_ADMIN_CHECK_MARK} ตามมาเรียนถึงวันนี้ · วันล่วงหน้าเว้นว่าง · คลิกเพื่อแก้รายช่อง`
+                    : `ช่องว่าง = ยังไม่ทำ · คลิกเพื่อสลับ ${CLASSROOM_ADMIN_CHECK_MARK}`}
               </span>
               {canEdit ? (
               <div className="classroom-admin-attendance-toolbar-actions">
@@ -2440,7 +2442,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                             type="button"
                             className={`classroom-admin-day-all-btn ${dayClearing ? 'is-clear' : ''}`}
                             disabled={
-                              (mode === 'attendance' && dateKey > attendanceAsOf)
+                              ((mode === 'attendance' || isAttendanceDefaultMode) && dateKey > attendanceAsOf)
                               || dayBusy
                               || attendanceBulkFilling
                               || attendanceClearingAll
@@ -2556,7 +2558,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <>
               <span className="legend-pill legend-green">{CLASSROOM_ADMIN_CHECK_MARK} ทำแล้ว</span>
               <span className="legend-pill legend-red">ว่าง = ยังไม่ทำ</span>
-              {isAttendanceDefaultMode && <span className="legend-pill legend-amber">อ้างอิงจากมาเรียน แต่แก้รายช่องได้</span>}
+              {isAttendanceDefaultMode && <span className="legend-pill legend-amber">อ้างอิงจากมาเรียนถึงวันนี้ · วันล่วงหน้ายังไม่บันทึก</span>}
               <span className="legend-pill legend-gray">วันหยุดจะไม่รับบันทึก</span>
             </>
           )}
