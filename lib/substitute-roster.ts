@@ -90,9 +90,12 @@ export function substituteMinutes(entries:SubstituteRosterEntry[],periods:Period
   return total
 }
 
-/** คาบสอนจริงในวันนั้น ไม่นับคาบที่ล็อกว่าง */
+/** Count lessons and student activity periods, once per actual time slot. */
 export function teachingPeriodCount(busy: SubstituteBusy[], teacherId: string) {
-  return new Set(busy.filter(row => row.teacherId === teacherId && row.kind !== 'block').map(row => row.period)).size
+  return new Set(busy.filter(row => row.teacherId === teacherId && row.kind !== 'block' && row.period > 0)
+    .map(row => row.start_time && row.end_time
+      ? `${row.start_time.slice(0, 5)}-${row.end_time.slice(0, 5)}`
+      : row.period)).size
 }
 
 export function summarizeSubstituteTeachers(days: Array<{ entries?: Array<{ substitute_teacher_id?: string | null }> | null }>) {
@@ -104,4 +107,15 @@ export function summarizeSubstituteTeachers(days: Array<{ entries?: Array<{ subs
     }
   }
   return [...counts.entries()].map(([teacherId, periods]) => ({ teacherId, periods })).sort((a, b) => b.periods - a.periods || a.teacherId.localeCompare(b.teacherId))
+}
+
+export type SubstitutePdfWorkload = { scheduled: number | null; substitutes: number; termAssignments: number }
+
+export function substitutePdfWorkload(entries: SubstituteRosterEntry[], busy: SubstituteBusy[] | null, otherDays: { teacherId: string; periods: number }[]) {
+  const prior = new Map(otherDays.map(row => [row.teacherId, row.periods]))
+  return Object.fromEntries(summarizeSubstituteTeachers([{ entries }]).map(({ teacherId, periods }) => [teacherId, {
+    scheduled: busy === null ? null : teachingPeriodCount(busy, teacherId),
+    substitutes: periods,
+    termAssignments: periods + (prior.get(teacherId) ?? 0),
+  } satisfies SubstitutePdfWorkload]))
 }

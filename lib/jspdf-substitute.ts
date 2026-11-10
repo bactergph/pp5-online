@@ -4,12 +4,14 @@ import {jsPDF} from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import {applyThaiFonts,loadImageDataUrl} from '@/lib/jspdf-thai-font'
 import {periodTimeLabel,type PeriodTimeRow} from '@/lib/schedule-helpers'
+import type {SubstitutePdfWorkload} from '@/lib/substitute-roster'
 
 export type SubstitutePdfInput={
   schoolName:string;logoUrl?:string|null;date:string;year:number;term:string
   academicHead:string;director:string;times:PeriodTimeRow[]
   teachers:{id:string;prefix:string;full_name:string}[];teacherNames?:Record<string,string>
   entries:{absent_teacher_id:string;period:number;room_label:string|null;subject_label:string|null;substitute_teacher_id:string|null;leave_type:string;note:string|null}[]
+  workload:Record<string,SubstitutePdfWorkload>
 }
 
 /** A monochrome A4 form. Each absent teacher starts a new page, also allowing
@@ -17,6 +19,7 @@ export type SubstitutePdfInput={
 export async function buildSubstitutePdf(input:SubstitutePdfInput){
   if(!input.entries.length)throw Error('ยังไม่มีรายการสอนแทนที่บันทึกไว้')
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4',compress:true})
+  doc.setLineHeightFactor(1.08)
   await applyThaiFonts(doc)
   const logo=await loadImageDataUrl(input.logoUrl)
   const names=new Map([...input.teachers.map(t=>[t.id,`${t.prefix||''}${t.full_name}`] as const),...Object.entries(input.teacherNames||{})])
@@ -32,11 +35,20 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
     if(index)doc.addPage()
     const clockLabel=(entry:SubstitutePdfInput['entries'][number])=>periodTimeLabel(levelPeriodTimes(input.times,entry.room_label||''),entry.period)
     const entries=input.entries.filter(entry=>entry.absent_teacher_id===teacherId).sort((a,b)=>(hasPeriodProfiles(input.times)?clockLabel(a).localeCompare(clockLabel(b)):a.period-b.period)||(a.room_label||'').localeCompare(b.room_label||'','th'))
+    const coverIds=[...new Set(entries.flatMap(row=>row.substitute_teacher_id?[row.substitute_teacher_id]:[]))]
+    const summary=coverIds.map(id=>{
+      const load=input.workload[id]
+      return [names.get(id)||'ไม่ระบุชื่อ',String(load.termAssignments),String(load.scheduled??'-'),String(load.substitutes),String(load.scheduled===null?'-':load.scheduled+load.substitutes)]
+    })
+    if(!summary.length)summary.push(['ยังไม่กำหนดครู','','','',''])
+    const detailWidths=[10,23,17,41,42,23,21]
+    const summaryX=margin+detailWidths.reduce((sum,value)=>sum+value,0)+5
+    const widths=[...detailWidths,5,content-(summaryX-margin)-54,13,14,14,13]
     doc.setFont('THSarabunNew','bold');doc.setFontSize(18)
-    const schoolLines=doc.splitTextToSize(scheduleSchoolName(input.schoolName),content) as string[]
+    const schoolLines=doc.splitTextToSize(scheduleSchoolName(input.schoolName),logo?content-34:content) as string[]
     doc.setFontSize(15)
     const teacherLines=doc.splitTextToSize(`ครูเจ้าของคาบ ${names.get(teacherId)||'ไม่ระบุชื่อ'}     ประเภทการลา ${[...new Set(entries.map(entry=>entry.leave_type))].join(', ')}`,content) as string[]
-    const schoolY=logo?28:16,titleY=schoolY+(schoolLines.length-1)*7+7
+    const schoolY=16,titleY=schoolY+(schoolLines.length-1)*7+7
     const teacherY=titleY+16,tableTop=teacherY+teacherLines.length*6+4
     doc.setFont('THSarabunNew','normal');doc.setFontSize(15)
     const ownerLines=doc.splitTextToSize(`ลงชื่อครูเจ้าของคาบ ........................................................ (${names.get(teacherId)||'........................................'})`,content-6) as string[]
@@ -49,26 +61,38 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
       const page=doc.getCurrentPageInfo().pageNumber
       if(drawnHeaders.has(page))return
       drawnHeaders.add(page)
-      if(logo)doc.addImage(logo,'JPEG',(width-14)/2,8,14,14)
+      if(logo)doc.addImage(logo,'JPEG',margin,9,14,14)
       text(schoolLines,width/2,schoolY,18,true,true)
       text('บันทึกการจัดครูเข้าสอนแทน',width/2,titleY,18,true,true)
       text(`ประจำวันที่ ${date}     ภาคเรียนที่ ${input.term} ปีการศึกษา ${input.year}`,width/2,titleY+7,15,false,true)
       doc.setDrawColor(65);doc.setLineWidth(0.25);doc.line(margin,titleY+11,width-margin,titleY+11)
       text(teacherLines,margin,teacherY,15,true)
       text(`${entries.length} รายการ / ${new Set(entries.map(entry=>hasPeriodProfiles(input.times)?clockLabel(entry)||String(entry.period):String(entry.period))).size} ช่วงคาบ`,margin,tableTop-2,13)
+      text('สรุปภาระงานวันนี้และยอดสอนแทนในเทอม',summaryX,tableTop-2,13,true)
     }
     drawHeader()
-    const widths=[13,29,22,61,48,45,content-218]
     autoTable(doc,{
       // Keep the table and its signatures together; continued pages repeat the header.
       startY:tableTop,margin:{top:tableTop,bottom:height-bodyBottom,left:margin,right:margin},
-      head:[['คาบ','เวลา','ชั้น / ห้อง','รายวิชา / กิจกรรม','ครูผู้สอนแทน','หมายเหตุ','ลงชื่อหลังสอน']],
-      body:entries.map((entry,i)=>[String(entry.period),periodTimeLabel(levelPeriodTimes(input.times,entry.room_label||''),entry.period).replaceAll('–','-'),entry.room_label||'-',entry.subject_label||'-',names.get(entry.substitute_teacher_id||'')||'ยังไม่กำหนดครู',(entry.note?.length||0)>180?`ดูหมายเหตุเพิ่มเติมข้อ ${i+1}`:entry.note||'','']),
+      head:[['คาบ','เวลา','ชั้น / ห้อง','รายวิชา / กิจกรรม','ครูผู้สอนแทน','หมายเหตุ','ลงชื่อ\nหลังสอน','','ครูสอนแทน','เทอมนี้\n(ครั้ง)','ตาม\nตาราง','สอน\nแทน','รวม\n(คาบ)']],
+      body:entries.map((entry,i)=>[String(entry.period),clockLabel(entry).replaceAll('–','-'),entry.room_label||'-',entry.subject_label||'-',names.get(entry.substitute_teacher_id||'')||'ยังไม่กำหนดครู',(entry.note?.length||0)>180?`ดูหมายเหตุเพิ่มเติมข้อ ${i+1}`:entry.note||'','','',...(summary[i]??['','','','',''])]),
       theme:'grid',showHead:'everyPage',rowPageBreak:'avoid',
-      // A full eight-period day uses slightly less cell whitespace, retaining readable type.
-      styles:{font:'THSarabunNew',fontSize:15,textColor:0,fillColor:255,lineColor:80,lineWidth:0.18,cellPadding:entries.length>=8?1.9:2.2,minCellHeight:entries.length>=8?10:10.5,valign:'middle',overflow:'linebreak'},
+      styles:{font:'THSarabunNew',fontSize:entries.length>=8?13:14,textColor:0,fillColor:255,lineColor:80,lineWidth:0.18,cellPadding:{top:0.6,bottom:0.6,left:1.6,right:1.6},minCellHeight:entries.length>=8?9:10.5,valign:'middle',overflow:'linebreak'},
       headStyles:{fontStyle:'bold',fillColor:242,textColor:0,halign:'center'},alternateRowStyles:{fillColor:255},
-      columnStyles:Object.fromEntries(widths.map((cellWidth,i)=>[i,{cellWidth,...i<3?{halign:'center' as const}:{}}])),didDrawPage:drawHeader,
+      columnStyles:Object.fromEntries(widths.map((cellWidth,i)=>[i,{cellWidth,...i<3||i>=9?{halign:'center' as const}:{}}])),
+      didParseCell:({cell,column,row,section})=>{
+        if(column.index===7||column.index>=8&&section==='body'&&row.index>=summary.length){
+          cell.styles.lineWidth=0
+          cell.styles.fillColor=false
+        }else if(column.index>=8){
+          cell.styles.fontSize=13
+          if(column.index===12){
+            cell.styles.fontStyle='bold'
+            if(section==='body')cell.styles.fillColor=248
+          }
+        }
+      },
+      didDrawPage:drawHeader,
     })
     const lastY=(doc as jsPDF&{lastAutoTable?:{finalY:number}}).lastAutoTable?.finalY||tableTop
     let contentY=lastY
@@ -97,7 +121,11 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
     signature(margin+content*0.25,signatureY+signerOffset,input.academicHead,'หัวหน้าวิชาการ',content*0.45)
     signature(margin+content*0.75,signatureY+signerOffset,input.director,'ผู้อำนวยการสถานศึกษา',content*0.45)
   }
-  for(let page=1;page<=doc.getNumberOfPages();page++){doc.setPage(page);text(`หน้า ${page} / ${doc.getNumberOfPages()}`,width-margin-15,height-8,11)}
+  for(let page=1;page<=doc.getNumberOfPages();page++){
+    doc.setPage(page)
+    text('สอนแทน 1 ครั้ง = 1 รายการที่บันทึก    รวมวันนี้ = คาบตามตาราง + คาบสอนแทน',margin,height-10,11)
+    text(`หน้า ${page} / ${doc.getNumberOfPages()}`,width-margin-15,height-8,11)
+  }
   const teacherLabel=teacherIds.length===1?`-${names.get(teacherIds[0])||'ครูเจ้าของคาบ'}`:'-ทั้งหมด'
   return {blob:doc.output('blob'),fileName:`บันทึกการสอนแทน-${input.date}${teacherLabel}.pdf`.replace(/[\\/:*?"<>|]/g,'-')}
 }

@@ -381,9 +381,9 @@ export async function fetchScheduleExportContext() {
   return mod.fetchScheduleExportContext()
 }
 
-export async function fetchSubstituteDay(date: string, yearId: string, semester = 1) {
+export async function fetchSubstituteDay(date: string, yearId: string, semester = 1, readOnly = false) {
   const mod = await import('./extended-actions')
-  return mod.fetchSubstituteDay(date, yearId, semester)
+  return mod.fetchSubstituteDay(date, yearId, semester, readOnly)
 }
 
 export async function loadSubstituteSlotsForTeacher(
@@ -462,9 +462,9 @@ export async function fetchSubstituteHistory(year:string,term=1,before?:string) 
   return mod.fetchSubstituteHistory(year,term,before)
 }
 
-export async function fetchSubstituteStats(year:string,term=1) {
+export async function fetchSubstituteStats(year:string,term=1,excludingDate?:string) {
   const mod=await import('./extended-actions')
-  return mod.fetchSubstituteStats(year,term)
+  return mod.fetchSubstituteStats(year,term,excludingDate)
 }
 
 export async function deleteSubstituteRosterEntries(dayId:string,expected:import('@/lib/substitute-roster').SubstituteRosterEntry[],ids:string[]) {

@@ -424,10 +424,11 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       if(kind==='class')return Object.fromEntries(deviceDocumentPages(plan(year,term),'class',ids,term,year).map((page,index)=>[ids[index],page.gridData]))
       return Object.fromEntries(deviceDocumentPages(plan(year,term),'teacher',ids,term,year).map((page,index)=>[ids[index],page.gridData]))
     },
-    fetchSubstituteStats:async(year,term=1)=>{
-      validateSubstituteHistoryScope(year,term)
+    fetchSubstituteStats:async(year,term=1,excludingDate)=>{
+      validateSubstituteHistoryScope(year,term,excludingDate)
       const current=plan(year,term)
-      return summarizeSubstituteTeachers(Object.values(current.substitutes||{}).map(rows=>({entries:rows.map(externalEntry)}))).map(row=>({...row,name:current.teachers.find(teacher=>teacher.id===row.teacherId)?.name||''}))
+      const days=Object.entries(current.substitutes||{}).filter(([date])=>date!==excludingDate).map(([,rows])=>({entries:rows.map(externalEntry)}))
+      return summarizeSubstituteTeachers(days).map(row=>({...row,name:current.teachers.find(teacher=>teacher.id===row.teacherId)?.name||''}))
     },
     fetchSubstituteHistory:async(year,term=1,before)=>{
       validateSubstituteHistoryScope(year,term,before)
@@ -452,7 +453,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     }),
     fetchSubstituteDay:async(date,year,term=1)=>{
       const current=plan(year,term),day=weekday(date)
-      return {day:{id:key(year,term,date),date,day_of_week:day,note:null},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',availability_warning:'',teacher_names:substituteDocumentNames(Object.values(current.substitutes||{}).flat().map(externalEntry),Object.fromEntries(current.teachers.map(teacher=>[teacher.id,teacher.name]))),classrooms:current.rooms.map(room=>({id:room.id,label:room.label})),busy:rosterBusy(current,day),entries:(current.substitutes[date]||[]).map(entry=>({...externalEntry(entry),...rosterPeriodClock(current.periods,current.rooms.find(room=>room.id===entry.roomId)?.label||'',entry.period)}))}
+      return {day:{id:key(year,term,date),date,day_of_week:day,note:null},day_label:SCHEDULE_DAYS.find(item=>item.value===day)?.label||'',availability_warning:'',period_times:current.periods,teacher_names:substituteDocumentNames(Object.values(current.substitutes||{}).flat().map(externalEntry),Object.fromEntries(current.teachers.map(teacher=>[teacher.id,teacher.name]))),classrooms:current.rooms.map(room=>({id:room.id,label:room.label})),busy:rosterBusy(current,day),entries:(current.substitutes[date]||[]).map(entry=>({...externalEntry(entry),...rosterPeriodClock(current.periods,current.rooms.find(room=>room.id===entry.roomId)?.label||'',entry.period)}))}
     },
     loadSubstituteRosterSlots:async(date,year,teachers,term=1)=>{
       const current=plan(year,term)

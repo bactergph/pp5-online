@@ -5,7 +5,7 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import {FiPlus,FiSearch,FiCheckCircle,FiAlertTriangle,FiUsers,FiEdit2,FiTrash2,FiDownload,FiFileText,FiCalendar,FiRefreshCw,FiArrowLeft,FiX,FiInfo,FiLoader,FiSave} from 'react-icons/fi'
 import {useScheduleGuard,useScheduleOperations,useScheduleServices} from './ScheduleServices'
 import {currentScheduleSemester,periodTimeLabel,type PeriodTimeRow} from '@/lib/schedule-helpers'
-import {indexSubstituteAvailability,teachingPeriodCount,validateSubstituteRoster,SUBSTITUTE_LEAVE_TYPES,type SubstituteRosterEntry as Entry,type SubstituteBusy} from '@/lib/substitute-roster'
+import {indexSubstituteAvailability,substitutePdfWorkload,teachingPeriodCount,validateSubstituteRoster,SUBSTITUTE_LEAVE_TYPES,type SubstituteRosterEntry as Entry,type SubstituteBusy} from '@/lib/substitute-roster'
 import {directorDisplayName} from '@/lib/school-director'
 import {buildSubstitutePdf} from '@/lib/jspdf-substitute'
 import AppAlertModal from '@/components/AppAlertModal'
@@ -20,7 +20,7 @@ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'n
 const rowKey=(row:Entry)=>[row.absent_teacher_id,row.period,row.classroom_id].join(':')
 
 export default function SubstituteScheduleEntry(){
-  const {fetchScheduleInit,fetchPeriodTimes,fetchSubstituteDay,loadSubstituteRosterSlots,saveSubstituteRoster,deleteSubstituteRosterEntries,fetchSubstitutePdfContext}=useScheduleOperations()
+  const {fetchScheduleInit,fetchPeriodTimes,fetchSubstituteDay,fetchSubstituteStats,loadSubstituteRosterSlots,saveSubstituteRoster,deleteSubstituteRosterEntries,fetchSubstitutePdfContext}=useScheduleOperations()
   const {local}=useScheduleServices()
   const [years,setYears]=useState<Year[]>([]),[teachers,setTeachers]=useState<Teacher[]>([]),[periods,setPeriods]=useState<PeriodTimeRow[]>([])
   const [year,setYear]=useState(''),[term,setTerm]=useState(String(currentScheduleSemester())),[date,setDate]=useState(today)
@@ -64,6 +64,7 @@ export default function SubstituteScheduleEntry(){
   useEffect(()=>{if(editing&&!pickerOpen&&!working&&focusAssignments.current){focusAssignments.current=false;assignments.current?.focus({preventScroll:true});assignments.current?.scrollIntoView({block:'start',behavior:'instant'})}},[editing,pickerOpen,working])
   useEffect(()=>{if(!editing&&focusHistory.current){focusHistory.current=false;const history=document.getElementById('substitute-saved-history');history?.focus({preventScroll:true});history?.scrollIntoView({block:'start',behavior:'instant'})}},[editing,historyRevision])
   const conflictFor=useMemo(()=>{const lookup=indexSubstituteAvailability(entries,busy,names);return (teacherId:string,row:Entry)=>availabilityWarning?['ยังตรวจเวลาว่างจากตารางปกติไม่ได้']:lookup(teacherId,row)},[entries,busy,names,availabilityWarning])
+  const scheduledLoads=useMemo(()=>new Map(teachers.map(teacher=>[teacher.id,teachingPeriodCount(busy,teacher.id)])),[busy,teachers])
   const reasons=(row:Entry)=>row.substitute_teacher_id?conflictFor(row.substitute_teacher_id,row):[]
   const conflicts=entries.filter(row=>reasons(row).length>0),unassigned=entries.filter(row=>!row.substitute_teacher_id)
   const visibleTeachers=teachers.filter(teacher=>names[teacher.id]?.toLocaleLowerCase().includes(teacherSearch.trim().toLocaleLowerCase()))
@@ -124,11 +125,22 @@ export default function SubstituteScheduleEntry(){
     finally{operation.current=false;setWorking('')}
   }
   async function pdf(record?:SubstituteHistoryRecord,historyNames:Record<string,string>={}){
-    const rows=record?.entries||original,pdfDate=record?.day.date||date
+    const pdfDate=record?.day.date||date
     // Saved documents are independent of the current editor's unsaved draft.
-    if((!record&&(blocked||dirty))||!year||!rows.length||operation.current)return
+    if((!record&&(blocked||dirty||!original.length))||!year||operation.current)return
     operation.current=true;setDownload(null);setWorking('กำลังสร้าง PDF จากข้อมูลที่บันทึกแล้ว…')
-    try{const context=await fetchSubstitutePdfContext(),result=await buildSubstitutePdf({schoolName:context.school?.name||'โรงเรียน',logoUrl:context.school?.logo_url,date:pdfDate,year:years.find(row=>row.id===year)?.year_be||0,term,academicHead:context.academicHead,director:directorDisplayName(context.school,''),times:context.periodTimes,teachers,teacherNames:substituteDocumentNames(rows,{...names,...historyNames}),entries:rows.map(row=>({...row,note:row.note}))})
+    try{
+      const [context,day,otherDays]=await Promise.all([
+        fetchSubstitutePdfContext(),fetchSubstituteDay(pdfDate,year,Number(term),true),fetchSubstituteStats(year,Number(term),pdfDate),
+      ])
+      const rows=record?day.entries.filter(row=>row.absent_teacher_id===record.absentId):day.entries
+      const workload=substitutePdfWorkload(day.entries,day.period_times===null?null:day.busy,otherDays)
+      const result=await buildSubstitutePdf({
+        schoolName:context.school?.name||'โรงเรียน',logoUrl:context.school?.logo_url,date:pdfDate,
+        year:years.find(row=>row.id===year)?.year_be||0,term,academicHead:context.academicHead,
+        director:directorDisplayName(context.school,''),times:day.period_times??[],teachers,
+        teacherNames:substituteDocumentNames(rows,{...names,...historyNames,...day.teacher_names}),entries:rows,workload,
+      })
       const url=URL.createObjectURL(result.blob),link=document.createElement('a')
       setDownload({url,fileName:result.fileName})
       try{link.href=url;link.download=result.fileName;document.body.appendChild(link);link.click()}finally{link.remove()}
@@ -173,9 +185,9 @@ export default function SubstituteScheduleEntry(){
             const group=entries.filter(row=>row.absent_teacher_id===absentId).sort((a,b)=>a.period-b.period||(a.room_label||'').localeCompare(b.room_label||'','th'))
             return <section className="sub-roster-group" key={absentId}><div className="sub-roster-group-head"><div><span className="sub-desk-person-mark" aria-hidden="true">{names[absentId]?.charAt(0)||'ค'}</span><div><h3>{names[absentId]||'ครูเจ้าของคาบ'}</h3><p>{group.length} คาบ · รอครูสอนแทน {group.filter(row=>!row.substitute_teacher_id).length} คาบ</p></div></div><button type="button" className="sub-roster-danger" disabled={blocked} onClick={()=>setDeletion({ids:group.map(row=>row.id),label:'ทุกรายการของ '+(names[absentId]||'ครูคนนี้')})} title="ลบคาบของครูคนนี้"><FiTrash2 aria-hidden="true"/>ลบรายการครูคนนี้</button></div>
               <div className="sub-roster-table-wrap"><table className="sub-roster-table sub-table"><thead><tr><th>คาบ / ห้อง / วิชา</th><th>ครูสอนแทน</th><th>การลา / หมายเหตุ</th><th>จัดการ</th></tr></thead><tbody>{group.map(row=>{
-                const detail=reasons(row),loadOf=(id:string)=>teachingPeriodCount(busy,id),candidates=teachers.filter(teacher=>teacher.id!==row.absent_teacher_id).map(teacher=>({teacher,detail:conflictFor(teacher.id,row),load:loadOf(teacher.id)})).sort((a,b)=>Number(a.detail.length>0)-Number(b.detail.length>0)||a.load-b.load||(names[a.teacher.id]||'').localeCompare(names[b.teacher.id]||'','th'))
+                const detail=reasons(row),candidates=teachers.filter(teacher=>teacher.id!==row.absent_teacher_id).map(teacher=>({teacher,detail:conflictFor(teacher.id,row),load:scheduledLoads.get(teacher.id)??0})).sort((a,b)=>Number(a.detail.length>0)-Number(b.detail.length>0)||a.load-b.load||(names[a.teacher.id]||'').localeCompare(names[b.teacher.id]||'','th'))
                 return <tr key={row.id} data-entry-id={row.id}><td data-label="คาบ / ห้อง / วิชา"><strong>คาบ {row.period} · {row.room_label}</strong><small>{periodTimeLabel(levelPeriodTimes(periods,row.room_label||''),row.period)}</small><span>{row.subject_label}</span></td>
-                  <td data-label="ครูสอนแทน"><select className="sub-roster-assignee" aria-label={`ครูสอนแทน ${row.id}`} disabled={blocked} value={row.substitute_teacher_id||''} onChange={event=>change(row.id,{substitute_teacher_id:event.target.value||null})}><option value="">เลือกครูสอนแทน</option>{row.substitute_teacher_id&&!candidates.some(item=>item.teacher.id===row.substitute_teacher_id)&&<option value={row.substitute_teacher_id}>{names[row.substitute_teacher_id]||'ครูเดิม'} · ตรวจข้อมูลครู</option>}{[false,true].map(isBusy=><optgroup key={String(isBusy)} label={isBusy?'ไม่ว่าง · ยังเลือกได้':'ว่างในคาบนี้'}>{candidates.filter(item=>!!item.detail.length===isBusy).map(({teacher,detail,load})=><option key={teacher.id} value={teacher.id}>{names[teacher.id]} · สอน {load} คาบ{detail.length?' · ไม่ว่าง: '+detail[0]:' · ว่าง'}</option>)}</optgroup>)}</select>
+                  <td data-label="ครูสอนแทน"><select className="sub-roster-assignee" aria-label={`ครูสอนแทน ${row.id}`} disabled={blocked} value={row.substitute_teacher_id||''} onChange={event=>change(row.id,{substitute_teacher_id:event.target.value||null})}><option value="">เลือกครูสอนแทน</option>{row.substitute_teacher_id&&!candidates.some(item=>item.teacher.id===row.substitute_teacher_id)&&<option value={row.substitute_teacher_id}>{names[row.substitute_teacher_id]||'ครูเดิม'} · ตรวจข้อมูลครู</option>}{[false,true].map(isBusy=><optgroup key={String(isBusy)} label={isBusy?'ไม่ว่าง · ยังเลือกได้':'ว่างในคาบนี้'}>{candidates.filter(item=>!!item.detail.length===isBusy).map(({teacher,detail,load})=><option key={teacher.id} value={teacher.id}>{names[teacher.id]} · {availabilityWarning?'ตรวจจำนวนคาบไม่ได้':`ตามตาราง ${load} คาบ`}{detail.length?' · ไม่ว่าง: '+detail[0]:' · ว่าง'}</option>)}</optgroup>)}</select>
                     {row.substitute_teacher_id?<div className={'sub-roster-availability '+(detail.length?'is-busy':'is-free')}>{detail.length?<><strong><FiAlertTriangle aria-hidden="true"/>ไม่ว่าง · ยังเลือกได้</strong><span>{detail[0]}</span>{detail.length>1&&<details><summary>ดูอีก {detail.length-1} ข้อสังเกต</summary><ul>{detail.slice(1).map(text=><li key={text}>{text}</li>)}</ul></details>}</>:<><FiCheckCircle aria-hidden="true"/>ว่างในคาบนี้</>}</div>:<small className="sub-desk-field-hint">เรียงครูที่ว่างไว้ก่อน</small>}</td>
                   <td data-label="การลา / หมายเหตุ"><select aria-label={`ประเภทการลา ${row.id}`} disabled={blocked} value={row.leave_type} onChange={event=>change(row.id,{leave_type:event.target.value})}>{[...new Set([...SUBSTITUTE_LEAVE_TYPES,row.leave_type])].map(type=><option key={type}>{type}</option>)}</select><input aria-label={`หมายเหตุ ${row.id}`} disabled={blocked} value={row.note||''} maxLength={1000} placeholder="ระบุเพิ่มเติม" onChange={event=>change(row.id,{note:event.target.value||null})}/></td>
                   <td data-label="จัดการ"><div className="sub-roster-row-actions"><button type="button" disabled={blocked} onClick={()=>openEditor(row)}><FiEdit2 aria-hidden="true"/>แก้ไข</button><button type="button" disabled={blocked} className="sub-roster-danger" onClick={()=>setDeletion({ids:[row.id],label:`คาบ ${row.period} · ${row.room_label} · ${row.subject_label}`})}><FiTrash2 aria-hidden="true"/>ลบคาบ</button></div></td></tr>
