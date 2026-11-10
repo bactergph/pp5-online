@@ -632,7 +632,7 @@ export async function buildDailyAttendancePdfBlob(
         }
 
         drawRect(doc, x, rowY, dayW, rowH, fill)
-        if (isPdfCheckMark(value)) {
+        if (isPdfCheckMark(value) || value === CLASSROOM_ADMIN_CHECK_MARK) {
           drawJsPdfTick(doc, x, rowY, dayW, rowH, fg, tablePt)
         } else if (value) {
           drawCenteredText(doc, value, x, rowY, dayW, rowH, {

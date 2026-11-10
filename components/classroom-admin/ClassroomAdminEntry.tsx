@@ -58,6 +58,7 @@ import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scopeDocumentPreviewPath } from '@/lib/document-preview-popup'
 import { resolveClassroomAdminDocumentTitle } from '@/lib/classroom-admin-document-titles'
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
+import ClassroomAdminCheckMark, { isClassroomAdminDrawnCheck } from '@/components/classroom-admin/ClassroomAdminCheckMark'
 import {
   DAILY_BLANK,
   DAILY_STATUS_LABELS,
@@ -723,7 +724,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             openWeekend ? 'is-open-weekend' : '',
           ].filter(Boolean).join(' ')}
         >
-          {displayValue}
+          {isClassroomAdminDrawnCheck(displayValue) ? <ClassroomAdminCheckMark /> : displayValue}
         </td>
       )
     })

@@ -116,6 +116,14 @@ const CLASSROOM_ADMIN_PRINT_RULES = `
   .attendance-print-status-cell.attendance-ม,
   .attendance-print-status-cell.attendance-print-status-present,
   .attendance-print-status-cell:not(.is-weekend):not(.is-holiday):not(:empty) { background: #CFF8D8; font-weight: 900; color: #14532D; }
+  .attendance-print-check {
+    display: block;
+    width: 1em;
+    height: 1em;
+    max-width: 70%;
+    max-height: 68%;
+    margin-inline: auto;
+  }
   .attendance-print-status-ป,
   .attendance-print-status-ล { background: #FEF3C7 !important; color: #78350F !important; font-weight: 900; }
   .attendance-print-status-ข { background: #FEE2E2 !important; color: #7F1D1D !important; font-weight: 900; }

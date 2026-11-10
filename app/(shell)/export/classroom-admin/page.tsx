@@ -28,6 +28,7 @@ import {
 import { buildClassroomAdminBookPdfBlob, isJsPdfBookReportType } from '@/lib/jspdf-classroom-admin-book'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { CLASSROOM_ADMIN_CHECK_MARK, classroomAdminDoneMark } from '@/lib/classroom-admin-check-mark'
+import ClassroomAdminCheckMark, { isClassroomAdminDrawnCheck } from '@/components/classroom-admin/ClassroomAdminCheckMark'
 import { REPORT_FONT_FAMILY } from '@/lib/report-font'
 import { downscaleImageUrl } from '@/lib/downscale-image-url'
 import {
@@ -705,7 +706,7 @@ export default function ClassroomAdminExportPage() {
                 openWeekend ? 'is-open-weekend' : '',
               ].filter(Boolean).join(' ')}
             >
-              {displayValue}
+              {isClassroomAdminDrawnCheck(displayValue) ? <ClassroomAdminCheckMark /> : displayValue}
             </td>
           )
         })
@@ -1875,6 +1876,14 @@ ${fontFaces}
         background: #CFF8D8;
         font-weight: 900;
         color: #14532D;
+      }
+      .attendance-print-check {
+        display: block;
+        width: 1em;
+        height: 1em;
+        max-width: 70%;
+        max-height: 68%;
+        margin-inline: auto;
       }
       .attendance-print-status-ป,
       .attendance-print-status-ล {
