@@ -376,6 +376,7 @@ const ADMIN_SETTINGS: NavItem = {
       children: [
         { href: '/settings/school', label: 'ข้อมูลโรงเรียน', icon: ic(I.building) },
         { href: '/settings/users', label: 'ข้อมูลบุคลากร', icon: ic(I.users) },
+        { href: '/settings/teacher-activities', label: 'กิจกรรมครู', icon: ic(I.star) },
         { href: '/settings/academic-year', label: 'ปีการศึกษา', icon: ic(I.calendar) },
         { href: '/settings/holidays', label: 'วันหยุด', icon: ic(I.clock) },
       ],

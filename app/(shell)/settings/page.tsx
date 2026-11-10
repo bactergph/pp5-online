@@ -51,6 +51,15 @@ const ALL_MENU: MenuItem[] = [
     roles: ['admin', 'district'],
   },
   {
+    href: '/settings/teacher-activities',
+    label: 'กิจกรรมครู',
+    desc: 'PLC ประชุม เวร และงานช่วงพักของครู',
+    color: '#C49212',
+    bg: '#FFFBEB',
+    icon: <ClockIcon />,
+    roles: ['admin'],
+  },
+  {
     href: '/settings/subjects',
     label: 'รายวิชา',
     desc: 'จัดการรายวิชาตามกลุ่มสาระ',
