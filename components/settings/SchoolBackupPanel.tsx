@@ -11,7 +11,28 @@ import {
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type DriveFile = { id: string; name: string; size: number | null; createdTime: string | null; webViewLink: string | null }
-type Phase = { key: string; label: string; state: 'run' | 'done' | 'error'; detail?: string }
+type Phase = { key: string; label: string; state: 'wait' | 'run' | 'done' | 'error'; detail?: string }
+const EXPORT_STEPS = [
+  { key: 'connect', label: 'ตรวจการเชื่อม Google Drive' },
+  { key: 'staff', label: 'อ่านบุคลากรและรายวิชา' },
+  { key: 'rooms', label: 'อ่านห้องเรียนและนักเรียน' },
+  { key: 'scores', label: 'อ่านคะแนนและเกรด' },
+  { key: 'attendance', label: 'อ่านการมาเรียนและเวลาเรียน' },
+  { key: 'schedule', label: 'อ่านตารางเรียน เอกสาร และผลประเมิน' },
+  { key: 'upload', label: 'อัปโหลดขึ้น Google Drive' },
+]
+const IMPORT_STEPS = [
+  { key: 'check', label: 'ตรวจไฟล์และการยอมรับ' },
+  { key: 'accounts', label: 'เตรียมบัญชีบุคลากร' },
+  { key: 'catalog', label: 'ข้อมูลโรงเรียน บุคลากร และเวลาคาบ' },
+  { key: 'upsert', label: 'รายวิชาและเกณฑ์' },
+  { key: 'clear', label: 'ล้างข้อมูลเดิมของปีนี้' },
+  { key: 'insert', label: 'นำเข้าข้อมูลใหม่' },
+  { key: 'write', label: 'ตรวจผลหลังนำเข้า' },
+]
+function beginSteps(steps: { key: string; label: string }[]): Phase[] {
+  return steps.map((step, index) => ({ ...step, state: index === 0 ? 'run' : 'wait' }))
+}
 type Preview = { summary: BackupSummary; fileName: string; fileId?: string; raw?: string }
 
 async function readEvents(response: Response, onPhase: (phase: Phase) => void) {
@@ -47,18 +68,47 @@ function formatWhen(value: string | null) {
   return new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok' }).format(date)
 }
 
-function StatusList({ phases }: { phases: Phase[] }) {
+const PHASE_TEXT = { wait: 'รอ', run: 'กำลังทำ', done: 'เสร็จ', error: 'ไม่สำเร็จ' }
+
+function StatusCard({ title, phases }: { title: string; phases: Phase[] }) {
   if (!phases.length) return null
+  const current = phases.find(phase => phase.state === 'run')
+  const done = phases.filter(phase => phase.state === 'done').length
   return (
-    <ol className="backup-status" aria-live="polite">
-      {phases.map(phase => (
-        <li key={phase.key} data-state={phase.state}>
-          <span>{phase.state === 'done' ? 'เสร็จ' : phase.state === 'error' ? 'ไม่สำเร็จ' : 'กำลังทำ'}</span>
-          <strong>{phase.label}</strong>
-          {phase.detail ? <small>{phase.detail}</small> : null}
-        </li>
-      ))}
-    </ol>
+    <section className="data-card" style={{ padding: 20, overflow: 'hidden' }} aria-live="polite">
+      <div className="section-title" style={{ marginBottom: 6 }}>{title}</div>
+      <p style={{ margin: '0 0 14px', color: 'var(--text-3)', fontSize: 13 }}>
+        {current
+          ? `${current.label}${current.detail ? ` · ${current.detail}` : ''}`
+          : done === phases.length ? 'ทำครบทุกขั้นแล้ว' : `เสร็จ ${done} จาก ${phases.length} ขั้น`}
+      </p>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="thai-table" style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ width: 56, textAlign: 'center' }}>#</th>
+              <th>ขั้นตอน</th>
+              <th style={{ width: 120 }}>สถานะ</th>
+              <th>รายละเอียด</th>
+            </tr>
+          </thead>
+          <tbody>
+            {phases.map((phase, index) => (
+              <tr key={phase.key} style={phase.state === 'run' ? { background: '#F8FBFF' } : undefined}>
+                <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{index + 1}</td>
+                <td style={{ fontWeight: phase.state === 'run' ? 700 : 500 }}>{phase.label}</td>
+                <td>
+                  <span className={phase.state === 'done' ? 'badge badge-success' : 'badge'} style={phase.state === 'error' ? { background: '#FEE2E2', color: '#991B1B' } : phase.state === 'run' ? { background: '#DBEAFE', color: '#1E40AF' } : undefined}>
+                    {PHASE_TEXT[phase.state]}
+                  </span>
+                </td>
+                <td style={{ color: 'var(--text-3)' }}>{phase.detail || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -96,7 +146,10 @@ export default function SchoolBackupPanel() {
   }, [])
 
   function rememberPhase(setPhases: (value: Phase[] | ((current: Phase[]) => Phase[])) => void) {
-    return (phase: Phase) => setPhases(current => [...current.filter(item => item.key !== phase.key), phase])
+    return (phase: Phase) => setPhases(current => {
+      if (!current.some(item => item.key === phase.key)) return [...current, phase]
+      return current.map(item => item.key === phase.key ? { ...item, ...phase } : item)
+    })
   }
 
   async function exportBackup() {
@@ -104,7 +157,7 @@ export default function SchoolBackupPanel() {
     setExporting(true)
     setExportError('')
     setExportLink(null)
-    setExportPhases([])
+    setExportPhases(beginSteps(EXPORT_STEPS))
     try {
       const response = await fetch('/api/settings/school-backup/export', {
         method: 'POST',
@@ -138,7 +191,6 @@ export default function SchoolBackupPanel() {
   async function previewDrive(file: DriveFile) {
     clearPreview()
     setImporting(true)
-    setImportPhases([{ key: 'read', label: 'อ่านรายละเอียดไฟล์จาก Google Drive', state: 'run' }])
     try {
       const response = await fetch('/api/settings/school-backup/preview', {
         method: 'POST',
@@ -148,10 +200,8 @@ export default function SchoolBackupPanel() {
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || 'อ่านไฟล์ไม่สำเร็จ')
       setPreview({ summary: body.summary, fileName: body.fileName || file.name, fileId: file.id })
-      setImportPhases([{ key: 'read', label: 'อ่านรายละเอียดไฟล์จาก Google Drive', state: 'done', detail: body.fileName || file.name }])
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'อ่านไฟล์ไม่สำเร็จ')
-      setImportPhases([])
     } finally {
       setImporting(false)
     }
@@ -160,15 +210,12 @@ export default function SchoolBackupPanel() {
   async function previewLocal(file: File | undefined) {
     if (!file) return
     clearPreview()
-    setImportPhases([{ key: 'read', label: 'อ่านรายละเอียดไฟล์จากเครื่อง', state: 'run' }])
     try {
       const raw = await file.text()
       const summary = summarizeBackup(JSON.parse(raw))
       setPreview({ summary, fileName: file.name, raw })
-      setImportPhases([{ key: 'read', label: 'อ่านรายละเอียดไฟล์จากเครื่อง', state: 'done', detail: file.name }])
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'ไฟล์นี้ไม่ใช่ข้อมูลสำรองของจารย์เสก')
-      setImportPhases([])
     }
   }
 
@@ -177,7 +224,8 @@ export default function SchoolBackupPanel() {
     setImporting(true)
     setImportError('')
     setImportDone('')
-    setImportPhases([])
+    setPreview(null)
+    setImportPhases(beginSteps(IMPORT_STEPS))
     try {
       const response = preview.fileId
         ? await fetch('/api/settings/school-backup/import', {
@@ -210,87 +258,148 @@ export default function SchoolBackupPanel() {
   const yearClash = Boolean(preview && localYear && localYear.id !== preview.summary.academicYear.id)
   const canImport = Boolean(preview && accepted && !yearClash && !importing)
 
-  return (
-    <div className="page-stack school-backup">
-      <div className="control-card school-settings-head">
-        <div>
-          <h1 className="section-title">สำรองข้อมูล</h1>
-          <p className="backup-note">สำรองคะแนน เกรด การมาเรียน บุคลากร รายวิชา ตารางเรียน และข้อมูลทั้งปีขึ้น Google Drive</p>
-        </div>
-        <div className="school-settings-head-actions">
-          {connected ? <span className="badge badge-success">{driveEmail || 'เชื่อม Google Drive แล้ว'}</span> : <Link className="btn btn-ghost" href="/settings/school?tab=integrations">เชื่อม Google Drive</Link>}
-        </div>
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--text-3)' }}>
+        กำลังโหลด...
       </div>
+    )
+  }
 
-      {pageError ? <div className="alert alert-error">{pageError}</div> : null}
+  const yearLabel = years.find(year => year.id === yearId)
 
-      <section className="data-card card-padded">
-        <h2 className="section-title">สำรองขึ้น Google Drive</h2>
-        <div className="form-grid">
-          <label>
-            <span className="form-label">ปีการศึกษา</span>
-            <select className="form-input" value={yearId} onChange={event => setYearId(event.target.value)} disabled={loading || exporting}>
+  return (
+    <div className="page-stack">
+      <section className="control-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <div className="section-title" style={{ marginBottom: 2 }}>สำรองข้อมูล</div>
+          <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
+            {connected ? `เชื่อม Google Drive แล้ว${driveEmail ? ` · ${driveEmail}` : ''}` : 'ยังไม่ได้เชื่อม Google Drive'}
+            {yearLabel ? ` · ปีการศึกษา ${yearLabel.year_be}` : ''}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 180 }}>
+            <label className="form-label">ปีการศึกษา</label>
+            <select className="form-input" style={{ width: '100%' }} value={yearId} onChange={event => setYearId(event.target.value)} disabled={exporting}>
               {years.map(year => <option key={year.id} value={year.id}>{year.year_be}{year.is_active ? ' (ปัจจุบัน)' : ''}</option>)}
             </select>
-          </label>
-        </div>
-        <p className="backup-note">ไฟล์จะชื่อ Database_โรงเรียน … ปีการศึกษา … และอยู่ในโฟลเดอร์สำรองข้อมูล</p>
-        <button type="button" className="btn btn-primary" onClick={exportBackup} disabled={!connected || !yearId || exporting || loading}>
-          {exporting ? 'กำลังสำรองข้อมูล...' : 'สำรองข้อมูล'}
-        </button>
-        <StatusList phases={exportPhases} />
-        {exportError ? <div className="alert alert-error">{exportError}</div> : null}
-        {exportLink ? (
-          <div className="alert alert-success">
-            สำรองแล้ว: {exportLink.name}
-            {exportLink.href ? <> · <a href={exportLink.href} target="_blank" rel="noreferrer">เปิดบน Google Drive</a></> : null}
           </div>
-        ) : null}
+          {connected ? (
+            <button type="button" className="btn btn-primary" onClick={exportBackup} disabled={!yearId || exporting}>
+              {exporting ? 'กำลังสำรอง...' : 'สำรองขึ้น Drive'}
+            </button>
+          ) : (
+            <Link className="btn btn-secondary" href="/settings/school?tab=integrations">เชื่อม Google Drive</Link>
+          )}
+        </div>
       </section>
 
-      <section className="data-card card-padded">
-        <h2 className="section-title">นำเข้าข้อมูล</h2>
-        <p className="backup-note">เลือกไฟล์สำรองเพื่อดูรายละเอียดก่อน ปุ่มนำเข้าจะใช้ได้หลังติ๊กยอมรับ</p>
-        <div className="backup-file-list">
-          {files.length ? files.map(file => (
-            <button key={file.id} type="button" className="backup-file" onClick={() => previewDrive(file)} disabled={importing}>
-              <strong>{file.name}</strong>
-              <small>{formatWhen(file.createdTime)}{file.size ? ` · ${(file.size / 1024 / 1024).toFixed(1)} MB` : ''}</small>
-            </button>
-          )) : <p className="backup-note">ยังไม่มีไฟล์สำรองบน Google Drive</p>}
+      {pageError ? <div className="alert alert-error">{pageError}</div> : null}
+      <StatusCard title="สถานะการสำรอง" phases={exportPhases} />
+      {exportError ? <div className="alert alert-error">{exportError}</div> : null}
+      {exportLink ? (
+        <div className="alert alert-success">
+          สำรองแล้ว: {exportLink.name}
+          {exportLink.href ? <> · <a href={exportLink.href} target="_blank" rel="noreferrer">เปิดบน Google Drive</a></> : null}
         </div>
-        <label className="btn btn-ghost">
-          เลือกไฟล์จากเครื่อง
-          <input type="file" accept="application/json,.json" hidden onChange={event => { void previewLocal(event.target.files?.[0]); event.target.value = '' }} />
-        </label>
-        <StatusList phases={importPhases} />
-        {preview ? (
-          <div className="backup-preview">
-            <h3>{preview.fileName}</h3>
-            <p>{preview.summary.school.name} ({preview.summary.school.code}) · ปีการศึกษา {preview.summary.academicYear.yearBe} · สำรองเมื่อ {formatWhen(preview.summary.exportedAt)}</p>
-            <ul className="backup-counts">
-              {preview.summary.sections.map(section => (
-                <li key={section.key}><span>{section.label}</span><strong>{section.count.toLocaleString('th-TH')}</strong></li>
+      ) : null}
+
+      <section className="data-card" style={{ padding: 20, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 16 }}>
+          <div>
+            <div className="section-title" style={{ marginBottom: 6 }}>ไฟล์สำรอง</div>
+            <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
+              เลือกไฟล์เพื่อดูรายละเอียดก่อน ปุ่มนำเข้าจะใช้ได้หลังติ๊กยอมรับ · {files.length} ไฟล์บน Drive
+            </p>
+          </div>
+          <label className="btn btn-secondary">
+            เลือกไฟล์จากเครื่อง
+            <input type="file" accept="application/json,.json" hidden disabled={importing} onChange={event => { void previewLocal(event.target.files?.[0]); event.target.value = '' }} />
+          </label>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="thai-table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ width: 56, textAlign: 'center' }}>#</th>
+                <th>ชื่อไฟล์</th>
+                <th style={{ width: 180 }}>เวลา</th>
+                <th style={{ width: 90, textAlign: 'right' }}>ขนาด</th>
+                <th style={{ width: 120, textAlign: 'center' }}>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {files.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-3)', padding: 36 }}>
+                    ยังไม่มีไฟล์สำรองบน Google Drive
+                  </td>
+                </tr>
+              ) : files.map((file, index) => (
+                <tr key={file.id}>
+                  <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{index + 1}</td>
+                  <td style={{ fontWeight: 700 }}>{file.name}</td>
+                  <td>{formatWhen(file.createdTime) || '—'}</td>
+                  <td style={{ textAlign: 'right' }}>{file.size ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : '—'}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => previewDrive(file)} disabled={importing}>ดูรายละเอียด</button>
+                  </td>
+                </tr>
               ))}
-            </ul>
-            <ul className="backup-notes">
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <StatusCard title="สถานะการนำเข้า" phases={importPhases} />
+
+      {preview ? (
+        <div className="modal-backdrop" onClick={() => { if (!importing) clearPreview() }}>
+          <div className="modal-card" style={{ maxWidth: 720, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={event => event.stopPropagation()}>
+            <div className="section-title" style={{ marginBottom: 6 }}>รายละเอียดก่อนนำเข้า</div>
+            <p style={{ margin: '0 0 14px', color: 'var(--text-3)', fontSize: 13 }}>
+              {preview.fileName} · {preview.summary.school.name} ({preview.summary.school.code}) · ปีการศึกษา {preview.summary.academicYear.yearBe} · สำรองเมื่อ {formatWhen(preview.summary.exportedAt)}
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="thai-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>กลุ่มข้อมูล</th>
+                    <th style={{ width: 140, textAlign: 'right' }}>จำนวน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.summary.sections.map(section => (
+                    <tr key={section.key}>
+                      <td>{section.label}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{section.count.toLocaleString('th-TH')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ul style={{ margin: '14px 0', paddingLeft: 18, color: 'var(--text-2)', lineHeight: 1.7 }}>
               {BACKUP_IMPORT_NOTES.map(note => <li key={note}>{note}</li>)}
               {!localYear ? <li>ยังไม่มีปีการศึกษานี้ในโรงเรียน จะสร้างให้โดยไม่สลับปีที่กำลังใช้งาน</li> : null}
             </ul>
             {yearClash ? <div className="alert alert-error">ปีการศึกษานี้มีอยู่แล้วแต่เป็นคนละชุดข้อมูล นำเข้าไฟล์นี้ไม่ได้</div> : (
-              <label className="backup-accept">
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '8px 0 14px', fontWeight: 700 }}>
                 <input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} disabled={importing} />
                 <span>ฉันตรวจรายละเอียดแล้ว และยอมรับให้นำเข้าข้อมูลนี้แทนที่ข้อมูลปีการศึกษา {preview.summary.academicYear.yearBe}</span>
               </label>
             )}
-            <button type="button" className="btn btn-primary" disabled={!canImport} onClick={importBackup}>
-              {importing ? 'กำลังนำเข้าข้อมูล...' : 'นำเข้าข้อมูล'}
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" className="btn btn-secondary" onClick={clearPreview} disabled={importing}>ปิด</button>
+              <button type="button" className="btn btn-primary" disabled={!canImport} onClick={importBackup}>
+                {importing ? 'กำลังนำเข้า...' : 'นำเข้าข้อมูล'}
+              </button>
+            </div>
           </div>
-        ) : null}
-        {importError ? <div className="alert alert-error">{importError}</div> : null}
-        {importDone ? <div className="alert alert-success">{importDone}</div> : null}
-      </section>
+        </div>
+      ) : null}
+      {importError ? <div className="alert alert-error">{importError}</div> : null}
+      {importDone ? <div className="alert alert-success">{importDone}</div> : null}
     </div>
   )
 }

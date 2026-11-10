@@ -94,8 +94,8 @@ export async function exportSchoolBackup(
   if (!year) throw new Error('ไม่พบปีการศึกษาของโรงเรียนนี้')
   onPhase({ key: 'connect', label: 'ตรวจการเชื่อม Google Drive', state: 'done', detail: school.name })
 
-  onPhase({ key: 'read', label: 'อ่านข้อมูลคะแนน เกรด การมาเรียน บุคลากร รายวิชา และตารางเรียน', state: 'run' })
   const yearKey = year.id as string
+  onPhase({ key: 'staff', label: 'อ่านบุคลากรและรายวิชา', state: 'run' })
   const users = await fetchAll(db, 'users', query => query.eq('school_id', actor.schoolId))
   const subjects = await fetchAll(db, 'subjects', query => query.eq('school_id', actor.schoolId))
   const subjectGroupHeads = await fetchAll(db, 'subject_group_heads', query => query.eq('school_id', actor.schoolId))
@@ -104,19 +104,27 @@ export async function exportSchoolBackup(
   const clubs = await fetchAll(db, 'clubs', query => query.eq('school_id', actor.schoolId))
   const periodTimes = await fetchAll(db, 'school_period_times', query => query.eq('school_id', actor.schoolId), ['sort_order', 'id'])
   const deviceUploads = await fetchAll(db, 'device_schedule_uploads', query => query.eq('school_id', actor.schoolId), ['school_id'])
+  onPhase({ key: 'staff', label: 'อ่านบุคลากรและรายวิชา', state: 'done', detail: `${users.length.toLocaleString('th-TH')} คน · รายวิชา ${subjects.length.toLocaleString('th-TH')}` })
+  onPhase({ key: 'rooms', label: 'อ่านห้องเรียนและนักเรียน', state: 'run' })
   const classrooms = await fetchAll(db, 'classrooms', query => query.eq('school_id', actor.schoolId).eq('academic_year_id', yearKey))
   const roomIds = ids(classrooms)
   const holidays = await fetchAll(db, 'holidays', query => query.eq('academic_year_id', yearKey))
   const students = await fetchByIds(db, 'students', 'classroom_id', roomIds)
   const classSubjects = await fetchAll(db, 'class_subjects', query => query.eq('academic_year_id', yearKey))
   const offeringIds = ids(classSubjects)
+  onPhase({ key: 'rooms', label: 'อ่านห้องเรียนและนักเรียน', state: 'done', detail: `${classrooms.length.toLocaleString('th-TH')} ห้อง · นักเรียน ${students.length.toLocaleString('th-TH')}` })
+  onPhase({ key: 'scores', label: 'อ่านคะแนนและเกรด', state: 'run' })
   const periodConfig = await fetchByIds(db, 'period_config', 'classroom_id', roomIds)
   const teacherPermissions = await fetchByIds(db, 'teacher_permissions', 'classroom_id', roomIds)
   const scoreConfigs = await fetchByIds(db, 'score_configs', 'class_subject_id', offeringIds)
   const scores = await fetchByIds(db, 'scores', 'class_subject_id', offeringIds)
+  onPhase({ key: 'scores', label: 'อ่านคะแนนและเกรด', state: 'done', detail: `${scores.length.toLocaleString('th-TH')} แถว` })
+  onPhase({ key: 'attendance', label: 'อ่านการมาเรียนและเวลาเรียน', state: 'run' })
   const dailyAttendance = await fetchByIds(db, 'daily_attendance', 'classroom_id', roomIds)
   const hourlyAttendance = await fetchByIds(db, 'hourly_attendance', 'classroom_id', roomIds)
   const dailyActivities = await fetchByIds(db, 'daily_activities', 'classroom_id', roomIds)
+  onPhase({ key: 'attendance', label: 'อ่านการมาเรียนและเวลาเรียน', state: 'done', detail: `มาเรียน ${dailyAttendance.length.toLocaleString('th-TH')} · เวลาเรียน ${hourlyAttendance.length.toLocaleString('th-TH')}` })
+  onPhase({ key: 'schedule', label: 'อ่านตารางเรียน เอกสาร และผลประเมิน', state: 'run' })
   const byYear = (table: string, order = ['id']) => fetchAll(db, table, query => query.eq('academic_year_id', yearKey), order)
   const bySchoolYear = (table: string, order = ['id']) => fetchAll(
     db,
@@ -223,8 +231,8 @@ export async function exportSchoolBackup(
   payload.counts = Object.fromEntries(summarizeBackup(payload).sections.map(section => [section.key, section.count]))
   const summary = summarizeBackup(payload)
   onPhase({
-    key: 'read',
-    label: 'อ่านข้อมูลคะแนน เกรด การมาเรียน บุคลากร รายวิชา และตารางเรียน',
+    key: 'schedule',
+    label: 'อ่านตารางเรียน เอกสาร และผลประเมิน',
     state: 'done',
     detail: `${summary.total.toLocaleString('th-TH')} รายการ`,
   })
