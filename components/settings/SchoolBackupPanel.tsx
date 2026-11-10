@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { fetchBackupPage } from '@/app/(shell)/settings/backup/actions'
+import { deleteBackupFile, fetchBackupPage, renameBackupFile } from '@/app/(shell)/settings/backup/actions'
 import {
   BACKUP_IMPORT_NOTES,
   summarizeBackup,
@@ -70,45 +70,42 @@ function formatWhen(value: string | null) {
 
 const PHASE_TEXT = { wait: 'รอ', run: 'กำลังทำ', done: 'เสร็จ', error: 'ไม่สำเร็จ' }
 
-function StatusCard({ title, phases }: { title: string; phases: Phase[] }) {
+function StatusPopup({ title, phases, busy, notice, error, onClose }: { title: string; phases: Phase[]; busy: boolean; notice?: string; error?: string; onClose: () => void }) {
   if (!phases.length) return null
   const current = phases.find(phase => phase.state === 'run')
   const done = phases.filter(phase => phase.state === 'done').length
   return (
-    <section className="data-card" style={{ padding: 20, overflow: 'hidden' }} aria-live="polite">
-      <div className="section-title" style={{ marginBottom: 6 }}>{title}</div>
-      <p style={{ margin: '0 0 14px', color: 'var(--text-3)', fontSize: 13 }}>
-        {current
-          ? `${current.label}${current.detail ? ` · ${current.detail}` : ''}`
-          : done === phases.length ? 'ทำครบทุกขั้นแล้ว' : `เสร็จ ${done} จาก ${phases.length} ขั้น`}
-      </p>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="thai-table" style={{ width: '100%' }}>
-          <thead>
-            <tr>
-              <th style={{ width: 56, textAlign: 'center' }}>#</th>
-              <th>ขั้นตอน</th>
-              <th style={{ width: 120 }}>สถานะ</th>
-              <th>รายละเอียด</th>
-            </tr>
-          </thead>
-          <tbody>
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-card" role="dialog" aria-modal="true" aria-live="polite" style={{ width: 'min(560px, 100%)', minWidth: 0, maxHeight: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '22px 22px 12px', overflow: 'auto' }}>
+          <div className="section-title" style={{ marginBottom: 6 }}>{title}</div>
+          <p style={{ margin: '0 0 14px', color: 'var(--text-3)', fontSize: 13, overflowWrap: 'anywhere' }}>
+            {current
+              ? `${current.label}${current.detail ? ` · ${current.detail}` : ''}`
+              : done === phases.length ? 'ทำครบทุกขั้นแล้ว' : `เสร็จ ${done} จาก ${phases.length} ขั้น`}
+          </p>
+          <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
             {phases.map((phase, index) => (
-              <tr key={phase.key} style={phase.state === 'run' ? { background: '#F8FBFF' } : undefined}>
-                <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{index + 1}</td>
-                <td style={{ fontWeight: phase.state === 'run' ? 700 : 500 }}>{phase.label}</td>
-                <td>
-                  <span className={phase.state === 'done' ? 'badge badge-success' : 'badge'} style={phase.state === 'error' ? { background: '#FEE2E2', color: '#991B1B' } : phase.state === 'run' ? { background: '#DBEAFE', color: '#1E40AF' } : undefined}>
-                    {PHASE_TEXT[phase.state]}
-                  </span>
-                </td>
-                <td style={{ color: 'var(--text-3)' }}>{phase.detail || '—'}</td>
-              </tr>
+              <div key={phase.key} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '11px 14px', borderTop: index ? '1px solid #F1F5F9' : undefined, background: phase.state === 'run' ? '#F8FBFF' : 'white' }}>
+                <span style={{ width: 22, color: 'var(--text-3)', flex: 'none' }}>{index + 1}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontWeight: phase.state === 'run' ? 700 : 500 }}>{phase.label}</span>
+                  <span style={{ display: 'block', marginTop: 2, color: 'var(--text-3)', fontSize: 13, overflowWrap: 'anywhere' }}>{phase.detail || '—'}</span>
+                </span>
+                <span className={phase.state === 'done' ? 'badge badge-success' : 'badge'} style={{ flex: 'none', ...(phase.state === 'error' ? { background: '#FEE2E2', color: '#991B1B' } : phase.state === 'run' ? { background: '#DBEAFE', color: '#1E40AF' } : undefined) }}>
+                  {PHASE_TEXT[phase.state]}
+                </span>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+          {notice ? <div className="alert alert-success" style={{ marginTop: 14 }}>{notice}</div> : null}
+          {error ? <div className="alert alert-error" style={{ marginTop: 14, overflowWrap: 'anywhere' }}>{error}</div> : null}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 22px 22px', borderTop: '1px solid var(--border)' }}>
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>{busy ? 'กำลังทำ...' : 'ปิด'}</button>
+        </div>
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -130,6 +127,11 @@ export default function SchoolBackupPanel() {
   const [importDone, setImportDone] = useState('')
   const [importing, setImporting] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [refreshAt, setRefreshAt] = useState(0)
+  const [fileAction, setFileAction] = useState<{ kind: 'rename' | 'delete'; file: DriveFile } | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [fileBusy, setFileBusy] = useState(false)
+  const [fileNotice, setFileNotice] = useState('')
 
   async function reload() {
     const page = await fetchBackupPage()
@@ -144,6 +146,12 @@ export default function SchoolBackupPanel() {
   useEffect(() => {
     reload().catch(error => setPageError(error instanceof Error ? error.message : 'โหลดหน้าสำรองข้อมูลไม่สำเร็จ')).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (!refreshAt) return
+    const timer = window.setTimeout(() => window.location.reload(), 2500)
+    return () => window.clearTimeout(timer)
+  }, [refreshAt])
 
   function rememberPhase(setPhases: (value: Phase[] | ((current: Phase[]) => Phase[])) => void) {
     return (phase: Phase) => setPhases(current => {
@@ -171,10 +179,11 @@ export default function SchoolBackupPanel() {
       const result = await readEvents(response, rememberPhase(setExportPhases))
       const fileName = String(result.fileName || '')
       setExportLink({ name: fileName, href: typeof result.webViewLink === 'string' ? result.webViewLink : null })
-      await reload()
+      setRefreshAt(Date.now())
     } catch (error) {
-      setExportError(error instanceof Error ? error.message : 'สำรองข้อมูลไม่สำเร็จ')
-      setExportPhases(current => current.map(phase => phase.state === 'run' ? { ...phase, state: 'error' } : phase))
+      const message = error instanceof Error ? error.message : 'สำรองข้อมูลไม่สำเร็จ'
+      setExportError(message)
+      setExportPhases(current => current.map(phase => phase.state === 'run' ? { ...phase, state: 'error', detail: message } : phase))
     } finally {
       setExporting(false)
     }
@@ -247,11 +256,50 @@ export default function SchoolBackupPanel() {
       setImportDone(warnings ? `นำเข้าแล้ว มี ${warnings} บัญชีที่อัปเดตอีเมลเข้าสู่ระบบไม่สำเร็จ` : 'นำเข้าข้อมูลแล้ว')
       setAccepted(false)
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : 'นำเข้าข้อมูลไม่สำเร็จ')
-      setImportPhases(current => current.map(phase => phase.state === 'run' ? { ...phase, state: 'error' } : phase))
+      const message = error instanceof Error ? error.message : 'นำเข้าข้อมูลไม่สำเร็จ'
+      setImportError(message)
+      setImportPhases(current => current.map(phase => phase.state === 'run' ? { ...phase, state: 'error', detail: message } : phase))
     } finally {
       setImporting(false)
     }
+  }
+
+  function openRename(file: DriveFile) {
+    setFileNotice('')
+    setPageError('')
+    setRenameValue(file.name)
+    setFileAction({ kind: 'rename', file })
+  }
+
+  async function saveRename() {
+    if (!fileAction || fileAction.kind !== 'rename' || fileBusy) return
+    setFileBusy(true)
+    setPageError('')
+    const result = await renameBackupFile(fileAction.file.id, renameValue)
+    setFileBusy(false)
+    if ('error' in result && result.error) {
+      setPageError(result.error)
+      return
+    }
+    setFileAction(null)
+    setFileNotice(`แก้ชื่อเป็น ${'name' in result ? result.name : renameValue} แล้ว`)
+    await reload()
+  }
+
+  async function confirmDelete() {
+    if (!fileAction || fileAction.kind !== 'delete' || fileBusy) return
+    setFileBusy(true)
+    setPageError('')
+    const result = await deleteBackupFile(fileAction.file.id)
+    setFileBusy(false)
+    if ('error' in result && result.error) {
+      setPageError(result.error)
+      return
+    }
+    const name = fileAction.file.name
+    setFileAction(null)
+    setFileNotice(`ลบ ${name} ออกจาก Google Drive แล้ว`)
+    await reload()
   }
 
   const localYear = years.find(year => year.year_be === preview?.summary.academicYear.yearBe)
@@ -296,12 +344,12 @@ export default function SchoolBackupPanel() {
       </section>
 
       {pageError ? <div className="alert alert-error">{pageError}</div> : null}
-      <StatusCard title="สถานะการสำรอง" phases={exportPhases} />
       {exportError ? <div className="alert alert-error">{exportError}</div> : null}
       {exportLink ? (
         <div className="alert alert-success">
           สำรองแล้ว: {exportLink.name}
           {exportLink.href ? <> · <a href={exportLink.href} target="_blank" rel="noreferrer">เปิดบน Google Drive</a></> : null}
+          <div>รายการไฟล์จะรีเฟรชในอีกสักครู่</div>
         </div>
       ) : null}
 
@@ -326,7 +374,7 @@ export default function SchoolBackupPanel() {
                 <th>ชื่อไฟล์</th>
                 <th style={{ width: 180 }}>เวลา</th>
                 <th style={{ width: 90, textAlign: 'right' }}>ขนาด</th>
-                <th style={{ width: 120, textAlign: 'center' }}>จัดการ</th>
+                <th style={{ width: 280, textAlign: 'right' }}>จัดการ</th>
               </tr>
             </thead>
             <tbody>
@@ -342,8 +390,12 @@ export default function SchoolBackupPanel() {
                   <td style={{ fontWeight: 700 }}>{file.name}</td>
                   <td>{formatWhen(file.createdTime) || '—'}</td>
                   <td style={{ textAlign: 'right' }}>{file.size ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : '—'}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => previewDrive(file)} disabled={importing}>ดูรายละเอียด</button>
+                  <td>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => previewDrive(file)} disabled={importing || fileBusy}>ดูรายละเอียด</button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => openRename(file)} disabled={importing || fileBusy}>แก้ชื่อ</button>
+                      <button type="button" className="btn btn-danger btn-sm" onClick={() => { setFileNotice(''); setFileAction({ kind: 'delete', file }) }} disabled={importing || fileBusy}>ลบ</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -352,48 +404,82 @@ export default function SchoolBackupPanel() {
         </div>
       </section>
 
-      <StatusCard title="สถานะการนำเข้า" phases={importPhases} />
+      {fileNotice ? <div className="alert alert-success">{fileNotice}</div> : null}
+      {importPhases.length ? (
+        <StatusPopup title="สถานะการนำเข้า" phases={importPhases} busy={importing} notice={importDone} error={importError} onClose={() => setImportPhases([])} />
+      ) : exportPhases.length ? (
+        <StatusPopup title="สถานะการสำรอง" phases={exportPhases} busy={exporting} notice={exportLink ? `สำรองแล้ว: ${exportLink.name} · รายการไฟล์จะรีเฟรชในอีกสักครู่` : ''} error={exportError} onClose={() => setExportPhases([])} />
+      ) : null}
+
+      {fileAction?.kind === 'rename' ? (
+        <div className="modal-backdrop" onClick={() => { if (!fileBusy) setFileAction(null) }}>
+          <div className="modal-card" style={{ maxWidth: 560 }} onClick={event => event.stopPropagation()}>
+            <div className="section-title" style={{ marginBottom: 6 }}>แก้ไขชื่อไฟล์</div>
+            <p style={{ margin: '0 0 14px', color: 'var(--text-3)', fontSize: 13 }}>ชื่อต้องขึ้นต้นด้วย Database_ และลงท้าย .json ไฟล์ยังอยู่โฟลเดอร์เดิม</p>
+            <input className="form-input" style={{ width: '100%' }} value={renameValue} onChange={event => setRenameValue(event.target.value)} disabled={fileBusy} />
+            {pageError ? <div className="alert alert-error" style={{ marginTop: 12 }}>{pageError}</div> : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setFileAction(null)} disabled={fileBusy}>ยกเลิก</button>
+              <button type="button" className="btn btn-primary" onClick={saveRename} disabled={fileBusy || !renameValue.trim()}>{fileBusy ? 'กำลังบันทึก...' : 'บันทึกชื่อ'}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {fileAction?.kind === 'delete' ? (
+        <div className="modal-backdrop" onClick={() => { if (!fileBusy) setFileAction(null) }}>
+          <div className="modal-card" style={{ maxWidth: 520 }} onClick={event => event.stopPropagation()}>
+            <div className="section-title" style={{ marginBottom: 6 }}>ลบไฟล์สำรอง</div>
+            <p style={{ margin: '0 0 14px', color: 'var(--text-2)', lineHeight: 1.6 }}>
+              ลบ {fileAction.file.name} ออกจาก Google Drive ข้อมูลในโรงเรียนไม่เปลี่ยน
+            </p>
+            {pageError ? <div className="alert alert-error" style={{ marginBottom: 12 }}>{pageError}</div> : null}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setFileAction(null)} disabled={fileBusy}>ยกเลิก</button>
+              <button type="button" className="btn btn-danger" onClick={confirmDelete} disabled={fileBusy}>{fileBusy ? 'กำลังลบ...' : 'ลบไฟล์'}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {preview ? (
         <div className="modal-backdrop" onClick={() => { if (!importing) clearPreview() }}>
-          <div className="modal-card" style={{ maxWidth: 720, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={event => event.stopPropagation()}>
-            <div className="section-title" style={{ marginBottom: 6 }}>รายละเอียดก่อนนำเข้า</div>
-            <p style={{ margin: '0 0 14px', color: 'var(--text-3)', fontSize: 13 }}>
-              {preview.fileName} · {preview.summary.school.name} ({preview.summary.school.code}) · ปีการศึกษา {preview.summary.academicYear.yearBe} · สำรองเมื่อ {formatWhen(preview.summary.exportedAt)}
-            </p>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="thai-table" style={{ width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th>กลุ่มข้อมูล</th>
-                    <th style={{ width: 140, textAlign: 'right' }}>จำนวน</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.summary.sections.map(section => (
-                    <tr key={section.key}>
-                      <td>{section.label}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{section.count.toLocaleString('th-TH')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="modal-card" style={{ width: 'min(560px, 100%)', minWidth: 0, maxHeight: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }} onClick={event => event.stopPropagation()}>
+            <div style={{ padding: '22px 22px 12px', overflow: 'auto' }}>
+              <div className="section-title" style={{ marginBottom: 6 }}>รายละเอียดก่อนนำเข้า</div>
+              <p style={{ margin: '0 0 14px', color: 'var(--text-3)', fontSize: 13, overflowWrap: 'anywhere' }}>
+                {preview.fileName} · {preview.summary.school.name} ({preview.summary.school.code}) · ปีการศึกษา {preview.summary.academicYear.yearBe} · สำรองเมื่อ {formatWhen(preview.summary.exportedAt)}
+              </p>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '10px 14px', background: 'var(--bg-2)', color: 'var(--text-3)', fontSize: 12, fontWeight: 700 }}>
+                  <span>กลุ่มข้อมูล</span>
+                  <span>จำนวน</span>
+                </div>
+                {preview.summary.sections.map(section => (
+                  <div key={section.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '11px 14px', borderTop: '1px solid #F1F5F9' }}>
+                    <span style={{ minWidth: 0 }}>{section.label}</span>
+                    <strong>{section.count.toLocaleString('th-TH')}</strong>
+                  </div>
+                ))}
+              </div>
+              <ul style={{ margin: '14px 0 0', paddingLeft: 18, color: 'var(--text-2)', lineHeight: 1.7 }}>
+                {BACKUP_IMPORT_NOTES.map(note => <li key={note}>{note}</li>)}
+                {!localYear ? <li>ยังไม่มีปีการศึกษานี้ในโรงเรียน จะสร้างให้โดยไม่สลับปีที่กำลังใช้งาน</li> : null}
+              </ul>
             </div>
-            <ul style={{ margin: '14px 0', paddingLeft: 18, color: 'var(--text-2)', lineHeight: 1.7 }}>
-              {BACKUP_IMPORT_NOTES.map(note => <li key={note}>{note}</li>)}
-              {!localYear ? <li>ยังไม่มีปีการศึกษานี้ในโรงเรียน จะสร้างให้โดยไม่สลับปีที่กำลังใช้งาน</li> : null}
-            </ul>
-            {yearClash ? <div className="alert alert-error">ปีการศึกษานี้มีอยู่แล้วแต่เป็นคนละชุดข้อมูล นำเข้าไฟล์นี้ไม่ได้</div> : (
-              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '8px 0 14px', fontWeight: 700 }}>
-                <input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} disabled={importing} />
-                <span>ฉันตรวจรายละเอียดแล้ว และยอมรับให้นำเข้าข้อมูลนี้แทนที่ข้อมูลปีการศึกษา {preview.summary.academicYear.yearBe}</span>
-              </label>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button type="button" className="btn btn-secondary" onClick={clearPreview} disabled={importing}>ปิด</button>
-              <button type="button" className="btn btn-primary" disabled={!canImport} onClick={importBackup}>
-                {importing ? 'กำลังนำเข้า...' : 'นำเข้าข้อมูล'}
-              </button>
+            <div style={{ padding: '14px 22px 22px', borderTop: '1px solid var(--border)', background: 'white' }}>
+              {yearClash ? <div className="alert alert-error">ปีการศึกษานี้มีอยู่แล้วแต่เป็นคนละชุดข้อมูล นำเข้าไฟล์นี้ไม่ได้</div> : (
+                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '0 0 14px', fontWeight: 700 }}>
+                  <input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} disabled={importing} />
+                  <span>ฉันตรวจรายละเอียดแล้ว และยอมรับให้นำเข้าข้อมูลนี้แทนที่ข้อมูลปีการศึกษา {preview.summary.academicYear.yearBe}</span>
+                </label>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button type="button" className="btn btn-secondary" onClick={clearPreview} disabled={importing}>ปิด</button>
+                <button type="button" className="btn btn-primary" disabled={!canImport} onClick={importBackup}>
+                  {importing ? 'กำลังนำเข้า...' : 'นำเข้าข้อมูล'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

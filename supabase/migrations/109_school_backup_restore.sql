@@ -9,6 +9,7 @@ set search_path = public
 as $$
 declare
   inserted integer := 0;
+  cols text;
   allowed text[] := array[
     'classrooms','period_config','holidays','students','class_subjects','teacher_permissions',
     'score_configs','scores','daily_attendance','hourly_attendance','daily_activities',
@@ -31,8 +32,20 @@ begin
   if p_table = 'weekend_school_days' and to_regclass('public.weekend_school_days') is null then
     return 0;
   end if;
-  execute format('insert into public.%I select * from jsonb_populate_recordset(null::public.%I, $1)', p_table, p_table)
-    using p_rows;
+  select string_agg(quote_ident(a.attname), ', ' order by a.attnum)
+    into cols
+  from pg_attribute a
+  where a.attrelid = format('public.%I', p_table)::regclass
+    and a.attnum > 0
+    and not a.attisdropped
+    and a.attgenerated = '';
+  if cols is null then
+    raise exception 'ตาราง % ไม่มีคอลัมน์สำหรับนำเข้า', p_table;
+  end if;
+  execute format(
+    'insert into public.%I (%s) select %s from jsonb_populate_recordset(null::public.%I, $1)',
+    p_table, cols, cols, p_table
+  ) using p_rows;
   get diagnostics inserted = row_count;
   return inserted;
 end;

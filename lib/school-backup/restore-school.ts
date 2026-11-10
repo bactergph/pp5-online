@@ -232,6 +232,12 @@ export async function restoreSchoolBackup(
       const rows = Array.isArray(payload.data[target]) ? payload.data[target] as unknown[] : []
       let limit = 200
       for (let index = 0; index < rows.length;) {
+        onPhase({
+          key: 'insert',
+          label: 'นำเข้าข้อมูลใหม่',
+          state: 'run',
+          detail: `${label} ${index.toLocaleString('th-TH')}/${rows.length.toLocaleString('th-TH')}`,
+        })
         try {
           await rpc(db, 'backup_restore_insert_batch', {
             p_school_id: actor.schoolId,

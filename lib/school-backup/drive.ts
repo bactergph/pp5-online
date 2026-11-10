@@ -1,7 +1,7 @@
 import 'server-only'
 import { ensureDriveFolderPath } from '@/lib/google-drive'
 import { getDriveClientForSchool } from '@/lib/google-drive/school-drive'
-import { BACKUP_FOLDER } from '@/lib/school-backup/format'
+import { BACKUP_FOLDER, normalizeBackupFileName } from '@/lib/school-backup/format'
 
 const MAX_BACKUP_BYTES = 80 * 1024 * 1024
 
@@ -61,4 +61,36 @@ export async function downloadDriveBackup(schoolId: string, rootFolderId: string
   const buffer = Buffer.from(media.data as ArrayBuffer)
   if (buffer.length > MAX_BACKUP_BYTES) throw new Error('ไฟล์สำรองใหญ่เกินกว่าที่ระบบนำเข้าได้')
   return { name: meta.data.name, buffer }
+}
+
+async function backupFileInFolder(schoolId: string, rootFolderId: string, fileId: string) {
+  if (!fileId || fileId.length > 200 || /[^A-Za-z0-9_-]/.test(fileId)) throw new Error('ไม่พบไฟล์สำรอง')
+  const { drive, folderId } = await backupFolder(schoolId, rootFolderId)
+  const meta = await drive.files.get({
+    fileId,
+    fields: 'id, name, parents',
+    supportsAllDrives: true,
+  })
+  if (!meta.data.parents?.includes(folderId) || !meta.data.name?.startsWith('Database_')) {
+    throw new Error('จัดการได้เฉพาะไฟล์สำรองในโฟลเดอร์สำรองข้อมูล')
+  }
+  return { drive, name: meta.data.name }
+}
+
+export async function renameDriveBackup(schoolId: string, rootFolderId: string, fileId: string, name: string) {
+  const next = normalizeBackupFileName(name)
+  const { drive } = await backupFileInFolder(schoolId, rootFolderId, fileId)
+  const updated = await drive.files.update({
+    fileId,
+    requestBody: { name: next },
+    fields: 'id, name',
+    supportsAllDrives: true,
+  })
+  return updated.data.name || next
+}
+
+export async function deleteDriveBackup(schoolId: string, rootFolderId: string, fileId: string) {
+  const { drive, name } = await backupFileInFolder(schoolId, rootFolderId, fileId)
+  await drive.files.delete({ fileId, supportsAllDrives: true })
+  return name
 }

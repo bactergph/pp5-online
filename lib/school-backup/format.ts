@@ -80,6 +80,15 @@ export function schoolProfile(row: Record<string, unknown>) {
   return profile
 }
 
+export function normalizeBackupFileName(name: string) {
+  const cleaned = name.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!cleaned) throw new Error('กรุณาใส่ชื่อไฟล์')
+  const withExt = /\.json$/i.test(cleaned) ? cleaned : `${cleaned}.json`
+  if (!withExt.startsWith('Database_')) throw new Error('ชื่อไฟล์ต้องขึ้นต้นด้วย Database_')
+  if (withExt.length > 180) throw new Error('ชื่อไฟล์ยาวเกินกำหนด')
+  return withExt
+}
+
 export function schoolBackupFileName(schoolName: string, yearBe: number, at = new Date()) {
   const school = schoolName.replace(/[\\/:*?"<>|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'ไม่ระบุชื่อ'
   const parts = new Intl.DateTimeFormat('en-US', {
