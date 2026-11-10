@@ -112,28 +112,15 @@ export default function SchoolLeadersPanel({
     })),
   ]
   const stats = countSlots(tracked)
-  const progressPct = stats.total ? Math.round((stats.filled / stats.total) * 100) : 0
   const noStaff = staff.length === 0
 
   return (
     <div className="school-leaders-panel">
       <div className="leaders-status-bar">
         <div className="leaders-status-bar__main">
-          <div className="leaders-status-bar__title-row">
-            <h3 className="leaders-status-bar__title">สถานะการกำหนดตำแหน่ง</h3>
-            <span className="leaders-status-bar__count">{stats.filled}/{stats.total}</span>
-          </div>
           <p className="leaders-status-bar__desc">
-            เลือกจากระบบ หรือพิมพ์ชื่อเองแล้วบันทึก ระบบจะเพิ่มชื่อนั้นในบุคลากรของโรงเรียน
+            กำหนดแล้ว {stats.filled}/{stats.total} ตำแหน่ง · พร้อมลงนาม {stats.linked} · มีชื่ออย่างเดียว {stats.manual} · ยังไม่กำหนด {stats.total - stats.filled}
           </p>
-          <div className="leaders-status-bar__meter" aria-hidden>
-            <div className="leaders-status-bar__meter-fill" style={{ width: `${progressPct}%` }} />
-          </div>
-          <div className="leaders-status-bar__chips">
-            <span className="leaders-chip is-linked">{stats.linked} พร้อมลงนาม</span>
-            <span className="leaders-chip is-manual">{stats.manual} มีชื่ออย่างเดียว</span>
-            <span className="leaders-chip is-empty">{stats.total - stats.filled} ยังไม่กำหนด</span>
-          </div>
         </div>
         {showSaveCta && onSaveClick && (
           <button
@@ -165,10 +152,10 @@ export default function SchoolLeadersPanel({
               <p>ผู้อำนวยการ รองผู้อำนวยการ และผู้รักษาการ</p>
             </div>
           </div>
-          <div className="leaders-role-grid">
-            <div className="leaders-role-card">
-              <div className="leaders-role-card__meta">
-                <span className="leaders-role-card__label">ผู้อำนวยการ</span>
+          <div className="leaders-rows">
+            <div className="leaders-row">
+              <div className="leaders-row__label">
+                <span>ผู้อำนวยการ</span>
                 <SlotBadge kind={slotKind(directorUserId, directorName)} />
               </div>
               <StaffPicker
@@ -181,60 +168,65 @@ export default function SchoolLeadersPanel({
               />
             </div>
 
-            <div className="leaders-role-card">
-              <div className="leaders-role-card__meta">
-                <span className="leaders-role-card__label">รองผู้อำนวยการ</span>
+            <div className="leaders-row">
+              <div className="leaders-row__label">
+                <span>รองผู้อำนวยการ</span>
                 <SlotBadge kind={slotKind(viceDirectorUserId, viceDirectorName)} />
               </div>
-              <StaffPicker
-                staff={staff}
-                value={viceDirectorUserId}
-                manualValue={viceDirectorName}
-                allowManual
-                onManualChange={onViceDirectorManual}
-                onChange={onViceDirectorChange}
-              />
-              <div className="school-leaders-vice__actions">
-                <button
-                  type="button"
-                  className={isViceDirectorActing ? 'btn btn-primary' : 'btn btn-secondary'}
-                  onClick={onToggleViceAsActing}
-                  disabled={actingToggleBusy}
-                  aria-pressed={isViceDirectorActing}
-                >
-                  {actingToggleBusy
-                    ? 'กำลังบันทึก...'
-                    : isViceDirectorActing
-                      ? 'ยกเลิกรักษาการ'
-                      : 'ตั้งเป็นรักษาการ ผอ.'}
-                </button>
-                {isViceDirectorActing && (
-                  <span className="badge badge-success">ใช้รอง ผอ. ลงนามแทน</span>
-                )}
+              <div className="leaders-row__field">
+                <StaffPicker
+                  staff={staff}
+                  value={viceDirectorUserId}
+                  manualValue={viceDirectorName}
+                  allowManual
+                  onManualChange={onViceDirectorManual}
+                  onChange={onViceDirectorChange}
+                />
+                <div className="school-leaders-vice__actions">
+                  <button
+                    type="button"
+                    className={isViceDirectorActing ? 'btn btn-primary' : 'btn btn-secondary'}
+                    onClick={onToggleViceAsActing}
+                    disabled={actingToggleBusy}
+                    aria-pressed={isViceDirectorActing}
+                  >
+                    {actingToggleBusy
+                      ? 'กำลังบันทึก...'
+                      : isViceDirectorActing
+                        ? 'ยกเลิกรักษาการ'
+                        : 'ตั้งเป็นรักษาการ ผอ.'}
+                  </button>
+                  {isViceDirectorActing && (
+                    <span className="badge badge-success">ใช้รอง ผอ. ลงนามแทน</span>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="leaders-role-card">
-              <div className="leaders-role-card__meta">
-                <span className="leaders-role-card__label">ผู้รักษาการ (ถ้ามี)</span>
+            <div className="leaders-row">
+              <div className="leaders-row__label">
+                <span>ผู้รักษาการ</span>
                 <SlotBadge kind={slotKind(actingDirectorUserId, actingDirector)} />
               </div>
-              <StaffPicker
-                staff={staff}
-                value={actingDirectorUserId}
-                manualValue={actingDirector}
-                allowManual
-                onManualChange={onActingDirectorManual}
-                onChange={onActingDirectorChange}
-              />
-              <label className="form-label" style={{ marginTop: 8 }}>ตำแหน่งผู้รักษาการ</label>
-              <input
-                name="acting_director_position"
-                value={actingDirectorPosition}
-                onChange={e => onActingDirectorPositionChange(e.target.value)}
-                className="form-input"
-                placeholder="เช่น ครู, ครูชำนาญการ, รองผู้อำนวยการ"
-              />
+              <div className="leaders-row__field">
+                <StaffPicker
+                  staff={staff}
+                  value={actingDirectorUserId}
+                  manualValue={actingDirector}
+                  allowManual
+                  onManualChange={onActingDirectorManual}
+                  onChange={onActingDirectorChange}
+                />
+                <label className="form-label" htmlFor="acting-director-position">ตำแหน่งผู้รักษาการ</label>
+                <input
+                  id="acting-director-position"
+                  name="acting_director_position"
+                  value={actingDirectorPosition}
+                  onChange={e => onActingDirectorPositionChange(e.target.value)}
+                  className="form-input"
+                  placeholder="เช่น ครู, ครูชำนาญการ, รองผู้อำนวยการ"
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -246,10 +238,10 @@ export default function SchoolLeadersPanel({
               <p>ชื่อในรายงานสรุปและเอกสารฝ่ายวิชาการ</p>
             </div>
           </div>
-          <div className="leaders-role-grid leaders-role-grid--2">
-            <div className="leaders-role-card">
-              <div className="leaders-role-card__meta">
-                <span className="leaders-role-card__label">หัวหน้าฝ่ายวิชาการ</span>
+          <div className="leaders-rows">
+            <div className="leaders-row">
+              <div className="leaders-row__label">
+                <span>หัวหน้าฝ่ายวิชาการ</span>
                 <SlotBadge kind={slotKind(academicHeadUserId, academicHeadName)} />
               </div>
               <StaffPicker
@@ -261,9 +253,9 @@ export default function SchoolLeadersPanel({
                 onChange={onAcademicHeadChange}
               />
             </div>
-            <div className="leaders-role-card">
-              <div className="leaders-role-card__meta">
-                <span className="leaders-role-card__label">หัวหน้างานวัดผล</span>
+            <div className="leaders-row">
+              <div className="leaders-row__label">
+                <span>หัวหน้างานวัดผล</span>
                 <SlotBadge kind={slotKind(measurementHeadUserId, measurementHeadName)} />
               </div>
               <StaffPicker
@@ -285,14 +277,14 @@ export default function SchoolLeadersPanel({
               <p>ใช้ลงนามหน้าปก ปพ.5 รายวิชา — เลือกจากระบบเพื่อลงนามได้</p>
             </div>
           </div>
-          <div className="leaders-subject-grid">
+          <div className="leaders-rows">
             {SUBJECT_GROUPS.map(group => {
               const slot = subjectGroupHeads[group] || { name: '', userId: null }
               const kind = slotKind(slot.userId, slot.name)
               return (
-                <div key={group} className={`leaders-subject-card is-${kind}`}>
-                  <div className="leaders-subject-card__head">
-                    <h4>{group}</h4>
+                <div key={group} className="leaders-row leaders-row--subject">
+                  <div className="leaders-row__label">
+                    <span>{group}</span>
                     <SlotBadge kind={kind} />
                   </div>
                   <StaffPicker

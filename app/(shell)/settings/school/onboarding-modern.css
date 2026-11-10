@@ -62,8 +62,6 @@
   border-radius: 8px;
 }
 @media (min-width: 1100px) {
-  .onboarding-modern .leaders-role-grid,
-  .onboarding-modern .leaders-role-grid--2,
   .onboarding-modern .leaders-subject-grid {
     grid-template-columns: 1fr 1fr;
   }

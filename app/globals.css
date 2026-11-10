@@ -4176,6 +4176,54 @@ div:has(> .thai-table) {
   line-height: 1.45;
 }
 
+.leaders-rows {
+  display: grid;
+}
+
+.leaders-row {
+  display: grid;
+  grid-template-columns: minmax(148px, 220px) minmax(0, 1fr);
+  gap: 8px 16px;
+  align-items: start;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.leaders-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.leaders-row__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.leaders-row__field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.school-leaders-panel .leaders-status-bar {
+  align-items: center;
+  padding: 0 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.school-leaders-panel .leaders-status-bar__desc {
+  font-size: 13px;
+}
+
 .leaders-role-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4252,6 +4300,15 @@ div:has(> .thai-table) {
 }
 
 @media (max-width: 980px) {
+  .leaders-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .leaders-row__label {
+    min-height: 0;
+  }
+
   .leaders-role-grid,
   .leaders-role-grid--2 {
     grid-template-columns: 1fr;
