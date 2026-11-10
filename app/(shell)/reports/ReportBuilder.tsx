@@ -3993,13 +3993,14 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
       const result = await fetchReportSubjects({ academicYearId: yearId, classroomId, mode, term: reportTerm })
       if (activeRef && !activeRef.active) return
       setSubjectOptions(result)
+      setClassSubjectId(current => result.some(subject => subject.class_subject_id === current) ? current : '')
     } catch (err) {
       if (activeRef && !activeRef.active) return
       setError(err instanceof Error ? err.message : 'โหลดรายวิชาไม่สำเร็จ')
     } finally {
       if (!activeRef || activeRef.active) setLoading(false)
     }
-  }, [yearId, classroomId, mode])
+  }, [yearId, classroomId, mode, reportTerm])
 
   const loadSubjectPreview = useCallback(async (activeRef?: { active: boolean }) => {
     if (!yearId || !classroomId || !classSubjectId) return
@@ -4084,14 +4085,25 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
     if (mode !== 'pp5-subject' || !yearId || !classroomId) return
     const activeRef = { active: true }
     const timer = window.setTimeout(() => {
-      if (classSubjectId) void loadSubjectPreview(activeRef)
-      else void loadSubjectOptions(activeRef)
+      void loadSubjectOptions(activeRef)
     }, 0)
     return () => {
       window.clearTimeout(timer)
       activeRef.active = false
     }
-  }, [mode, yearId, classroomId, classSubjectId, reportTerm, loadSubjectOptions, loadSubjectPreview])
+  }, [mode, yearId, classroomId, reportTerm, loadSubjectOptions])
+
+  useEffect(() => {
+    if (mode !== 'pp5-subject' || !yearId || !classroomId || !classSubjectId) return
+    const activeRef = { active: true }
+    const timer = window.setTimeout(() => {
+      void loadSubjectPreview(activeRef)
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      activeRef.active = false
+    }
+  }, [mode, yearId, classroomId, classSubjectId, reportTerm, loadSubjectPreview])
 
   useEffect(() => {
     if (mode !== 'pp5-class' || !yearId || !level || !classroomId) return
@@ -4406,7 +4418,7 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
             {showPp5SubjectTerm && (
               <div>
                 <label className="form-label">ภาคเรียน</label>
-                <select value={term} onChange={event => { setTerm(Number(event.target.value) as 0 | 1 | 2); resetData() }} className="form-input">
+                <select value={term} onChange={event => { setData(null); setTerm(Number(event.target.value) as 0 | 1 | 2) }} className="form-input">
                   <option value={1}>ภาคเรียนที่ 1</option>
                   <option value={2}>ภาคเรียนที่ 2</option>
                 </select>

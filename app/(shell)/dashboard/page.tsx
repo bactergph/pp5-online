@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { verifySession } from '@/lib/dal'
 import { isAcademicHeadRole } from '@/lib/roles'
-import {DashboardStatCard as StatCard, DashboardQuickLink as QuickLink} from '@/components/dashboard/DashboardCards'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,21 +26,21 @@ async function getSchoolStats(schoolId: string) {
   }
 }
 
-async function getSchoolCode(schoolId: string) {
+async function getSchoolContext(schoolId: string) {
   const { createServerClient } = await import('@/lib/supabase')
   const db = createServerClient()
-  const { data } = await db.from('schools').select('code').eq('id', schoolId).maybeSingle()
-  return data?.code ? String(data.code).trim().toLowerCase() : null
+  const [{ data: school }, { data: year }] = await Promise.all([
+    db.from('schools').select('name, code, acting_director_user_id').eq('id', schoolId).maybeSingle(),
+    db.from('academic_years').select('year_be').eq('school_id', schoolId).eq('is_active', true).maybeSingle(),
+  ])
+  return {
+    name: school?.name ? String(school.name).trim() : '',
+    code: school?.code ? String(school.code).trim().toLowerCase() : null,
+    yearBe: year?.year_be ?? null,
+    actingDirectorId: school?.acting_director_user_id ? String(school.acting_director_user_id) : null,
+  }
 }
 
-async function getSchoolName(schoolId: string) {
-  const { createServerClient } = await import('@/lib/supabase')
-  const db = createServerClient()
-  const { data } = await db.from('schools').select('name').eq('id', schoolId).maybeSingle()
-  return data?.name ? String(data.name).trim() : ''
-}
-
-// Super Admin: ภาพรวมสมาชิก/ลูกค้าโรงเรียน
 async function getDistrictStats() {
   const { createServerClient } = await import('@/lib/supabase')
   const db = createServerClient()
@@ -51,25 +50,25 @@ async function getDistrictStats() {
     db.from('schools').select('id', { count: 'exact', head: true }).not('code', 'is', null),
     db.from('users').select('id', { count: 'exact', head: true }).neq('role', 'district'),
   ])
-  const admins = adminRes.data
-  const list = admins || []
+  const list = adminRes.data || []
   const active = list.filter(a => a.is_active).length
-  const schoolsWithAdmin = new Set(list.filter(a => a.school_id).map(a => a.school_id)).size
   return {
     total: list.length,
     active,
     pending: list.length - active,
-    schoolsWithAdmin,
+    schoolsWithAdmin: new Set(list.filter(a => a.school_id).map(a => a.school_id)).size,
     schools: schoolCountRes.count ?? 0,
     schoolsWithCode: codeCountRes.count ?? 0,
     memberUsers: userCountRes.count ?? 0,
   }
 }
 
+function countText(value: number) {
+  return value.toLocaleString('th-TH')
+}
+
 export default async function DashboardPage() {
   const s = await verifySession()
-  // admin: กด "ตั้งค่าภายหลัง" ได้ชั่วคราว (cookie) — แต่ถ้าตั้งค่ายังไม่ครบและไม่มี cookie จะเด้ง onboarding
-  // ไม่บังคับโลโก้ / Google Drive / นำเข้านักเรียน
   if (s.role === 'admin') {
     const { cookies } = await import('next/headers')
     const skipped = (await cookies()).get('onboarding_skipped')?.value === '1'
@@ -81,13 +80,11 @@ export default async function DashboardPage() {
   }
   const effectiveRole = s.isHomeroom ? 'homeroom' : s.role
   const isDistrict = s.role === 'district'
-
   const districtStats = isDistrict ? await getDistrictStats() : null
+  const school = !isDistrict && s.schoolId ? await getSchoolContext(s.schoolId) : null
   const schoolStats = !isDistrict && s.schoolId ? await getSchoolStats(s.schoolId) : null
-  const schoolCode = !isDistrict && s.schoolId ? await getSchoolCode(s.schoolId) : null
-  const schoolName = !isDistrict && s.schoolId ? await getSchoolName(s.schoolId) : ''
+  const isActingDirector = Boolean(school && school.actingDirectorId === s.userId)
 
-  let isActingDirector = false
   let signCounts: {
     pp5: number
     pp6: number
@@ -96,179 +93,122 @@ export default async function DashboardPage() {
     actionablePp6: number
     actionableClassroomAdmin: number
   } | null = null
-  if (!isDistrict && s.schoolId) {
-    const { createServerClient } = await import('@/lib/supabase')
-    const db = createServerClient()
-    const { data: school } = await db.from('schools')
-      .select('acting_director_user_id')
-      .eq('id', s.schoolId)
-      .maybeSingle()
-    isActingDirector = school?.acting_director_user_id === s.userId
-  }
-
   const showSignPanel = s.role === 'principal' || isAcademicHeadRole(s.role) || isActingDirector
   if (showSignPanel && s.schoolId) {
     const { fetchSignPendingCounts } = await import('@/app/sign/actions')
     signCounts = await fetchSignPendingCounts()
   }
   const { withSchoolPrefix } = await import('@/lib/school-path')
-  const scopeHref = (href: string) => withSchoolPrefix(schoolCode, href)
+  const scopeHref = (href: string) => withSchoolPrefix(school?.code || null, href)
   const showClassroomAdminCard = isActingDirector || s.role === 'principal'
+  const links = getQuickLinks(effectiveRole)
+  const queues = showSignPanel ? [
+    {
+      label: 'ปพ.5 รายวิชา',
+      href: scopeHref('/documents/sign?tab=subject'),
+      count: signCounts?.pp5 ?? 0,
+      actionable: signCounts?.actionablePp5 ?? 0,
+    },
+    {
+      label: 'ปพ.5 รวมชั้น / ปพ.6',
+      href: scopeHref('/documents/sign?tab=class_pp6'),
+      count: signCounts?.pp6 ?? 0,
+      actionable: signCounts?.actionablePp6 ?? 0,
+    },
+    ...(showClassroomAdminCard ? [{
+      label: 'ธุรการชั้นเรียน',
+      href: scopeHref('/classroom-admin/sign'),
+      count: signCounts?.classroomAdmin ?? 0,
+      actionable: signCounts?.actionableClassroomAdmin ?? 0,
+    }] : []),
+  ] : []
+  const urgent = queues.find(item => item.actionable > 0)
+  const primary = urgent
+    ? { href: urgent.href, label: `ลงนาม${urgent.label}` }
+    : { href: scopeHref(links[0]?.href || '/dashboard'), label: links[0]?.label || 'เริ่มงาน' }
+  const roleBits = [
+    getRoleLabel(s.role),
+    s.isHomeroom ? 'ครูประจำชั้น' : '',
+    school?.yearBe ? `ปีการศึกษา ${school.yearBe}` : '',
+  ].filter(Boolean)
 
   return (
-    <div className="page-stack dashboard-workspace">
-
-      {/* Welcome */}
-      <div className="hero-panel page-hero" style={{
-        background: isDistrict
-          ? 'linear-gradient(135deg, #1b2d4b 0%, #17469f 52%, #3479dc 100%)'
-          : 'linear-gradient(135deg, #17469f 0%, #235bc8 50%, #3479dc 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '16px',
-      }}>
+    <div className="page-stack">
+      <section className="control-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          {!isDistrict && schoolName ? (
-            <p className="page-hero-kicker" style={{ color: 'rgba(255,248,231,0.9)', marginBottom: '4px', textTransform: 'none', letterSpacing: '0.02em' }}>
-              {schoolName}
-            </p>
-          ) : null}
-          <p className="page-hero-kicker" style={{ color: 'rgba(255,248,231,0.9)', marginBottom: '6px' }}>
-            {isDistrict ? 'ระบบจัดการสมาชิก' : 'ยินดีต้อนรับ'}
-          </p>
-          <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'white', marginBottom: '6px' }}>
-            {isDistrict ? 'Super Admin Dashboard' : `คุณ${s.fullName}`}
-          </h2>
-          {isDistrict && (
-            <p style={{ margin: '0 0 10px', color: 'rgba(255,255,255,0.82)', fontSize: 14, maxWidth: 640 }}>
-              ดูแลสมาชิกโรงเรียน เปิด/ปิดบัญชี ตั้งโควตาผู้ใช้ และจัดการลิงก์เข้าใช้งานของลูกค้า
-            </p>
-          )}
-          <span style={{ background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.9)', fontSize: '12px', fontWeight: 600, padding: '4px 12px', borderRadius: '100px' }}>
-            {getRoleLabel(s.role)}{s.isHomeroom ? ' · ครูประจำชั้น' : ''}
+          <div className="section-title" style={{ marginBottom: 2 }}>{isDistrict ? 'ดูแลสมาชิกโรงเรียน' : (school?.name || 'หน้าหลัก')}</div>
+          <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
+            {roleBits.join(' · ')}
             {isDistrict ? ` · ${s.fullName}` : ''}
-          </span>
-        </div>
-        <div className="dashboard-hero-mark" style={{ width: '72px', height: '72px', borderRadius: '20px', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {isDistrict ? (
-            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
-              <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11"/>
-            </svg>
-          ) : (
-            <svg width="38" height="38" viewBox="0 0 28 28" fill="none">
-              <path d="M14 2L26 8V14C26 20.6 20.8 26 14 28C7.2 26 2 20.6 2 14V8L14 2Z" fill="white" fillOpacity="0.9"/>
-              <path d="M9 13H19M9 17H15M11 9H17" stroke="#17469f" strokeWidth="1.8" strokeLinecap="round"/>
-            </svg>
-          )}
-        </div>
-      </div>
-
-      {/* เอกสารรออนุมัติ — ผอ. / หัวหน้าวิชาการ */}
-      {showSignPanel && (
-        <div>
-          <p className="section-title">เอกสารรออนุมัติ</p>
-          <div className="responsive-grid">
-            {([
-              {
-                label: 'ปพ.5 รายวิชา',
-                href: scopeHref('/documents/sign?tab=subject'),
-                count: signCounts?.pp5 ?? 0,
-                actionable: signCounts?.actionablePp5 ?? 0,
-                color: '#9D174D',
-              },
-              {
-                label: 'ปพ.5 รวมชั้น / ปพ.6',
-                href: scopeHref('/documents/sign?tab=class_pp6'),
-                count: signCounts?.pp6 ?? 0,
-                actionable: signCounts?.actionablePp6 ?? 0,
-                color: '#0E7490',
-              },
-              ...(showClassroomAdminCard
-                ? [{
-                    label: 'ธุรการชั้นเรียน',
-                    href: scopeHref('/classroom-admin/sign'),
-                    count: signCounts?.classroomAdmin ?? 0,
-                    actionable: signCounts?.actionableClassroomAdmin ?? 0,
-                    color: '#B45309',
-                  }]
-                : []),
-            ]).map(d => (
-              <a key={d.href} href={d.href} className="card-sm quick-link" style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '16px 20px' }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <span style={{ fontSize: '28px', fontWeight: 800, color: d.count > 0 ? d.color : '#9CA3AF', lineHeight: 1 }}>{d.count}</span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>รายการ</span>
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{d.label}</div>
-                <div style={{ fontSize: '11px', color: d.count > 0 ? d.color : 'var(--text-3)' }}>
-                  {d.count > 0
-                    ? (d.actionable > 0 ? `ถึงคิวคุณ ${d.actionable} · ดูคิว →` : 'เสนอเซ็นแล้ว · ดูคิว →')
-                    : 'ยังไม่มีเอกสารเสนอเซ็น'}
-                </div>
-              </a>
-            ))}
-          </div>
-          <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '8px' }}>
-            {showClassroomAdminCard
-              ? 'ตัวเลขหลัก = เอกสารเสนอเซ็นแล้วทั้งคิว · “ถึงคิวคุณ” = รอผอ./รักษาการลงนาม'
-              : 'ตัวเลขหลัก = เอกสารเสนอเซ็นแล้วทั้งคิว · “ถึงคิวคุณ” = รอหัวหน้าวิชาการลงนาม'}
+          </p>
+          <p style={{ margin: '8px 0 0', color: 'var(--text-2)', fontSize: 14, maxWidth: 640 }}>
+            {isDistrict && districtStats
+              ? `สมาชิกที่ยังไม่พร้อมใช้งาน ${countText(districtStats.pending)} บัญชี · โรงเรียนที่มีผู้ดูแลแล้ว ${countText(districtStats.schoolsWithAdmin)} แห่ง`
+              : roleLead(effectiveRole)}
           </p>
         </div>
-      )}
+        <a className="btn btn-primary" href={isDistrict ? '/district/admins' : primary.href}>
+          {isDistrict ? 'จัดการสมาชิกโรงเรียน' : primary.label}
+        </a>
+      </section>
 
-      {/* Stats — Super Admin (จัดการสมาชิกโรงเรียน) */}
-      {isDistrict && districtStats && (
-        <div className="responsive-grid-sm">
-          {[
-            { label: 'สมาชิกโรงเรียน', value: districtStats.total, icon: <UserIcon/>, color: '#235bc8' },
-            { label: 'ใช้งานอยู่', value: districtStats.active, icon: <GridIcon/>, color: '#059669' },
-            { label: 'รออนุมัติ / ระงับ', value: districtStats.pending, icon: <AlertIcon/>, color: districtStats.pending > 0 ? '#D97706' : '#059669' },
-            { label: 'โรงเรียนในระบบ', value: districtStats.schools, icon: <HomeIcon/>, color: '#0891B2' },
-            { label: 'มีลิงก์เข้าโรงเรียน', value: districtStats.schoolsWithCode, icon: <DocIcon/>, color: '#C49212' },
-            { label: 'ผู้ใช้ทั้งหมด', value: districtStats.memberUsers, icon: <BookIcon/>, color: '#DB2777' },
-          ].map(m => (
-            <div key={m.label} className="stat-card">
-              <div style={{ color: m.color, flexShrink: 0 }}>{m.icon}</div>
-              <div>
-                <div style={{ fontSize: '26px', fontWeight: 800, color: m.color, lineHeight: 1 }}>{m.value}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '4px' }}>{m.label}</div>
-              </div>
-            </div>
+      {queues.length > 0 ? (
+        <section className="data-card" style={{ padding: '8px 20px 16px' }}>
+          <div className="section-title" style={{ margin: '12px 0 4px' }}>เอกสารรออนุมัติ</div>
+          <p style={{ margin: '0 0 4px', color: 'var(--text-3)', fontSize: 13 }}>
+            {showClassroomAdminCard
+              ? 'ตัวเลขคือเอกสารที่เสนอเซ็นแล้วทั้งคิว ถึงคิวคุณคือรอผู้อำนวยการหรือผู้รักษาการ'
+              : 'ตัวเลขคือเอกสารที่เสนอเซ็นแล้วทั้งคิว ถึงคิวคุณคือรอหัวหน้าวิชาการ'}
+          </p>
+          {queues.map(item => (
+            <a key={item.href} href={item.href} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderTop: '1px solid #F1F5F9', textDecoration: 'none', color: 'inherit' }}>
+              <strong style={{ width: 72, fontSize: 28, fontWeight: 600, fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: item.count > 0 ? 'var(--text)' : 'var(--text-3)' }}>{countText(item.count)}</strong>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontWeight: 600 }}>{item.label}</span>
+                <span style={{ display: 'block', marginTop: 2, color: 'var(--text-3)', fontSize: 13 }}>
+                  {item.count > 0 ? (item.actionable > 0 ? `ถึงคิวคุณ ${countText(item.actionable)} รายการ` : 'เสนอเซ็นแล้ว ยังไม่ถึงคิว') : 'ยังไม่มีเอกสารเสนอเซ็น'}
+                </span>
+              </span>
+              <span style={{ color: 'var(--text-3)', fontSize: 13 }}>เปิด</span>
+            </a>
           ))}
-        </div>
-      )}
+        </section>
+      ) : null}
 
-      {isDistrict && districtStats && (
-        <div className="card-padded" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 18, alignItems: 'center' }}>
-          <div>
-            <p className="section-title" style={{ marginBottom: 6 }}>งานที่ควรติดตาม</p>
-            <p style={{ margin: 0, color: 'var(--text-2)', fontSize: 14 }}>
-              มีสมาชิกที่ยังไม่พร้อมใช้งาน {districtStats.pending} บัญชี และโรงเรียนที่มีผู้ดูแลแล้ว {districtStats.schoolsWithAdmin} แห่ง
-            </p>
+      <section className="data-card" style={{ padding: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))' }}>
+        {(isDistrict && districtStats ? [
+          { label: 'สมาชิกโรงเรียน', value: districtStats.total },
+          { label: 'ใช้งานอยู่', value: districtStats.active },
+          { label: 'รออนุมัติหรือระงับ', value: districtStats.pending },
+          { label: 'โรงเรียนในระบบ', value: districtStats.schools },
+          { label: 'มีลิงก์เข้าโรงเรียน', value: districtStats.schoolsWithCode },
+          { label: 'ผู้ใช้ทั้งหมด', value: districtStats.memberUsers },
+        ] : [
+          { label: 'ห้องเรียน', value: schoolStats?.classrooms ?? 0 },
+          { label: 'รายวิชา', value: schoolStats?.subjects ?? 0 },
+          { label: 'นักเรียน', value: schoolStats?.students ?? 0 },
+          { label: 'ปพ.5 ที่เปิดบันทึก', value: schoolStats?.pp5 ?? 0 },
+        ]).map(item => (
+          <div key={item.label} style={{ padding: '16px 18px' }}>
+            <div style={{ fontSize: 28, fontWeight: 600, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2, color: item.label === 'รออนุมัติหรือระงับ' && item.value > 0 ? '#92400E' : 'var(--text)' }}>{countText(item.value)}</div>
+            <div style={{ marginTop: 4, color: 'var(--text-3)', fontSize: 13 }}>{item.label}</div>
           </div>
-          <a href="/district/admins" className="btn btn-primary">จัดการสมาชิกโรงเรียน</a>
-        </div>
-      )}
+        ))}
+      </section>
 
-      {/* Stats — school roles */}
-      {!isDistrict && (
-        <div className="responsive-grid-sm">
-          <StatCard icon={<HomeIcon/>} label="ห้องเรียน" value={schoolStats?.classrooms ?? '-'} color="#235bc8" bg="#edf4ff"/>
-          <StatCard icon={<BookIcon/>} label="รายวิชา" value={schoolStats?.subjects ?? '-'} color="#0891B2" bg="#ECFEFF"/>
-          <StatCard icon={<UserIcon/>} label="นักเรียน" value={schoolStats?.students ?? '-'} color="#059669" bg="#ECFDF5"/>
-          <StatCard icon={<DocIcon/>} label="ปพ.5 ที่เปิดบันทึก" value={schoolStats?.pp5 ?? '-'} color="#D97706" bg="#FFFBEB"/>
-        </div>
-      )}
-
-      {/* Quick links */}
-      <div>
-        <p className="section-title">เมนูด่วน</p>
-        <div className="responsive-grid">
-          {getQuickLinks(effectiveRole).map(ql => (
-            <QuickLink key={ql.href} {...ql} href={scopeHref(ql.href)} />
-          ))}
-        </div>
-      </div>
+      <section className="data-card" style={{ padding: '8px 20px 12px' }}>
+        <div className="section-title" style={{ margin: '12px 0 0' }}>{workTitle(effectiveRole)}</div>
+        {links.map(link => (
+          <a key={link.href} href={scopeHref(link.href)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderTop: '1px solid #F1F5F9', textDecoration: 'none', color: 'inherit' }}>
+            <span style={{ width: 20, flex: 'none', color: 'var(--text-3)' }}>{link.icon}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <strong style={{ display: 'block', fontWeight: 600 }}>{link.label}</strong>
+              <span style={{ display: 'block', marginTop: 2, color: 'var(--text-3)', fontSize: 13 }}>{link.desc}</span>
+            </span>
+            <span style={{ color: 'var(--text-3)', fontSize: 13 }}>เปิด</span>
+          </a>
+        ))}
+      </section>
     </div>
   )
 }
@@ -295,7 +235,7 @@ function getQuickLinks(role: string): QL[] {
     export_pp:  { href: '/reports/pp5',              icon: <DocIcon/>,   label: 'พิมพ์ ปพ.5 รายวิชา',       desc: 'ดูตัวอย่างและพิมพ์รายงานรายวิชาเป็น PDF',       color: '#D97706', bg: '#FFFBEB' },
     report_st:  { href: '/reports/pp6',              icon: <GridIcon/>,  label: 'ปพ.6 นักเรียน',           desc: 'ดูผลการเรียนและพิมพ์รายงานนักเรียน',      color: '#C49212', bg: '#F5F3FF' },
     assign:     { href: '/settings/class-subjects',  icon: <UserIcon/>,  label: 'มอบหมายครูผู้สอน',         desc: 'กำหนดผู้รับผิดชอบรายวิชาและห้องเรียน',           color: '#0E7490', bg: '#ECFEFF' },
-    evaluation: { href: '/evaluation/character',      icon: <GridIcon/>,  label: 'การวัดและประเมินผล',     desc: 'คุณลักษณะ 8 ข้อ · อ่านคิดวิเคราะห์ · กิจกรรมพัฒนาผู้เรียน', color: '#0891B2', bg: '#ECFEFF' },
+    evaluation: { href: '/evaluation/character',      icon: <GridIcon/>,  label: 'การวัดและประเมินผล',     desc: 'คุณลักษณะ 8 ข้อ อ่านคิดวิเคราะห์ กิจกรรมพัฒนาผู้เรียน', color: '#0891B2', bg: '#ECFEFF' },
     homeroom_pp:{ href: '/reports/pp6',              icon: <DocIcon/>,   label: 'ปพ.6 ห้องประจำชั้น',       desc: 'ดูและพิมพ์ผลการเรียนของนักเรียนประจำชั้น',       color: '#B45309', bg: '#FFFBEB' },
     exp_subj:   { href: '/reports/pp5',              icon: <DocIcon/>,   label: 'พิมพ์ ปพ.5 รายวิชา',       desc: 'ดูตัวอย่างและพิมพ์ ปพ.5 ของวิชาที่สอน',              color: '#D97706', bg: '#FFFBEB' },
     rpt_indiv:  { href: '/reports/pp6',              icon: <UserIcon/>,  label: 'ปพ.6 นักเรียน',           desc: 'ดูผลการเรียนและพิมพ์รายงานนักเรียน',         color: '#C49212', bg: '#F5F3FF' },
@@ -320,6 +260,32 @@ function getQuickLinks(role: string): QL[] {
   }
 }
 
+function roleLead(role: string) {
+  const map: Record<string, string> = {
+    district: 'ดูแลสมาชิกโรงเรียน เปิดปิดบัญชี และลิงก์เข้าใช้งาน',
+    admin: 'จัดตาราง ตั้งค่าโรงเรียน และดูแลบัญชีผู้ใช้',
+    principal: 'ลงนามเอกสารที่ถึงคิว และดูภาพรวมห้องเรียน',
+    deputy_principal: 'จัดตาราง มอบหมายครู และลงนามวิชาการ',
+    academic_head: 'จัดตาราง มอบหมายครู และลงนามวิชาการ',
+    homeroom: 'เริ่มจากธุรการห้องประจำชั้น แล้วตามด้วยคะแนนและเวลาเรียน',
+    teacher: 'เริ่มจากคะแนน เวลาเรียน และตารางสอน',
+  }
+  return map[role] || 'เลือกงานจากรายการด้านล่าง'
+}
+
+function workTitle(role: string) {
+  const map: Record<string, string> = {
+    district: 'งานดูแลสมาชิก',
+    admin: 'งานผู้ดูแลโรงเรียน',
+    principal: 'งานผู้อำนวยการ',
+    deputy_principal: 'งานวิชาการ',
+    academic_head: 'งานวิชาการ',
+    homeroom: 'งานครูประจำชั้น',
+    teacher: 'งานครูผู้สอน',
+  }
+  return map[role] || 'งานวันนี้'
+}
+
 function S({ d }: { d: string }) {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
 }
@@ -331,11 +297,9 @@ function GridIcon() { return <S d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14
 function EditIcon() { return <S d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5 M17.5 2.5a2.121 2.121 0 013 3L12 14l-4 1 1-4 8.5-8.5z"/> }
 function ClockIcon(){ return <S d="M12 22a10 10 0 100-20 10 10 0 000 20z M12 6v6l4 2"/> }
 
-function AlertIcon() { return <S d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01"/> }
-
 function getRoleLabel(r: string) {
   const map: Record<string, string> = {
-    district: 'Super Admin',
+    district: 'ผู้ดูแลระบบ',
     admin: 'ผู้ดูแลโรงเรียน',
     principal: 'ผู้อำนวยการ',
     deputy_principal: 'รองผู้อำนวยการ',
