@@ -37,10 +37,10 @@ type UploadState = { uploading: boolean; url: string | null; error: string | nul
 
 const SCHOOL_SETTING_TABS: { key: SchoolSettingsTab; label: string; icon: string }[] = [
   { key: 'general', label: 'ข้อมูลทั่วไป', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
-  { key: 'leaders', label: 'ผู้บริหาร/ผู้รับผิดชอบ', icon: 'M12 12a4 4 0 100-8 4 4 0 000 8z M4 22a8 8 0 0116 0' },
-  { key: 'login', label: 'สร้างหน้า login', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+  { key: 'leaders', label: 'ผู้บริหาร', icon: 'M12 12a4 4 0 100-8 4 4 0 000 8z M4 22a8 8 0 0116 0' },
+  { key: 'login', label: 'ลิงก์เข้าโรงเรียน', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
   { key: 'branding', label: 'โลโก้และตรา', icon: 'M3 5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5z M8.5 8.5h.01 M21 15l-5-5L5 21' },
-  { key: 'integrations', label: 'เชื่อมต่อ Google Drive', icon: 'M4 4h16v16H4z M8 8h8v8H8z' },
+  { key: 'integrations', label: 'Google Drive', icon: 'M4 4h16v16H4z M8 8h8v8H8z' },
 ]
 const schoolSettingTabs = Array.isArray(SCHOOL_SETTING_TABS) ? SCHOOL_SETTING_TABS : []
 
@@ -376,6 +376,24 @@ export default function SchoolSettingsPage() {
     setStepSaving(false)
     if (headsResult.error) { notify('error', headsResult.error); return }
     goStep(step + 1)
+  }
+
+  async function copySchoolLogin() {
+    if (!school.code) return
+    const url = `${window.location.origin}/${String(school.code).trim().toLowerCase()}/login`
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      const field = document.createElement('textarea')
+      field.value = url
+      document.body.appendChild(field)
+      field.select()
+      document.execCommand('copy')
+      document.body.removeChild(field)
+    }
+    setLinkCopied(true)
+    notify('success', 'คัดลอกลิงก์แล้ว')
+    window.setTimeout(() => setLinkCopied(false), 2500)
   }
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
@@ -989,48 +1007,50 @@ export default function SchoolSettingsPage() {
         onSubmit={save}
         className="school-settings-form"
       >
-        <div className="school-settings-tab-card">
-          <div className="school-settings-toolbar">
-            <div className="school-settings-header-actions">
-              {school.code && <span className="badge badge-success school-settings-code">/{school.code}</span>}
-              <button
-                type="button"
-                onClick={() => { setReselect(true); setQ(''); setResults([]) }}
-                className="btn btn-secondary school-settings-reselect"
-              >
-                เปลี่ยนโรงเรียน
-              </button>
-              {activeTab !== 'integrations' && (
-                <LoadingButton
-                  type="submit"
-                  loading={saving}
-                  className="btn btn-primary school-settings-save-top"
-                >
-                  บันทึก
-                </LoadingButton>
-              )}
-            </div>
-            <nav className="school-settings-tabs" aria-label="ตั้งค่าข้อมูลโรงเรียน" role="tablist">
-              {schoolSettingTabs.map(tab => {
-                const isActive = activeTab === tab.key
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setActiveTab(tab.key)}
-                    className={`school-settings-tab ${isActive ? 'is-active' : ''}`}
-                    role="tab"
-                    aria-selected={isActive}
-                    title={tab.label}
-                  >
-                    <SchoolTabIcon d={tab.icon} />
-                    <span>{tab.label}</span>
-                  </button>
-                )
-              })}
-            </nav>
+        <section className="control-card school-settings-head">
+          <div>
+            <div className="section-title" style={{ marginBottom: 2 }}>ข้อมูลโรงเรียน</div>
+            <p>ชื่อ ที่อยู่ ผู้ลงนาม โลโก้ และลิงก์ที่ครูใช้เข้าโรงเรียน</p>
           </div>
-        </div>
+          <div className="school-settings-head-actions">
+            {school.code && <span className="badge badge-success school-settings-code">/{school.code}</span>}
+            <button
+              type="button"
+              onClick={() => { setReselect(true); setQ(''); setResults([]) }}
+              className="btn btn-ghost school-settings-reselect"
+            >
+              เปลี่ยนโรงเรียน
+            </button>
+            {activeTab !== 'integrations' && (
+              <LoadingButton
+                type="submit"
+                loading={saving}
+                className="btn btn-primary school-settings-save-top"
+              >
+                บันทึก
+              </LoadingButton>
+            )}
+          </div>
+        </section>
+        <nav className="school-settings-tabs" aria-label="ตั้งค่าข้อมูลโรงเรียน" role="tablist">
+          {schoolSettingTabs.map(tab => {
+            const isActive = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`school-settings-tab ${isActive ? 'is-active' : ''}`}
+                role="tab"
+                aria-selected={isActive}
+                title={tab.label}
+              >
+                <SchoolTabIcon d={tab.icon} />
+                <span>{tab.label}</span>
+              </button>
+            )
+          })}
+        </nav>
 
         <div className="school-settings-panels">
           <section
@@ -1086,7 +1106,7 @@ export default function SchoolSettingsPage() {
                 <p>เลือกจากรายชื่อในระบบ หรือพิมพ์ชื่อเอง แล้วบันทึกเพื่อเพิ่มเป็นบุคลากรของโรงเรียน</p>
               </div>
             </div>
-            {renderLeadersPanel({ showSaveCta: true })}
+            {renderLeadersPanel()}
           </section>
 
           <section
@@ -1096,8 +1116,8 @@ export default function SchoolSettingsPage() {
           >
               <div className="school-card-head">
                 <div>
-                  <div className="section-title">สร้างหน้า login โรงเรียน</div>
-                  <p>ลิงก์สำหรับครูและบุคลากรในโรงเรียน</p>
+                  <div className="section-title">ลิงก์เข้าโรงเรียน</div>
+                  <p>ลิงก์นี้คือหน้าเข้าสู่ระบบของครูและบุคลากร</p>
                 </div>
               </div>
               <div className="school-form-grid school-form-grid-side">
@@ -1117,9 +1137,14 @@ export default function SchoolSettingsPage() {
                 </div>
               </div>
               {school.code && (
-                <div className="school-login-link">
-                  <span>ลิงก์เข้าระบบ</span>
-                  <code>{typeof window !== 'undefined' ? window.location.origin : ''}/{school.code}/login</code>
+                <div className="school-login-link school-login-link--row">
+                  <div>
+                    <span>ลิงก์ที่ครูใช้เข้าโรงเรียน</span>
+                    <code>{typeof window !== 'undefined' ? window.location.origin : ''}/{school.code}/login</code>
+                  </div>
+                  <button type="button" className="btn btn-secondary" onClick={() => void copySchoolLogin()}>
+                    {linkCopied ? 'คัดลอกแล้ว' : 'คัดลอกลิงก์'}
+                  </button>
                 </div>
               )}
           </section>
@@ -1170,7 +1195,7 @@ export default function SchoolSettingsPage() {
           <div className="school-save-bar">
             <div>
               <strong>{school.name || 'ข้อมูลโรงเรียน'}</strong>
-              <span>ตรวจสอบแล้วกดบันทึกด้านบน หรือปุ่มด้านล่างนี้</span>
+              <span>ตรวจข้อมูลในแท็บนี้แล้วกดบันทึก</span>
             </div>
             <LoadingButton type="submit" loading={saving} className="btn btn-primary btn-lg">บันทึกข้อมูล</LoadingButton>
           </div>

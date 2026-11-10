@@ -74,7 +74,7 @@
   .workspace-theme :is(.table,.thai-table,.data-table)>tbody>tr:hover>td{background:#f7faff}
   .workspace-theme .filter-bar.control-card{border-top:3px solid var(--ws-color);background:linear-gradient(115deg,#fff,var(--ws-soft));box-shadow:var(--ws-shadow)}
   .workspace-theme .thai-table .subject-group-row td{color:var(--ws-ink);background:var(--ws-soft);border-left-color:var(--ws-color)}
-  .workspace-theme :is(.subject-chip-row,.school-settings-tabs,.score-entry-tabs) :is([aria-selected=true],[aria-pressed=true],.is-active){color:var(--ws-ink);background:var(--ws-soft);border-color:var(--ws-line);box-shadow:0 3px 8px #17365b08}
+  .workspace-theme :is(.subject-chip-row,.school-settings-tabs,.score-entry-tabs) :is([aria-selected=true],[aria-pressed=true],.is-active){color:var(--ws-ink);background:var(--ws-soft);border-color:var(--ws-line)}
 
   /* Dense score/evaluation screens and report controls use the same surfaces. */
   .workspace-theme :is(.score-entry-head,.eval-head){padding:16px 20px;border:1px solid var(--ws-line);border-left:4px solid var(--ws-color);border-radius:16px;background:linear-gradient(115deg,#fff,var(--ws-soft));box-shadow:var(--ws-shadow)}

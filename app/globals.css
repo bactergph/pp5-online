@@ -3641,11 +3641,26 @@ div:has(> .thai-table) {
 /* ============================================================
    School Settings
    ============================================================ */
-.school-settings-header {
+.school-settings-header,
+.school-settings-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
+}
+
+.school-settings-head p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.school-settings-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .school-settings-toolbar {
@@ -3731,7 +3746,6 @@ div:has(> .thai-table) {
   border-color: #E8D9C4;
   background: #F5EDE3;
   color: #6B4F32;
-  box-shadow: 0 6px 14px rgba(139, 107, 69, 0.14);
 }
 
 .school-settings-tab svg {
@@ -3825,6 +3839,21 @@ div:has(> .thai-table) {
   word-break: break-all;
   color: #3F2E1F;
   font-size: 12px;
+}
+
+.school-login-link--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.school-login-link--row > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
 }
 
 .wizard-summary {
@@ -4300,28 +4329,15 @@ body.staff-picker-menu-open .school-save-bar {
 
 @media (max-width: 640px) {
   .school-settings-header,
+  .school-settings-head,
   .school-save-bar {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .school-settings-tab-card {
-    padding: 10px;
-    border-radius: 16px;
-  }
-
-  /* มือถือ: แถวบน = badge/ปุ่ม, แถวล่าง = แท็บเลื่อนเต็มความกว้าง */
-  .school-settings-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .school-settings-header-actions {
+  .school-settings-head-actions {
     width: 100%;
     justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 8px;
   }
 
   .school-settings-code {
@@ -4375,12 +4391,12 @@ body.staff-picker-menu-open .school-save-bar {
     text-overflow: ellipsis;
   }
 
-  .school-settings-header-actions .btn,
+  .school-settings-head-actions .btn,
   .school-save-bar .btn {
     width: 100%;
   }
 
-  .school-settings-header-actions .school-settings-reselect {
+  .school-settings-head-actions .school-settings-reselect {
     width: auto;
   }
 

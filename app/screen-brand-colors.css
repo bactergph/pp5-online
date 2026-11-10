@@ -293,8 +293,7 @@ body {
 .school-settings-tab.is-active {
   border-color: #dce4ef;
   background: #edf4ff;
-  color: #17469f;
-  box-shadow: 0 6px 14px rgba(35,91,200, 0.14)
+  color: #17469f
 }
 
 .school-login-link {

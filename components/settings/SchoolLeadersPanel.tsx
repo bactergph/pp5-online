@@ -153,7 +153,7 @@ export default function SchoolLeadersPanel({
             <strong>ยังไม่มีบุคลากรในระบบ</strong>
             <p>เพิ่มบัญชีครู/บุคลากรก่อน แล้วค่อยเลือกเป็นหัวหน้า — หรือพิมพ์ชื่อเองชั่วคราวได้</p>
           </div>
-          <Link href="/settings/users" className="btn btn-secondary">ไปหน้าผู้ใช้</Link>
+          <Link href="/settings/users" className="btn btn-secondary">ไปข้อมูลบุคลากร</Link>
         </div>
       )}
 
