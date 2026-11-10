@@ -633,7 +633,7 @@ export async function buildDailyAttendancePdfBlob(
 
         drawRect(doc, x, rowY, dayW, rowH, fill)
         if (isPdfCheckMark(value)) {
-          drawJsPdfTick(doc, x, rowY, dayW, rowH, fg)
+          drawJsPdfTick(doc, x, rowY, dayW, rowH, fg, tablePt)
         } else if (value) {
           drawCenteredText(doc, value, x, rowY, dayW, rowH, {
             fontSize: tablePt,

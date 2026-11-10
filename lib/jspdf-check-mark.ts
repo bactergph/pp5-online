@@ -42,7 +42,8 @@ export function isPdfCheckMark(value: string) {
   return value === '✓' || value === '✔'
 }
 
-/** เครื่องหมายถูกอย่างเดียว — ฟอนต์ PDF มีแค่ไทยกับ ASCII จึงวาดเส้นแทน glyph */
+/** เครื่องหมายถูกอย่างเดียว — ฟอนต์ PDF มีแค่ไทยกับ ASCII จึงวาดเส้นแทน glyph
+ *  fontSizePt ทำให้ขนาดตามค่า «ตัวเลขในตาราง» และหดเมื่อช่องเล็กกว่าตัวอักษร */
 export function drawJsPdfTick(
   doc: jsPDF,
   x: number,
@@ -50,8 +51,10 @@ export function drawJsPdfTick(
   w: number,
   h: number,
   color: [number, number, number] = [17, 24, 39],
+  fontSizePt = 0,
 ) {
-  const size = Math.min(w * 0.72, h * 0.62)
+  const em = fontSizePt > 0 ? fontSizePt * 0.352777778 : Math.min(w, h)
+  const size = Math.min(w * 0.86, h * 0.78, em * 0.95)
   const cx = x + w / 2
   const cy = y + h / 2 + size * 0.04
   const x1 = cx - size * 0.46

@@ -40,14 +40,27 @@ async function page(extra) {
   return drawing.pages().join('\n')
 }
 
+function tickSpan(svg) {
+  const lines = [...svg.matchAll(/<line [^>]*x1="([^"]+)" y1="([^"]+)" x2="([^"]+)" y2="([^"]+)"/g)]
+  assert.equal(lines.length, 2)
+  const xs = lines.flatMap(line => [Number(line[1]), Number(line[3])])
+  const ys = lines.flatMap(line => [Number(line[2]), Number(line[4])])
+  return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }
+}
+
 ;(async () => {
   const present = await page({ attendance: { s1: { 18: 'ม' } } })
   assert.equal((present.match(/<line /g) || []).length, 2)
   assert.equal(present.includes('✓'), false)
+  const small = tickSpan(await page({ attendance: { s1: { 18: 'ม' } }, layout: { fontTablePx: 6 } }))
+  const large = tickSpan(await page({ attendance: { s1: { 18: 'ม' } }, layout: { fontTablePx: 16 } }))
+  const cramped = tickSpan(await page({ attendance: { s1: { 18: 'ม' } }, layout: { fontTablePx: 16, rowHeightPx: 8 } }))
+  assert.ok(large.w > small.w * 1.4 && large.h > small.h * 1.4, 'table font size changes the check mark')
+  assert.ok(cramped.h < large.h, 'a short row keeps the check mark inside the cell')
   const slash = await page({ reportType: 'brushing', activities: { s1: { 18: 1 } } })
   assert.equal((slash.match(/<line /g) || []).length, 0)
   assert.match(slash, />\/<\/text>/)
-  console.log('PASS: attendance check is drawn; routine slash stays text')
+  console.log('PASS: attendance check follows the table font; routine slash stays text')
 })().catch(error => {
   console.error(error)
   process.exit(1)
