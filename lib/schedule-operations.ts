@@ -6,7 +6,7 @@ const lessonTeachers=(l:{teacherId:string|null;teacherIds?:string[]})=>l.teacher
 import { getSession } from '@/lib/session'
 import { createServerClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/audit'
-import { SCHEDULE_EDIT_ROLES } from '@/lib/schedules'
+import { SCHEDULE_EDIT_ROLES, SCHEDULE_TEACHING_ROLES } from '@/lib/schedules'
 import { lessonColumns, lessonKey, loadSchedule, loadScheduleConstraints, persistSchedule, requireScheduleClass, type ScheduleSlot } from '@/lib/schedule-store'
 import { generate, confirmDraft, cancelDraft, preparation } from '@/lib/schedule-preparation'
 import { planScheduleClear, scheduleClearRooms, type ScheduleClearOptions, type ScheduleClearScope } from './schedule-clear'
@@ -96,7 +96,7 @@ export async function removeSubjectCell(roomId:string,year:string,day:number,per
 
 export async function teacherAvailability(year: string, semester = 1) {
   const ctx = await context(year,semester)
-  const {data,error} = await createServerClient().from('users').select('id,prefix,full_name').eq('school_id',ctx.session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name')
+  const {data,error} = await createServerClient().from('users').select('id,prefix,full_name').eq('school_id',ctx.session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',[...SCHEDULE_TEACHING_ROLES]).order('full_name')
   if (error) throw new Error(error.message)
   const quotaMap=new Map<string,{id:string;teacherId:string;label:string;activity:boolean;target:number;used:number}>()
   for(const l of ctx.data.lessons)for(const teacherId of lessonTeachers(l))for(const part of teachingQuotaParts(l)){const id=part.id,key=id+':'+teacherId,used=ctx.data.slots.filter(s=>lessonKey(s)===l.id&&(part.cell?part.cell===`${s.day_of_week}:${s.period}`:!l.jointTeachingCells?.[`${s.day_of_week}:${s.period}`])).length,target=l.activity?Math.max(part.count,used,1):part.count,existing=quotaMap.get(key);if(existing){existing.target=Math.max(existing.target,target);existing.used=Math.max(existing.used,used);existing.label+=' / '+l.label}else quotaMap.set(key,{id,teacherId,label:l.label,activity:l.activity,target,used})}
@@ -241,7 +241,7 @@ export async function activityOptions(year: string, roomId: string, semester = 1
   const db = createServerClient()
   const [settings, teachers, offerings] = await Promise.all([
     db.from('evaluation_settings').select('id,label,hours_per_year').eq('school_id', ctx.session.schoolId!).eq('kind', 'activities').eq('is_active', true).order('sort_order'),
-    db.from('users').select('id,prefix,full_name').eq('school_id', ctx.session.schoolId!).eq('is_active', true).in('role', ['teacher','academic_head','deputy_principal','principal','admin']).order('full_name'),
+    db.from('users').select('id,prefix,full_name').eq('school_id', ctx.session.schoolId!).eq('is_active', true).in('role', [...SCHEDULE_TEACHING_ROLES]).order('full_name'),
     db.from('class_schedule_activities').select('id,evaluation_setting_id,teacher_id,weekly_periods').eq('classroom_id', roomId).eq('academic_year_id', year),
   ])
   for (const r of [settings, teachers, offerings]) if (r.error) throw new Error(r.error.message)

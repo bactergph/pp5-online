@@ -37,15 +37,19 @@ console.log('PASS: assigned and scheduled workloads; flexible/joint/separate/leg
 
 let session = { schoolId: 'school', role: 'admin' }, failTeachers = false, loads = 0
 const filters = []
-const query = { select() { return query }, eq(key, value) { filters.push([key, value]); return query }, in() { return query }, order() { return query }, then(resolve) { return Promise.resolve({ data: teachers, error: failTeachers ? { message: 'offline' } : null }).then(resolve) } }
+const schedules = load('lib/schedules.ts')
+const query = { select() { return query }, eq(key, value) { filters.push([key, value]); return query }, in(column, values) { filters.push([column, values]); return query }, order() { return query }, then(resolve) { return Promise.resolve({ data: teachers, error: failTeachers ? { message: 'offline' } : null }).then(resolve) } }
 const api = load('app/(shell)/schedules/extended-actions.ts', {
-  '@/lib/session': { getSession: async () => session }, '@/lib/schedules': { SCHEDULE_VIEW_ROLES: ['admin', 'teacher'] },
+  '@/lib/session': { getSession: async () => session }, '@/lib/schedules': { SCHEDULE_VIEW_ROLES: ['admin', 'teacher'], SCHEDULE_TEACHING_ROLES: schedules.SCHEDULE_TEACHING_ROLES },
   '@/lib/supabase': { createServerClient: () => ({ from(table) { assert.equal(table, 'users'); return query } }) },
   '@/lib/schedule-store': { loadSchedule: async (school, year, term) => { loads++; assert.equal(school, 'school'); assert.equal(year, 'year'); assert.equal(term, 2); return data } },
   '@/lib/schedule-workload': summary,
 })
 assert.equal((await api.fetchScheduleWorkload('year', 2)).length, 3)
 assert.ok(filters.some(([key, value]) => key === 'school_id' && value === 'school'))
+const teachingRoles = filters.find(([key]) => key === 'role')?.[1]
+assert.deepEqual([...teachingRoles], [...schedules.SCHEDULE_TEACHING_ROLES])
+assert.equal([...teachingRoles].includes('admin'), false)
 failTeachers = true; await assert.rejects(api.fetchScheduleWorkload('year', 2), /โหลดรายชื่อครู/)
 const previousLoads = loads; session = null; await assert.rejects(api.fetchScheduleWorkload('year', 2), /ไม่มีสิทธิ์/); assert.equal(loads, previousLoads)
 session = { schoolId: null, role: 'admin' }; await assert.rejects(api.fetchScheduleWorkload('year', 2), /ไม่พบโรงเรียน/)

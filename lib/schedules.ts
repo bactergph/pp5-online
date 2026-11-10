@@ -30,6 +30,8 @@ export const SCHEDULE_PERIODS = Array.from({ length: SCHEDULE_PERIOD_COUNT }, (_
 
 export const SCHEDULE_EDIT_ROLES = ['admin', 'academic_head', 'deputy_principal'] as const
 export const SCHEDULE_VIEW_ROLES = ['admin', 'academic_head', 'deputy_principal', 'principal', 'teacher'] as const
+/** Teaching roster for timetable setup. School admin keeps edit access and is omitted here. */
+export const SCHEDULE_TEACHING_ROLES = ['teacher', 'academic_head', 'deputy_principal', 'principal'] as const
 
 /** Timetable levels include kindergarten 1–3, primary and secondary. */
 export function isTimetableClassroom(level: string) {

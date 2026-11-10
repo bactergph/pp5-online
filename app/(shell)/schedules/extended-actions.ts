@@ -22,6 +22,7 @@ import {
 import {
   SCHEDULE_DAYS,
   SCHEDULE_EDIT_ROLES,
+  SCHEDULE_TEACHING_ROLES,
   SCHEDULE_VIEW_ROLES,
 } from '@/lib/schedules'
 
@@ -169,7 +170,7 @@ export async function fetchScheduleWorkload(yearId: string, semester = 1) {
   const { data: teachers, error } = await db.from('users')
     .select('id, prefix, full_name, position')
     .eq('school_id', session.schoolId)
-    .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin', 'principal'])
+    .in('role', [...SCHEDULE_TEACHING_ROLES])
     .order('full_name')
 
   if (error) throw new Error('โหลดรายชื่อครูสำหรับสรุปภาระสอนไม่สำเร็จ กรุณาลองใหม่')

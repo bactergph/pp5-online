@@ -17,6 +17,7 @@ import {
   SCHEDULE_DAYS,
   SCHEDULE_EDIT_ROLES,
   SCHEDULE_PERIOD_COUNT,
+  SCHEDULE_TEACHING_ROLES,
   SCHEDULE_VIEW_ROLES,
 } from '@/lib/schedules'
 import { activityTimetableTeacherLabel, isActivityLessonId, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
@@ -68,7 +69,7 @@ export async function fetchScheduleInit() {
     .select('id, prefix, full_name')
     .or('is_active.eq.true,email.like.pending-%')
     .eq('school_id', session.schoolId)
-    .in('role', ['teacher', 'academic_head', 'deputy_principal', 'admin', 'principal'])
+    .in('role', [...SCHEDULE_TEACHING_ROLES])
     .order('full_name')
 
   if (teachersError) throw new Error('โหลดรายชื่อครูไม่สำเร็จ: ' + teachersError.message)

@@ -9,7 +9,7 @@ import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, val
 import { randomUUID } from 'node:crypto'
 import { getSession } from './session'
 import { createServerClient } from './supabase'
-import { SCHEDULE_EDIT_ROLES, classroomShortName, isTimetableClassroom } from './schedules'
+import { SCHEDULE_EDIT_ROLES, SCHEDULE_TEACHING_ROLES, classroomShortName, isTimetableClassroom } from './schedules'
 import { loadSchedule, loadScheduleConstraints, lessonKey, lessonColumns, type ScheduleSlot } from './schedule-store'
 import { DEFAULT_PERIOD_TIMES, normalizePeriodTimes, validatePeriodTimes, type PeriodTimeRow } from './schedule-helpers'
 import { emptyPlan, validatePlan, checkPlanning, solvePlannedSchedule, lessonPrefersMorning, type SchedulePlan } from './schedule-planning'
@@ -26,13 +26,16 @@ export async function preparation(year:string,term:number){
  db.from('schedule_plans').select('config').eq('school_id',session.schoolId).eq('academic_year_id',year).eq('semester',term).maybeSingle(),
  db.from('school_period_times').select('period,label,start_time,end_time,is_break,sort_order,profiles').eq('school_id',session.schoolId).order('sort_order'),
  readActivityCatalog(db,session.schoolId),
- db.from('users').select('id,prefix,full_name,position').eq('school_id',session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',['teacher','academic_head','deputy_principal','principal','admin']).order('full_name').limit(1000)])
+ db.from('users').select('id,prefix,full_name,position').eq('school_id',session.schoolId).or('is_active.eq.true,email.like.pending-%').in('role',[...SCHEDULE_TEACHING_ROLES]).order('full_name').limit(1000)])
  for(const r of [config,times,teachers])fail(r.error)
  if(hash!==await snapshot(session.schoolId,year,term))throw Error('ข้อมูลเปลี่ยนระหว่างโหลด กรุณาลองใหม่')
  const storedPlan=(config.data?.config||emptyPlan()) as SchedulePlan
  const allClassrooms=data.allClassrooms||data.classrooms
  const allLessonRooms=data.allLessonRooms||data.lessons
+ const roster=teachers.data||[]
+ const allowed=new Set(roster.map(teacher=>teacher.id))
  const plan=effectiveSchedulePlan(storedPlan,allClassrooms,allLessonRooms)
+ if(plan.teacherIds?.some(id=>!allowed.has(id))){const teacherIds=plan.teacherIds.filter(id=>allowed.has(id));if(teacherIds.length)plan.teacherIds=teacherIds;else delete plan.teacherIds}
  const periods=normalizePeriodTimes((times.data?.length?times.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[])
  const classrooms=data.classrooms.filter(c=>isTimetableClassroom(c.level)).map(c=>({...c,name:classroomShortName(c,plan.roomLabels)}))
  const roomTitle=new Map(classrooms.map(c=>[c.id,`${c.level}/${c.name}`]))
@@ -43,7 +46,7 @@ export async function preparation(year:string,term:number){
  }),plan)
  // Keep enabled rooms outside the selected scope for teacher and venue checks.
  // Closed-room data remains archived and never participates in planning.
- return {hash,plan,storedPlan,allLessonRooms,allClassrooms:allClassrooms.map(c=>({...c,name:classroomShortName(c,storedPlan.roomLabels)})),periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,manualBlocks:constraints.manualBlocks,blocksSupported:constraints.blocksSupported!==false,activities,teachers:teachers.data||[]}
+ return {hash,plan,storedPlan,allLessonRooms,allClassrooms:allClassrooms.map(c=>({...c,name:classroomShortName(c,storedPlan.roomLabels)})),periods,timesConfigured:!!times.data?.length,classrooms,lessons,slots:data.slots,blocks:constraints.blocks,manualBlocks:constraints.manualBlocks,blocksSupported:constraints.blocksSupported!==false,activities,teachers:roster}
 }
 export type Preparation = Awaited<ReturnType<typeof preparation>>
 export async function repairActivityTeachers(year:string,term:number,hash:string){
