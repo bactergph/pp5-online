@@ -115,11 +115,18 @@ export default function TeacherActivitiesSettings() {
           </div>
         </div>
       </section>
-      {error ? <p className="prep-error" role="alert">{error}</p> : null}
-      {loading || (yearId && !data && !error) ? <p role="status">กำลังโหลดกิจกรรมครู…</p> : null}
-      {!loading && !yearId && !error ? <p>ยังไม่มีปีการศึกษา ให้ตั้งปีการศึกษาก่อน แล้วกลับมากำหนดกิจกรรมครู</p> : null}
+      {error ? <div className="alert alert-error" role="alert">{error}</div> : null}
+      {loading || (yearId && !data && !error) ? (
+        <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--text-3)' }}>กำลังโหลด...</div>
+      ) : null}
+      {!loading && !yearId && !error ? (
+        <section className="data-card" style={{ padding: 36, textAlign: 'center', color: 'var(--text-3)' }}>
+          ยังไม่มีปีการศึกษา ให้ตั้งปีการศึกษาก่อน แล้วกลับมากำหนดกิจกรรมครู
+        </section>
+      ) : null}
       {data ? (
         <TeacherActivityEditor
+          surface="settings"
           data={data}
           year={yearId}
           term={term}
