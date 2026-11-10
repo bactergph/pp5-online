@@ -14,6 +14,9 @@ assert.ok(search(admin,'ตาราง พิมพ์').length,'Search matches
 assert.ok(search(admin,'ครู').some(result=>result.trail),'Nested leaves keep their context')
 assert.ok(search(admin,'กิจกรรมครู').some(result=>result.href==='/settings/teacher-activities'),'Teacher activities stay in basic school data')
 assert.ok(!search(build('academic_head',false),'กิจกรรมครู').some(result=>result.href==='/settings/teacher-activities'))
+assert.ok(search(admin,'สำรอง').some(result=>result.href==='/settings/backup'),'School backup stays in basic school data')
+assert.ok(!search(build('academic_head',false),'สำรองข้อมูล').some(result=>result.href==='/settings/backup'))
+assert.equal(context('/seka/settings/backup','seka','ตั้งค่า').title,'สำรองข้อมูล')
 assert.equal(search(admin,' ' ).length,0);assert.equal(search(admin,'...').length,0);assert.equal(search(admin,'ไม่พบคำนี้123').length,0)
 const filtered=[{label:'งานครู',items:[{label:'คะแนน',href:'/scores'}]}]
 assert.equal(search(filtered,'บุคลากร').length,0,'Search cannot invent destinations outside the filtered role menu')

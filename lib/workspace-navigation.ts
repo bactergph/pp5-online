@@ -72,6 +72,7 @@ const routes:Record<string,[string,string]>={
   '/classrooms/homeroom':['ข้อมูลโรงเรียน','กำหนดครูประจำชั้น'],
   '/settings/academic-year':['ตั้งค่าโรงเรียน','ปีการศึกษาและภาคเรียน'],
   '/settings/holidays':['ตั้งค่าโรงเรียน','วันหยุดและปฏิทินเรียน'],
+  '/settings/backup':['ตั้งค่าโรงเรียน','สำรองข้อมูล'],
   '/settings/teacher-activities':['ตั้งค่าโรงเรียน','กิจกรรมครู'],
   '/settings/import-dmc':['ข้อมูลโรงเรียน','นำเข้านักเรียนจาก DMC'],
   '/settings/periods':['ตั้งค่าโรงเรียน','กำหนดคาบเรียน'],

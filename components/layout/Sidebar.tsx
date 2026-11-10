@@ -379,6 +379,7 @@ const ADMIN_SETTINGS: NavItem = {
         { href: '/settings/teacher-activities', label: 'กิจกรรมครู', icon: ic(I.star) },
         { href: '/settings/academic-year', label: 'ปีการศึกษา', icon: ic(I.calendar) },
         { href: '/settings/holidays', label: 'วันหยุด', icon: ic(I.clock) },
+        { href: '/settings/backup', label: 'สำรองข้อมูล', icon: ic(I.shield) },
       ],
     },
     {

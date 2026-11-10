@@ -60,6 +60,15 @@ const ALL_MENU: MenuItem[] = [
     roles: ['admin'],
   },
   {
+    href: '/settings/backup',
+    label: 'สำรองข้อมูล',
+    desc: 'ส่งทั้งฐานข้อมูลของปีการศึกษาขึ้น Google Drive และนำเข้ากลับ',
+    color: '#235bc8',
+    bg: '#edf4ff',
+    icon: <HolidayIcon />,
+    roles: ['admin'],
+  },
+  {
     href: '/settings/subjects',
     label: 'รายวิชา',
     desc: 'จัดการรายวิชาตามกลุ่มสาระ',
