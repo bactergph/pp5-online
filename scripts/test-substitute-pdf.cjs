@@ -31,7 +31,7 @@ async function test(){
     ['eight-with-logo',{...base,entries:entries(8)},1],
     ['six-without-logo',{...base,logoUrl:null,entries:entries(6)},1],
     ['two-teachers',{...base,entries:[...entries(6),...entries(6).map(row=>({...row,absent_teacher_id:'second'}))]},2],
-    ['eight-substitutes',{...base,teacherNames:{...teacherNames,...Object.fromEntries(entries(8).map((_,i)=>['cover'+i,'นางสาวครูสอนแทน นามสกุลยาวพิเศษ '+i]))},workload:Object.fromEntries(entries(8).map((_,i)=>['cover'+i,{scheduled:2,substitutes:1,termAssignments:21}])),entries:entries(8).map((row,i)=>({...row,substitute_teacher_id:'cover'+i}))},1],
+    ['eight-substitutes',{...base,teacherNames:{...teacherNames,...Object.fromEntries(entries(8).map((_,i)=>['cover'+i,'นางสาวครูสอนแทน นามสกุลยาวพิเศษ '+i]))},workload:Object.fromEntries(entries(8).map((_,i)=>['cover'+i,{scheduled:2,substitutes:1,termAssignments:21}])),entries:entries(8).map((row,i)=>({...row,substitute_teacher_id:'cover'+i}))},2],
     ['many-periods',{...base,entries:entries(23)},null],
     ['long-notes',{...base,entries:entries(6).map((row,i)=>({...row,note:i===0?'รายละเอียดการสอนเพิ่มเติม '.repeat(240)+'END LONG NOTE 123':null}))},null],
     ['wrapped-names',{...base,schoolName:'โรงเรียนสาธิตทดสอบการจัดการเรียนการสอนและการบันทึกข้อมูล '+ 'ทดสอบชื่อโรงเรียน '.repeat(8),academicHead:'นางสาวหัวหน้าวิชาการ '+ 'ทดสอบนามสกุลยาว '.repeat(7),director:'นายผู้อำนวยการ '+ 'ทดสอบนามสกุลยาว '.repeat(7),entries:entries(6)},null],
@@ -44,7 +44,13 @@ async function test(){
     if(['six-with-logo','eight-with-logo','six-without-logo'].includes(name))assert.ok(owner[0].y-doc.lastAutoTable.finalY>=9.99,'Keep at least 10mm between table edge and owner signature baseline')
     assert.equal(owner.length,new Set(input.entries.map(row=>row.absent_teacher_id)).size,'One signature block per absent teacher')
     assert.equal(events.filter(event=>/^รายวิชาทดสอบ \d+$/.test(event.text)).length,input.entries.length,'Every row survives pagination')
-    assert.ok(events.some(event=>event.x>doc.internal.pageSize.getWidth()/2&&event.text==='สรุปภาระงานวันนี้และยอดสอนแทนในเทอม'))
+    const captions=events.filter(event=>event.text==='สรุปภาระงานวันนี้และยอดสอนแทนในเทอม')
+    assert.equal(captions.length,new Set(input.entries.map(row=>row.absent_teacher_id)).size,'One workload summary per absent teacher')
+    for(const caption of captions){
+      assert.ok(caption.x>doc.internal.pageSize.getWidth()/2,'Summary stays on the right')
+      assert.ok(owner.some(signature=>signature.page===caption.page),'Summary shares the signature page')
+      if(['six-with-logo','eight-with-logo','six-without-logo','two-teachers'].includes(name))assert.ok(caption.y>doc.internal.pageSize.getHeight()/2,'Summary sits in the lower half')
+    }
     if(name==='six-with-logo'){
       const term=events.find(event=>event.x>200&&event.text==='21')
       assert.ok(term,'Term total is printed in the right summary')

@@ -40,10 +40,18 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
       const load=input.workload[id]
       return [names.get(id)||'ไม่ระบุชื่อ',String(load.termAssignments),String(load.scheduled??'-'),String(load.substitutes),String(load.scheduled===null?'-':load.scheduled+load.substitutes)]
     })
-    if(!summary.length)summary.push(['ยังไม่กำหนดครู','','','',''])
-    const detailWidths=[10,23,17,41,42,23,21]
-    const summaryX=margin+detailWidths.reduce((sum,value)=>sum+value,0)+5
-    const widths=[...detailWidths,5,content-(summaryX-margin)-54,13,14,14,13]
+    if(!summary.length)summary.push(['ยังไม่กำหนดครู','-','-','-','-'])
+    const numberWidths=[18,16,16,20]
+    doc.setFont('THSarabunNew','normal');doc.setFontSize(12)
+    const nameWidth=Math.min(72,Math.max(44,Math.max(...summary.map(row=>doc.getTextWidth(String(row[0]))))+4))
+    const summaryWidths=[nameWidth,...numberWidths]
+    const summaryWidth=summaryWidths.reduce((sum,value)=>sum+value,0)
+    const summaryLeft=width-margin-summaryWidth
+    const signatureWidth=summaryLeft-margin-8
+    const detailWeights=[14,32,28,72,58,38,27]
+    const detailSum=detailWeights.reduce((sum,value)=>sum+value,0)
+    const widths=detailWeights.map(value=>value/detailSum*content)
+    widths[widths.length-1]=content-widths.slice(0,-1).reduce((sum,value)=>sum+value,0)
     doc.setFont('THSarabunNew','bold');doc.setFontSize(18)
     const schoolLines=doc.splitTextToSize(scheduleSchoolName(input.schoolName),logo?content-34:content) as string[]
     doc.setFontSize(15)
@@ -51,12 +59,22 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
     const schoolY=16,titleY=schoolY+(schoolLines.length-1)*7+7
     const teacherY=titleY+16,tableTop=teacherY+teacherLines.length*6+4
     doc.setFont('THSarabunNew','normal');doc.setFontSize(15)
-    const ownerLines=doc.splitTextToSize(`ลงชื่อครูเจ้าของคาบ ........................................................ (${names.get(teacherId)||'........................................'})`,content-6) as string[]
+    const ownerName=names.get(teacherId)||'........................................'
+    const ownerPrefix='ลงชื่อครูเจ้าของคาบ ',ownerSuffix=` (${ownerName})`
+    let ownerDots='......'
+    while(ownerDots.length<40&&doc.getTextWidth(`${ownerPrefix}${ownerDots}..${ownerSuffix}`)<=signatureWidth)ownerDots+='..'
+    const ownerLines=doc.splitTextToSize(`${ownerPrefix}${ownerDots}${ownerSuffix}`,signatureWidth) as string[]
     doc.setFontSize(14)
-    const signerLines=Math.max(...[input.academicHead,input.director].map(name=>(doc.splitTextToSize(`(${name||'........................................................'})`,content*0.45) as string[]).length))
+    const signerWidth=signatureWidth*0.46
+    const signerLines=Math.max(...[input.academicHead,input.director].map(name=>(doc.splitTextToSize(`(${name||'........................................................'})`,signerWidth) as string[]).length))
     const signerLineHeight=14*1.15*25.4/72
     const signerOffset=ownerLines.length*6.2+6,signatureHeight=signerOffset+6+signerLines*signerLineHeight+9
-    const signatureGap=10,bottomLimit=height-15,bodyBottom=bottomLimit-signatureHeight-signatureGap
+    const summaryLine=12*1.15*25.4/72
+    doc.setFont('THSarabunNew','normal');doc.setFontSize(12)
+    const summaryBody=summary.reduce((total,row)=>total+Math.max(7.4,(doc.splitTextToSize(String(row[0]),nameWidth-3.2) as string[]).length*summaryLine+1.8),0)
+    const summaryHeight=6+11+summaryBody+1.5
+    const blockHeight=Math.max(signatureHeight,summaryHeight)
+    const signatureGap=10,bottomLimit=height-15,bodyBottom=bottomLimit-blockHeight-signatureGap
     const drawHeader=()=>{
       const page=doc.getCurrentPageInfo().pageNumber
       if(drawnHeaders.has(page))return
@@ -68,30 +86,17 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
       doc.setDrawColor(65);doc.setLineWidth(0.25);doc.line(margin,titleY+11,width-margin,titleY+11)
       text(teacherLines,margin,teacherY,15,true)
       text(`${entries.length} รายการ / ${new Set(entries.map(entry=>hasPeriodProfiles(input.times)?clockLabel(entry)||String(entry.period):String(entry.period))).size} ช่วงคาบ`,margin,tableTop-2,13)
-      text('สรุปภาระงานวันนี้และยอดสอนแทนในเทอม',summaryX,tableTop-2,13,true)
     }
     drawHeader()
     autoTable(doc,{
-      // Keep the table and its signatures together; continued pages repeat the header.
+      // Keep the table and its closing block together; continued pages repeat the header.
       startY:tableTop,margin:{top:tableTop,bottom:height-bodyBottom,left:margin,right:margin},
-      head:[['คาบ','เวลา','ชั้น / ห้อง','รายวิชา / กิจกรรม','ครูผู้สอนแทน','หมายเหตุ','ลงชื่อ\nหลังสอน','','ครูสอนแทน','เทอมนี้\n(ครั้ง)','ตาม\nตาราง','สอน\nแทน','รวม\n(คาบ)']],
-      body:entries.map((entry,i)=>[String(entry.period),clockLabel(entry).replaceAll('–','-'),entry.room_label||'-',entry.subject_label||'-',names.get(entry.substitute_teacher_id||'')||'ยังไม่กำหนดครู',(entry.note?.length||0)>180?`ดูหมายเหตุเพิ่มเติมข้อ ${i+1}`:entry.note||'','','',...(summary[i]??['','','','',''])]),
+      head:[['คาบ','เวลา','ชั้น / ห้อง','รายวิชา / กิจกรรม','ครูผู้สอนแทน','หมายเหตุ','ลงชื่อ\nหลังสอน']],
+      body:entries.map((entry,i)=>[String(entry.period),clockLabel(entry).replaceAll('–','-'),entry.room_label||'-',entry.subject_label||'-',names.get(entry.substitute_teacher_id||'')||'ยังไม่กำหนดครู',(entry.note?.length||0)>180?`ดูหมายเหตุเพิ่มเติมข้อ ${i+1}`:entry.note||'','']),
       theme:'grid',showHead:'everyPage',rowPageBreak:'avoid',
       styles:{font:'THSarabunNew',fontSize:entries.length>=8?13:14,textColor:0,fillColor:255,lineColor:80,lineWidth:0.18,cellPadding:{top:0.6,bottom:0.6,left:1.6,right:1.6},minCellHeight:entries.length>=8?9:10.5,valign:'middle',overflow:'linebreak'},
       headStyles:{fontStyle:'bold',fillColor:242,textColor:0,halign:'center'},alternateRowStyles:{fillColor:255},
-      columnStyles:Object.fromEntries(widths.map((cellWidth,i)=>[i,{cellWidth,...i<3||i>=9?{halign:'center' as const}:{}}])),
-      didParseCell:({cell,column,row,section})=>{
-        if(column.index===7||column.index>=8&&section==='body'&&row.index>=summary.length){
-          cell.styles.lineWidth=0
-          cell.styles.fillColor=false
-        }else if(column.index>=8){
-          cell.styles.fontSize=13
-          if(column.index===12){
-            cell.styles.fontStyle='bold'
-            if(section==='body')cell.styles.fillColor=248
-          }
-        }
-      },
+      columnStyles:Object.fromEntries(widths.map((cellWidth,i)=>[i,{cellWidth,...(i<3||i===6?{halign:'center' as const}:{})}])),
       didDrawPage:drawHeader,
     })
     const lastY=(doc as jsPDF&{lastAutoTable?:{finalY:number}}).lastAutoTable?.finalY||tableTop
@@ -107,19 +112,34 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
         text(line,margin,notesY,14);contentY=notesY+2;notesY+=6
       }
     }
-    let signatureY=contentY+signatureGap
-    if(signatureY+signatureHeight>bottomLimit+0.01){doc.addPage();drawHeader();signatureY=tableTop+6}
+    let blockTop=contentY+signatureGap
+    if(blockTop+blockHeight>bottomLimit+0.01){doc.addPage();drawHeader();blockTop=tableTop+6}
+    const signatureY=blockTop+blockHeight-signatureHeight,summaryTop=blockTop+blockHeight-summaryHeight
+    doc.setFont('THSarabunNew','normal');doc.setFontSize(15)
+    let signLine='ลงชื่อ '
+    while(signLine.length<46&&doc.getTextWidth(`${signLine}.`)<=signerWidth-1)signLine+='.'
     const signature=(center:number,y:number,name:string,role:string,maxWidth:number)=>{
-      text('ลงชื่อ ........................................................',center,y,15,false,true)
+      text(signLine,center,y,15,false,true)
       doc.setFontSize(14)
       const lines=doc.splitTextToSize(`(${name||'........................................................'})`,maxWidth) as string[]
       text(lines,center,y+6,14,false,true)
       const roleY=y+6+lines.length*signerLineHeight+1
       text(role,center,roleY,14,false,true);text(`วันที่ ${date}`,center,roleY+6,14,false,true)
     }
-    text(ownerLines,margin+3,signatureY,15)
-    signature(margin+content*0.25,signatureY+signerOffset,input.academicHead,'หัวหน้าวิชาการ',content*0.45)
-    signature(margin+content*0.75,signatureY+signerOffset,input.director,'ผู้อำนวยการสถานศึกษา',content*0.45)
+    text(ownerLines,margin,signatureY,15)
+    signature(margin+signatureWidth*0.27,signatureY+signerOffset,input.academicHead,'หัวหน้าวิชาการ',signerWidth)
+    signature(margin+signatureWidth*0.73,signatureY+signerOffset,input.director,'ผู้อำนวยการสถานศึกษา',signerWidth)
+    const detailTable=(doc as jsPDF&{lastAutoTable?:{finalY:number}}).lastAutoTable
+    text('สรุปภาระงานวันนี้และยอดสอนแทนในเทอม',summaryLeft,summaryTop+3.4,12,true)
+    autoTable(doc,{
+      startY:summaryTop+5.2,margin:{left:summaryLeft,right:margin,top:tableTop,bottom:height-bottomLimit},tableWidth:summaryWidth,
+      head:[['ครูสอนแทน','เทอมนี้\n(ครั้ง)','ตาม\nตาราง','สอน\nแทน','รวมวันนี้\n(คาบ)']],body:summary,theme:'grid',rowPageBreak:'avoid',
+      styles:{font:'THSarabunNew',fontSize:12,textColor:0,fillColor:255,lineColor:80,lineWidth:0.18,cellPadding:{top:0.5,bottom:0.5,left:1.2,right:1.2},minCellHeight:7.2,valign:'middle',overflow:'linebreak'},
+      headStyles:{fontStyle:'bold',fillColor:242,textColor:0,halign:'center',fontSize:11},
+      columnStyles:Object.fromEntries(summaryWidths.map((cellWidth,i)=>[i,{cellWidth,...(i?{halign:'center' as const}:{})}])),
+      didParseCell:({cell,column,section})=>{if(column.index===4){cell.styles.fontStyle='bold';if(section==='body')cell.styles.fillColor=248}},
+    })
+    if(detailTable)(doc as jsPDF&{lastAutoTable?:{finalY:number}}).lastAutoTable=detailTable
   }
   for(let page=1;page<=doc.getNumberOfPages();page++){
     doc.setPage(page)
