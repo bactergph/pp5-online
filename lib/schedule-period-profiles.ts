@@ -45,13 +45,26 @@ export function profileCellOverlap(times:PeriodTimeRow[],levelA:string,periodA:n
   const a=periodInterval(levelPeriodTimes(times,levelA),periodA),b=periodInterval(levelPeriodTimes(times,levelB),periodB)
   return !!a&&!!b&&intervalsOverlap(a,b)
 }
-/** Display-only clock columns for teachers who teach across grade schedules. */
+/** Display-only clock columns for teachers who teach across grade schedules.
+ * A shared break stays visible so a lunch duty can sit in that column.
+ * A break that cuts across another band's lesson is omitted, otherwise the
+ * combined timeline would show a lunch that is not lunch for every grade. */
 export function teacherPeriodTimes(times:PeriodTimeRow[]):PeriodTimeRow[]{
  if(!hasTeacherTimeline(times))return times
  const clocks=new Map<string,PeriodTimeRow>()
- for(const rows of [times,...Object.values(periodProfiles(times))])for(const row of rows||[])if(!row.is_break)clocks.set(`${row.start_time}-${row.end_time}`,row)
- for(const activity of teacherActivitiesInClock(times))clocks.set(`${activity.start_time}-${activity.end_time}`,{period:0,label:activity.name,start_time:activity.start_time,end_time:activity.end_time,is_break:false,sort_order:0})
- return [...clocks.values()].sort((a,b)=>a.start_time.localeCompare(b.start_time)||a.end_time.localeCompare(b.end_time)).map((row,i)=>({period:i+1,label:`ช่วง ${i+1}`,start_time:row.start_time,end_time:row.end_time,is_break:false,sort_order:i+1}))
+ for(const rows of [times,...Object.values(periodProfiles(times))])for(const row of rows||[])if(!row.is_break)clocks.set(`${row.start_time}-${row.end_time}`,{...row,is_break:false})
+ for(const row of times){
+  if(!row.is_break)continue
+  const key=`${row.start_time}-${row.end_time}`
+  const overlapsLesson=[...clocks.values()].some(slot=>!slot.is_break&&slot.start_time<row.end_time&&row.start_time<slot.end_time)
+  if(!overlapsLesson&&!clocks.has(key))clocks.set(key,{...row,is_break:true})
+ }
+ for(const activity of teacherActivitiesInClock(times)){
+  const key=`${activity.start_time}-${activity.end_time}`
+  const covered=[...clocks.values()].some(row=>row.start_time<=activity.start_time&&activity.end_time<=row.end_time)
+  if(!covered)clocks.set(key,{period:0,label:activity.name,start_time:activity.start_time,end_time:activity.end_time,is_break:false,sort_order:0})
+ }
+ return [...clocks.values()].sort((a,b)=>a.start_time.localeCompare(b.start_time)||a.end_time.localeCompare(b.end_time)||Number(a.is_break)-Number(b.is_break)).map((row,i)=>({period:i+1,label:row.is_break?(row.label||'พัก'):`ช่วง ${i+1}`,start_time:row.start_time,end_time:row.end_time,is_break:!!row.is_break,sort_order:i+1}))
 }
 export function teacherDisplayPeriod(times:PeriodTimeRow[],level:string,period:number){
  if(!hasTeacherTimeline(times))return period

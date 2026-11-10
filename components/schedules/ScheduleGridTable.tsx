@@ -34,17 +34,24 @@ const GRID_STYLES = `
     background: #f3f6fb; color: #52647c; font-size: 12px; font-weight: 600;
     writing-mode: vertical-rl; text-orientation: mixed; padding: 10px 4px;
   }
+  .schedule-grid-table th.col-break-duty { min-width: 108px; background: #f3f6fb; color: #243044; }
+  .schedule-grid-table td.break-duty {
+    min-width: 108px; background: #f3f6fb; color: #243044; font-size: 13px; font-weight: 600; padding: 8px 6px;
+  }
 `
 
 type Props = {
   renderCell: (day: number, period: number) => ReactNode
+  renderBreak?: (day: number, period: number) => ReactNode | null
   periodTimes?: PeriodTimeRow[]
   days?: number[]
   compactBreak?: boolean
+  /** Teacher grids keep lunch wide enough to show a named duty. */
+  dutyBreaks?: boolean
 }
 
-export default function ScheduleGridTable({ renderCell, periodTimes, compactBreak = false, days = [1,2,3,4,5] }: Props) {
-  const columns: ScheduleColumn[] = (periodTimes?.length ? periodTimes : DEFAULT_PERIOD_TIMES).map(t => t.is_break ? { kind: 'break', header: t.label || 'พัก' } : { kind: 'period', period: t.period, header: t.label?.startsWith('ช่วง')?t.label:String(t.period) })
+export default function ScheduleGridTable({ renderCell, renderBreak, periodTimes, compactBreak = false, dutyBreaks = false, days = [1,2,3,4,5] }: Props) {
+  const columns: ScheduleColumn[] = (periodTimes?.length ? periodTimes : DEFAULT_PERIOD_TIMES).map(t => t.is_break ? { kind: 'break', period: t.period, header: t.label || 'พัก' } : { kind: 'period', period: t.period, header: t.label?.startsWith('ช่วง')?t.label:String(t.period) })
   return (
     <>
       <style>{GRID_STYLES}</style>
@@ -55,7 +62,7 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
             {columns.map((col,index) => (
               <th
                 key={col.kind === 'period' ? `p-${col.period}` : `break-${index}`}
-                className={col.kind === 'break' ? 'col-break' : 'col-period'}
+                className={col.kind === 'break' ? (dutyBreaks ? 'col-break-duty' : 'col-break') : 'col-period'}
               >
                 {col.kind === 'period' ? (
                   <>
@@ -63,6 +70,11 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
                     {periodTimes?.length ? (
                       <span className="period-time">{periodTimeLabel(periodTimes, col.period)}</span>
                     ) : null}
+                  </>
+                ) : dutyBreaks ? (
+                  <>
+                    {col.header}
+                    <span className="period-time">{periodTimes?.find(row=>row.is_break&&row.period===col.period)?.start_time}–{periodTimes?.find(row=>row.is_break&&row.period===col.period)?.end_time}</span>
                   </>
                 ) : col.header}
               </th>
@@ -76,9 +88,10 @@ export default function ScheduleGridTable({ renderCell, periodTimes, compactBrea
               {columns.map((col,index) => {
                 if (col.kind === 'break') {
                   if (compactBreak && day.value !== days[0]) return null
+                  const duty = dutyBreaks && col.period !== undefined ? renderBreak?.(day.value, col.period) : null
                   return (
-                    <td key={`${day.value}-break-${index}`} className="break-col" rowSpan={compactBreak ? days.length : undefined}>
-                      {col.header}
+                    <td key={`${day.value}-break-${index}`} className={duty ? 'break-duty' : dutyBreaks ? 'break-duty' : 'break-col'} rowSpan={compactBreak ? days.length : undefined}>
+                      {duty || col.header}
                     </td>
                   )
                 }

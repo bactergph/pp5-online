@@ -175,7 +175,12 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
         </details>
         </div>
 
-        <div className="schedule-grid-scroll overflow-x-auto"><ScheduleGridTable days={visibleDays} periodTimes={gridTimes} compactBreak renderCell={(day,period)=>{
+        <div className="schedule-grid-scroll overflow-x-auto"><ScheduleGridTable days={visibleDays} periodTimes={gridTimes} dutyBreaks renderBreak={(day,period)=>{
+          const row=gridTimes.find(time=>time.is_break&&time.period===period)
+          if(!row)return null
+          const names=teacherActivitiesInClock(periodTimes).filter(activity=>activity.teacherIds.includes(teacher)&&activity.days.includes(day)&&row.start_time<=activity.start_time&&activity.end_time<=row.end_time).map(activity=>activity.name)
+          return names.length?<div className="cell-view"><strong>{names.join(' / ')}</strong><small>กิจกรรมครู</small></div>:null
+        }} renderCell={(day,period)=>{
           const busy=busyAt(day,period)
           const blocked=teacherCellBlocks(data,periodTimes,teacher,day,period).length>0
           const selected=editing?.day===day&&editing?.period===period

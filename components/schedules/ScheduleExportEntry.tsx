@@ -520,7 +520,12 @@ export default function ScheduleExportPage() {
               {SCHEDULE_DAYS.filter(d=>scheduleDays.includes(d.value)).map(day => (
                 <tr key={day.value}>
                   <td className="day-col">{day.label}</td>
-                  {displayTimes.map((row,index)=>row.is_break?<td key={`break-${index}`} className="break-col">{row.label}</td>:renderPrintCell(day.value,row.period))}
+                  {displayTimes.map((row,index)=>{
+                    if(!row.is_break)return renderPrintCell(day.value,row.period)
+                    const duty=gridData[`${day.value}-${row.period}`]
+                    const named=duty?.line2==='(กิจกรรมครู)'&&duty.line1&&duty.line1!=='—'
+                    return <td key={`break-${index}`} className="break-col">{named?duty.line1:row.label}</td>
+                  })}
                 </tr>
               ))}
             </tbody>

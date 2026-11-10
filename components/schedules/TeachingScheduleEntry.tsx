@@ -194,8 +194,12 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-empty">ไม่พบครูในโรงเรียน</div>
         ) : (
           <div className="schedule-grid-card">
-            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<div className="schedule-profile-teacher-grid"><ScheduleGridTable days={scheduleDays}
+            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<div className="schedule-profile-teacher-grid"><ScheduleGridTable days={scheduleDays} dutyBreaks
               periodTimes={teacherPeriodTimes(periodTimes)}
+              renderBreak={(day, period) => {
+                const cell = cells[`${day}-${period}`]
+                return cell?.room_line === 'กิจกรรมครู' ? <div className="cell-view"><strong>{cell.subject_line}</strong><small>กิจกรรมครู</small></div> : null
+              }}
               renderCell={(day, period) => {
                 const key = `${day}-${period}`
                 const cell = cells[key]

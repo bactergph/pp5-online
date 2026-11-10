@@ -21,9 +21,16 @@ export function scheduleTeachingView(data:Awaited<ReturnType<typeof loadSchedule
     }
   }
   for(const activity of teacherActivitiesInClock(data.periodTimes||[]).filter(activity=>activity.teacherIds.includes(teacherId))){
-    const period=teacherPeriodTimes(data.periodTimes||[]).find(row=>row.start_time===activity.start_time&&row.end_time===activity.end_time)?.period
-    if(!period)continue
-    for(const day of activity.days)result[`${day}-${period}`]={label:activity.name,subject_line:activity.name,room_line:'กิจกรรมครู',pdf:{line1:activity.name,line2:'(กิจกรรมครู)',line3:`${activity.start_time}–${activity.end_time}`}}
+    const axis=teacherPeriodTimes(data.periodTimes||[])
+    const slot=axis.find(row=>row.start_time===activity.start_time&&row.end_time===activity.end_time)
+      ??axis.find(row=>row.is_break&&row.start_time<=activity.start_time&&activity.end_time<=row.end_time)
+    if(!slot)continue
+    for(const day of activity.days){
+      const key=`${day}-${slot.period}`,current=result[key]
+      if(current&&current.room_line!=='กิจกรรมครู')continue
+      const name=current?.room_line==='กิจกรรมครู'?`${current.subject_line} / ${activity.name}`:activity.name
+      result[key]={label:name,subject_line:name,room_line:'กิจกรรมครู',pdf:{line1:name,line2:'(กิจกรรมครู)',line3:`${activity.start_time}–${activity.end_time}`}}
+    }
   }
   return result
 }

@@ -26,7 +26,11 @@ export function deviceDocumentPages(plan:FreeWizardPlan,kind:'class'|'teacher',i
     const gridData:Record<string,SchedulePdfCell>={}
     if(kind==='teacher'){
       const cells=scheduleTeachingView(deviceDisplaySchedule(plan),id)
-      for(const day of [...new Set([...plan.days,...(plan.teacherActivities||[]).flatMap(activity=>activity.days)])])for(const {period} of teachingRows(teacherPeriodTimes(teacherTimes)))gridData[`${day}-${period}`]=cells[`${day}-${period}`]?.pdf||{line1:plan.blocks.some(b=>b.teacherId===id&&b.day===day&&teacherBlockOverlaps(teacherTimes,b.period,period))?'ไม่ว่าง':'—',line2:''}
+      for(const day of [...new Set([...plan.days,...(plan.teacherActivities||[]).flatMap(activity=>activity.days)])])for(const row of teacherPeriodTimes(teacherTimes)){
+        const key=`${day}-${row.period}`
+        if(row.is_break){if(cells[key]?.pdf)gridData[key]=cells[key].pdf;continue}
+        gridData[key]=cells[key]?.pdf||{line1:plan.blocks.some(b=>b.teacherId===id&&b.day===day&&teacherBlockOverlaps(teacherTimes,b.period,row.period))?'ไม่ว่าง':'—',line2:''}
+      }
       return {layout:teacherPeriodTimes(teacherTimes).length>10?'teacher-agenda' as const:'grid' as const,periodTimes:teacherPeriodTimes(teacherTimes),title:`ตารางสอน ${plan.teachers.find(t=>t.id===id)?.name||''} ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,gridData}
     }
     for(const day of plan.days)for(const {period} of teachingRows(levelPeriodTimes(plan.periods,plan.rooms.find(room=>room.id===id)?.label||''))){

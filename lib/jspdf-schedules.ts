@@ -221,7 +221,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   y += 3
 
   if ('layout' in sheet && sheet.layout==='teacher-agenda') {
-    const events=SCHEDULE_DAYS.filter(day=>!input.days||input.days.includes(day.value)).flatMap(day=>times.filter(time=>!time.is_break).flatMap(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return cell&&cell.line1&&cell.line1!=='—'?[{day,time,cell}]:[]}))
+    const events=SCHEDULE_DAYS.filter(day=>!input.days||input.days.includes(day.value)).flatMap(day=>times.filter(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return time.is_break?cell?.line2==='(กิจกรรมครู)':!!cell&&!!cell.line1&&cell.line1!=='—'}).flatMap(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return cell?[{day,time,cell}]:[]}))
     const widths=[24,36,91,45,81],head=()=>{let x=MARGIN_X;for(const [i,label] of ['วัน','เวลา','รายวิชา / กิจกรรม','ชั้น / ห้อง','รายละเอียด'].entries()){drawCell(doc,x,y,widths[i],10,label,'',{fill:HEADER_BG,line1Size:14});x+=widths[i]}y+=10}
     head()
     for(const event of events){
@@ -258,8 +258,8 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
     drawCell(doc, x, y, dayW, rowH, day.label, '', { fill: DAY_BG })
     x += dayW
     for(const row of times){
-      const width=row.is_break?breakW:periodW,cell=sheet.gridData[`${day.value}-${row.period}`]
-      drawCell(doc,x,y,width,rowH,row.is_break?row.label:cell?.line1||'—',row.is_break?'':cell?.line2||'',row.is_break?{fill:BREAK_BG,line1Size:11}:{line3:cell?.line3,line4:cell?.line4})
+      const width=row.is_break?breakW:periodW,cell=sheet.gridData[`${day.value}-${row.period}`],duty=row.is_break&&cell?.line2==='(กิจกรรมครู)'&&cell.line1&&cell.line1!=='—'
+      drawCell(doc,x,y,width,rowH,duty?cell.line1:row.is_break?row.label:cell?.line1||'—',duty?'':row.is_break?'':cell?.line2||'',row.is_break?{fill:BREAK_BG,line1Size:duty?12:11}:{line3:cell?.line3,line4:cell?.line4})
       x+=width
     }
     y += rowH

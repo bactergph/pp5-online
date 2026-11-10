@@ -13,7 +13,7 @@ export const SCHEDULE_DAYS: { value: number; label: string; short: string }[] = 
 
 export type ScheduleColumn =
   | { kind: 'period'; period: number; header: string }
-  | { kind: 'break'; header: string }
+  | { kind: 'break'; header: string; period?: number }
 
 /** คอลัมน์ตาราง: คาบ 1–3 | พักเที่ยง | คาบ 4–6 */
 export const SCHEDULE_COLUMNS: ScheduleColumn[] = [
