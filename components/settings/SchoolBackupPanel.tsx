@@ -216,6 +216,36 @@ export default function SchoolBackupPanel() {
     }
   }
 
+  async function downloadDriveFile(file: DriveFile) {
+    setFileBusy(true)
+    setPageError('')
+    setFileNotice('')
+    try {
+      const response = await fetch('/api/settings/school-backup/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: file.id }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body.error || 'ดาวน์โหลดไม่สำเร็จ')
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = file.name
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : 'ดาวน์โหลดไม่สำเร็จ')
+    } finally {
+      setFileBusy(false)
+    }
+  }
+
   async function previewLocal(file: File | undefined) {
     if (!file) return
     clearPreview()
@@ -393,6 +423,7 @@ export default function SchoolBackupPanel() {
                   <td>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => previewDrive(file)} disabled={importing || fileBusy}>ดูรายละเอียด</button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => downloadDriveFile(file)} disabled={importing || fileBusy}>ดาวน์โหลด</button>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => openRename(file)} disabled={importing || fileBusy}>แก้ชื่อ</button>
                       <button type="button" className="btn btn-danger btn-sm" onClick={() => { setFileNotice(''); setFileAction({ kind: 'delete', file }) }} disabled={importing || fileBusy}>ลบ</button>
                     </div>
