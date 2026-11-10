@@ -37,3 +37,36 @@ export function drawJsPdfCheckbox(
   doc.setLineCap(0)
   doc.setLineJoin(0)
 }
+
+export function isPdfCheckMark(value: string) {
+  return value === '✓' || value === '✔'
+}
+
+/** เครื่องหมายถูกอย่างเดียว — ฟอนต์ PDF มีแค่ไทยกับ ASCII จึงวาดเส้นแทน glyph */
+export function drawJsPdfTick(
+  doc: jsPDF,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: [number, number, number] = [17, 24, 39],
+) {
+  const size = Math.min(w * 0.72, h * 0.62)
+  const cx = x + w / 2
+  const cy = y + h / 2 + size * 0.04
+  const x1 = cx - size * 0.46
+  const y1 = cy
+  const x2 = cx - size * 0.1
+  const y2 = cy + size * 0.34
+  const x3 = cx + size * 0.5
+  const y3 = cy - size * 0.4
+
+  doc.setDrawColor(color[0], color[1], color[2])
+  doc.setLineWidth(Math.max(0.28, size * 0.16))
+  doc.setLineCap(1)
+  doc.setLineJoin(1)
+  doc.line(x1, y1, x2, y2)
+  doc.line(x2, y2, x3, y3)
+  doc.setLineCap(0)
+  doc.setLineJoin(0)
+}

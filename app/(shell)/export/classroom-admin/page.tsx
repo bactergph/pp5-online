@@ -359,7 +359,7 @@ export default function ClassroomAdminExportPage() {
 
     const book = document.querySelector('.classroom-export-book') as HTMLElement | null
     if (!book) {
-      setError('ไม่พบเอกสารสำหรับพิมพ์')
+      window.print()
       return
     }
 
@@ -395,12 +395,17 @@ export default function ClassroomAdminExportPage() {
   <style>${printStyles}</style>
   <style>
     body { margin: 0; background: #ffffff; }
+    .classroom-export-print-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; background: #ffffff; border-bottom: 1px solid #d7dee8; }
+    .classroom-export-print-bar strong { font: 700 16px "TH Sarabun New", sans-serif; }
+    .classroom-export-print-bar button { border: 0; border-radius: 10px; padding: 8px 18px; color: #ffffff; background: #059669; font: 700 16px "TH Sarabun New", sans-serif; cursor: pointer; }
     .classroom-export-print-window { display: grid; place-items: start center; padding: 0; }
     .classroom-export-book { transform: none !important; }
     .attendance-print-sheet { box-shadow: none !important; }
+    @media print { .classroom-export-print-bar { display: none !important; } }
   </style>
 </head>
 <body>
+  <div class="classroom-export-print-bar"><strong>${escapeHtml(printTitle)}</strong><button type="button" onclick="window.print()">พิมพ์</button></div>
   <main class="classroom-export-print-window">${book.outerHTML}</main>
   <script>
     window.addEventListener('load', function () {
@@ -1083,6 +1088,19 @@ export default function ClassroomAdminExportPage() {
       {error && <div className="alert alert-error no-print">{error}</div>}
 
       <div className="classroom-export-preview-pane">
+      {autoPrintMode && !embedMode && !printMode && (
+        <div className="classroom-export-preview-toolbar no-print">
+          <div className="classroom-export-autoprint-copy">
+            <strong>เอกสารธุรการประจำชั้น</strong>
+            <span>กดพิมพ์เพื่อเปิดหน้าต่างพิมพ์ของเบราว์เซอร์</span>
+          </div>
+          <div className="classroom-export-preview-toolbar-actions">
+            <button type="button" className="classroom-export-primary-btn" onClick={() => void printExportDocument()} disabled={!hasData || isLoading}>
+              {isLoading || !hasData ? 'กำลังเตรียมเอกสาร...' : 'พิมพ์'}
+            </button>
+          </div>
+        </div>
+      )}
       {!embedMode && !printMode && !autoPrintMode && (
         <div className="classroom-export-preview-toolbar no-print">
           <label>
@@ -1560,6 +1578,8 @@ ${fontFaces}
         border-bottom: 4px solid #E5EBF2;
         box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
       }
+      .classroom-export-autoprint-copy strong { display: block; color: #0F172A; font-size: 16px; }
+      .classroom-export-autoprint-copy span { display: block; color: #64748B; font-size: 13px; }
       .classroom-export-preview-toolbar label {
         display: inline-flex;
         align-items: center;
@@ -2300,6 +2320,24 @@ ${fontFaces}
         .classroom-export-load-btn {
           background: #F5EDE3 !important;
           box-shadow: inset 0 0 0 1px rgba(139, 107, 69, 0.22);
+        }
+      }
+      @media print {
+        @page { size: A4 landscape; margin: 0; }
+        .no-print, .sidebar, .navbar, .app-topbar, .sidebar-overlay, .classroom-export-autoprint-copy { display: none !important; }
+        .main-content, .content-shell, .page-stack, .classroom-export-page, .classroom-export-workspace,
+        .classroom-export-preview-pane, .classroom-export-preview-card {
+          display: block !important; width: auto !important; max-width: none !important;
+          margin: 0 !important; padding: 0 !important; background: #fff !important;
+          min-height: 0 !important; overflow: visible !important; border: 0 !important; box-shadow: none !important;
+        }
+        .classroom-export-preview-card > div { zoom: 1 !important; }
+        .classroom-export-preview-card [aria-label="ตัวอย่างเอกสารจากพิกัดร่วมกับ PDF"] {
+          background: #fff !important; padding: 0 !important; overflow: visible !important;
+        }
+        .classroom-export-preview-card [aria-label="ตัวอย่างเอกสารจากพิกัดร่วมกับ PDF"] > div {
+          width: 297mm !important; height: 210mm !important; margin: 0 !important; overflow: hidden !important;
+          break-after: page; page-break-after: always;
         }
       }
       .classroom-export-page--print {

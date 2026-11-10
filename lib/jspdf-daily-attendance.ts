@@ -14,6 +14,7 @@ import {
   printPageRowCount,
 } from '@/lib/print-student-pages'
 import { getThaiMonthName } from '@/lib/thaiDate'
+import { drawJsPdfTick, isPdfCheckMark } from '@/lib/jspdf-check-mark'
 import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 
 const PAGE_W = CLASSROOM_ADMIN_A4_LANDSCAPE_MM.width
@@ -631,7 +632,9 @@ export async function buildDailyAttendancePdfBlob(
         }
 
         drawRect(doc, x, rowY, dayW, rowH, fill)
-        if (value) {
+        if (isPdfCheckMark(value)) {
+          drawJsPdfTick(doc, x, rowY, dayW, rowH, fg)
+        } else if (value) {
           drawCenteredText(doc, value, x, rowY, dayW, rowH, {
             fontSize: tablePt,
             bold: true,
