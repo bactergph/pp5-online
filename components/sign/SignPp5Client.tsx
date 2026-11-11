@@ -16,6 +16,7 @@ import {
 import type { ClassDocType } from '@/lib/approvals/types'
 import { CLASS_DOC_TYPE_LABELS } from '@/lib/approvals/types'
 import { classDocTypeToPreviewKind } from '@/lib/sign-document-preview'
+import { isSecondaryClassLevel } from '@/lib/class-level'
 
 type ClassDocRow = Awaited<ReturnType<typeof fetchClassDocQueue>>[number]
 type Pp5Row = Awaited<ReturnType<typeof fetchPp5SubjectQueue>>[number]
@@ -26,6 +27,7 @@ function mapPp5Subject(row: Pp5Row): ApprovalQueueItem & { class_subject_id: str
     title: `${row.subject_code} ${row.subject_name}`,
     subtitle: `ห้อง ${row.classroom_label} · ${row.subject_group}`,
     term: row.term,
+    termLabel: !isSecondaryClassLevel(row.level) && row.term === 1 ? 'ทั้งปีการศึกษา' : undefined,
     status: row.status,
     status_label: row.status_label,
     next_step: row.next_step,

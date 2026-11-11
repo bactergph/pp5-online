@@ -14,6 +14,16 @@ async function run(){
  await setup.fetchScheduleInit();await saved(setup.saveTimetableClassrooms('2569',2,[{level:'ป.1',names:['1','IP']},{level:'ม.1',names:['2PL']}]))
  assert.equal(emptyBundle.terms[1].rooms.length,3);assert.equal(new Set(emptyBundle.terms[2].rooms.map(room=>room.id)).size,3)
  assert.equal((await saved(setup.fetchPreparation('2569',2))).classrooms[1].name,'IP')
+ const primaryRoom=emptyBundle.terms[2].rooms[0].id,secondaryRoom=emptyBundle.terms[2].rooms[2].id
+ const primarySubject={classroomId:primaryRoom,code:'ท11101',name:'ภาษาไทย',teacherId:'',count:2,pattern:[2],venue:'',group:'ภาษาไทย',type:'พื้นฐาน'}
+ const initial=await saved(setup.fetchPreparation('2569',2))
+ await saved(setup.saveScheduleInputSubjects('2569',2,initial.hash,[primarySubject,{...primarySubject,classroomId:secondaryRoom,code:'ท21101'}]))
+ const first=await saved(setup.fetchPreparation('2569',1))
+ assert.equal(first.lessons.filter(lesson=>!lesson.activity).map(lesson=>lesson.code).join(','),'ท11101')
+ await saved(setup.saveScheduleInputSubjects('2569',1,first.hash,[{...primarySubject,count:3,pattern:[2,1]}]))
+ assert.equal(emptyBundle.terms[1].subjects[0].id,emptyBundle.terms[2].subjects[0].id)
+ assert.equal(emptyBundle.terms[1].subjects[0].periods,3)
+ assert.equal(emptyBundle.terms[2].subjects[0].periods,2)
  const copyPlan={...free.normalizePlan({rooms:base.rooms,teachers:[{id:'copy-t1',name:'ครูหนึ่ง'},{id:'copy-t2',name:'ครูสอง'}],subjects:base.rooms.map((room,i)=>({id:'copy-s'+i,roomId:room.id,code:'ท21101',name:'ภาษาไทย',teacherId:'copy-t'+(i+1),periods:1,pattern:[1],placeId:null})),activities:[{id:uuid(900),name:'กิจกรรมร่วม',mode:'joint',roomIds:base.rooms.map(room=>room.id),teacherId:'',teacherIds:[],roomTeachers:{},weeklyPeriods:1,cells:[]}],timetable:[{classroomId:base.rooms[0].id,day:1,period:1,subjectId:'copy-s0'},{classroomId:base.rooms[0].id,day:1,period:2,subjectId:'',activityId:uuid(900)},{classroomId:base.rooms[1].id,day:2,period:3,subjectId:'copy-s1'}]}),substitutes:{}}
  let copyBundle={year:'2569',semester:2,terms:{1:structuredClone(copyPlan),2:structuredClone(copyPlan)}}
  const copyService=createDeviceScheduleServices({read:()=>copyBundle,write:async next=>{copyBundle=next;return true}});await copyService.fetchScheduleInit()

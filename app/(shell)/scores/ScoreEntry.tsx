@@ -46,6 +46,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   const [selectedClass, setSelectedClass] = useState('')
   const [items, setItems] = useState<CS[]>([])
   const [selectedCS, setSelectedCS] = useState('')
+  const [subjectListContext, setSubjectListContext] = useState('')
   const [term, setTerm] = useState<1 | 2>(1)
 
   const [students, setStudents] = useState<Student[]>([])
@@ -71,6 +72,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   const skipClassFetch = useRef(true)
 
   const isSecondary = isSecondaryClassLevel(classrooms.find(room => room.id === selectedClass)?.level)
+  const subjectsReady = subjectListContext === `${selectedClass}:${term}`
   const canConfigureScores = ['admin', 'district', 'academic_head', 'deputy_principal', 'teacher'].includes(userRole)
   const canConfigureCourses = ['admin', 'district', 'academic_head', 'deputy_principal'].includes(userRole)
   const subjectMap = Object.fromEntries(subjects.map(s => [s.id, s]))
@@ -85,6 +87,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
       const csList = (d.classSubjects || []) as CS[]
       setClassrooms(list)
       setItems(csList)
+      setSubjectListContext(`${list[0]?.id || ''}:${d.initialTerm ?? 1}`)
       skipYearFetch.current = true
       skipClassFetch.current = true
       setSelectedYear(d.activeYearId || '')
@@ -134,13 +137,20 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
       if (cancelled) return
       const list = data as CS[]
       setItems(list)
+      setSubjectListContext(`${selectedClass}:${term}`)
       setSelectedCS(current => list.some(item => item.id === current) ? current : (list[0]?.id || ''))
       if (list.length === 0) {
         setStudents([])
         setConfig(null)
         setRows({})
       }
-    }).catch(() => { if (!cancelled) setEntryMessage('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่') })
+    }).catch(() => {
+      if (!cancelled) {
+        setItems([])
+        setSubjectListContext(`${selectedClass}:${term}`)
+        setEntryMessage('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่')
+      }
+    })
     return () => { cancelled = true }
   }, [selectedClass, term])
 
@@ -170,7 +180,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   }
 
   useEffect(() => {
-    if (!selectedClass || !selectedCS || !items.some(item => item.id === selectedCS && item.classroom_id === selectedClass)) return
+    if (!subjectsReady || !selectedClass || !selectedCS || !items.some(item => item.id === selectedCS && item.classroom_id === selectedClass)) return
     let cancelled = false
 
     void Promise.resolve().then(() => {
@@ -221,7 +231,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
     })
 
     return () => { cancelled = true }
-  }, [selectedClass, selectedCS, term, items])
+  }, [selectedClass, selectedCS, term, items, subjectsReady])
 
   const scoreConfigHref = useMemo(() => {
     const base = withSchoolPrefix(schoolCodeFromPathname(pathname), '/score-config')
@@ -446,7 +456,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
         </div>
       )}
     <div className="page-stack score-entry-page">
-      {isSecondary && <p className="alert alert-info">มัธยมศึกษา · ตัดผลการเรียนแยกภาคเรียน คะแนนและเกรดไม่รวมข้ามภาคเรียน</p>}
+      {selectedClass && <p className="alert alert-info">{isSecondary ? 'มัธยมศึกษา · ตัดผลการเรียนแยกภาคเรียน' : 'ประถมศึกษา · ใช้รายวิชาทั้งปี กรอกคะแนนตามภาคเรียนและสรุปผลทั้งปี'}</p>}
 
       {entryMessage && !loadingGrid && (
         <div className="control-card" role="status" style={{ color: '#92400E', background: '#FFFBEB' }}>
@@ -490,7 +500,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
             </div>
             <div className="score-entry-field">
               <label htmlFor="score-subject">รายวิชา</label>
-              <select id="score-subject" value={selectedCS} onChange={e => { const value = e.target.value; void changeSelection(() => setSelectedCS(value)) }} disabled={saving || transferBusy || items.length === 0}>
+              <select id="score-subject" value={selectedCS} onChange={e => { const value = e.target.value; void changeSelection(() => setSelectedCS(value)) }} disabled={saving || transferBusy || !subjectsReady || items.length === 0}>
                 {items.length === 0 ? <option>— ไม่มีวิชา —</option> : items.map(it => {
                   const s = subjectMap[it.subject_id]
                   return <option key={it.id} value={it.id}>[{s?.code}] {subjectWithUnits(s?.name || '', readContentUnits(it.content_units))}</option>
@@ -505,6 +515,8 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
                 ? 'ยังไม่มีห้องที่คุณได้รับมอบหมายสอนในปีนี้ — ตรวจสอบที่เมนู "จัดครูเข้าสอน"'
                 : 'ยังไม่มีชั้นเรียนในปีนี้ — ไปเพิ่มที่เมนู "ชั้นเรียน" ก่อน'}
             </div>
+          ) : selectedClass && !subjectsReady ? (
+            <p role="status">กำลังโหลดรายวิชา…</p>
           ) : items.length === 0 ? (
             <div className="alert alert-error score-config-cta">
               <div className="score-config-cta-text">

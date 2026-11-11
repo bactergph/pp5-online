@@ -3822,6 +3822,7 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
   const [classroomId, setClassroomId] = useState('')
   const [term, setTerm] = useState<0 | 1 | 2>(1)
   const [pp6Term, setPp6Term] = useState<0 | 1 | 2>(1)
+  const [showHistoricalSubjects, setShowHistoricalSubjects] = useState(false)
   const [classSubjectId, setClassSubjectId] = useState('')
   const [subjectOptions, setSubjectOptions] = useState<ReportSubject[]>([])
   const [sections, setSections] = useState<PrintSection[]>(DEFAULT_SECTIONS[mode])
@@ -3875,6 +3876,7 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
       } else if (mode === 'pp6') {
         setLevel(firstLevel)
         setClassroomId('')
+        setPp6Term(isSecondaryClassLevel(firstLevel) ? 1 : 0)
       } else {
         setLevel(firstLevel)
         setClassroomId(firstClassroom?.id || '')
@@ -3990,7 +3992,7 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
     setLoading(true)
     setError('')
     try {
-      const result = await fetchReportSubjects({ academicYearId: yearId, classroomId, mode, term: reportTerm })
+      const result = await fetchReportSubjects({ academicYearId: yearId, classroomId, mode, term: reportTerm, includeHistorical: showHistoricalSubjects })
       if (activeRef && !activeRef.active) return
       setSubjectOptions(result)
       setClassSubjectId(current => result.some(subject => subject.class_subject_id === current) ? current : '')
@@ -4000,7 +4002,7 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
     } finally {
       if (!activeRef || activeRef.active) setLoading(false)
     }
-  }, [yearId, classroomId, mode, reportTerm])
+  }, [yearId, classroomId, mode, reportTerm, showHistoricalSubjects])
 
   const loadSubjectPreview = useCallback(async (activeRef?: { active: boolean }) => {
     if (!yearId || !classroomId || !classSubjectId) return
@@ -4281,6 +4283,7 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
     const nextClassroom = nextClassrooms.find(item => item.level === nextLevel)
     setLevel(nextLevel)
     setClassroomId(mode === 'pp5-class' || mode === 'pp6' ? '' : nextClassroom?.id || '')
+    if (mode === 'pp6') setPp6Term(isSecondaryClassLevel(nextLevel) ? 1 : 0)
     resetData()
   }
 
@@ -4291,6 +4294,7 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
     if (mode === 'pp5-subject') {
       setTerm(isSecondaryClassLevel(nextLevel) ? (term === 0 ? 1 : term) : 0)
     }
+    if (mode === 'pp6') setPp6Term(isSecondaryClassLevel(nextLevel) ? 1 : 0)
     resetData()
   }
 
@@ -4456,9 +4460,10 @@ export default function ReportBuilder({ mode, educationBand }: { mode: ReportMod
                 <select value={classSubjectId} onChange={event => { setData(null); setClassSubjectId(event.target.value) }} className="form-input" disabled={!classroomId || loading || subjectOptions.length === 0}>
                   <option value="">{classroomId ? (subjectOptions.length === 0 ? '— ไม่มีวิชาที่ปรับได้ —' : '— เลือกรายวิชา —') : '— เลือกห้องก่อน —'}</option>
                   {subjectOptions.map(subject => (
-                    <option key={subject.class_subject_id} value={subject.class_subject_id}>[{subject.subject.code}] {subject.subject.name}</option>
+                    <option key={subject.class_subject_id} value={subject.class_subject_id}>[{subject.subject.code}] {subject.subject.name}{showHistoricalSubjects && (subject.semester ?? 0) !== reportTerm ? ` · รายการเดิม (${subject.semester ? `เทอม ${subject.semester}` : 'ทั้งปี'})` : ''}</option>
                   ))}
                 </select>
+                <label><input type="checkbox" checked={showHistoricalSubjects} onChange={event => setShowHistoricalSubjects(event.target.checked)} /> แสดงรายวิชาเดิม</label>
               </div>
             )}
             {mode === 'pp6' && (

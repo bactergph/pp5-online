@@ -9,6 +9,7 @@ import { normalizeSecondaryScore, type AcademicBand } from '@/lib/secondary-acad
 import { getScoreEntryPeriod } from '@/lib/score-entry-period'
 import {limitsToOwnSubjects} from '@/lib/personal-data-scope'
 import {scoreTermVisible,teacherOwnsOffering} from '@/lib/class-subject-offer'
+import {selectClassSubjectOfferings} from '@/lib/class-subject-term'
 
 async function requireSession() {
   const session = await getSession()
@@ -53,7 +54,7 @@ async function loadScoreSubjects(
   classroomId: string,
   term: 1 | 2 = 1,
 ) {
-  const { data: room, error: roomError } = await db.from('classrooms').select('id')
+  const { data: room, error: roomError } = await db.from('classrooms').select('id,level')
     .eq('id', classroomId).eq('school_id', session.schoolId || '').maybeSingle()
   if (roomError) throw new Error('โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่')
   if (!room) throw new Error('ไม่มีสิทธิ์ดูห้องเรียนนี้')
@@ -77,7 +78,8 @@ async function loadScoreSubjects(
     return ((plain.data || []) as OfferingRow[]).filter(row => !own || teacherOwnsOffering(row, session.userId))
   }
   if (error) throw new Error('โหลดรายวิชาไม่สำเร็จ กรุณาลองใหม่')
-  return rows.filter(row => scoreTermVisible(row.semester, row.score_terms, term) && (!own || teacherOwnsOffering(row, session.userId)))
+  return selectClassSubjectOfferings(rows, room.level, term)
+    .filter(row => scoreTermVisible(row.semester, row.score_terms, term) && (!own || teacherOwnsOffering(row, session.userId)))
 }
 
 /** ปี + วิชา + ห้องของปีที่ active + วิชาในห้องแรก — ลด waterfall ตอนเปิดหน้า */

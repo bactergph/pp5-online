@@ -19,7 +19,7 @@ function from(table){const filters=[];let operation='read',payload,start=0,end=9
   }
   writes++;const added=batch.map(row=>({...row,id:'new-'+(++next)}));state[table].push(...added);return{data:added,error:null}
 };const q={select:()=>q,eq:(key,value)=>{filters.push(row=>row[key]===value);return q},in:(key,values)=>{filters.push(row=>values.includes(row[key]));return q},order:()=>q,range:(a,b)=>{start=a;end=b;return q},insert:rows=>{operation='insert';payload=rows;return q},update:value=>{operation='update';payload=value;return q},upsert:value=>{operation='upsert';payload=value;return q},then:(yes,no)=>Promise.resolve().then(execute).then(yes,no)};return q}
-const api=compile('lib/schedule-input-server.ts',{'./session':{getSession:async()=>actor},'./supabase':{createServerClient:()=>({from})},'./schedules':{SCHEDULE_EDIT_ROLES:['admin']},'./schedule-preparation':{preparation},'./schedule-input':input})
+const api=compile('lib/schedule-input-server.ts',{'./session':{getSession:async()=>actor},'./supabase':{createServerClient:()=>({from})},'./schedules':{SCHEDULE_EDIT_ROLES:['admin']},'./schedule-preparation':{preparation},'./schedule-input':input,'./class-level':compile('lib/class-level.ts')})
 const row={classroomId:'room',code:'ท11101',name:'ภาษาไทย',teacherId:'teacher',count:4,pattern:[1,1,1,1],venue:'',group:'ภาษาไทย',type:'พื้นฐาน'}
 ;(async()=>{
   const secondBefore=JSON.stringify(plan(2))
@@ -46,6 +46,10 @@ const row={classroomId:'room',code:'ท11101',name:'ภาษาไทย',teach
   // Duplicate legacy annual + semester offering prefers the exact semester.
   state.class_subjects.push({id:'legacy',classroom_id:'room',subject_id:'subject',teacher_id:'teacher',academic_year_id:'year',semester:0})
   await api.importScheduleSubjects('year',1,'hash',[{...row,count:6,pattern:[1,1,1,1,1,1]}]);assert.equal(plan(1).rules[term1].count,6);assert.equal(plan(1).rules.legacy,undefined)
+  state.class_subjects=state.class_subjects.filter(item=>item.id!==term2)
+  await api.importScheduleSubjects('year',2,'hash',[{...row,teacherId:'teacher2'}])
+  assert.equal(state.class_subjects.find(item=>item.semester===2).teacher_id,'teacher2')
+  assert.equal(state.class_subjects.find(item=>item.id==='legacy').teacher_id,'teacher','New secondary term never changes legacy ownership')
   actor={...actor,role:'teacher'};await assert.rejects(()=>api.importScheduleSubjects('year',1,'hash',[row]),/สิทธิ์/)
   console.log('PASS: primary annual code reused across both semesters; independent workloads and other-term data; retry and read-failure guards; secondary term isolation and exact-term preference')
 })().catch(error=>{console.error(error);process.exitCode=1})

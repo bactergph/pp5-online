@@ -5,8 +5,8 @@ const tables = {
   class_subjects: [], class_schedule_activities: [{id:'combined',classroom_id:'room0',evaluation_setting_id:'guide',teacher_id:null,weekly_periods:0,evaluation_settings:{label:'กิจกรรมแนะแนว',short_label:'แนะแนว',is_active:true}}], users: [{id:'teacher',prefix:'ครู',full_name:'ทดสอบ'}],
   class_schedule_slots: Array.from({length:1200},(_,i)=>({classroom_id:`room${Math.floor(i/30)}`,semester:1,academic_year_id:'year',day_of_week:Math.floor(i%30/6)+1,period:i%6+1,class_subject_id:null,activity_id:null,note:'reserved',locked:true})),
 }
-let legacySchema=false, savedRpc, teamConfig,checkParallel=true,subjectsWaiting=false,slotsStartedDuringSubjects=false,releaseSubjects
-const db={from(table){const filters={};const query={select(){return query},eq(k,v){filters[k]=v;return query},in(){return query},order(){return query},then(resolve){resolve({data:tables[table]||[],error:null})},async maybeSingle(){return {data:table==='schedule_plans'?{config:teamConfig}:{id:'year'},error:null}},async range(from,to){
+let legacySchema=false, savedRpc, teamConfig, rulesByTerm,checkParallel=true,subjectsWaiting=false,slotsStartedDuringSubjects=false,releaseSubjects
+const db={from(table){const filters={};const query={select(){return query},eq(k,v){filters[k]=v;return query},in(){return query},order(){return query},then(resolve){resolve({data:tables[table]||[],error:null})},async maybeSingle(){return {data:table==='schedule_plans'?{config:rulesByTerm?.[filters.semester] ?? teamConfig}:{id:'year'},error:null}},async range(from,to){
  if(checkParallel&&table==='class_subjects'){subjectsWaiting=true;let timer;await new Promise(resolve=>{releaseSubjects=resolve;timer=setTimeout(resolve,200)});clearTimeout(timer);subjectsWaiting=false}
  if(checkParallel&&table==='class_schedule_slots'){slotsStartedDuringSubjects ||= subjectsWaiting;releaseSubjects?.()}
  if(legacySchema && table==='class_schedule_slots' && 'semester' in filters) return {data:null,error:{code:'42703',message:'column semester does not exist'}}
@@ -15,7 +15,7 @@ const db={from(table){const filters={};const query={select(){return query},eq(k,
 const jointHelpers={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-joint-teaching.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:jointHelpers});
 const teamHelpers=pure('lib/schedule-activity-teams.ts');
 const exportsObject={}
-vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-store.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-joint-teaching'?jointHelpers:name==='./schedule-activity-teams'?teamHelpers:name==='./schedule-plan-validation'?{validateManualPlan:async()=>{}}:name==='@/lib/supabase'?{createServerClient:()=>db}:name==='@/lib/schedule-helpers'?pure('lib/schedule-helpers.ts'):name==='@/lib/schedule-activity'?{LEARNER_DEVELOPMENT_KEY:'learner-development',LEARNER_DEVELOPMENT_NAME:'กิจกรรมพัฒนาผู้เรียน'}:name.startsWith('./')?pure('lib/'+name.slice(2)+'.ts'):{}})
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-store.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject,require:name=>name==='./schedule-joint-teaching'?jointHelpers:name==='./schedule-activity-teams'?teamHelpers:name==='./schedule-plan-validation'?{validateManualPlan:async()=>{}}:name==='@/lib/supabase'?{createServerClient:()=>db}:name==='@/lib/schedule-activity'?{LEARNER_DEVELOPMENT_KEY:'learner-development',LEARNER_DEVELOPMENT_NAME:'กิจกรรมพัฒนาผู้เรียน'}:name.startsWith('@/lib/')?pure(name.slice(2)+'.ts'):name.startsWith('./')?pure('lib/'+name.slice(2)+'.ts'):{}})
 ;(async()=>{const result=await exportsObject.loadSchedule('school','year');assert.equal(result.slots.length,1200);assert.equal(result.classrooms.length,40);assert.equal(result.lessons.length,1);assert.equal(result.lessons[0].name,'กิจกรรมแนะแนว');assert.equal(result.lessons[0].subjectId,'guide');assert.equal(result.lessons[0].teacherId,null);assert.equal(result.lessons[0].teacherOptional,true);assert.equal(result.lessons[0].selectable,true);assert.equal(result.lessons[0].count,0);tables.class_schedule_slots.push({...tables.class_schedule_slots[0],semester:2,note:'term2'})
  assert.equal(slotsStartedDuringSubjects,true,'Timetable reads must start without waiting for all subject pages');checkParallel=false;
  console.log('PASS: subject/activity/timetable/teacher reads run concurrently after school scope validation');
@@ -24,6 +24,19 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-store.ts','u
  await assert.rejects(exportsObject.loadSchedule('school','year',3),/ภาคเรียน/)
  tables.users.push({id:'second',prefix:'ครู',full_name:'อีกคน'});teamConfig={activityGroups:[{id:'team',settingId:'guide',mode:'joint',roomIds:['room0'],teacherIds:['teacher','second'],roomTeachers:{},weeklyPeriods:2,cells:[]}]};const teamSchedule=await exportsObject.loadSchedule('school','year',2);assert.equal(teamSchedule.lessons[0].teacherIds.join(','),'teacher,second');assert.equal(teamSchedule.lessons[0].teacherName,'ครู ทดสอบ, ครู อีกคน');assert.equal(teamSchedule.lessons[0].count,2);assert.equal(teamSchedule.lessons[0].activityGroupId,'team');assert.equal(teamSchedule.lessons[0].selectable,false);
  console.log('PASS: term activity team loads all teachers and names for timetable/PDF, weekly count and shared group identity');
+ tables.classrooms[0].level='ป.2';tables.classrooms[1].level='ม.1'
+ const offering=(id,room,semester)=>({id,classroom_id:room,subject_id:'math',teacher_id:'teacher',semester,subjects:{code:'ค1',name:'คณิตศาสตร์',hours_per_year:40,credits:1}})
+ tables.class_subjects.push(offering('primary','room0',0),offering('legacy','room1',0),offering('secondary1','room1',1),offering('secondary2','room1',2))
+ rulesByTerm={1:{rules:{}},2:{rules:{primary:{count:3}}}}
+ let subjects=(await exportsObject.loadSchedule('school','year',1)).lessons.filter(row=>!row.activity)
+ assert.deepEqual(Array.from(subjects,row=>row.id),['primary','secondary1'],'Annual subjects stay visible without importing again; secondary uses its exact term')
+ assert.equal(subjects.find(row=>row.id==='primary').count,1)
+ subjects=(await exportsObject.loadSchedule('school','year',2)).lessons.filter(row=>!row.activity)
+ assert.deepEqual(Array.from(subjects,row=>row.id),['primary','secondary2'])
+ assert.equal(subjects.find(row=>row.id==='primary').count,3)
+ tables.class_schedule_slots.push({...tables.class_schedule_slots[0],classroom_id:'room1',class_subject_id:'legacy',semester:2})
+ subjects=(await exportsObject.loadSchedule('school','year',2)).lessons.filter(row=>!row.activity)
+ assert.deepEqual(Array.from(subjects,row=>row.id),['primary','legacy'],'An existing timetable continues to display the offering it references')
  legacySchema=true
  assert.equal((await exportsObject.loadSchedule('school','year',1)).semesterSupported,false)
  await assert.rejects(exportsObject.loadSchedule('school','year',2),/057/)

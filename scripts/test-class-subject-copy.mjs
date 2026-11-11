@@ -14,6 +14,18 @@ function load(path, deps = {}) {
 const levels = load('lib/class-level.ts')
 const terms = load('lib/class-subject-term.ts', { '@/lib/class-level': levels })
 const copy = load('lib/class-subject-copy.ts', { '@/lib/class-subject-term': terms })
+const sameCode = [
+  { id: 'annual', subject_id: 'thai', semester: 0 },
+  { id: 'first', subject_id: 'thai', semester: 1 },
+  { id: 'second', subject_id: 'thai', semester: 2 },
+]
+const visible = (level, term, rows = sameCode, keep) => Array.from(terms.selectClassSubjectOfferings(rows, level, term, keep), row => row.id)
+assert.deepEqual(visible('ป.5', 0), ['annual'])
+assert.deepEqual(visible('ป.5', 2), ['annual'])
+assert.deepEqual(visible('ม.1', 1), ['first'])
+assert.deepEqual(visible('ม.1', 2), ['second'])
+assert.deepEqual(visible('ม.1', 2, sameCode.slice(0, 2)), ['annual'])
+assert.deepEqual(visible('ม.1', 1, sameCode, new Set(['annual'])), ['annual', 'first'])
 const id = n => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`
 const school = id(100), year = id(101)
 const input = { sourceClassroomId: id(1), targetClassroomId: id(2), academicYearId: year, term: 2 }

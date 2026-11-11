@@ -2,6 +2,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict')
 function compile(file,imports={}) {const api={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:api,Date,require:name=>imports[name]||{}});return api}
 const guard=compile('lib/school-record-scope.ts')
+const pure=require('./helpers/load-pure-ts.cjs')
 let actor={userId:'owner',schoolId:'a',role:'admin'},failure=null,next=0
 const writes=[],rpcCalls=[]
 const tables={
@@ -23,6 +24,7 @@ function query(table){
  const filters=[];let operation='read',payload,countOnly=false,conflicts
  const execute=()=>{
   const selected=(tables[table]||[]).map(row=>joined(table,row)).filter(row=>filters.every(f=>f(row)))
+  const saved=[]
   if(operation!=='read'){
    if(failure===table)return {data:null,error:{message:'simulated write failure'},count:0}
    writes.push({table,operation,payload:structuredClone(payload)})
@@ -30,10 +32,10 @@ function query(table){
    if(operation==='update')for(const row of tables[table])if(selected.some(item=>item.id===row.id))Object.assign(row,payload)
    if(operation==='insert'||operation==='upsert')for(const row of Array.isArray(payload)?payload:[payload]){
     const existing=conflicts&&tables[table].find(item=>conflicts.every(key=>item[key]===row[key]))
-    if(existing)Object.assign(existing,row);else tables[table].push({id:'created'+(++next),...row})
+    if(existing){Object.assign(existing,row);saved.push(existing)}else{const created={id:'created'+(++next),...row};tables[table].push(created);saved.push(created)}
    }
   }
-  return {data:countOnly?null:operation==='insert'?(Array.isArray(payload)?payload:[payload]).map(row=>({...row,id:row.id||'created'+next})):selected,error:null,count:selected.length}
+  return {data:countOnly?null:operation==='insert'||operation==='upsert'?saved:selected,error:null,count:selected.length}
  }
  const q={select:(_fields,options)=>{countOnly=!!options?.head;return q},eq:(key,value)=>{filters.push(row=>key.split('.').reduce((v,k)=>v?.[k],row)===value);return q},in:(key,values)=>{filters.push(row=>values.includes(row[key]));return q},neq:(key,value)=>{filters.push(row=>row[key]!==value);return q},order:()=>q,limit:()=>q,
  update:value=>{operation='update';payload=value;return q},insert:value=>{operation='insert';payload=value;return q},upsert:(value,options)=>{operation='upsert';payload=value;conflicts=options?.onConflict?.split(',');return q},delete:()=>{operation='delete';return q},
@@ -45,7 +47,8 @@ const imports={
  crypto:require('node:crypto'),'@/lib/session':{getSession:async()=>actor},'@/lib/supabase':{createServerClient:()=>db},'@/lib/school-record-scope':guard,
  '@/lib/audit':{logActivity:async()=>{},resolveClassroomSchoolId:async id=>tables.classrooms.find(r=>r.id===id)?.school_id,resolveClassSubjectContext:async id=>({schoolId:tables.classrooms.find(r=>r.id===tables.class_subjects.find(cs=>cs.id===id)?.classroom_id)?.school_id})},
  '@/lib/personal-data-scope':{limitsToOwnSubjects:async()=>false},'@/lib/students-cache':{invalidateClassroomStudents:()=>{},invalidateClassroomStudentsMany:()=>{}},'@/lib/school-calendar-cache':{invalidateSchoolCalendar:()=>{}},
- '@/lib/school-shell':{getSchoolShell:async()=>({education_type:'primary'})},'@/lib/school-education-type':{schoolLevels:()=>['ป.1','ป.2']},'@/lib/class-subject-term':{classSubjectSemesterForLevel:()=>0},
+ '@/lib/school-shell':{getSchoolShell:async()=>({education_type:'primary'})},'@/lib/school-education-type':{schoolLevels:()=>['ป.1','ป.2']},'@/lib/class-subject-term':pure('lib/class-subject-term.ts'),
+ '@/lib/class-level':pure('lib/class-level.ts'),'@/lib/class-subject-offer':pure('lib/class-subject-offer.ts'),
 }
 const api=compile('app/(shell)/settings/actions.ts',imports),rooms=compile('app/(shell)/classrooms/actions.ts',imports)
 let checks=0
@@ -79,6 +82,17 @@ async function ok(call,label){const result=await call();assert.ok(result&&typeof
  await denied(()=>api.importStudents('rb',[{first_name:'Wrong'}]),'foreign student import');await denied(()=>api.importStudentsWholeSchool('yb',[{first_name:'Wrong'}]),'foreign school import')
  await denied(()=>api.addClassSubjects('ra','ya',['sb']),'foreign course import');await denied(()=>api.addClassSubjects('ra','ya2',['sa2']),'wrong year course import')
  const added=await ok(()=>api.addClassSubjects('ra','ya',['sa2','sa2']),'deduplicated course import');assert.equal(added.added,1)
+ tables.classrooms.push({id:'rm',school_id:'a',academic_year_id:'ya',level:'ม.1',room:1})
+ await denied(()=>api.addClassSubjects('rm','ya',['sa2'],0),'secondary cannot create a new annual offering')
+ for (const term of [1,2]) await ok(()=>api.addClassSubjects('rm','ya',['sa2'],term),`secondary offering term ${term}`)
+ assert.equal((await api.fetchClassSubjects('ra',2)).find(item=>item.subject_id==='sa2').semester,0)
+ const termOne=(await api.fetchClassSubjects('rm',1))[0],termTwo=(await api.fetchClassSubjects('rm',2))[0]
+ assert.notEqual(termOne.id,termTwo.id)
+ tables.hourly_attendance=[{id:'attendance',class_subject_id:termOne.id}]
+ await denied(()=>api.removeClassSubject(termOne.id),'historical attendance blocks removal')
+ await ok(()=>api.removeAllClassSubjects('rm',2),'bulk removal applies to one secondary term')
+ assert.equal((await api.fetchClassSubjects('rm',1))[0].id,termOne.id)
+ assert.equal((await api.fetchClassSubjects('rm',2)).length,0)
  await denied(()=>api.removeClassSubject('csb'),'foreign course delete');await denied(()=>api.removeAllClassSubjects('rb'),'foreign course clear')
  const cfg={class_subject_id:'csa',term:1,unit_count:1,between_scores:[60],midterm_max:20,final_max:20,total_max:100}
  await denied(()=>api.saveScoreConfigs([{...cfg,class_subject_id:'csb'}]),'foreign score config');await denied(()=>api.saveScoreConfigs([{...cfg,term:3}]),'invalid config term');await ok(()=>api.saveScoreConfigs([cfg]),'create local score config');await ok(()=>api.saveScoreConfigs([{...cfg,between_scores:[50],midterm_max:25,final_max:25}]),'edit local score config');assert.equal(tables.score_configs.length,1)

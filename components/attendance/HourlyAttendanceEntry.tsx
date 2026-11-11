@@ -565,7 +565,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
           </select>
         </div>
         <div className="hourly-filter-field hourly-filter-field--subject">
-          <label className="form-label" htmlFor="hourly-subject">รายวิชา · ภาคเรียนที่ {term}</label>
+          <label className="form-label" htmlFor="hourly-subject">รายวิชา · {classroom && !isSecondaryClassLevel(classroom.level) ? 'ทั้งปีการศึกษา' : `ภาคเรียนที่ ${term}`}</label>
           <select id="hourly-subject" value={selectedCS} onChange={e => setSelectedCS(e.target.value)} className="form-input" disabled={attendanceBusy || !subjectsReady || items.length === 0}>
             <option value="">{!subjectsReady ? '— กำลังโหลดรายวิชา —' : items.length === 0 ? `— ไม่มีวิชาในภาคเรียนที่ ${term} —` : '— เลือกรายวิชา —'}</option>
             {items.map(it => {

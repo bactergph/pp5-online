@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { isSecondaryClassLevel } from '@/lib/class-level'
 import {
   fetchClassSubjectInit, fetchScoreClassroomsLite, fetchScoreClassSubjects,
   fetchScoreConfigs, saveScoreConfigs,
@@ -23,6 +24,7 @@ export default function ScoreConfigPage() {
   const [selectedClass, setSelectedClass] = useState('')
   const [term, setTerm] = useState<1 | 2>(1)
   const [items, setItems] = useState<CS[]>([])
+  const [loadedContext, setLoadedContext] = useState('')
   const [cfg, setCfg] = useState<Record<string, Cfg>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -78,12 +80,16 @@ export default function ScoreConfigPage() {
     setLoading(false)
   }
 
-  async function loadConfig() {
-    const list = await fetchScoreClassSubjects(selectedClass) as CS[]
-    setItems(list)
+  const configContext = selectedClass ? `${selectedClass}:${term}` : ''
+  const ready = !!configContext && loadedContext === configContext
+
+  async function loadConfig(isCurrent: () => boolean) {
+    const list = await fetchScoreClassSubjects(selectedClass, term) as CS[]
+    if (!isCurrent()) return
     const existing = await fetchScoreConfigs(list.map(i => i.id), term) as {
       class_subject_id: string; unit_count: number; between_scores: number[]; midterm_max: number; final_max: number
     }[]
+    if (!isCurrent()) return
     const exMap = Object.fromEntries(existing.map(e => [e.class_subject_id, e]))
     const next: Record<string, Cfg> = {}
     for (const it of list) {
@@ -98,12 +104,18 @@ export default function ScoreConfigPage() {
         next[it.id] = { units: Array(7).fill(0), midterm: 0, final: 0 }
       }
     }
+    setItems(list)
     setCfg(next)
+    setLoadedContext(configContext)
   }
 
   useEffect(() => { void Promise.resolve().then(init) }, [])
   useEffect(() => {
-    if (selectedClass) void Promise.resolve().then(loadConfig)
+    let active = true
+    if (selectedClass) void Promise.resolve().then(() => active ? loadConfig(() => active) : undefined).catch(error => {
+      if (active) notify('error', error instanceof Error ? error.message : 'โหลดสัดส่วนคะแนนไม่สำเร็จ')
+    })
+    return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClass, term])
 
@@ -160,6 +172,7 @@ export default function ScoreConfigPage() {
   const rowTotal = (c: Cfg) => (c.units.reduce((a, b) => a + (Number(b) || 0), 0) + (Number(c.midterm) || 0) + (Number(c.final) || 0))
 
   async function handleSave() {
+    if (!ready || saving) return
     setSaving(true)
     setAlertModal(null)
     const rows = items.map(it => {
@@ -223,8 +236,9 @@ export default function ScoreConfigPage() {
               )}
             </div>
             <div className="field-inline">
+              {selectedClass && !isSecondaryClassLevel(classrooms.find(room => room.id === selectedClass)?.level) && <span className="badge badge-gray">รายวิชาทั้งปี · สัดส่วนคะแนนรายภาค</span>}
               {([1, 2] as const).map(t => (
-                <button key={t} onClick={() => setTerm(t)} className={term === t ? 'btn btn-primary' : 'btn btn-secondary'} style={{ fontSize: 13 }}>
+                <button key={t} disabled={saving} onClick={() => setTerm(t)} className={term === t ? 'btn btn-primary' : 'btn btn-secondary'} style={{ fontSize: 13 }}>
                   ภาคเรียนที่ {t}
                 </button>
               ))}
@@ -237,6 +251,8 @@ export default function ScoreConfigPage() {
                 ? 'ยังไม่มีห้องที่คุณได้รับมอบหมายสอนในปีนี้ — ตรวจสอบที่เมนู "จัดครูเข้าสอน"'
                 : 'ยังไม่มีชั้นเรียนในปีนี้ — ไปเพิ่มที่เมนู "ชั้นเรียน" ก่อน'}
             </div>
+          ) : !ready ? (
+            <p role="status">กำลังโหลดรายวิชาและสัดส่วนคะแนน…</p>
           ) : items.length === 0 ? (
             <div className="alert alert-error">
               {userRole === 'teacher'

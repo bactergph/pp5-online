@@ -8,6 +8,8 @@ import { activityTeachers, type ActivityTeam } from './schedule-activity-teams'
 import { createServerClient } from '@/lib/supabase'
 import { weeklyHoursFromYear } from '@/lib/schedule-helpers'
 import { assignScheduledUnits, readContentUnitRows, scheduledLessonId, type ContentUnit } from '@/lib/class-subject-offer'
+import { isSecondaryClassLevel } from './class-level'
+import { selectClassSubjectOfferings } from './class-subject-term'
 
 function weeklyCount(level: string, credits: unknown, hours: unknown) {
   const text = (level || '').trim()
@@ -101,10 +103,26 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
     if (r.error.code === 'PGRST205' || r.error.code === '42703') throw new Error('ระบบตารางเรียนยังไม่พร้อม กรุณาให้ผู้ดูแลรันไฟล์ฐานข้อมูล 057_schedule_semesters.sql ก่อน')
     throw new Error(`โหลดตารางเรียนไม่สำเร็จ: ${r.error.message}`)
   }
-  const levels = new Map(classrooms.map(c => [c.id, c.level]))
+  const levels = new Map(allClassrooms.map(c => [c.id, c.level]))
   const names = new Map((teachers.data || []).map(t => [t.id, `${t.prefix || ''} ${t.full_name}`.trim()]))
   const labels = new Map(classrooms.map(c => [c.id, `${c.level}/${c.room}`]))
-  let lessons: ScheduleLesson[] = (subjects.data || []).filter(row => row.semester == null || Number(row.semester) === 0 || Number(row.semester) === semester).map(row => {
+  const subjectRows = (subjects.data || []).filter(row => row.semester == null || Number(row.semester) === 0 || Number(row.semester) === semester)
+  const exactOfferingIds = new Set(subjectRows.filter(row => Number(row.semester) === semester).map(row => row.id))
+  const placedIds = new Set((slots.data || []).map(row => row.class_subject_id).filter((id): id is string => !!id))
+  const roomSubjects = new Map<string, typeof subjectRows>()
+  const placedSubjects = new Set<string>()
+  for (const row of subjectRows) {
+    const group = roomSubjects.get(row.classroom_id) || []
+    group.push(row)
+    roomSubjects.set(row.classroom_id, group)
+    if (placedIds.has(row.id)) placedSubjects.add(`${row.classroom_id}:${row.subject_id}`)
+  }
+  const visibleOfferingIds = new Set(Array.from(roomSubjects).flatMap(([id, rows]) =>
+    selectClassSubjectOfferings(rows, levels.get(id), semester, placedIds)
+      .filter(row => placedIds.has(row.id) || !placedSubjects.has(`${row.classroom_id}:${row.subject_id}`))
+      .map(row => row.id),
+  ))
+  let lessons: ScheduleLesson[] = subjectRows.map(row => {
     const s = Array.isArray(row.subjects) ? row.subjects[0] : row.subjects
     const units = readContentUnitRows(row.content_units)
     const lesson: ScheduleLesson = { id: row.id, classroomId: row.classroom_id, teacherId: row.teacher_id, count: weeklyCount(levels.get(row.classroom_id) || '', s?.credits, s?.hours_per_year),
@@ -150,7 +168,13 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
   if(bell.error)throw Error(bell.error.message)
   const periodTimes=withTeacherActivityClock((bell.data?.length?bell.data:DEFAULT_PERIOD_TIMES) as PeriodTimeRow[],plan?.teacherActivities)
   const ruleOwned = (rules: Set<string>, id: string) => rules.has(id) || rules.has(id.split('#')[0])
-  const visible = lessons.filter(lesson => lesson.activity || !(ruleOwned(otherRules, lesson.id) && !ruleOwned(thisRules, lesson.id)))
+  const visible = lessons.filter(lesson => {
+    if (lesson.activity) return true
+    const offeringId = lesson.offeringId || lesson.id
+    if (!visibleOfferingIds.has(offeringId)) return false
+    if (placedIds.has(offeringId) || exactOfferingIds.has(offeringId) || !isSecondaryClassLevel(levels.get(lesson.classroomId))) return true
+    return !(ruleOwned(otherRules, lesson.id) && !ruleOwned(thisRules, lesson.id))
+  })
   const storedPlan={days:[1,2,3,4,5],rooms:[],rules:{},reduceGaps:false,maxContinuous:0,...plan} as import('./schedule-planning').SchedulePlan
   const effective=effectiveSchedulePlan(storedPlan,allClassrooms,lessons),activeIds=new Set(classrooms.map(room=>room.id))
   return { allClassrooms,storedPlan,allLessonRooms:lessons.map(lesson=>({id:lesson.id,classroomId:lesson.classroomId})),periodTimes, classrooms, lessons: withJointTeachingGroups(visible.filter(lesson=>activeIds.has(lesson.classroomId)),effective), slots: ((slots.data || []) as ScheduleSlot[]).filter(slot=>activeIds.has(slot.classroom_id)), activityGroups: effective.activityGroups || [], teacherNames: Object.fromEntries(names), semesterSupported: !slots.legacy }

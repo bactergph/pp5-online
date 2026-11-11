@@ -4,7 +4,8 @@ import { relationOne } from '@/lib/postgrest-relation'
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity } from '@/lib/audit'
-import { classSubjectTerms } from '@/lib/class-subject-term'
+import { classSubjectTerms, selectClassSubjectOfferings } from '@/lib/class-subject-term'
+import { isSecondaryClassLevel } from '@/lib/class-level'
 import { SUBJECT_GROUPS } from '@/lib/subject-groups'
 import type { ClassDocType, SchoolLeaders, SubjectGroupHeadMap } from '@/lib/approvals/types'
 import {
@@ -164,7 +165,7 @@ export async function fetchPp5SubjectQueue() {
     academic_year_id: string
     semester?: number | null
     classrooms: { id: string; level: string; room: number }
-    subjects: { code: string; name: string; subject_group: string }
+    subjects: { id: string; code: string; name: string; subject_group: string }
   }> | null
 
   if (!classSubjects?.length) return []
@@ -175,6 +176,18 @@ export async function fetchPp5SubjectQueue() {
     .in('class_subject_id', csIds)
 
   const approvalMap = new Map((approvals || []).map(a => [`${a.class_subject_id}:${a.term}`, a]))
+  const offeringsByRoom = new Map<string, { level: string; offerings: { id: string; subject_id: string; semester?: number | null }[] }>()
+  for (const row of classSubjects) {
+    const room = relationOne(row.classrooms)
+    const subject = relationOne(row.subjects)
+    if (!room || !subject) continue
+    const group = offeringsByRoom.get(room.id) || { level: room.level, offerings: [] }
+    group.offerings.push({ id: row.id, subject_id: subject.id, semester: row.semester })
+    offeringsByRoom.set(room.id, group)
+  }
+  const currentByTerm = ([1, 2] as const).map(term => new Set(
+    [...offeringsByRoom.values()].flatMap(group => selectClassSubjectOfferings(group.offerings, group.level, term).map(row => row.id)),
+  ))
 
   const items: Array<{
     id: string | null
@@ -203,6 +216,8 @@ export async function fetchPp5SubjectQueue() {
     const subject = relationOne(cs.subjects)
     if (!classroom || !subject) continue
     for (const term of classSubjectTerms((cs as { semester?: number | null }).semester)) {
+      const existingApproval = approvalMap.get(`${cs.id}:${term}`)
+      if (!existingApproval && (!currentByTerm[term - 1].has(cs.id) || !isSecondaryClassLevel(classroom.level) && !cs.semester && term === 2)) continue
       const record = (approvalMap.get(`${cs.id}:${term}`) || {
         status: 'draft',
       }) as Pp5SubjectApproval

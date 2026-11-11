@@ -1,4 +1,5 @@
 import { calcGrade, gradeLabel } from '@/lib/grade'
+import { selectClassSubjectOfferings } from '@/lib/class-subject-term'
 import type { ReportPayload, ReportScore, ReportSubject } from '@/lib/report-data-server'
 
 export type AcademicBand = 'primary' | 'secondary'
@@ -6,7 +7,9 @@ export type AcademicTerm = 1 | 2
 
 /** A legacy semester=0 offering still has two independent secondary results. */
 export function secondarySubjects(subjects: ReportSubject[], term: AcademicTerm) {
-  return subjects.filter(subject => !subject.semester || subject.semester === term)
+  return selectClassSubjectOfferings(subjects.map(subject => ({
+    subject, subject_id: subject.subject.id || subject.class_subject_id, semester: subject.semester,
+  })), 'มัธยม', term).map(row => row.subject)
 }
 
 export function secondaryCourseResult(data: ReportPayload, studentId: string, subject: ReportSubject, term: AcademicTerm) {

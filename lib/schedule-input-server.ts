@@ -8,6 +8,7 @@ import { validateSubjectInputs, type SubjectInputRow } from './schedule-input'
 import { prepareSubjectDetails, type SubjectDetailsInput } from './schedule-subject-details'
 import { prepareTeacherDetails, type TeacherDetailsInput } from './schedule-teacher-details'
 import { staffAccessError } from './staff-permissions'
+import { isSecondaryClassLevel } from './class-level'
 
 export async function saveTeacherDetails(year: string, term: number, id: string, input: TeacherDetailsInput) {
   const session = await getSession()
@@ -103,7 +104,7 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
   const db = createServerClient()
   const roomLevel = (classroomId: string) => current.classrooms.find(room => room.id === classroomId)?.level || ''
   type ImportOffering = { id: string; classroomId: string; code: string; name: string; fullName?: string; teacherId?: string | null; semester?: number }
-  const offerings = new Map<string, ImportOffering>(current.lessons.filter(lesson => !lesson.activity).map(lesson => [`${lesson.classroomId}|${lesson.code.trim().toLowerCase()}`, lesson]))
+  const offerings = new Map<string, ImportOffering>()
   let levelColumn = true
   let listed: { id: string; code: string; name: string; level: string | null }[]
   try {
@@ -120,16 +121,16 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
       .eq('academic_year_id', year).in('classroom_id', [...new Set(rows.map(row => row.classroomId))])
       .in('semester', [0, term]).order('id').range(from, to), 'โหลดรายวิชาของห้องเดิมไม่สำเร็จ')
   const subjectById = new Map(catalog.map(subject => [subject.id, subject]))
-  const preferred = new Set<string>()
-  const targetSemester = (room: string) => /^(ม\.|มัธยม)/.test(roomLevel(room)) ? term : 0
-  stored.sort((a, b) => Number(b.semester === targetSemester(b.classroom_id)) - Number(a.semester === targetSemester(a.classroom_id)))
+  const targetSemester = (room: string) => isSecondaryClassLevel(roomLevel(room)) ? term : 0
+  const placedIds = new Set((current.slots || []).map(slot => slot.class_subject_id))
+  stored.sort((a, b) => Number(placedIds.has(b.id)) - Number(placedIds.has(a.id)) ||
+    Number(b.semester === targetSemester(b.classroom_id)) - Number(a.semester === targetSemester(a.classroom_id)))
   for (const item of stored) {
-    if (item.semester !== 0 && item.semester !== targetSemester(item.classroom_id)) continue
+    if (item.semester !== targetSemester(item.classroom_id) && !placedIds.has(item.id)) continue
     const subject = subjectById.get(item.subject_id)
     if (!subject) continue
     const key = `${item.classroom_id}|${subject.code.toLowerCase()}`
-    if (preferred.has(key)) continue
-    preferred.add(key)
+    if (offerings.has(key)) continue
     offerings.set(key, { id: item.id, classroomId: item.classroom_id, code: subject.code, name: subject.name, fullName: subject.name, teacherId: item.teacher_id, semester: item.semester })
   }
   const findSubject = (code: string, level: string) => {
@@ -182,7 +183,7 @@ export async function importScheduleSubjects(year: string, term: number, hash: s
     const key = `${row.classroomId}|${code.toLowerCase()}`
     const offering = offerings.get(key)
     const level = current.classrooms.find(room => room.id === row.classroomId)?.level || ''
-    const semester = /^(ม\.|มัธยม)/.test(level) ? term : 0
+    const semester = targetSemester(row.classroomId)
     const offeringId = offering?.id || ''
     if (!offering) {
       const subject = findSubject(code, level)
@@ -237,6 +238,12 @@ export async function removeScheduleSubjects(year: string, term: number, hash: s
   const slots = await db.from('class_schedule_slots').select('id', { count: 'exact', head: true }).in('class_subject_id', lessonIds)
   if (slots.error) throw Error('ตรวจคาบในตารางก่อนลบรายวิชาไม่สำเร็จ')
   if ((slots.count ?? 0) > 0) throw Error('มีคาบในตารางแล้ว นำคาบออกก่อนลบรายวิชา')
+  const [attendance, approvals] = await Promise.all([
+    db.from('hourly_attendance').select('id', { count: 'exact', head: true }).in('class_subject_id', lessonIds),
+    db.from('approval_signatures').select('id', { count: 'exact', head: true }).in('class_subject_id', lessonIds),
+  ])
+  if (attendance.error || approvals.error) throw Error('ตรวจประวัติรายวิชาก่อนลบไม่สำเร็จ')
+  if ((attendance.count ?? 0) || (approvals.count ?? 0)) throw Error('ลบไม่ได้ เพราะมีข้อมูลเวลาเรียนหรือเอกสารลงนามของรายวิชา')
   const rules = { ...current.plan.rules }
   for (const id of lessonIds) delete rules[id]
   const plan = await db.from('schedule_plans').update({ config: { ...current.plan, rules } }).eq('school_id', session.schoolId).eq('academic_year_id', year).eq('semester', term)

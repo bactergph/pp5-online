@@ -1,5 +1,6 @@
 import 'server-only'
 import { isSecondaryClassLevel } from '@/lib/class-level'
+import { selectClassSubjectOfferings } from '@/lib/class-subject-term'
 import { secondaryResultFromInput, secondaryActivityRows, type AcademicBand } from '@/lib/secondary-academic'
 
 import { createServerClient } from '@/lib/supabase'
@@ -636,8 +637,17 @@ const REPORT_SUBJECT_SELECT = 'id, semester, order_number, subject_id, teacher_i
 
 async function loadReportClassSubjects(
   db: ReturnType<typeof createServerClient>,
-  params: { classroomId: string; academicYearId: string; term?: 0 | 1 | 2; teacherId?: string; classSubjectId?: string },
+  params: { classroomId: string; academicYearId: string; level: string; term?: 0 | 1 | 2; teacherId?: string; classSubjectId?: string; includeHistorical?: boolean },
 ) {
+  const filterRows = (rows: DbRow[]) => {
+    const candidates = rows.map(row => ({ row, id: asText(row.id), subject_id: asText(row.subject_id), semester: Number(row.semester) }))
+    const retained = candidates.filter(candidate => params.includeHistorical || candidate.id === params.classSubjectId).map(candidate => candidate.id)
+    return selectClassSubjectOfferings(candidates, params.level, params.term ?? 0, new Set(retained))
+      .map(({ row }) => row)
+      .filter(row => !params.classSubjectId || asText(row.id) === params.classSubjectId)
+      .filter(row => !params.teacherId || teacherOwnsOffering({ teacher_id: asNullableText(row.teacher_id), co_teacher_ids: Array.isArray(row.co_teacher_ids) ? row.co_teacher_ids as string[] : [] }, params.teacherId))
+      .filter(row => params.term !== 1 && params.term !== 2 || scoreTermVisible(Number(row.semester), row.score_terms, params.term))
+  }
   const build = (withSemester: boolean) => {
     let query = db.from('class_subjects')
       .select(withSemester ? REPORT_SUBJECT_SELECT : REPORT_SUBJECT_SELECT.replace('semester, ', ''))
@@ -657,18 +667,15 @@ async function loadReportClassSubjects(
     if (params.classSubjectId) query = query.eq('id', params.classSubjectId)
     const legacy = await query
     if (legacy.error) throw new Error(legacy.error.message)
-    return (legacy.data || []) as unknown as DbRow[]
+    return filterRows((legacy.data || []) as unknown as DbRow[])
   }
   if (result.error && /semester/.test(result.error.message)) {
     const legacy = await build(false)
     if (legacy.error) throw new Error(legacy.error.message)
-    return (legacy.data || []) as unknown as DbRow[]
+    return filterRows((legacy.data || []) as unknown as DbRow[])
   }
   if (result.error) throw new Error(result.error.message)
-  return ((result.data || []) as unknown as DbRow[]).filter(row => {
-    if (params.teacherId && !teacherOwnsOffering({ teacher_id: asNullableText(row.teacher_id), co_teacher_ids: Array.isArray(row.co_teacher_ids) ? row.co_teacher_ids as string[] : [] }, params.teacherId)) return false
-    return params.term !== 1 && params.term !== 2 || scoreTermVisible(row.semester === 1 || row.semester === 2 ? row.semester : 0, row.score_terms, params.term)
-  })
+  return filterRows((result.data || []) as unknown as DbRow[])
 }
 
 export async function fetchReportSubjects(params: {
@@ -676,15 +683,19 @@ export async function fetchReportSubjects(params: {
   classroomId: string
   mode?: ReportMode
   term?: 0 | 1 | 2
+  includeHistorical?: boolean
 }) {
   const session = await requireReportSession()
   const db = createServerClient()
-  await requireReportClassroom(db, session, params.classroomId, params.mode)
+  const classroom = await requireReportClassroom(db, session, params.classroomId, params.mode)
+  if (classroom.academic_year_id !== params.academicYearId) throw new Error('ปีการศึกษาไม่ตรงกับห้องเรียน')
 
   const rows = await loadReportClassSubjects(db, {
     classroomId: params.classroomId,
     academicYearId: params.academicYearId,
+    level: classroom.level,
     term: params.term,
+    includeHistorical: params.includeHistorical,
     teacherId: await limitsToOwnSubjects(session) && (params.mode||'pp5-subject') === 'pp5-subject' ? session.userId : undefined,
   })
 
@@ -707,17 +718,19 @@ export async function loadReportDataForAccess(
   const db = createServerClient()
   const ownSubjects=await limitsToOwnSubjects(access)&&(params.mode||'pp5-subject')==='pp5-subject'
 
-  const classSubjectRowsPromise = loadReportClassSubjects(db, {
+  const classroomPromise = requireReportClassroom(db, access, params.classroomId, params.mode)
+  const classSubjectRowsPromise = classroomPromise.then(classroom => loadReportClassSubjects(db, {
     classroomId: params.classroomId,
     academicYearId: params.academicYearId,
+    level: classroom.level,
     term: params.term,
     teacherId: ownSubjects ? access.userId : undefined,
-    classSubjectId: ownSubjects ? params.classSubjectId : undefined,
-  })
+    classSubjectId: params.mode === 'pp5-subject' || !params.mode ? params.classSubjectId : undefined,
+  }))
 
   const [school, classroomBase, yearRow, students, classSubjectRows] = await Promise.all([
     loadReportSchool(db, schoolId),
-    requireReportClassroom(db, access, params.classroomId, params.mode),
+    classroomPromise,
     db.from('academic_years')
       .select('id, year_be, is_active, term1_start_date, term1_end_date, term2_start_date, term2_end_date')
       .eq('id', params.academicYearId)

@@ -29,7 +29,6 @@ import {
   copyClassSubjects,
   removeClassSubject,
   removeAllClassSubjects,
-  reorderClassSubjects,
 } from '@/app/(shell)/settings/actions'
 import LoadingButton from '@/components/LoadingButton'
 import { useAppAlert } from '@/lib/use-app-alert'
@@ -68,7 +67,7 @@ type Club = {
 type ClubYear = { id: string; year_be: number; is_active: boolean }
 type ClubClassroom = { id: string; level: string; room: number; academic_year_id: string }
 type ClubStudent = { id: string; student_number: number; prefix: string | null; first_name: string; last_name: string; status: string }
-type ClassSubjectItem = { id: string; subject_id: string; teacher_id: string | null; order_number: number }
+type ClassSubjectItem = { id: string; subject_id: string; teacher_id: string | null; order_number: number; semester?: number }
 
 // กลุ่มมาตรฐานใช้จัดลำดับก่อน ส่วนชื่อกลุ่มจริงโหลดจากการตั้งค่าของโรงเรียน
 const SUBJECT_GROUPS = [
@@ -239,7 +238,7 @@ const emptyClub = {
 
 type ParsedRow = {
   code: string; name: string; short_name: string | null; subject_group: string
-  type: string; hours_per_year: number; credits: number; max_score: number
+  type: string; hours_per_year: number; credits: number; max_score: number; level?: string
 }
 
 function gridToRows(grid: GridRow[], secondary = false): ParsedRow[] {
@@ -252,7 +251,7 @@ function gridToRows(grid: GridRow[], secondary = false): ParsedRow[] {
     const value = Number(row.hours.trim()) || 0
     const hours = secondary ? value * 80 : value
     const r: ParsedRow = {
-      code, name, short_name: null,
+      code, name, short_name: null, level: gradeLabelFromCode(code) === '—' ? undefined : gradeLabelFromCode(code),
       subject_group: deriveGroup(code),
       type: row.type.includes('เพิ่ม') ? 'เพิ่มเติม' : 'พื้นฐาน',
       hours_per_year: hours,
@@ -314,7 +313,9 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   const [editingGroupName, setEditingGroupName] = useState<string | null>(null)
   const [groupSaving, setGroupSaving] = useState(false)
   const [educationType, setEducationType] = useState<SchoolEducationType>('primary')
-  const secondary = educationType === 'secondary'
+  const [catalogBand, setCatalogBand] = useState<SchoolEducationType | null>(null)
+  const classSubjectRequest = useRef(0)
+  const secondary = (catalogBand ?? educationType) === 'secondary'
   const schoolGroupNames = schoolSubjectGroups.map(group => group.name)
   const subjectGroupNames = [
     ...SUBJECT_GROUPS.filter(name => schoolGroupNames.includes(name)),
@@ -386,13 +387,20 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   const filteredClubClassrooms = clubClassrooms.filter(classroom => !clubYearId || classroom.academic_year_id === clubYearId)
   const activeClubs = clubs.filter(club => club.is_active)
   const classSubjectMap = Object.fromEntries(subjects.map(subject => [subject.id, subject]))
-  const assignedSubjectIds = new Set(classSubjectItems.map(item => item.subject_id))
   const selectedClassSubjectClassroom = classSubjectClassrooms.find(classroom => classroom.id === classSubjectClassroomId)
-  const classSubjectSemester: 0 | 1 | 2 = selectedClassSubjectClassroom && isSecondaryClassLevel(selectedClassSubjectClassroom.level) ? classSubjectTerm : 0
-  const availableClassSubjects = sortSubjectsByCurriculum(subjects.filter(subject => !assignedSubjectIds.has(subject.id)))
+  const secondaryRoom = isSecondaryClassLevel(selectedClassSubjectClassroom?.level)
+  const classSubjectSemester: 0 | 1 | 2 = secondaryRoom ? classSubjectTerm : 0
+  const assignedSubjectIds = new Set(classSubjectItems.filter(item => (item.semester ?? 0) === classSubjectSemester).map(item => item.subject_id))
+  const availableClassSubjects = sortSubjectsByCurriculum(subjects.filter(subject => {
+    if (assignedSubjectIds.has(subject.id)) return false
+    const levels = subjectGradeLabels(subject, secondaryRoom)
+    if (levels.length && !levels.some(level => isSecondaryClassLevel(level) === secondaryRoom)) return false
+    const terms = subjectTermList(subject)
+    return !secondaryRoom || !terms.length || terms.includes(classSubjectTerm)
+  }))
   const autoClassSubjects = selectedClassSubjectClassroom
     ? availableClassSubjects.filter(subject => {
-      if (!subjectGradeLabels(subject, secondary).includes(selectedClassSubjectClassroom.level)) return false
+      if (!subjectGradeLabels(subject, secondaryRoom).includes(selectedClassSubjectClassroom.level)) return false
       if (!isSecondaryClassLevel(selectedClassSubjectClassroom.level)) return true
       const terms = subjectTermList(subject)
       return !terms.length || terms.includes(classSubjectTerm)
@@ -604,15 +612,20 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   }
 
   async function loadClassSubjectItems(classroomId: string, semester = classSubjectSemester) {
+    const request = ++classSubjectRequest.current
     setLoadingClassSubjects(true)
     setSelectedSubjectId('')
-    let items = await fetchClassSubjects(classroomId, semester) as ClassSubjectItem[]
-    if (items.length > 0) {
-      const { error } = await reorderClassSubjects(classroomId, semester)
-      if (!error) items = await fetchClassSubjects(classroomId, semester) as ClassSubjectItem[]
+    try {
+      const items = await fetchClassSubjects(classroomId, semester) as ClassSubjectItem[]
+      if (request === classSubjectRequest.current) setClassSubjectItems(items)
+    } catch (error) {
+      if (request === classSubjectRequest.current) {
+        setClassSubjectItems([])
+        notify('error', error instanceof Error ? error.message : 'โหลดรายวิชาไม่สำเร็จ')
+      }
+    } finally {
+      if (request === classSubjectRequest.current) setLoadingClassSubjects(false)
     }
-    setClassSubjectItems(items)
-    setLoadingClassSubjects(false)
   }
 
   async function handleAddClassSubject(subjectIds: string[], successText: (added: number) => string) {
@@ -692,7 +705,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
 
   async function handleRemoveAllClassSubjects() {
     if (!classSubjectClassroomId || classSubjectItems.length === 0) return
-    if (!confirm(`ลบรายวิชาของ${classSubjectSemester ? `ภาคเรียนที่ ${classSubjectSemester}` : 'ทั้งปี'} ${classSubjectItems.length} วิชาออกจากห้องนี้?`)) return
+    if (!assignedSubjectIds.size || !confirm(`ลบรายวิชาของ${classSubjectSemester ? `ภาคเรียนที่ ${classSubjectSemester}` : 'ทั้งปี'} ${assignedSubjectIds.size} วิชาออกจากห้องนี้?`)) return
     setClassSubjectSaving(true); setClassSubjectAction('remove-all'); clearAlert()
     try {
       const { error, deleted } = await removeAllClassSubjects(classSubjectClassroomId, classSubjectSemester)
@@ -709,15 +722,22 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    setSaving(true); clearAlert()
     const fd = new FormData(e.currentTarget)
+    const code = (fd.get('code') as string).trim()
+    const inferredLevel = gradeLabelFromCode(code)
+    const level = formLevel || (inferredLevel === '—' ? '' : inferredLevel)
+    if (level && isSecondaryClassLevel(level) !== secondary || !level && catalogBand && catalogBand !== educationType) {
+      notify('error', 'เลือกชั้นให้ตรงกับระดับของรายวิชาก่อนบันทึก')
+      return
+    }
+    setSaving(true); clearAlert()
     const payload = {
-      code: (fd.get('code') as string).trim(),
+      code,
       name: (fd.get('name') as string).trim(),
       short_name: (fd.get('short_name') as string).trim() || null,
       subject_group: fd.get('subject_group') as string,
-      level: formLevel,
-      ...(secondary ? { semester: formSemester } : {}),
+      level,
+      semester: secondary ? formSemester : 0,
       type: fd.get('type') as string,
       hours_per_year: Number(fd.get('hours_per_year') || 0),
       credits: Number(fd.get('credits') || 0),
@@ -785,8 +805,12 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   function clearGrid() { setGrid(Array.from({ length: 12 }, blankRow)) }
 
   async function handleBulkSave() {
+    if (validRows.some(row => row.level ? isSecondaryClassLevel(row.level) !== secondary : catalogBand && catalogBand !== educationType)) {
+      notify('error', 'พบรหัสวิชาที่ไม่ตรงกับระดับที่เลือก กรุณานำเข้าประถมและมัธยมทีละชุด')
+      return
+    }
     setPasteSaving(true); clearAlert()
-    const { error, count } = await bulkUpsertSubjects(validRows.map(row => ({ ...row, ...(secondary ? { semester: pasteSemester } : {}) })))
+    const { error, count } = await bulkUpsertSubjects(validRows.map(row => ({ ...row, semester: secondary ? pasteSemester : 0 })))
     setPasteSaving(false)
     if (error) { notify('error', error); return }
     notify('success', `เพิ่ม/อัปเดต ${count} วิชาเรียบร้อย`)
@@ -808,9 +832,9 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
   }
 
   async function handleSyncGlobal() {
-    if (!confirm('ใช้โครงสร้างรายวิชากลางเข้าโรงเรียนนี้?\nวิชาที่มีรหัสซ้ำจะถูกอัปเดต')) return
+    if (!confirm(`ใช้โครงสร้างรายวิชากลางระดับ${secondary ? 'มัธยม' : 'ประถม'}เข้าโรงเรียนนี้?\nวิชาที่มีรหัสและชั้นตรงกันจะถูกอัปเดต`)) return
     setSyncBusy(true); clearAlert()
-    const { error, count } = await syncSubjectsFromGlobal()
+    const { error, count } = await syncSubjectsFromGlobal(secondary ? 'secondary' : 'primary')
     setSyncBusy(false)
     if (error) { notify('error', error); return }
     notify('success', `ใช้จากข้อมูลกลางแล้ว ${count} รายวิชา`)
@@ -932,10 +956,14 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
     await loadEvaluationSettings(evaluationKind)
   }
 
-  const termPool = subjects.filter(subject => {
+  const catalogSubjects = subjects.filter(subject => {
+    const levels = subjectGradeLabels(subject, true)
+    return levels.length ? levels.some(level => isSecondaryClassLevel(level) === secondary) : educationType === (secondary ? 'secondary' : 'primary')
+  })
+  const termPool = catalogSubjects.filter(subject => {
     if (!secondary || filterTerm === 0) return true
     const terms = subjectTermList(subject)
-    if (!terms.length) return soleSchoolTerm(subjects) === filterTerm
+    if (!terms.length) return true
     return terms.includes(filterTerm)
   })
   const gradeOptions = GRADE_ORDER.filter(level => termPool.some(subject => subjectGradeLabels(subject, secondary).includes(level)))
@@ -1250,6 +1278,14 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
         <>
           <div className="filter-bar control-card" style={{ marginBottom: 12 }}>
             <div className="subject-view-tools">
+              <div className="subject-chip-row" role="group" aria-label="ระดับรายวิชา">
+                <span>ระดับรายวิชา</span>
+                {(['primary', 'secondary'] as const).map(band => (
+                  <button key={band} type="button" className={`subject-chip ${(catalogBand ?? educationType) === band ? 'is-active' : ''}`} aria-pressed={(catalogBand ?? educationType) === band} onClick={() => { termChosen.current = true; setCatalogBand(band); setFilterTerm(0); setFilterGrade('') }}>
+                    {band === 'primary' ? 'ประถม · ทั้งปี' : 'มัธยม · รายเทอม'}
+                  </button>
+                ))}
+              </div>
               {secondary && (
                 <div className="subject-chip-row" role="tablist" aria-label="ภาคเรียน">
                   <span>ภาคเรียน</span>
@@ -1297,7 +1333,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 <div className="section-title" style={{ marginBottom: 6 }}>ข้อมูลรายวิชา</div>
                 {secondary && <p className="mb-2 text-sm text-slate-600">1 คาบ/สัปดาห์ = 0.5 หน่วยกิต · 2 คาบ = 1 · 3 คาบ = 1.5 · 4 คาบ = 2</p>}
                 <p style={{ margin: 0, color: 'var(--text-3)', fontSize: 13 }}>
-                  แสดง {filtered.length} จาก {subjects.length} วิชา{filterGrade ? ` · ${filterGrade}` : ''}{secondary && filterTerm ? ` · ภาคเรียนที่ ${filterTerm}` : ''} · ชั้นอิงจากห้องที่เปิดวิชานี้
+                  แสดง {filtered.length} จาก {catalogSubjects.length} วิชา{filterGrade ? ` · ${filterGrade}` : ''}{secondary && filterTerm ? ` · ภาคเรียนที่ ${filterTerm}` : ''} · ชั้นอิงจากห้องที่เปิดวิชานี้
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -1306,7 +1342,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 </LoadingButton>
                 <button type="button" onClick={() => { setShowGroupManager(true); setEditingGroupName(null); setGroupDraft('') }} className="btn btn-secondary">จัดการกลุ่มสาระ</button>
                 <button type="button" onClick={() => { setGrid(Array.from({ length: 12 }, blankRow)); setPasteSemester(defaultSubjectSemester(filterTerm)); setShowPaste(true); setShowForm(false) }} className="btn btn-secondary">วางจากตาราง</button>
-                {secondary && subjects.some(subject => subjectTermList(subject).length === 0) && <LoadingButton type="button" loading={fillingSemesters} className="btn btn-secondary" onClick={handleFillMissingSemesters}>ใส่เทอม 2 ให้วิชาที่ยังไม่ระบุ</LoadingButton>}
+                {secondary && educationType === 'secondary' && catalogSubjects.length === subjects.length && catalogSubjects.some(subject => subjectTermList(subject).length === 0) && <LoadingButton type="button" loading={fillingSemesters} className="btn btn-secondary" onClick={handleFillMissingSemesters}>ใส่เทอม 2 ให้วิชาที่ยังไม่ระบุ</LoadingButton>}
                 <button type="button" onClick={openAdd} className="btn btn-primary">+ เพิ่มรายวิชา</button>
                 <LoadingButton type="button" onClick={handleDeleteAll} loading={deletingAll} disabled={!subjects.length || saving || syncBusy} loadingText="กำลังลบ..." className="btn btn-secondary" style={{ color: '#b91c1c', borderColor: '#fecaca' }}>ลบทั้งหมด</LoadingButton>
               </div>
@@ -1407,7 +1443,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 </select>
               </div>
               <div>
-                <label className="form-label">ภาคเรียน</label>
+                <label className="form-label">{secondaryRoom ? 'ภาคเรียน' : 'ช่วงรายวิชา'}</label>
                 <select
                   className="form-input"
                   value={classSubjectSemester || 1}
@@ -1415,7 +1451,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                   disabled={classSubjectSaving || !selectedClassSubjectClassroom || !isSecondaryClassLevel(selectedClassSubjectClassroom.level)}
                 >
                   <option value={1}>{selectedClassSubjectClassroom && isSecondaryClassLevel(selectedClassSubjectClassroom.level) ? 'ภาคเรียนที่ 1' : 'ทั้งปี'}</option>
-                  <option value={2}>ภาคเรียนที่ 2</option>
+                  {secondaryRoom && <option value={2}>ภาคเรียนที่ 2</option>}
                 </select>
               </div>
             </div>
@@ -1507,7 +1543,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                 <LoadingButton
                   loading={classSubjectAction === 'remove-all'}
                   onClick={handleRemoveAllClassSubjects}
-                  disabled={!canManageClassSubjects || classSubjectItems.length === 0 || classSubjectSaving}
+                  disabled={!canManageClassSubjects || assignedSubjectIds.size === 0 || classSubjectSaving}
                   className="btn btn-secondary"
                   style={{ color: '#DC2626', borderColor: 'rgba(220, 38, 38, 0.25)' }}
                 >
@@ -1524,7 +1560,7 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                     <th>ชื่อวิชา</th>
                     <th style={{ width: 180 }}>กลุ่มสาระ</th>
                     <th style={{ width: 90 }}>ประเภท</th>
-                    <th style={{ width: 100, textAlign: 'right' }}>{secondary ? 'ชม./ภาคเรียน' : 'ชม./ปี'}</th>
+                    <th style={{ width: 100, textAlign: 'right' }}>{secondaryRoom ? 'ชม./ภาคเรียน' : 'ชม./ปี'}</th>
                     <th style={{ width: 90 }}>จัดการ</th>
                   </tr>
                 </thead>
@@ -1541,11 +1577,12 @@ export default function SubjectSettingsManager({ mode = 'subjects' }: { mode?: '
                         <td style={{ fontWeight: 800 }}>{subject?.code || '-'}</td>
                         <td>
                           <div style={{ fontWeight: 800 }}>{subject?.name || '(ไม่พบรายวิชา)'}</div>
+                          {(item.semester ?? 0) !== classSubjectSemester && <small>รายการเดิม · {item.semester ? `ภาคเรียนที่ ${item.semester}` : 'ทั้งปี'}</small>}
                           {subject?.short_name && <div style={{ color: 'var(--text-3)', fontSize: 12 }}>ชื่อย่อ: {subject.short_name}</div>}
                         </td>
                         <td>{subject?.subject_group || '-'}</td>
                         <td>{subject?.type || '-'}</td>
-                        <td style={{ textAlign: 'right' }}>{subject ? secondary ? Number(subject.credits) * 40 : subject.hours_per_year : '-'}</td>
+                        <td style={{ textAlign: 'right' }}>{subject ? secondaryRoom ? Number(subject.credits) * 40 : subject.hours_per_year : '-'}</td>
                         <td>
                           <button
                             type="button"

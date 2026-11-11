@@ -285,7 +285,7 @@ export default function ScheduleDataInput({ kind, data, year, term, onSaved, onD
     <div className="prep-teacher-bar">
       <div className="prep-teacher-title">
         <h2>รายวิชาแต่ละห้อง</h2>
-        <p>{activeRoomLabel ? `${activeRoomLabel.level}/${activeRoomLabel.name} · ${roomLessons.length} รายวิชา` : `${subjectLessons.length} รายวิชา`}</p>
+        <p>{activeRoomLabel ? `${activeRoomLabel.level}/${activeRoomLabel.name} · ${roomLessons.length} รายวิชา · ${activeRoomLabel.level.startsWith('ป.') ? `รายวิชาทั้งปี · กำหนดคาบเทอม ${term}` : `เทอม ${term}`}` : `${subjectLessons.length} รายวิชา`}</p>
       </div>
       <div className="prep-teacher-tools prep-subject-tools">
         <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="ค้นหารหัส ชื่อวิชา หรือครูในห้องนี้" aria-label="ค้นหารายวิชา" />

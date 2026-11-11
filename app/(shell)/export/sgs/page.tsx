@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { FiDownload, FiExternalLink, FiInfo, FiSend } from 'react-icons/fi'
 import { fetchScoreClassrooms, fetchScoreEntryData, fetchScoreInit, fetchScoreSubjects } from '../../scores/actions'
 import { buildSavedSGSScorePacket } from '@/lib/sgs-transfer'
+import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { ScorePacket } from '@/extensions/jarnsek-sgs/core'
 import type { TransferConfig } from '@/lib/score-transfer'
 import SGSExportDialog from '@/components/SGSExportDialog'
@@ -90,8 +91,8 @@ export default function SGSExportPage() {
     <div className="sgs-page-notice"><FiInfo aria-hidden="true"/><span>ใช้คะแนนที่บันทึกแล้วในระบบ หากเพิ่งแก้คะแนน กรุณาบันทึกในหน้า <Link href={`${base}/scores`}>บันทึกคะแนน</Link> ก่อนส่งออก</span></div>
     <section className="control-card sgs-page-selection" aria-labelledby="sgs-selection-title"><h2 id="sgs-selection-title">เลือกข้อมูลที่จะส่งออก</h2><div className="sgs-page-fields">
       <label>ปีการศึกษา<select className="form-input" value={yearId} disabled={loading} onChange={event => { reset(); setClassroomId(''); setYearId(event.target.value) }}><option value="">เลือกปีการศึกษา</option>{years.map(item => <option key={item.id} value={item.id}>{item.year_be}</option>)}</select></label>
-      <label>ภาคเรียน<select className="form-input" value={term} disabled={loading} onChange={event => { reset(); setTerm(Number(event.target.value) as 1 | 2) }}><option value={1}>ภาคเรียนที่ 1</option><option value={2}>ภาคเรียนที่ 2</option></select></label>
       <label>ชั้น / ห้อง<select className="form-input" value={classroomId} disabled={!roomsReady || loading} onChange={event => { reset(); setClassroomId(event.target.value) }}><option value="">{yearId && !roomsReady ? 'กำลังโหลดห้อง…' : 'เลือกห้องเรียน'}</option>{roomsReady && classrooms.items.map(item => <option key={item.id} value={item.id}>{item.level}/{item.room}</option>)}</select></label>
+      <label>{classroom && !isSecondaryClassLevel(classroom.level) ? 'ภาคเรียนของคะแนน' : 'ภาคเรียน'}<select className="form-input" value={term} disabled={loading} onChange={event => { reset(); setTerm(Number(event.target.value) as 1 | 2) }}><option value={1}>ภาคเรียนที่ 1</option><option value={2}>ภาคเรียนที่ 2</option></select></label>
       <label>รายวิชา<select className="form-input" value={offeringId} disabled={!subjectsReady || loading} onChange={event => { setEntry(null); setDialogOpen(false); setOfferingId(event.target.value) }}><option value="">{classroomId && !subjectsReady ? 'กำลังโหลดรายวิชา…' : 'เลือกรายวิชา'}</option>{subjectsReady && offerings.items.map(item => { const detail = subjects.find(subject => subject.id === item.subject_id); return <option key={item.id} value={item.id}>{detail ? `${detail.code} · ${detail.name}` : 'รายวิชาไม่พบข้อมูล'}</option> })}</select></label>
     </div>
     {loading && <p role="status">กำลังโหลดข้อมูล…</p>}

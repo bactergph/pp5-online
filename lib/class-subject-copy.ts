@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { classSubjectSemesterForLevel } from '@/lib/class-subject-term'
+import { classSubjectSemesterForLevel, selectClassSubjectOfferings } from '@/lib/class-subject-term'
 
 export type ClassSubjectCopyInput = {
   sourceClassroomId: string
@@ -33,11 +33,12 @@ export async function prepareClassSubjectCopy(db: SupabaseClient, schoolId: stri
   if (!source || !target) throw new Error('ห้องต้นทางและปลายทางต้องอยู่ในโรงเรียนและปีการศึกษาที่เลือก')
   const sourceSemester = classSubjectSemesterForLevel(source.level, input.term)
   const targetSemester = classSubjectSemesterForLevel(target.level, input.term)
-  const sourceRows = await db.from('class_subjects').select('subject_id,order_number')
+  let sourceQuery = db.from('class_subjects').select('subject_id,order_number,semester')
     .eq('classroom_id', source.id).eq('academic_year_id', input.academicYearId)
-    .eq('semester', sourceSemester).order('order_number')
+  if (sourceSemester) sourceQuery = sourceQuery.in('semester', [0, sourceSemester])
+  const sourceRows = await sourceQuery.order('order_number')
   checkDatabaseError(sourceRows.error)
-  const subjectIds = [...new Set<string>((sourceRows.data || []).map(row => String(row.subject_id)))]
+  const subjectIds = [...new Set(selectClassSubjectOfferings(sourceRows.data || [], source.level, sourceSemester).map(row => String(row.subject_id)))]
   if (!subjectIds.length) throw new Error('ห้องต้นทางยังไม่มีรายวิชาในช่วงที่เลือก')
   const subjects = await db.from('subjects').select('id').eq('school_id', schoolId).in('id', subjectIds)
   checkDatabaseError(subjects.error)

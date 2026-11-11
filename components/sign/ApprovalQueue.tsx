@@ -17,6 +17,7 @@ export type ApprovalQueueItem = {
   title: string
   subtitle: string
   term: number
+  termLabel?: string
   status: string
   status_label: string
   next_step: string | null
@@ -96,7 +97,7 @@ export default function ApprovalQueue({
                     {statusMeta.label}
                   </span>
                 </div>
-                <span className="document-sign-card__term">เทอม {item.term}</span>
+                <span className="document-sign-card__term">{item.termLabel || `เทอม ${item.term}`}</span>
               </div>
 
               {stepMeta && stepMeta.steps.length > 0 && (

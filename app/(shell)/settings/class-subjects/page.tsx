@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import AppAlertModal from '@/components/AppAlertModal'
 import {
@@ -16,7 +16,7 @@ type Subject = {
   subject_group: string; type: string; hours_per_year: number; credits: number; max_score: number
 }
 type Classroom = { id: string; level: string; room: number }
-type CS = { id: string; subject_id: string; teacher_id: string | null; co_teacher_ids?: string[] | null; content_units?: unknown; score_terms?: unknown; order_number: number; room_name?: string | null }
+type CS = { id: string; subject_id: string; teacher_id: string | null; co_teacher_ids?: string[] | null; content_units?: unknown; score_terms?: unknown; order_number: number; room_name?: string | null; semester?: number }
 type UnitForm = { name: string; periods: string; useMain: boolean; teacherName: string }
 type UnitDraft = { enabled: boolean; rows: [UnitForm, UnitForm] }
 const blankUnit = (): UnitForm => ({ name: '', periods: '', useMain: true, teacherName: '' })
@@ -30,7 +30,9 @@ export default function ClassSubjectsPage() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [selectedClass, setSelectedClass] = useState('')
   const [term, setTerm] = useState<1 | 2>(1)
+  const [showHistory, setShowHistory] = useState(false)
   const [items, setItems] = useState<CS[]>([])
+  const [loadedContext, setLoadedContext] = useState('')
   const [loading, setLoading] = useState(true)
   const [roomDrafts,setRoomDrafts] = useState<Record<string,string>>({})
   const [teacherDrafts, setTeacherDrafts] = useState<Record<string, string>>({})
@@ -40,29 +42,16 @@ export default function ClassSubjectsPage() {
   const [alertModal, setAlertModal] = useState<{ type: 'success' | 'error'; title: string; message?: string } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
   const initialClassroom = useRef('')
+  const itemRequest = useRef(0)
 
-  function semesterFor(classId: string): 0 | 1 | 2 {
+  const semesterFor = useCallback((classId: string): 0 | 1 | 2 => {
     const room = classrooms.find(item => item.id === classId)
     return room && isSecondaryClassLevel(room.level) ? term : 0
-  }
+  }, [classrooms, term])
   const subjectMap = Object.fromEntries(subjects.map(s => [s.id, s]))
+  const itemsReady = loadedContext === `${selectedClass}:${semesterFor(selectedClass)}:${showHistory}`
 
-  useEffect(() => { init() }, [])
-  useEffect(() => { if (selectedYear) loadClassrooms(selectedYear) }, [selectedYear])
-  useEffect(() => {
-    if (selectedClass) {
-      const semester = semesterFor(selectedClass)
-      loadItems(selectedClass, semester)
-      return
-    }
-    Promise.resolve().then(() => {
-      setItems([])
-      setTeacherDrafts({}); setRoomDrafts({}); setUnitDrafts({});  setTermDrafts({})
-      setOpenTeacherPicker(null)
-    })
-  }, [selectedClass, term, classrooms])
-
-  async function init() {
+  const init = useCallback(async () => {
     const params = new URLSearchParams(window.location.search)
     const d = await fetchClassSubjectInit()
     setCanManage(d.canManage)
@@ -72,26 +61,62 @@ export default function ClassSubjectsPage() {
     const active = (d.years as Year[]).find(y => y.id === params.get('year')) || (d.years as Year[]).find(y => y.is_active) || (d.years as Year[])[0]
     if (active) setSelectedYear(active.id)
     setLoading(false)
-  }
-  async function loadClassrooms(yearId: string) {
+  }, [])
+  const loadClassrooms = useCallback(async (yearId: string, active: () => boolean) => {
     const cs = await fetchClassroomsLite(yearId) as Classroom[]
+    if (!active()) return
     setClassrooms(cs)
     setSelectedClass(cs.find(room => room.id === initialClassroom.current)?.id || cs[0]?.id || '')
     initialClassroom.current = ''
-  }
-  async function loadItems(classId: string, semester: 0 | 1 | 2) {
-    setTeacherDrafts({}); setRoomDrafts({}); setUnitDrafts({});  setTermDrafts({})
-    setOpenTeacherPicker(null)
-    setItems(await fetchClassSubjects(classId, semester) as CS[])
-  }
-
-  function notify(type: 'success' | 'error', text: string) {
+  }, [])
+  const notify = useCallback((type: 'success' | 'error', text: string) => {
     setAlertModal({
       type,
       title: type === 'success' ? 'บันทึกสำเร็จ' : 'บันทึกไม่สำเร็จ',
       message: text,
     })
-  }
+  }, [])
+  const loadItems = useCallback(async (classId: string, semester: 0 | 1 | 2) => {
+    const request = ++itemRequest.current
+    setTeacherDrafts({}); setRoomDrafts({}); setUnitDrafts({});  setTermDrafts({})
+    setOpenTeacherPicker(null)
+    try {
+      const rows = await fetchClassSubjects(classId, semester, showHistory) as CS[]
+      if (request === itemRequest.current) {
+        setItems(rows)
+        setLoadedContext(`${classId}:${semester}:${showHistory}`)
+      }
+    } catch (error) {
+      if (request === itemRequest.current) {
+        setItems([])
+        setLoadedContext(`${classId}:${semester}:${showHistory}`)
+        notify('error', error instanceof Error ? error.message : 'โหลดรายวิชาไม่สำเร็จ')
+      }
+    }
+  }, [showHistory, notify])
+  useEffect(() => {
+    void Promise.resolve().then(init).catch(error => {
+      setLoading(false)
+      notify('error', error instanceof Error ? error.message : 'โหลดข้อมูลรายวิชาไม่สำเร็จ')
+    })
+  }, [init, notify])
+  useEffect(() => {
+    let active = true
+    if (selectedYear) void Promise.resolve().then(() => active ? loadClassrooms(selectedYear, () => active) : undefined).catch(error => {
+      if (active) notify('error', error instanceof Error ? error.message : 'โหลดห้องเรียนไม่สำเร็จ')
+    })
+    return () => { active = false }
+  }, [selectedYear, loadClassrooms, notify])
+  useEffect(() => {
+    let active = true
+    void Promise.resolve().then(() => {
+      if (active && selectedClass) return loadItems(selectedClass, semesterFor(selectedClass))
+    })
+    return () => {
+      active = false
+      itemRequest.current++
+    }
+  }, [selectedClass, semesterFor, loadItems])
 
   function teacherName(id: string | null) {
     const t = teachers.find(t => t.id === id)
@@ -139,6 +164,7 @@ export default function ClassSubjectsPage() {
   }
   const pendingTeacherChanges = items.reduce((count, item) => count + (offeringChanged(item) ? 1 : 0), 0)
   async function handleSaveTeachers() {
+    if (!itemsReady || savingEdit) return
     const changes: Array<{ item: CS; teacherId?: string; error?: string }> = []
     for (const item of items) {
       if (!offeringChanged(item)) continue
@@ -217,17 +243,22 @@ export default function ClassSubjectsPage() {
               </select>
             </div>
             <div className="field-inline">
-              <label className="form-label" style={{ margin: 0 }}>ภาคเรียน:</label>
-              <select value={term} onChange={e => setTerm(Number(e.target.value) as 1 | 2)} className="form-input" style={{ width: 'auto' }} disabled={!classrooms.some(item => item.id === selectedClass && isSecondaryClassLevel(item.level))}>
-                <option value={1}>ภาคเรียนที่ 1</option>
-                <option value={2}>ภาคเรียนที่ 2</option>
-              </select>
+              {annualRoom ? <span className="badge badge-gray">รายวิชาทั้งปีการศึกษา</span> : <>
+                <label className="form-label" htmlFor="class-offering-term" style={{ margin: 0 }}>ภาคเรียน</label>
+                <select id="class-offering-term" value={term} onChange={e => setTerm(Number(e.target.value) as 1 | 2)} className="form-input" style={{ width: 'auto' }}>
+                  <option value={1}>ภาคเรียนที่ 1</option>
+                  <option value={2}>ภาคเรียนที่ 2</option>
+                </select>
+              </>}
             </div>
+            <label><input type="checkbox" checked={showHistory} onChange={event => setShowHistory(event.target.checked)} /> แสดงรายการเดิม</label>
           </div>
 
 
           {classrooms.length === 0 ? (
             <div className="alert alert-error">ยังไม่มีชั้นเรียนในปีนี้ — ไปเพิ่มที่เมนู &quot;ชั้นเรียน&quot; ก่อน</div>
+          ) : !itemsReady ? (
+            <p role="status">กำลังโหลดรายวิชา…</p>
           ) : (
             <>
               <p className="class-subject-offer-note">ครูประจำวิชาเป็นชื่อหลักในตาราง หากเลือกมีวิชาย่อย โควตาคาบจะแบ่งตามชื่อและผู้สอนของแต่ละวิชาย่อย ตารางเรียนและตารางสอนจะแสดงคนที่สอนวิชาย่อยนั้น คะแนนยังใช้รหัสวิชาเดียว</p>
@@ -261,6 +292,7 @@ export default function ClassSubjectsPage() {
                           <td style={{ fontWeight: 600 }}>{s?.code || '?'}</td>
                           <td className="class-subject-name-cell">
                             <span>{s?.name || '(วิชาถูกลบ)'}</span>
+                            {(cs.semester ?? 0) !== semesterFor(selectedClass) && <small>รายการเดิม · {cs.semester ? `ภาคเรียนที่ ${cs.semester}` : 'ทั้งปี'}</small>}
                             {s?.type && <span className="badge badge-gray" style={{ marginLeft: 8 }}>{s.type}</span>}
                             {canManage ? (
                               <div className="class-subject-units">

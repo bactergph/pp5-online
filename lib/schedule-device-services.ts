@@ -4,7 +4,7 @@ import {validatePeriodProfiles} from '@/lib/schedule-period-profiles'
 import {profileTeacherConflicts} from './schedule-profile-solver'
 import {validateTeacherActivities,withTeacherActivityClock,teacherActivityAvailability,teacherActivityRosterBusy} from './schedule-teacher-activities'
 import {repairActivityTeacherPlan} from './schedule-activity-teacher-repair'
-import {rosterPeriodClock,profileCellOverlap,hasPeriodProfiles,levelPeriodTimes} from './schedule-period-profiles'
+import {rosterPeriodClock,profileCellOverlap,hasPeriodProfiles,levelPeriodTimes,periodBand} from './schedule-period-profiles'
 import {applyJointTeachingLock,prepareJointTeachingSession,prepareJointTeachingCancellation} from './schedule-joint-lock'
 import type { ScheduleOperations } from '../components/schedules/ScheduleServices'
 import { activityTeachers, activityTeamKeepsSchedule, activityWeeklyPeriods, lessonTeachers, validateActivityTeam, type ActivityTeam } from './schedule-activity-teams'
@@ -12,7 +12,7 @@ import { validateSubjectInputs } from './schedule-input'
 import { validatePeriodTimes } from './schedule-helpers'
 import {validateJointTeachingGroups,jointTeachingSlotErrors,teachingEventAt,teachingQuotaParts} from './schedule-joint-teaching'
 import { validatePlan } from './schedule-planning'
-import { freeActivityGroup, freeActivityTeachers, newId, toDeviceSnapshot, type FreeActivity, type FreeWizardPlan } from './schedule-device-free'
+import { freeActivityGroup, freeActivityTeachers, newId, toDeviceSnapshot, type FreeActivity, type FreeSubject, type FreeWizardPlan } from './schedule-device-free'
 import {freeTeacherLimit as resolveTeacherLimit} from './free-schedule-entitlement'
 import { deviceDataKey, deviceScheduleKey, deviceDraftView, devicePreparation, devicePreflight, localDraftCells } from './schedule-device-view'
 import {scheduleTeachingView} from './schedule-teaching-view'
@@ -37,6 +37,9 @@ type Options = { read:()=>LocalScheduleBundle; write:(bundle:LocalScheduleBundle
 type Plan = LocalScheduleBundle['terms'][1]
 const failure = (error:unknown)=>({error:error instanceof Error?error.message:'บันทึกลงเครื่องไม่สำเร็จ',data:null})
 const outcome = async<T,>(work:()=>Promise<T>)=>{try{return {data:await work(),error:null}}catch(error){return failure(error)}}
+const subjectKey = (subject: FreeSubject) => `${subject.roomId}:${subject.code.trim().toLowerCase() || subject.id}`
+const primaryRooms = (rooms: Plan['rooms']) => new Set(rooms.filter(room => periodBand(room.label) === 'primary').map(room => room.id))
+const subjectDetails = ({ code, name, shortName, subjectGroup, subjectType }: FreeSubject) => ({ code, name, shortName, subjectGroup, subjectType })
 
 /** The online screens depend on this interface, never on a database implementation.
  * Every mutation here is serialized, verified, and acknowledged only after IndexedDB commits. */
@@ -49,7 +52,11 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     if(term!==1&&term!==2)throw Error('เลือกภาคเรียน 1 หรือ 2')
     const bundle=read(),workspace=year===deviceYear(bundle)?bundle:bundle.archives?.[year]
     if(!workspace)throw Error('ไม่พบปีการศึกษาในเครื่องนี้')
-    return workspace.terms[term]
+    const current=workspace.terms[term],sibling=workspace.terms[term===1?2:1]
+    const primary=primaryRooms(current.rooms)
+    const keys=new Set(current.subjects.map(subjectKey))
+    const annual=sibling.subjects.filter(subject=>primary.has(subject.roomId)&&!keys.has(subjectKey(subject)))
+    return annual.length?{...current,subjects:[...current.subjects,...annual]}:current
   }
   const preparation=(year:string,term:number)=>{selectedYear=year;selectedTerm=term;return devicePreparation(plan(year,term))}
   function stale(current:FreeWizardPlan,hash:string){if(hash!==deviceScheduleKey(current))throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาโหลดข้อมูลล่าสุดก่อนบันทึก')}
@@ -78,8 +85,27 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
       const missing=(day:number,period:number,room?:string)=>!next.days.includes(day)||!levelPeriodTimes(next.periods,next.rooms.find(item=>item.id===room)?.label||'').some(row=>!row.is_break&&row.period===period)
       if(!visibilityOnly&&(target.timetable.some(cell=>next.rooms.some(room=>room.id===cell.classroomId&&scheduleRoomEnabled(room))&&missing(cell.day,cell.period,cell.classroomId))||target.blocks.some(cell=>missing(cell.day,cell.period))||target.activities.some(activity=>activity.roomIds.filter(id=>next.rooms.some(room=>room.id===id&&scheduleRoomEnabled(room))).some(room=>activity.cells.some(cell=>missing(cell.day,cell.period,room))))))throw Error('มีตาราง กิจกรรม หรือคาบไม่ว่างใช้วันและเวลานี้อยู่ กรุณานำออกก่อนลดคาบ')
     }
+    const primary=primaryRooms(next.rooms)
+    const previousPrimary=new Map(previous.subjects.filter(subject=>primary.has(subject.roomId)).map(subject=>[subjectKey(subject),subject]))
+    const nextSubjects=new Map(next.subjects.map(subject=>[subject.id,subject]))
+    const siblingKeys=new Set(sibling.subjects.map(subjectKey))
+    const siblingSubjects=visibilityOnly?sibling.subjects:sibling.subjects.flatMap(subject=>{
+      const previousSubject=previousPrimary.get(subjectKey(subject))
+      if(!previousSubject)return [subject]
+      const changed=nextSubjects.get(previousSubject.id)
+      if(!changed){
+        if(sibling.timetable.some(cell=>cell.subjectId===subject.id)||sibling.teachingGroups?.some(group=>group.lessonIds.includes(subject.id))) {
+          throw Error(`วิชา ${subject.code} เป็นรายวิชาทั้งปีและยังใช้งานอยู่ในภาคเรียนที่ ${other}`)
+        }
+        return []
+      }
+      const details=subjectDetails(changed)
+      if(deviceDataKey(details)===deviceDataKey(subjectDetails(previousSubject)))return [subject]
+      if(subjectKey(changed)!==subjectKey(subject)&&siblingKeys.has(subjectKey(changed)))throw Error(`รหัสวิชา ${changed.code} ซ้ำกับรายวิชาของห้องในภาคเรียนที่ ${other}`)
+      return [{...subject,...details}]
+    })
     const activityCatalog=next.activityCatalog||[]
-    const terms={...workspace.terms,[term]:{...next,substitutes:next.substitutes||{}},[other]:visibilityOnly?{...sibling,rooms:next.rooms}:{...sibling,teacherActivities:repairActivityTeacherPlan({teacherActivities:sibling.teacherActivities},next.teachers.map(teacher=>teacher.id)).plan.teacherActivities,teachers:next.teachers,teacherIds:sibling.teacherIds?.filter(id=>next.teachers.some(teacher=>teacher.id===id)),blocks:sibling.blocks.filter(block=>next.teachers.some(teacher=>teacher.id===block.teacherId)),rooms:next.rooms,places:next.places,days:next.days,periods:next.periods,activityCatalog,activities:sibling.activities.map(activity=>({...activity,name:activityCatalog.find(item=>item.id===(activity.settingId||activity.id))?.label||activity.name}))}}
+    const terms={...workspace.terms,[term]:{...next,substitutes:next.substitutes||{}},[other]:visibilityOnly?{...sibling,rooms:next.rooms}:{...sibling,subjects:siblingSubjects,teacherActivities:repairActivityTeacherPlan({teacherActivities:sibling.teacherActivities},next.teachers.map(teacher=>teacher.id)).plan.teacherActivities,teachers:next.teachers,teacherIds:sibling.teacherIds?.filter(id=>next.teachers.some(teacher=>teacher.id===id)),blocks:sibling.blocks.filter(block=>next.teachers.some(teacher=>teacher.id===block.teacherId)),rooms:next.rooms,places:next.places,days:next.days,periods:next.periods,activityCatalog,activities:sibling.activities.map(activity=>({...activity,name:activityCatalog.find(item=>item.id===(activity.settingId||activity.id))?.label||activity.name}))}}
     const bundle=year===deviceYear(current)?{...current,terms,semester:term as 1|2}:{...current,archives:{...current.archives,[year]:{...workspace,terms}}}
     if(!await write(bundle))throw Error('ยังไม่ได้บันทึกลงเครื่อง กรุณาดาวน์โหลดสำเนาก่อนปิดหน้านี้')
     return devicePreparation(next)
