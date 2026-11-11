@@ -10,6 +10,11 @@ export type TeacherScheduleActivity = {
 }
 export type ScheduleTeacherBlock = { teacherId: string; day: number; period: number; start_time?: string; end_time?: string; label?: string; teacherActivityId?: string }
 const validClock = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+export function normalizeTeacherActivityTime(value: string) {
+  const time = value.replace('.', ':')
+  return validClock(time) ? time : null
+}
+
 export function validateTeacherActivities(activities: TeacherScheduleActivity[] | undefined, teacherIds?: string[]) {
   if (activities === undefined) return
   if (!Array.isArray(activities) || activities.length > 200) throw Error('กำหนดกิจกรรมครูได้ไม่เกิน 200 รายการ')

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Preparation } from '@/lib/schedule-preparation'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
-import { validateTeacherActivities, teacherActivityMinutes, type TeacherScheduleActivity } from '@/lib/schedule-teacher-activities'
+import { normalizeTeacherActivityTime, validateTeacherActivities, teacherActivityMinutes, type TeacherScheduleActivity } from '@/lib/schedule-teacher-activities'
 import { teacherActivityConflicts } from '@/lib/schedule-teacher-activity-conflicts'
 import { useScheduleOperations } from './ScheduleServices'
 import { usePendingScheduleEditor } from './SchedulePendingEdits'
@@ -93,6 +93,10 @@ export default function TeacherActivityEditor({
     setError('')
   }
 
+  function changeTime(field: 'start_time' | 'end_time', value: string) {
+    setDraft(current => current ? { ...current, [field]: normalizeTeacherActivityTime(value) ?? value } : current)
+  }
+
   if (surface === 'settings') {
     return (
       <>
@@ -168,11 +172,11 @@ export default function TeacherActivityEditor({
                   </div>
                   <div>
                     <label className="form-label" htmlFor="teacher-activity-start">เวลาเริ่ม (24 ชั่วโมง)</label>
-                    <input id="teacher-activity-start" className="form-input" value={draft.start_time} placeholder="15:30" inputMode="text" maxLength={5} onChange={event => setDraft({ ...draft, start_time: event.target.value })} />
+                    <input id="teacher-activity-start" className="form-input" value={draft.start_time} placeholder="15:30" inputMode="text" maxLength={5} onChange={event => changeTime('start_time', event.target.value)} />
                   </div>
                   <div>
                     <label className="form-label" htmlFor="teacher-activity-end">เวลาสิ้นสุด (24 ชั่วโมง)</label>
-                    <input id="teacher-activity-end" className="form-input" value={draft.end_time} placeholder="16:30" inputMode="text" maxLength={5} onChange={event => setDraft({ ...draft, end_time: event.target.value })} />
+                    <input id="teacher-activity-end" className="form-input" value={draft.end_time} placeholder="16:30" inputMode="text" maxLength={5} onChange={event => changeTime('end_time', event.target.value)} />
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <span className="form-label">ทำซ้ำทุกสัปดาห์</span>
@@ -242,8 +246,8 @@ export default function TeacherActivityEditor({
           <legend>{activities.some(activity => activity.id === draft.id) ? 'แก้ไขกิจกรรมครู' : 'เพิ่มกิจกรรมครู'}</legend>
           <div className="schedule-teacher-activity-fields">
             <label className="full">ชื่อกิจกรรม<input value={draft.name} maxLength={150} placeholder="เช่น ขายของสหกรณ์ / PLC กลุ่มสาระ" onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
-            <label>เริ่ม (24 ชั่วโมง)<input value={draft.start_time} placeholder="15:30" inputMode="text" maxLength={5} onChange={event => setDraft({ ...draft, start_time: event.target.value })} /></label>
-            <label>สิ้นสุด (24 ชั่วโมง)<input value={draft.end_time} placeholder="16:30" inputMode="text" maxLength={5} onChange={event => setDraft({ ...draft, end_time: event.target.value })} /></label>
+            <label>เริ่ม (24 ชั่วโมง)<input value={draft.start_time} placeholder="15:30" inputMode="text" maxLength={5} onChange={event => changeTime('start_time', event.target.value)} /></label>
+            <label>สิ้นสุด (24 ชั่วโมง)<input value={draft.end_time} placeholder="16:30" inputMode="text" maxLength={5} onChange={event => changeTime('end_time', event.target.value)} /></label>
           </div>
           <div>
             <strong>ทำซ้ำทุกสัปดาห์</strong>

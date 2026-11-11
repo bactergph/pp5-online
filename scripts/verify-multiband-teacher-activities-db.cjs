@@ -28,6 +28,13 @@ module.exports=async function(db,id){
  await assert.rejects(savePlan({...config,teacherActivities:[{...a,days:[2]}]}),/กิจกรรม/)
  assert.deepEqual((await db.query('select config from schedule_plans where semester=1')).rows[0].config.teacherActivities[0].days,[3,4])
  await save([row(21,51,7,2)],[])
+ const lastClass=row(20,50,6,2)
+ await save([],[lastClass])
+ const afterSchool={...a,days:[2]}
+ await savePlan({...config,teacherActivities:[afterSchool]})
+ await assert.rejects(savePlan({...config,teacherActivities:[{...afterSchool,start_time:'15:29'}]}),/กิจกรรม/)
+ assert.equal((await db.query('select config from schedule_plans where semester=1')).rows[0].config.teacherActivities[0].start_time,'15:30')
+ await save([lastClass],[])
  await assert.rejects(savePlan({...config,teacherActivities:[a,{...a,id:id(9002)}]}),/ทับซ้อน/)
  await assert.rejects(savePlan({...config,teacherActivities:[{...a,teacherIds:[id(9999)]}]}),/ไม่ถูกต้อง/)
  await assert.rejects(savePlan({...config,teacherActivities:[{...a,start_time:'bad'}]}),/ไม่ถูกต้อง/)

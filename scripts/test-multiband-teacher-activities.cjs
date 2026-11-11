@@ -5,6 +5,7 @@ const {checkPlanning,solvePlannedSchedule,emptyPlan}=load('lib/schedule-planning
 const {schedulePeriodBudget}=load('lib/schedule-period-budget.ts'),{normalizePlan,toDeviceSnapshot}=load('lib/schedule-device-free.ts')
 const {devicePreparation}=load('lib/schedule-device-view.ts'),{deviceDocumentPages,deviceDisplaySchedule,deviceWorkload}=load('lib/schedule-device-documents.ts')
 const {scheduleTeachingView}=load('lib/schedule-teaching-view.ts'),{readDeviceBackup}=load('lib/schedule-device-backup.ts')
+const {teacherActivityConflicts}=load('lib/schedule-teacher-activity-conflicts.ts')
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`
 const clock=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
 const bells=(count,duration,start=510)=>Array.from({length:count},(_,i)=>({period:i+1,label:'คาบ '+(i+1),start_time:clock(start+i*duration),end_time:clock(start+(i+1)*duration),is_break:false,sort_order:i+1}))
@@ -16,6 +17,18 @@ assert.equal(profiles.validatePeriodProfiles(times),null)
 assert.equal(moveLunchBreak(kindergarten,4).filter(row=>row.is_break).length,3,'Moving lunch preserves snack/nap')
 assert.equal(validatePeriodTimes(kindergarten.map(row=>row.period===-2?{...row,period:0}:row))!==null,true)
 const a={id:id(900),name:'PLC',teacherIds:[id(10)],days:[3,4],start_time:'15:30',end_time:'16:30'}
+const lastClass={
+ periods:times,
+ classrooms:[{id:id(2),level:'ป.2',room:2}],
+ lessons:[{id:id(2),classroomId:id(2),teacherId:id(10),label:'ป.2/2 · การงานอาชีพ'}],
+ slots:[{classroom_id:id(2),class_subject_id:id(2),activity_id:null,day_of_week:2,period:6}],
+ plan:{},
+}
+const afterSchool={...a,days:[2],start_time:'15.30',end_time:'16.30'}
+assert.equal(teacherActivityConflicts(lastClass,afterSchool).length,0,'A dotted 15.30 starts exactly when the last class ends')
+assert.equal(teacherActivityConflicts(lastClass,{...afterSchool,start_time:'15.29'}).length,1,'A genuine one-minute overlap is flagged')
+assert.equal(teacherActivityConflicts(lastClass,{...afterSchool,start_time:'15:29',end_time:'16:3'}).length,0,'An unfinished clock shows validation only')
+assert.equal(teacherActivityConflicts(lastClass,{...afterSchool,start_time:'15:20',end_time:'15:10'}).length,0,'A reversed clock shows validation only')
 const repaired=load('lib/schedule-activity-teacher-repair.ts').repairActivityTeacherPlan({teacherActivities:[a]},[]);assert.equal(repaired.plan.teacherActivities.length,0);assert.equal(repaired.removedTeacherIds[0],id(10))
 activity.validateTeacherActivities([a],[id(10)]);assert.equal(activity.teacherActivityMinutes([a],id(10)),120)
 assert.throws(()=>activity.validateTeacherActivities([a,{...a,id:id(901)}]),/ทับ/)

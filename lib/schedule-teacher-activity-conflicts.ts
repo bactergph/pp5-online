@@ -1,12 +1,16 @@
-import {levelPeriodTimes} from './schedule-period-profiles'
+import {clockMinute,intervalsOverlap,levelPeriodTimes} from './schedule-period-profiles'
 import type {PeriodTimeRow} from './schedule-helpers'
-import type {TeacherScheduleActivity} from './schedule-teacher-activities'
+import {normalizeTeacherActivityTime,type TeacherScheduleActivity} from './schedule-teacher-activities'
 type Data={periods:PeriodTimeRow[];classrooms:{id:string;level:string;name?:string;room:number}[];lessons:{id:string;classroomId:string;teacherId:string|null;teacherIds?:string[];name?:string;label:string}[];slots:{classroom_id:string;class_subject_id:string|null;activity_id:string|null;day_of_week:number;period:number}[];plan:{activityGroups?:{id:string;settingId:string;roomIds:string[];mode:string;teacherIds:string[];roomTeachers:Record<string,string[]>;cells:{day:number;period:number}[]}[]}}
 export function teacherActivityConflicts(data:Data,activity:TeacherScheduleActivity){
+ const startTime=normalizeTeacherActivityTime(activity.start_time),endTime=normalizeTeacherActivityTime(activity.end_time)
+ if(!startTime||!endTime)return []
+ const activityInterval={start:clockMinute(startTime),end:clockMinute(endTime)}
+ if(activityInterval.start>=activityInterval.end)return []
  const result:{teacherId:string;day:number;start_time:string;end_time:string;label:string}[]=[],seen=new Set<string>()
  function inspect(roomId:string,day:number,period:number,ids:string[],label:string){
   const room=data.classrooms.find(room=>room.id===roomId),time=levelPeriodTimes(data.periods,room?.level||'').find(row=>!row.is_break&&row.period===period)
-  if(!time||!activity.days.includes(day)||activity.start_time>=time.end_time||time.start_time>=activity.end_time)return
+  if(!time||!activity.days.includes(day)||!intervalsOverlap(activityInterval,{start:clockMinute(time.start_time),end:clockMinute(time.end_time)}))return
   for(const teacherId of ids.filter(id=>activity.teacherIds.includes(id))){const key=`${teacherId}:${roomId}:${day}:${period}:${label}`;if(seen.has(key))continue;seen.add(key);result.push({teacherId,day,start_time:time.start_time,end_time:time.end_time,label})}
  }
  for(const slot of data.slots){const id=slot.activity_id?`activity:${slot.activity_id}`:slot.class_subject_id,lesson=data.lessons.find(lesson=>lesson.id===id);if(lesson)inspect(slot.classroom_id,slot.day_of_week,slot.period,lesson.teacherIds??(lesson.teacherId?[lesson.teacherId]:[]),lesson.label)}
