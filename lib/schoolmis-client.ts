@@ -4,6 +4,7 @@
 export async function fetchSchoolMisCsvBlob(params: {
   academicYearId: string
   classroomId?: string
+  term?: 1 | 2
   scope?: 'classroom' | 'school'
 }): Promise<{ blob: Blob; fileName: string }> {
   const res = await fetch('/api/export/schoolmis', {
@@ -13,6 +14,7 @@ export async function fetchSchoolMisCsvBlob(params: {
       academicYearId: params.academicYearId,
       classroomId: params.classroomId,
       scope: params.scope,
+      term: params.term,
     }),
   })
 

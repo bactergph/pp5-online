@@ -5,11 +5,16 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
+  let term: 1 | 2 | undefined
   let academicYearId = ''
   let classroomId = ''
   let scope: 'classroom' | 'school' = 'classroom'
   try {
     const body = await req.json()
+    if (body?.term !== undefined && body.term !== 1 && body.term !== 2) {
+      return NextResponse.json({ error: 'ภาคเรียนไม่ถูกต้อง' }, { status: 400 })
+    }
+    term = body?.term
     if (body?.scope !== undefined && !['classroom', 'school'].includes(body.scope)) return NextResponse.json({ error: 'รูปแบบส่งออกไม่ถูกต้อง' }, { status: 400 })
     scope = body?.scope === 'school' ? 'school' : 'classroom'
     academicYearId = typeof body?.academicYearId === 'string' ? body.academicYearId : ''
@@ -23,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = scope === 'school' ? await buildSchoolMisSchoolExport(academicYearId) : await buildSchoolMisGradesExport({ academicYearId, classroomId })
+    const result = scope === 'school' ? await buildSchoolMisSchoolExport(academicYearId, term) : await buildSchoolMisGradesExport({ academicYearId, classroomId, term })
     if (result.error !== null) {
       const status = result.error.includes('สิทธิ์') || result.error.includes('เข้าสู่ระบบ') ? 403 : 400
       return NextResponse.json({ error: result.error }, { status })

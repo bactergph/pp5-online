@@ -1,7 +1,8 @@
 import 'server-only'
 import { createServerClient } from '@/lib/supabase'
 import {limitsToOwnSubjects} from '@/lib/personal-data-scope'
-import {scoreTermVisible,teacherOwnsOffering} from '@/lib/class-subject-offer'
+import {isSecondaryClassLevel} from '@/lib/class-level'
+import {readScoreTerms,scoreTermVisible,teacherOwnsOffering} from '@/lib/class-subject-offer'
 
 export async function getScoreEntryPeriod(
   session: { schoolId: string | null; role: string; userId: string; mustChangePassword?: boolean },
@@ -35,6 +36,8 @@ export async function getScoreEntryPeriod(
     open: open === true,
     classroomId: subject.classroom_id as string,
     classroomLevel: room.level,
+    annual: !isSecondaryClassLevel(room.level) && subject.semester !== 1 && subject.semester !== 2,
+    scoreTerms: subject.semester === 1 || subject.semester === 2 ? [subject.semester] : readScoreTerms(subject.score_terms),
     error: open === true ? undefined : `ปิดการบันทึกคะแนน ปีการศึกษา ${year.year_be} ภาคเรียนที่ ${term} แล้ว`,
   }
 }

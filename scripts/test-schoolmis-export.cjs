@@ -17,6 +17,34 @@ const parse=csv=>XLSX.utils.sheet_to_json(XLSX.read(csv.replace(/^\uFEFF/,''),{t
  const rows=parse(whole.csv);assert.equal(rows.length,1003);assert.deepEqual(rows[0],['#','ชั้น','ห้อง','รหัสนักเรียน','ชื่อ-สกุล','ท11101 ภาษาไทย1','ท14101 ภาษาไทย4']);assert.equal(rows[1][3],'00000');assert.equal(rows[1][4],'เด็กชายชื่อ,ทดสอบนักเรียน');assert.equal(rows[1][5],'3.5');assert.equal(rows[1][6],'');assert.equal(rows.at(-1)[6],'4');assert.ok(!whole.csv.includes('SECRET'));assert.ok(!whole.csv.includes('ก14901'))
  const room=await api.buildSchoolMisGradesExport({academicYearId:'year',classroomId:'r4'});assert.equal(room.error,null);assert.equal(parse(room.csv)[0].length,4);assert.equal(parse(room.csv)[1][3],'4')
  assert.ok((await api.buildSchoolMisSchoolExport('foreign-year')).error)
+ tables.classrooms.push({id:'m1',school_id:'school',academic_year_id:'year',level:'ม.1',room:1})
+ tables.students.push({id:'ms',classroom_id:'m1',student_number:1,student_code:'99001',first_name:'ตัวอย่าง',last_name:'มัธยม'})
+ const secondarySubject={id:'common',code:'ท21101',name:'ภาษาไทย'}
+ tables.class_subjects.push(
+   {id:'ms1',classroom_id:'m1',academic_year_id:'year',semester:1,order_number:1,subjects:secondarySubject},
+   {id:'ms2',classroom_id:'m1',academic_year_id:'year',semester:2,order_number:1,subjects:secondarySubject},
+   {id:'legacy',classroom_id:'m1',academic_year_id:'year',semester:0,order_number:0,subjects:secondarySubject},
+ )
+ tables.scores.push(
+   {student_id:'ms',class_subject_id:'ms1',term:1,grade:4,result:'เรียน'},
+   {student_id:'ms',class_subject_id:'ms2',term:2,grade:2,result:'เรียน'},
+   {student_id:'ms',class_subject_id:'legacy',term:1,grade:0,result:'เรียน'},
+ )
+ assert.match((await api.buildSchoolMisGradesExport({academicYearId:'year',classroomId:'m1'})).error,/ภาคเรียน/)
+ assert.match((await api.buildSchoolMisSchoolExport('year')).error,/ภาคเรียน/)
+ for(const [term,expected] of [[1,'4'],[2,'2']]){
+   const classroom=await api.buildSchoolMisGradesExport({academicYearId:'year',classroomId:'m1',term})
+   assert.equal(classroom.error,null);assert.match(classroom.fileName,new RegExp('เทอม'+term))
+   const local=parse(classroom.csv)
+   assert.equal(local[0].filter(v=>v.includes('ท21101')).length,1)
+   assert.equal(local[1].at(-1),expected)
+   const mixed=await api.buildSchoolMisSchoolExport('year',term)
+   assert.equal(mixed.error,null);assert.match(mixed.fileName,new RegExp('เทอม'+term))
+   const all=parse(mixed.csv)
+   const ix=all[0].findIndex(v=>v.includes('ท21101'))
+   assert.equal(all.find(row=>row[3]==='99001')[ix],expected)
+   assert.equal(all.find(row=>row[3]==='00000')[5],'3.5','Primary exports retain annual grades')
+ }
  session={...session,role:'teacher'};assert.ok((await api.buildSchoolMisSchoolExport('year')).error.includes('สิทธิ์'))
  session=null;assert.ok((await api.buildSchoolMisSchoolExport('year')).error.includes('สิทธิ์'))
  console.log('PASS: school/year isolation, role authorization, 1,002 students across rooms, grade columns/blank cells, CSV escaping and room export compatibility')

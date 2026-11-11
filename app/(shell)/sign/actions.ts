@@ -604,7 +604,7 @@ export async function signPp5Subject(
   const { school, groupHeads } = await loadSchoolContext(session.schoolId)
 
   const { data: cs } = await db.from('class_subjects')
-    .select('id, teacher_id, subjects!inner(subject_group), classrooms!inner(school_id)')
+    .select('id, semester, teacher_id, subjects!inner(subject_group), classrooms!inner(school_id, level)')
     .eq('id', classSubjectId)
     .maybeSingle()
   if (!cs || relationOne(cs.classrooms)?.school_id !== session.schoolId) {
@@ -655,16 +655,25 @@ export async function signPp5Subject(
     if (next === 'director') {
       updates.director_decision = 'อนุมัติ'
       updates.status = 'approved'
-      await db.from('scores').update({ locked: true, updated_at: now })
-        .eq('class_subject_id', classSubjectId)
-        .eq('term', term)
     }
   }
 
-  const { error } = await db.from('approval_signatures').update(updates).eq('id', record.id)
-  if (error) return { error: error.message }
+  if (updates.status === 'approved') {
+    const wholeYear = term === 1 && cs.semester !== 1 && cs.semester !== 2
+      && !isSecondaryClassLevel(relationOne(cs.classrooms)?.level)
+    const { error } = await db.rpc('approve_pp5_subject_and_lock_scores', {
+      p_school: session.schoolId, p_subject: classSubjectId, p_term: term, p_approval: record.id,
+      p_expected_updated_at: record.updated_at, p_signer: session.userId, p_approved_at: now, p_whole_year: wholeYear,
+    })
+    if (error) return { error: error.message }
+  } else {
+    const { data, error } = await db.from('approval_signatures').update(updates)
+      .eq('id', record.id).eq('updated_at', record.updated_at).eq('status', 'in_review').select('id').maybeSingle()
+    if (error) return { error: error.message }
+    if (!data) return { error: 'สถานะเอกสารเปลี่ยนแล้ว กรุณาโหลดใหม่' }
+  }
 
-  if (updates.status === 'approved' || updates.status === 'rejected') {
+  if (updates.status === 'rejected') {
     try {
       await completeActiveApprovalSubmission(
         db,
@@ -1436,4 +1445,3 @@ export async function buildSignDocumentJsPdfBase64(params: {
     return { error: err instanceof Error ? err.message : 'สร้าง PDF ไม่สำเร็จ' }
   }
 }
-

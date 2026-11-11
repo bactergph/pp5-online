@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
+import { isSecondaryClassLevel } from '@/lib/class-level'
 import { fetchAllRows } from '@/lib/supabase-paginate'
 import {
   buildSchoolMisGradesCsv,
@@ -45,6 +46,7 @@ export type SchoolMisExportResult =
 export async function buildSchoolMisGradesExport(params: {
   academicYearId: string
   classroomId: string
+  term?: 1 | 2
 }): Promise<SchoolMisExportResult> {
   const session = await getSession()
   if (!session) return { error: 'ไม่มีสิทธิ์' }
@@ -82,27 +84,31 @@ export async function buildSchoolMisGradesExport(params: {
 
   if (!yearRow) return { error: 'ไม่พบปีการศึกษา' }
 
+  const level = asText((classroom as DbRow).level)
+  const secondary = isSecondaryClassLevel(level)
+  if (secondary && params.term !== 1 && params.term !== 2) return { error: 'กรุณาเลือกภาคเรียนสำหรับรายวิชามัธยม' }
+
   const [students, classSubjectRows] = await Promise.all([
     fetchAllRows<DbRow>((from, to) => db.from('students')
       .select('id, student_number, student_code, prefix, first_name, last_name, status')
       .eq('classroom_id', params.classroomId)
       .order('student_number').order('id').range(from, to)),
     fetchAllRows<DbRow>((from, to) => db.from('class_subjects')
-      .select('id, order_number, subjects(id, code, name, subject_group, type)')
+      .select('id, semester, order_number, subjects(id, code, name, subject_group, type)')
       .eq('classroom_id', params.classroomId)
       .eq('academic_year_id', params.academicYearId)
       .order('order_number').order('id').range(from, to)),
   ])
 
-  const level = asText((classroom as DbRow).level)
   const room = asNumber((classroom as DbRow).room)
   const gradeLevel = classroomGradeNumber(level)
 
-  const subjects = ((classSubjectRows || []) as DbRow[])
+  const offerings = ((classSubjectRows || []) as DbRow[])
     .map(row => {
       const subject = row.subjects as DbRow | null
       return {
         class_subject_id: asText(row.id),
+        semester: asNumber(row.semester),
         order_number: asNumber(row.order_number),
         code: asText(subject?.code),
         name: asText(subject?.name),
@@ -110,6 +116,7 @@ export async function buildSchoolMisGradesExport(params: {
         type: asText(subject?.type),
       }
     })
+    .filter(subject => !secondary || subject.semester === 0 || subject.semester === params.term)
     .filter(subject => isGradableSchoolMisSubject(subject))
     .filter(subject => {
       if (gradeLevel == null) return true
@@ -117,6 +124,20 @@ export async function buildSchoolMisGradesExport(params: {
       return codeGrade == null || codeGrade === gradeLevel
     })
     .sort((a, b) => a.order_number - b.order_number || a.code.localeCompare(b.code, 'th'))
+
+  const byCode = new Map<string, typeof offerings>()
+  for (const offering of offerings) {
+    const list = byCode.get(offering.code) || []
+    list.push(offering)
+    byCode.set(offering.code, list)
+  }
+  const subjects = [...byCode.values()].map(list => {
+    const preferred = secondary
+      ? list.filter(item => item.semester === params.term)
+      : list.filter(item => item.semester === 0)
+    return (preferred[0] || list[0])
+  })
+  const scoredOfferings = secondary ? subjects : offerings
 
   const studentList = ((students || []) as DbRow[]).map(student => ({
     id: asText(student.id),
@@ -128,20 +149,22 @@ export async function buildSchoolMisGradesExport(params: {
   }))
 
   const studentIds = studentList.map(s => s.id)
-  const subjectIds = subjects.map(s => s.class_subject_id)
+  const subjectIds = scoredOfferings.map(s => s.class_subject_id)
 
   const gradeByKey: Record<string, string> = {}
   if (studentIds.length > 0 && subjectIds.length > 0) {
-    const scores = await fetchAllRows<DbRow>((from, to) =>
-      db.from('scores')
+    const scores = await fetchAllRows<DbRow>((from, to) => {
+      const query = db.from('scores')
         .select('student_id, class_subject_id, term, grade, result')
         .in('student_id', studentIds)
         .in('class_subject_id', subjectIds)
+      if (secondary) query.eq('term', params.term!)
+      return query
         .order('student_id')
         .order('class_subject_id')
         .order('term')
-        .range(from, to),
-    )
+        .range(from, to)
+    })
 
     const byTerm = new Map<string, { grade: number | null; result: string | null }>()
     for (const row of scores) {
@@ -152,10 +175,16 @@ export async function buildSchoolMisGradesExport(params: {
       })
     }
     for (const studentId of studentIds) {
-      for (const subjectId of subjectIds) {
-        const base = `${studentId}:${subjectId}`
-        const cell = schoolMisGradeCell(byTerm.get(`${base}:2`))
-          || schoolMisGradeCell(byTerm.get(`${base}:1`))
+      for (const subject of subjects) {
+        const base = studentId + ':' + subject.class_subject_id
+        const candidates = byCode.get(subject.code) || []
+        const key = (id: string, term: number) => studentId + ':' + id + ':' + term
+        const cell = secondary
+          ? schoolMisGradeCell(byTerm.get(key(subject.class_subject_id, params.term!)))
+          : [subject, ...candidates.filter(item => item.class_subject_id !== subject.class_subject_id)]
+            .map(item => schoolMisGradeCell(byTerm.get(key(item.class_subject_id, 2)))
+              || schoolMisGradeCell(byTerm.get(key(item.class_subject_id, 1))))
+            .find(Boolean)
         if (cell) gradeByKey[base] = cell
       }
     }
@@ -170,7 +199,8 @@ export async function buildSchoolMisGradesExport(params: {
   return {
     error: null,
     csv,
-    fileName: schoolMisExportFileName(level, room, asNumber((yearRow as DbRow).year_be)),
+    fileName: schoolMisExportFileName(level, room, asNumber((yearRow as DbRow).year_be))
+      .replace(/\.csv$/, secondary ? '_เทอม' + params.term + '.csv' : '.csv'),
     studentCount: studentList.length,
     subjectCount: subjects.length,
     level,
@@ -186,7 +216,7 @@ export async function buildSchoolMisGradesExport(params: {
 }
 
 /** One CSV for the selected school's academic year; room export remains unchanged. */
-export async function buildSchoolMisSchoolExport(academicYearId: string): Promise<{ error: null; csv: string; fileName: string } | { error: string }> {
+export async function buildSchoolMisSchoolExport(academicYearId: string, term?: 1 | 2): Promise<{ error: null; csv: string; fileName: string } | { error: string }> {
   const session = await getSession()
   if (!session?.schoolId || !canExportSchoolMisSchool(session.role)) return { error: 'ไม่มีสิทธิ์ส่งออกข้อมูลทั้งโรงเรียน' } as const
   const db = createServerClient()
@@ -197,15 +227,17 @@ export async function buildSchoolMisSchoolExport(academicYearId: string): Promis
     db.from('classrooms').select('id, level, room').eq('school_id', session.schoolId!).eq('academic_year_id', academicYearId)
       .order('level').order('room').order('id').range(from, to))
   if (!rooms.length) return { error: 'ไม่พบห้องเรียนในปีการศึกษาที่เลือก' } as const
+  const includesSecondary = rooms.some(room => isSecondaryClassLevel(room.level))
+  if (includesSecondary && term !== 1 && term !== 2) return { error: 'กรุณาเลือกภาคเรียนสำหรับรายวิชามัธยม' } as const
   rooms.sort((a, b) => a.level.localeCompare(b.level, 'th', { numeric: true }) || a.room - b.room)
   const exports: Extract<SchoolMisExportResult, { error: null }>[] = []
   // Bound parallel queries while preserving classroom order.
   for (let start = 0; start < rooms.length; start += 3) {
-    const batch = await Promise.all(rooms.slice(start, start + 3).map(room => buildSchoolMisGradesExport({ academicYearId, classroomId: room.id })))
+    const batch = await Promise.all(rooms.slice(start, start + 3).map(room => buildSchoolMisGradesExport({ academicYearId, classroomId: room.id, term })))
     for (const result of batch) {
       if (result.error !== null) return { error: result.error }
       exports.push(result)
     }
   }
-  return { error: null, csv: buildSchoolMisSchoolCsv(exports), fileName: `คะแนน_ทั้งโรงเรียน_ปี${year.data.year_be}.csv` }
+  return { error: null, csv: buildSchoolMisSchoolCsv(exports), fileName: `คะแนน_ทั้งโรงเรียน_ปี${year.data.year_be}${includesSecondary ? '_มัธยมเทอม' + term : ''}.csv` }
 }

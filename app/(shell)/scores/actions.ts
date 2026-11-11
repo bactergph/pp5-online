@@ -10,6 +10,7 @@ import { getScoreEntryPeriod } from '@/lib/score-entry-period'
 import {limitsToOwnSubjects} from '@/lib/personal-data-scope'
 import {scoreTermVisible,teacherOwnsOffering} from '@/lib/class-subject-offer'
 import {selectClassSubjectOfferings} from '@/lib/class-subject-term'
+import { mergeScoreEdit, readScoreInputs, type ScoreEdit } from '@/lib/score-edits'
 
 async function requireSession() {
   const session = await getSession()
@@ -132,109 +133,109 @@ export async function fetchScoreSubjects(classroomId: string, term: 1 | 2 = 1) {
   return loadScoreSubjects(db, session, classroomId, term)
 }
 
-// โหลดนักเรียน + config + คะแนนเดิม สำหรับ 1 วิชา × ภาคเรียน
+// // โหลดนักเรียน + config + คะแนนเดิม สำหรับ 1 วิชา × ภาคเรียน
 export async function fetchScoreEntryData(classroomId: string, classSubjectId: string, term: number) {
   const session = await requireSession()
   const period = await getScoreEntryPeriod(session, classSubjectId, term, classroomId)
   if (!period.classroomId) throw new Error(period.error)
   const db = createServerClient()
-  const [studentsR, configR] = await Promise.all([
+  const [studentsR, configR, approvalR] = await Promise.all([
     db.from('students').select('id, student_number, student_code, prefix, first_name, last_name, status')
       .eq('classroom_id', classroomId).order('student_number'),
     db.from('score_configs').select('*').eq('class_subject_id', classSubjectId).eq('term', term).maybeSingle(),
+    db.from('approval_signatures').select('id').eq('class_subject_id', classSubjectId)
+      .eq('status', 'approved').in('term', period.annual ? [...new Set([1, term])] : [term]).limit(1),
   ])
+  if (studentsR.error || configR.error || approvalR.error) throw new Error('โหลดข้อมูลคะแนนไม่สำเร็จ')
   const students = studentsR.data || []
   const ids = students.map((s: { id: string }) => s.id)
   let scores: Record<string, unknown>[] = []
   if (ids.length) {
-    const { data } = await db.from('scores').select('*')
+    const { data, error } = await db.from('scores').select('*')
       .eq('class_subject_id', classSubjectId).eq('term', term).in('student_id', ids)
+    if (error) throw new Error('โหลดคะแนนเดิมไม่สำเร็จ')
     scores = data || []
   }
 
   let term1Scores: Record<string, unknown>[] = []
   let term1Config: { total_max: number } | null = null
-  if (!isSecondaryClassLevel(period.classroomLevel) && term === 2 && ids.length) {
+  if (period.annual && period.scoreTerms.length > 1 && term === 2 && ids.length) {
     const [term1ScoresR, term1ConfigR] = await Promise.all([
-      db.from('scores').select('student_id, term_total')
+      db.from('scores').select('student_id, term_total, unit_scores, midterm_score, final_score')
         .eq('class_subject_id', classSubjectId).eq('term', 1).in('student_id', ids),
       db.from('score_configs').select('total_max')
         .eq('class_subject_id', classSubjectId).eq('term', 1).maybeSingle(),
     ])
-    term1Scores = term1ScoresR.data || []
+    if (term1ScoresR.error || term1ConfigR.error) throw new Error('โหลดคะแนนภาคเรียนที่ 1 ไม่สำเร็จ')
+    term1Scores = (term1ScoresR.data || []).filter(row => {
+      const inputs = readScoreInputs(row)
+      return row.term_total != null && (Number(row.term_total) !== 0 || Object.keys(inputs.unit_scores).length > 0
+        || inputs.midterm_score !== null || inputs.final_score !== null)
+    }).map(row => ({ student_id: row.student_id, term_total: row.term_total }))
     term1Config = term1ConfigR.data
   }
 
-  return { students, config: configR.data, scores, term1Scores, term1Config, entryOpen: period.open === true, entryMessage: period.error }
+  const locked = !!approvalR.data?.length || scores.some(row => row.locked === true)
+  return {
+    students, config: configR.data, scores, term1Scores, term1Config, scoreTerms: period.scoreTerms, annual: period.annual,
+    entryOpen: period.open === true && !locked,
+    entryMessage: locked ? 'คะแนนวิชานี้ถูกล็อก (ลงนามแล้ว)' : period.error,
+  }
 }
 
-export async function saveScores(
-  classSubjectId: string,
-  term: number,
-  rows: {
-    student_id: string
-    unit_scores: Record<string, number>
-    between_total: number
-    midterm_score: number | null
-    final_score: number | null
-    term_total: number | null
-    year_total?: number | null
-    grade: number | null
-    result: string
-  }[],
-) {
+export async function saveScores(classSubjectId: string, term: number, edits: ScoreEdit[]) {
   const session = await requireSession()
   if (!CAN_EDIT.includes(session.role)) return { error: 'ไม่มีสิทธิ์' }
-  if (rows.length === 0) return { error: 'ไม่มีข้อมูล' }
-  if (new Set(rows.map(row => row.student_id)).size !== rows.length) return { error: 'มีรายชื่อนักเรียนซ้ำ กรุณาตรวจสอบก่อนบันทึก' }
-  const db = createServerClient()
+  if (!Array.isArray(edits) || !edits.length) return { error: 'ไม่มีข้อมูล' }
+  if (new Set(edits.map(row => row.student_id)).size !== edits.length) return { error: 'มีรายชื่อนักเรียนซ้ำ กรุณาตรวจสอบก่อนบันทึก' }
 
-  // ครู: บันทึกได้เฉพาะวิชาที่ตนสอน
   const period = await getScoreEntryPeriod(session, classSubjectId, term)
-  if (period.error) return { error: period.error }
-  const { data: students, error: studentsError } = await db.from('students').select('id')
-    .eq('classroom_id', period.classroomId).in('id', rows.map(row => row.student_id))
-  if (studentsError || new Set(students?.map(student => student.id)).size !== new Set(rows.map(row => row.student_id)).size) {
-    return { error: 'ข้อมูลนักเรียนไม่ตรงกับห้องเรียน' }
-  }
-  if (await limitsToOwnSubjects(session)) {
-    const owned = await db.from('class_subjects').select('id, teacher_id, co_teacher_ids').eq('id', classSubjectId).maybeSingle()
-    const row = owned.error && /co_teacher_ids/.test(owned.error.message)
-      ? (await db.from('class_subjects').select('id, teacher_id').eq('id', classSubjectId).eq('teacher_id', session.userId).maybeSingle()).data
-      : owned.data && teacherOwnsOffering(owned.data, session.userId) ? owned.data : null
-    if (!row) return { error: 'บันทึกคะแนนได้เฉพาะวิชาที่ตนสอน' }
-  }
+  if (period.error || !period.classroomId) return { error: period.error || 'ไม่พบห้องเรียน' }
 
-  // กันแก้คะแนนที่ถูกล็อก (ลงนามแล้ว)
-  const { data: locked, error: lockError } = await db.from('scores')
-    .select('student_id').eq('class_subject_id', classSubjectId).eq('term', term).eq('locked', true)
-  if (locked && locked.length) return { error: 'คะแนนวิชานี้ถูกล็อก (ลงนามแล้ว) แก้ไขไม่ได้' }
-  if (lockError) return { error: 'ตรวจสอบสถานะล็อกคะแนนไม่สำเร็จ กรุณาลองใหม่', count: 0 }
+  const db = createServerClient()
+  const ids = edits.map(row => row.student_id)
+  const [students, configR] = await Promise.all([
+    db.from('students').select('id, first_name, last_name').eq('classroom_id', period.classroomId).in('id', ids),
+    db.from('score_configs').select('between_scores, midterm_max, final_max, total_max').eq('class_subject_id', classSubjectId).eq('term', term).maybeSingle(),
+  ])
+  if (students.error || students.data?.length !== ids.length) return { error: 'ข้อมูลนักเรียนไม่ตรงกับห้องเรียน' }
+  if (configR.error) return { error: 'โหลดสัดส่วนคะแนนไม่สำเร็จ กรุณาลองใหม่' }
+  const config = configR.data
+  if (!config || !(Number(config.total_max) > 0)) return { error: 'กรุณากำหนดสัดส่วนคะแนนของภาคเรียนนี้ก่อน' }
 
-  const secondary = isSecondaryClassLevel(period.classroomLevel)
-  let normalizedRows = rows
-  if (secondary) {
-    const { data: config, error } = await db.from('score_configs').select('between_scores, midterm_max, final_max, total_max').eq('class_subject_id', classSubjectId).eq('term', term).maybeSingle()
-    if (error || !config || !(Number(config.total_max) > 0)) return { error: 'กรุณากำหนดสัดส่วนคะแนนของภาคเรียนนี้ก่อน' }
-    try { normalizedRows = rows.map(row => normalizeSecondaryScore(row, config)) }
-    catch (error) { return { error: error instanceof Error ? error.message : 'คะแนนรายภาคไม่ถูกต้อง' } }
-  }
-  const payload = normalizedRows.map(r => ({
-    student_id: r.student_id,
-    class_subject_id: classSubjectId,
-    term,
-    unit_scores: r.unit_scores,
-    between_total: r.between_total,
-    midterm_score: r.midterm_score,
-    final_score: r.final_score,
-    term_total: r.term_total,
-    year_total: secondary ? null : r.year_total ?? null,
-    grade: r.grade,
-    result: r.result,
-    updated_at: new Date().toISOString(),
-  }))
-  const { error } = await db.from('scores').upsert(payload, { onConflict: 'student_id,class_subject_id,term' })
-  if (!error) {
+  const primary = !isSecondaryClassLevel(period.classroomLevel)
+  const term1OnlyInputs = primary && term === 1 && period.scoreTerms.includes(2)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data, error: readError } = await db.from('scores').select('student_id, unit_scores, midterm_score, final_score, result, updated_at')
+      .eq('class_subject_id', classSubjectId).eq('term', term).in('student_id', ids)
+    if (readError) return { error: 'ตรวจสอบคะแนนล่าสุดไม่สำเร็จ กรุณาลองใหม่' }
+    const current = new Map((data || []).map(row => [row.student_id, row]))
+    const payload = []
+    for (const edit of edits) {
+      const existing = current.get(edit.student_id)
+      try {
+        const original = readScoreInputs(existing)
+        const { changed, inputs } = mergeScoreEdit(edit.before, edit.after, original)
+        if (changed) {
+          const normalized = normalizeSecondaryScore({ ...inputs, result: term1OnlyInputs ? 'เรียน' : inputs.result }, config)
+          payload.push({ ...normalized, student_id: edit.student_id, expected_updated_at: existing?.updated_at ?? null })
+        }
+      } catch (error) {
+        const student = students.data.find(row => row.id === edit.student_id)
+        const name = [student?.first_name, student?.last_name].filter(Boolean).join(' ')
+        const message = error instanceof Error ? error.message : 'ตรวจสอบคะแนนไม่สำเร็จ'
+        return { error: name ? name + ' · ' + message : message }
+      }
+    }
+    if (!payload.length) return { count: 0 }
+
+    const { error } = await db.rpc('save_score_edits', {
+      p_school: session.schoolId, p_subject: classSubjectId, p_term: term,
+      p_primary: primary, p_config: config, p_rows: payload,
+    })
+    if (error?.code === '40001') continue
+    if (error) return { error: error.message, count: 0 }
+
     const context = await resolveClassSubjectContext(classSubjectId)
     await logActivity({
       actor: session,
@@ -244,9 +245,10 @@ export async function saveScores(
       targetType: 'class_subject',
       targetId: classSubjectId,
       targetLabel: [context.subjectLabel, context.classroomLabel].filter(Boolean).join(' · '),
-      description: `บันทึกคะแนน ${context.subjectLabel || 'รายวิชา'} ${context.classroomLabel || ''} ภาคเรียน ${term} จำนวน ${payload.length} คน`.trim(),
+      description: ('บันทึกคะแนน ' + (context.subjectLabel || 'รายวิชา') + ' ' + (context.classroomLabel || '') + ' ภาคเรียน ' + term + ' จำนวน ' + payload.length + ' คน').trim(),
       metadata: { classSubjectId, term, count: payload.length },
     })
+    return { count: payload.length }
   }
-  return { error: error?.message, count: error ? 0 : payload.length }
+  return { error: 'มีการบันทึกคะแนนพร้อมกัน กรุณาลองบันทึกอีกครั้ง', count: 0 }
 }

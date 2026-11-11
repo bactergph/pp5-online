@@ -95,31 +95,69 @@ async function uploads() {
   assert.equal((await images.readUploadImage(image('image/webp', [82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]))).ext, 'webp')
 }
 async function scores() {
-  let lockError = null, failed = false, locked = [], count = 0
-  const scoreDb = { from(table) {
-    let mutation = false
-    let id
-    const q = { select() { return q }, eq(k, v) { if (k === 'id') id = v; return q }, in() { return q }, order() { return q }, upsert() { mutation = true; return q },
-      async maybeSingle() { return { data: table === 'classrooms' && id === 'room-a' ? { id } : null, error: null } },
-      then(resolve, reject) { if (mutation) count++; return Promise.resolve(mutation ? { error: failed ? { message: 'write failed' } : null } : table === 'students' ? { data: [{ id: 'student' }] } : { data: locked, error: lockError }).then(resolve, reject) },
-    }; return q
-  } }
+  let readError = null, writeError = null, count = 0
+  const config = { between_scores: [60], midterm_max: 0, final_max: 40, total_max: 100 }
+  const scoreDb = {
+    from(table) {
+      let id
+      const q = {
+        select() { return q }, eq(k, v) { if (k === 'id') id = v; return q }, in() { return q }, order() { return q }, limit() { return q },
+        async maybeSingle() {
+          if (table === 'score_configs') return { data: config }
+          return { data: table === 'classrooms' && id === 'room-a' ? { id } : null }
+        },
+        then(resolve, reject) {
+          const response = table === 'students' ? { data: [{ id: 'student' }] }
+            : { data: [], error: table === 'scores' ? readError : null }
+          return Promise.resolve(response).then(resolve, reject)
+        },
+      }
+      return q
+    },
+    async rpc(name) {
+      assert.equal(name, 'save_score_edits')
+      if (!writeError) count++
+      return { error: writeError }
+    },
+  }
   reset()
+  const pure = require('./helpers/load-pure-ts.cjs')
   const api = load('app/(shell)/scores/actions.ts', {
     '@/lib/supabase': { createServerClient: () => scoreDb }, '@/lib/session': { getSession: async () => actor },
     '@/lib/audit': { logActivity: async () => {}, resolveClassSubjectContext: async () => ({ schoolId: 'school-a' }) },
-    '@/lib/personal-data-scope': { isPersonalSubjectAccess: async () => false },
-    '@/lib/score-entry-period': { getScoreEntryPeriod: async () => ({ classroomId: 'room-a' }) },
+    '@/lib/personal-data-scope': { limitsToOwnSubjects: async () => false },
+    '@/lib/score-entry-period': { getScoreEntryPeriod: async () => ({ classroomId: 'room-a', classroomLevel: 'ม.1', scoreTerms: [1, 2], open: true }) },
+    '@/lib/class-level': pure('lib/class-level.ts'),
+    '@/lib/academic-term': {}, '@/lib/daily-attendance': {},
+    '@/lib/secondary-academic': pure('lib/secondary-academic.ts'),
+    '@/lib/class-subject-offer': pure('lib/class-subject-offer.ts'),
+    '@/lib/class-subject-term': pure('lib/class-subject-term.ts'),
+    '@/lib/score-edits': pure('lib/score-edits.ts'),
   })
-  const rows = [{ student_id: 'student', unit_scores: {}, between_total: 0, midterm_score: null, final_score: null, term_total: 0, grade: null, result: '' }]
-  lockError = { message: 'database unavailable' }; assert.ok((await api.saveScores('subject', 1, rows)).error); assert.equal(count, 0)
-  lockError = null; locked = [{ student_id: 'student' }]; assert.ok((await api.saveScores('subject', 1, rows)).error); assert.equal(count, 0)
-  locked = []; assert.ok((await api.saveScores('subject', 1, [...rows, ...rows])).error); assert.equal(count, 0)
-  failed = true; let result = await api.saveScores('subject', 1, rows); assert.ok(result.error); assert.equal(result.count, 0)
-  failed = false; result = await api.saveScores('subject', 1, rows); assert.equal(result.error, undefined); assert.equal(result.count, 1)
+  const before = { unit_scores: {}, midterm_score: null, final_score: null, result: 'เรียน' }
+  const rows = [{ student_id: 'student', before, after: { ...before, final_score: 30 } }]
+  readError = { message: 'database unavailable' }
+  assert.match((await api.saveScores('subject', 1, rows)).error, /ตรวจสอบคะแนนล่าสุด/)
+  assert.equal(count, 0)
+  await assert.rejects(api.fetchScoreEntryData('room-a', 'subject', 1), /โหลดคะแนนเดิม/)
+  readError = null
+  writeError = { message: 'คะแนนถูกล็อก' }
+  assert.match((await api.saveScores('subject', 1, rows)).error, /ล็อก/)
+  assert.equal(count, 0)
+  assert.ok((await api.saveScores('subject', 1, [...rows, ...rows])).error)
+  assert.equal(count, 0)
+  writeError = { message: 'write failed' }
+  let result = await api.saveScores('subject', 1, rows)
+  assert.ok(result.error)
+  assert.equal(result.count, 0)
+  writeError = null
+  result = await api.saveScores('subject', 1, rows)
+  assert.equal(result.error, undefined)
+  assert.equal(result.count, 1)
   await assert.rejects(api.fetchScoreSubjects('foreign-room'), /สิทธิ์/)
   assert.equal((await api.fetchScoreSubjects('room-a')).length, 0)
-  actor.mustChangePassword = true; await assert.rejects(api.saveScores('subject', 1, rows), /สิทธิ์/)
+  actor.mustChangePassword = true
+  await assert.rejects(api.saveScores('subject', 1, rows), /สิทธิ์/)
 }
 async function passwords() {
   let authError = null, flagError = null, changes = 0, flagWrites = 0, logs = 0

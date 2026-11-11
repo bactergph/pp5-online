@@ -14,6 +14,7 @@ import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
 import { calcGrade, gradeLabel, gradeColor, RESULT_OPTIONS } from '@/lib/grade'
 import { scoreTransferData, parseScoreTransfer } from '@/lib/score-transfer'
+import { primaryAnnualTotal, readScoreInputs, type ScoreInputs } from '@/lib/score-edits'
 import { schoolCodeFromPathname, withSchoolPrefix } from '@/lib/school-path'
 import { readContentUnits, subjectWithUnits } from '@/lib/class-subject-offer'
 
@@ -24,6 +25,12 @@ type CS = { id: string; classroom_id: string; subject_id: string; order_number: 
 type Student = { id: string; student_number: number; student_code: string | null; prefix: string | null; first_name: string; last_name: string; status: string }
 type Config = { unit_count: number; between_scores: number[]; midterm_max: number; final_max: number; total_max: number }
 type Row = { unit_scores: number[]; midterm: number | null; final: number | null; result: string }
+
+function toScoreInputs(row: Row, showMidterm: boolean, showResult: boolean): ScoreInputs {
+  const unit_scores: Record<string, number> = {}
+  row.unit_scores.forEach((value, index) => { if (Number.isFinite(value)) unit_scores[String(index + 1)] = value })
+  return { unit_scores, midterm_score: showMidterm ? row.midterm : null, final_score: row.final, result: showResult ? row.result : 'เรียน' }
+}
 
 function clampScoreInput(raw: string, max: number): number | null {
   if (raw === '') return null
@@ -38,6 +45,11 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   const [entryOpen, setEntryOpen] = useState(false)
   const [entryMessage, setEntryMessage] = useState<string | undefined>()
   const [loadedEntry, setLoadedEntry] = useState('')
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [reloadGrid, setReloadGrid] = useState(0)
+  const [scoreTerms, setScoreTerms] = useState<number[]>([1, 2])
+  const [annualOffering, setAnnualOffering] = useState(false)
+  const originalRows = useRef<Record<string, Row>>({})
   const [userRole, setUserRole] = useState('')
   const [years, setYears] = useState<Year[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
@@ -186,17 +198,21 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
     void Promise.resolve().then(() => {
       if (cancelled) return null
       setLoadingGrid(true)
+      setLoadFailed(false)
+      setLoadedEntry('')
       return fetchScoreEntryData(selectedClass, selectedCS, term)
     }).then(d => {
       if (cancelled || !d) return
       setEntryOpen(d.entryOpen)
+      setScoreTerms(d.scoreTerms || [1, 2])
+      setAnnualOffering(d.annual ?? false)
       setEntryMessage(d.entryMessage)
       setLoadedEntry(`${selectedClass}:${selectedCS}:${term}`)
       const cfg = d.config as Config | null
       setConfig(cfg && Array.isArray(cfg.between_scores) ? cfg : null)
       setStudents(d.students as Student[])
       const uc = cfg?.between_scores?.length || 0
-      const scoreMap = Object.fromEntries((d.scores as Record<string, unknown>[]).map(s => [s.student_id as string, s]))
+      const scoreMap = Object.fromEntries((d.scores as Record<string, unknown>[]).map(s => [s.student_id as string, readScoreInputs(s)]))
       const next: Record<string, Row> = {}
       for (const st of d.students as Student[]) {
         const s = scoreMap[st.id]
@@ -208,16 +224,17 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
           result: (s?.result as string) || 'เรียน',
         }
       }
+      originalRows.current = next
       setRows(next)
       setDirty(false)
       if (term === 2) {
         const term1Map = Object.fromEntries(
           ((d.term1Scores || []) as Array<{ student_id: string; term_total: number | null }>)
-            .map(item => [item.student_id, Number(item.term_total) || 0]),
+            .filter(item => item.term_total != null).map(item => [item.student_id, Number(item.term_total)]),
         )
         const term1Max = Number((d.term1Config as { total_max?: number } | null)?.total_max) || 0
         setTerm1TermTotals(term1Map)
-        setYearTotalMax(term1Max + (cfg?.total_max ?? 0))
+        setYearTotalMax(term1Max > 0 && cfg?.total_max && cfg.total_max > 0 ? term1Max + cfg.total_max : 0)
       } else {
         setTerm1TermTotals({})
         setYearTotalMax(0)
@@ -226,12 +243,16 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
     }).catch(() => {
       if (cancelled) return
       setEntryOpen(false)
-      setEntryMessage('โหลดสถานะการบันทึกคะแนนไม่สำเร็จ กรุณาลองใหม่')
+      setEntryMessage(undefined)
+      setLoadFailed(true)
+      setStudents([])
+      setConfig(null)
+      setRows({})
       setLoadingGrid(false)
     })
 
     return () => { cancelled = true }
-  }, [selectedClass, selectedCS, term, items, subjectsReady])
+  }, [selectedClass, selectedCS, term, items, subjectsReady, reloadGrid])
 
   const scoreConfigHref = useMemo(() => {
     const base = withSchoolPrefix(schoolCodeFromPathname(pathname), '/score-config')
@@ -291,26 +312,27 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
     setRows(prev => ({ ...prev, [sid]: { ...prev[sid], result: val } })); setDirty(true); setSaveStatus('')
   }
 
-  function rowCalc(r: Row) {
+    function rowCalc(r: Row, studentId: string) {
     const between = r.unit_scores.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0)
-    const midtermPart = (config?.midterm_max ?? 0) > 0 ? (r.midterm || 0) : 0
-    const total = between + midtermPart + (r.final || 0)
-    const hasScore = r.unit_scores.some(Number.isFinite) || r.midterm !== null || r.final !== null
-    const grade = (!isSecondary || hasScore) && (isSecondary || term !== 1) && r.result === 'เรียน' ? calcGrade(total, config?.total_max || 100) : null
-    return { between, total, grade }
+    const midterm = (config?.midterm_max ?? 0) > 0 ? r.midterm : null
+    const hasScore = r.unit_scores.some(Number.isFinite) || midterm !== null || r.final !== null
+    const total = hasScore ? Math.round((between + (midterm ?? 0) + (r.final ?? 0)) * 100) / 100 : null
+    const annualTotal = scoreTerms.length === 1 || yearTotalMax > 0
+      ? primaryAnnualTotal(total, term1TermTotals[studentId] ?? null, scoreTerms.length === 1) : null
+    const gradeTotal = isSecondary ? total : annualTotal
+    const gradeMax = isSecondary || scoreTerms.length === 1 ? config?.total_max ?? 0 : yearTotalMax
+    const grade = gradeTotal !== null && gradeMax > 0 && (isSecondary || term === 2 || scoreTerms.length === 1) && r.result === 'เรียน'
+      ? calcGrade(gradeTotal, gradeMax) : null
+    return { between, total, annualTotal, grade }
   }
 
-  function yearTotalFor(studentId: string, termTotal: number) {
-    return (term1TermTotals[studentId] ?? 0) + termTotal
-  }
-
-  async function exportScores() {
+async function exportScores() {
     if (!config || loadingGrid || loadedEntry !== `${selectedClass}:${selectedCS}:${term}`) return
     setTransferBusy(true)
     try {
       const XLSX = await import('xlsx')
       const workbook = XLSX.utils.book_new()
-      const sheet = XLSX.utils.aoa_to_sheet(scoreTransferData(students, rows, config, term, isSecondary))
+      const sheet = XLSX.utils.aoa_to_sheet(scoreTransferData(students, rows, config, term, showGradeResult))
       sheet['!cols'] = [{ wch: 38 }, { wch: 8 }, { wch: 32 }, ...Array.from({ length: config.between_scores.length + 3 }, () => ({ wch: 24 }))]
       XLSX.utils.book_append_sheet(workbook, sheet, 'คะแนน')
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
@@ -341,7 +363,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
       if (range.e.r > 5000 || range.e.c > config.between_scores.length + 10) throw new Error('จำนวนแถวหรือคอลัมน์เกินแบบฟอร์ม กรุณาใช้ไฟล์ที่ดาวน์โหลดจากหน้านี้')
       if (Object.values(sheet).some(cell => cell && typeof cell === 'object' && 'f' in cell)) throw new Error('กรุณาใช้ค่าคะแนนตัวเลขแทนสูตร Excel ก่อนนำเข้า')
       const data = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: true })
-      const imported = parseScoreTransfer(data, students, config, term, [...RESULT_OPTIONS], isSecondary)
+      const imported = parseScoreTransfer(data, students, config, term, [...RESULT_OPTIONS], showGradeResult)
       if (liveTransferContext.current !== context) throw new Error('รายการที่เลือกเปลี่ยนแล้ว กรุณานำเข้าใหม่ในรายการที่ต้องการ')
       setImportPreview({ rows: imported, context, filename: file.name })
     } catch (error) {
@@ -359,49 +381,24 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   async function handleSave() {
     if (!config || !canEdit || saving) return
     const showMidtermOnSave = (config.midterm_max ?? 0) > 0
-    for (const st of students) {
-      const r = rows[st.id]
-      if (!r) continue
-      for (let i = 0; i < r.unit_scores.length; i++) {
-        const val = r.unit_scores[i]
-        const max = config.between_scores[i] ?? 0
-        if (overMax(val, max)) {
-          notify('error', `คะแนนระหว่างเรียนครั้งที่ ${i + 1} ของ ${st.first_name} เกินคะแนนเต็ม (${max})`)
-          return
-        }
-      }
-      if (showMidtermOnSave && r.midterm != null && overMax(r.midterm, config.midterm_max)) {
-        notify('error', `คะแนนกลางภาคของ ${st.first_name} เกินคะแนนเต็ม (${config.midterm_max})`)
-        return
-      }
-      if (r.final != null && overMax(r.final, config.final_max)) {
-        notify('error', `คะแนนปลายภาคของ ${st.first_name} เกินคะแนนเต็ม (${config.final_max})`)
-        return
-      }
-    }
     setSaving(true)
     setAlertModal(null)
-    const payload = students.map(st => {
-      const r = rows[st.id]
-      const { between, total, grade } = rowCalc(r)
-      const unitObj: Record<string, number> = {}
-      r.unit_scores.forEach((v, i) => { if (Number.isFinite(v)) unitObj[String(i + 1)] = v })
-      return {
-        student_id: st.id,
-        unit_scores: unitObj,
-        between_total: between,
-        midterm_score: (config.midterm_max ?? 0) > 0 ? r.midterm : null,
-        final_score: r.final,
-        term_total: total,
-        year_total: !isSecondary && term === 2 ? yearTotalFor(st.id, total) : null,
-        grade: !isSecondary && term === 1 ? null : grade,
-        result: !isSecondary && term === 1 ? 'เรียน' : r.result,
-      }
+    const edits = students.flatMap(student => {
+      const before = toScoreInputs(originalRows.current[student.id], showMidtermOnSave, showGradeResult)
+      const after = toScoreInputs(rows[student.id], showMidtermOnSave, showGradeResult)
+      return JSON.stringify(before) === JSON.stringify(after) ? [] : [{ student_id: student.id, before, after }]
     })
+    if (!edits.length) {
+      setDirty(false)
+      setSaving(false)
+      return
+    }
     try {
-      const { error } = await saveScores(selectedCS, term, payload)
+      const { error } = await saveScores(selectedCS, term, edits)
       if (error) { setSaveStatus('บันทึกไม่สำเร็จ คะแนนที่แก้ไขยังอยู่ กรุณาลองอีกครั้ง'); notify('error', error); return }
       setDirty(false)
+      setLoadingGrid(true)
+      setReloadGrid(value => value + 1)
       setSaveStatus('บันทึกแล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false }))
     } catch {
       setSaveStatus('บันทึกไม่สำเร็จ คะแนนที่แก้ไขยังอยู่ กรุณาลองอีกครั้ง')
@@ -418,8 +415,8 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   const selectedClassroom = classrooms.find(item => item.id === selectedClass)
   const betweenMax = config?.between_scores.reduce((a, b) => a + b, 0) || 0
   const showMidterm = (config?.midterm_max ?? 0) > 0
-  const showGradeResult = isSecondary || term !== 1
-  const showYearTotal = !isSecondary && term === 2
+  const showGradeResult = isSecondary || term !== 1 || scoreTerms.length === 1
+  const showYearTotal = !isSecondary && term === 2 && scoreTerms.length > 1
 
   return (
     <>
@@ -531,6 +528,13 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
             </div>
           ) : loadingGrid ? (
             <div className="text-center py-10 text-gray-500">กำลังโหลดคะแนน...</div>
+          ) : loadFailed ? (
+            <div className="alert alert-error score-config-cta" role="alert">
+              <span>โหลดคะแนนไม่สำเร็จ กรุณาลองโหลดใหม่ก่อนกรอกคะแนน</span>
+              <button type="button" className="btn btn-secondary" onClick={() => setReloadGrid(value => value + 1)}>โหลดคะแนนใหม่</button>
+            </div>
+          ) : loadedEntry !== (selectedClass + ':' + selectedCS + ':' + term) ? (
+            <p role="status">กำลังโหลดคะแนน…</p>
           ) : !config ? (
             <div className="alert alert-error score-config-cta">
               <div className="score-config-cta-text">
@@ -569,7 +573,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
                 <DocumentSignaturePanel
                   variant="pp5_subject"
                   classSubjectId={selectedCS}
-                  reportTerm={term}
+                  reportTerm={annualOffering ? 0 : term}
                   disabled={dirty}
                   compact
                 />
@@ -618,7 +622,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
                   <tbody>
                     {students.map(st => {
                       const r = rows[st.id]; if (!r) return null
-                      const { total, grade } = rowCalc(r)
+                      const { between, total, annualTotal, grade } = rowCalc(r, st.id)
                       const inactive = st.status === 'ย้ายออก'
                       return (
                         <tr key={st.id} style={inactive ? { opacity: 0.5 } : undefined}>
@@ -636,7 +640,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
                               </td>
                             )
                           })}
-                          <td style={{ textAlign: 'center', background: '#ECFDF5', fontWeight: 900, color: '#047857' }}>{rowCalc(r).between}</td>
+                          <td style={{ textAlign: 'center', background: '#ECFDF5', fontWeight: 900, color: '#047857' }}>{between}</td>
                           {showMidterm && (
                             <td style={{ textAlign: 'center', background: '#EFF6FF' }}>
                               <input aria-label={`${st.first_name} ${st.last_name} กลางภาค`} type="number" min={0} max={config.midterm_max} disabled={!canEdit || saving} value={r.midterm ?? ''}
@@ -650,7 +654,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
                           <td style={{ textAlign: 'center', fontWeight: 900 }}>{total}</td>
                           {showYearTotal && (
                             <td style={{ textAlign: 'center', background: '#FDF2F8', fontWeight: 900, color: '#BE185D' }}>
-                              {yearTotalFor(st.id, total)}
+                              {annualTotal ?? '–'}
                             </td>
                           )}
                           {showGradeResult && (

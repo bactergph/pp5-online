@@ -1,5 +1,5 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
-const modules=new Map();function load(file,deps={}){file=path.resolve(file);if(modules.has(file))return modules.get(file);const api={};modules.set(file,api);vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:api,Date,require:name=>name in deps?deps[name]:name==='server-only'?{}:name.startsWith('@/')?load(name.slice(2)+'.ts',deps):require(name)});return api}
+const modules=new Map();function load(file,deps={}){file=path.resolve(file);if(modules.has(file))return modules.get(file);const api={};modules.set(file,api);vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:api,Date,Error,require:name=>name in deps?deps[name]:name==='server-only'?{}:name.startsWith('@/')?load(name.slice(2)+'.ts',deps):require(name)});return api}
 const model=load('lib/secondary-academic.ts'),transfer=load('lib/score-transfer.ts');
 const catalog=JSON.parse(fs.readFileSync('data/seka-secondary-subjects.json','utf8'));
 assert.equal(catalog.source,'โรงเรียนเซกา');assert.equal(new Set(catalog.subjects.map(s=>s.level)).size,6);
@@ -25,7 +25,41 @@ const students=[{id:'a',student_number:1,first_name:'ทดสอบ',last_name:
 const excel=transfer.scoreTransferData(students,rows,config,1,true);assert.equal(transfer.parseScoreTransfer(excel,students,config,1,['เรียน','ร'],true).a.result,'ร');assert.equal(transfer.scoreTransferHeaders(config,1).includes('ผลการเรียน'),false,'Primary term-1 Excel format remains unchanged');
 const activities=model.secondaryActivityRows([{student_id:'a',term:0,field_key:'x',value_text:'ผ่าน'},{student_id:'a',term:1,field_key:'x',value_text:'ผ่าน'},{student_id:'a',term:2,field_key:'x',value_text:'ไม่ผ่าน'}],[{field_key:'x',is_active:true},{field_key:'y',is_active:true}]);assert.equal(activities.length,2);assert.equal(activities[0].overall_result,null,'Incomplete activity assessment must not claim pass');assert.equal(activities[1].overall_result,'ไม่ผ่าน');
 // Actual server action: score formula cannot be forged by the browser.
-let writes=[],level='ม.1',locked=false,session={role:'teacher',schoolId:'school',userId:'teacher'};const tables={students:[{id:'a',classroom_id:'room'}],score_configs:[config],scores:[]};
-function query(table){const filters=[];const result=()=>({data:table==='class_subjects'?[{id:'course'}]:(tables[table]||[]).filter(row=>filters.every(fn=>fn(row))),error:null});const q={select:()=>q,eq:(key,v)=>{if(table==='score_configs'||key==='class_subject_id'||key==='term')return q;if(key==='locked'){if(locked)tables.scores=[{student_id:'a'}];else tables.scores=[];return q}filters.push(r=>r[key]===v);return q},in:(key,vs)=>{filters.push(r=>vs.includes(r[key]));return q},maybeSingle:async()=>({...result(),data:result().data[0]||null}),upsert:async rows=>{writes=rows;return {error:null}},then:(yes,no)=>Promise.resolve(result()).then(yes,no)};return q}
-const api=load('app/(shell)/scores/actions.ts',{'@/lib/supabase':{createServerClient:()=>({from:query})},'@/lib/session':{getSession:async()=>session},'@/lib/audit':{logActivity:async()=>{},resolveClassSubjectContext:async()=>({schoolId:'school'})},'@/lib/personal-data-scope':{isPersonalSubjectAccess:async()=>false,limitsToOwnSubjects:async()=>false},'@/lib/score-entry-period':{getScoreEntryPeriod:async()=>({classroomId:'room',classroomLevel:level,open:true})}});
-(async()=>{assert.equal((await api.saveScores('course',1,[{student_id:'a',...input,between_total:999}])).count,1);assert.equal(writes[0].grade,4);assert.equal(writes[0].term_total,80);assert.equal(writes[0].year_total,null);assert.ok((await api.saveScores('course',2,[{student_id:'wrong',...input}])).error);locked=true;assert.ok((await api.saveScores('course',1,[{student_id:'a',...input}])).error);locked=false;level='ป.1';assert.equal((await api.saveScores('course',2,[{student_id:'a',...input}])).count,1);assert.equal(writes[0].year_total,200,'Primary persistence contract unchanged');console.log('PASS: Seka catalogue 6 levels, independent semester grades, weighted GPA incl zero/missing credits/pending results, legacy annual read-only, blank scores, safe server calculation, per-term activities, Excel roundtrip, roster/lock guards and primary regression')})().catch(error=>{console.error(error);process.exitCode=1})
+let writes = [], locked = false, latest = [], simulateRetry = false, attempts = 0
+const session = { role: 'teacher', schoolId: 'school', userId: 'teacher' }
+const tables = { students: [{ id: 'a', classroom_id: 'room' }], score_configs: [config] }
+function query(table){const filters=[];const result=()=>({data:table==='class_subjects'?[{id:'course'}]:(table==='scores'?latest:tables[table]||[]).filter(row=>filters.every(fn=>fn(row))),error:null});const q={select:()=>q,eq:(key,v)=>{if(table==='score_configs'||key==='class_subject_id'||key==='term')return q;filters.push(r=>r[key]===v);return q},in:(key,vs)=>{filters.push(r=>vs.includes(r[key]));return q},maybeSingle:async()=>({...result(),data:result().data[0]||null}),then:(yes,no)=>Promise.resolve(result()).then(yes,no)};return q}
+const api=load('app/(shell)/scores/actions.ts',{'@/lib/supabase':{createServerClient:()=>({from:query, rpc})},'@/lib/session':{getSession:async()=>session},'@/lib/audit':{logActivity:async()=>{},resolveClassSubjectContext:async()=>({schoolId:'school'})},'@/lib/personal-data-scope':{isPersonalSubjectAccess:async()=>false,limitsToOwnSubjects:async()=>false},'@/lib/score-entry-period':{getScoreEntryPeriod:async()=>({classroomId:'room',classroomLevel:'ม.1',scoreTerms:[1,2],open:true})}});
+async function rpc(name, payload) {
+  assert.equal(name, 'save_score_edits')
+  attempts++
+  if (simulateRetry && attempts === 1) {
+    latest = [{ student_id: 'a', ...input, unit_scores: { 1: 19, 2: 30 }, final_score: null }]
+    return { error: { code: '40001' } }
+  }
+  if (locked) return { error: { message: 'คะแนนถูกล็อก' } }
+  writes = payload.p_rows
+  return { error: null }
+}
+;(async () => {
+  const before = { unit_scores: {}, midterm_score: null, final_score: null, result: 'เรียน' }
+  const edit = { student_id: 'a', before, after: input }
+  assert.equal((await api.saveScores('course', 1, [edit])).count, 1)
+  assert.equal(writes[0].grade, 4)
+  assert.equal(writes[0].term_total, 80)
+  assert.equal(writes[0].year_total, null)
+  assert.ok((await api.saveScores('course', 2, [{ ...edit, student_id: 'wrong' }])).error)
+  locked = true
+  assert.match((await api.saveScores('course', 1, [edit])).error, /ล็อก/)
+  locked = false
+  latest = [{ student_id: 'a', ...input, final_score: null }]
+  attempts = 0
+  simulateRetry = true
+  const raceEdit = { student_id: 'a', before: { ...input, final_score: null }, after: input }
+  assert.equal((await api.saveScores('course', 1, [raceEdit])).count, 1)
+  assert.equal(attempts, 2)
+  assert.equal(writes[0].unit_scores[1], 19, 'Retry merges an edit in a different cell')
+  assert.equal(writes[0].term_total, 79)
+  assert.match((await api.saveScores('course', 1, [edit])).error, /คะแนนช่องเดียวกัน/)
+  console.log('PASS: secondary grading, reports, Excel and activities, score normalization, roster/lock guards, concurrent edits and retry')
+})().catch(error => { console.error(error); process.exitCode = 1 })

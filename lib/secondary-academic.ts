@@ -60,7 +60,8 @@ export function normalizeSecondaryScore<T extends { unit_scores: Record<string, 
   }
   if (!valid(row.midterm_score, config.midterm_max) || !valid(row.final_score, config.final_max)) throw new Error('คะแนนสอบเกินช่วงที่กำหนด')
   const any = Object.keys(row.unit_scores).length > 0 || row.midterm_score !== null || row.final_score !== null
-  const total = any ? between + (config.midterm_max > 0 ? row.midterm_score ?? 0 : 0) + (row.final_score ?? 0) : null
+  const rawTotal = between + (config.midterm_max > 0 ? row.midterm_score ?? 0 : 0) + (row.final_score ?? 0)
+  const total = any ? Number(rawTotal.toFixed(2)) : null
   if (total !== null && total > config.total_max) throw new Error('คะแนนรวมเกินคะแนนเต็ม')
   return { ...row, between_total: between, term_total: total, year_total: null, grade: secondaryResultFromInput({ term_total: total, result: row.result }, config.total_max) }
 }

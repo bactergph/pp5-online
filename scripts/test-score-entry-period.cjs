@@ -22,7 +22,7 @@ const db = { from(table) {
 const exportsObject = {}
 runInNewContext(source, {
   exports: exportsObject,
-  require: name => name === 'server-only' ? {} : name === '@/lib/class-subject-offer' ? offering : name === '@/lib/personal-data-scope' ? {limitsToOwnSubjects:async session=>!['admin','academic_head','deputy_principal','principal','district'].includes(session.role)&&(session.role==='teacher'||personal)} : { createServerClient: () => db },
+  require: name => name === 'server-only' ? {} : name === '@/lib/class-level' ? require('./helpers/load-pure-ts.cjs')('lib/class-level.ts') : name === '@/lib/class-subject-offer' ? offering : name === '@/lib/personal-data-scope' ? {limitsToOwnSubjects:async session=>!['admin','academic_head','deputy_principal','principal','district'].includes(session.role)&&(session.role==='teacher'||personal)} : { createServerClient: () => db },
 })
 const session = { schoolId: 'school-a', role: 'teacher', userId: 'teacher-a' }
 async function check() {

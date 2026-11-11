@@ -11,6 +11,7 @@ export async function fetchSchoolMisExportInit() {
 export async function exportSchoolMisGradesCsv(params: {
   academicYearId: string
   classroomId: string
+  term?: 1 | 2
 }) {
   return buildSchoolMisGradesExport(params)
 }
