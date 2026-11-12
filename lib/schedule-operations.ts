@@ -9,7 +9,7 @@ import { logActivity } from '@/lib/audit'
 import { SCHEDULE_EDIT_ROLES, SCHEDULE_TEACHING_ROLES } from '@/lib/schedules'
 import { lessonColumns, lessonKey, loadSchedule, loadScheduleConstraints, persistSchedule, requireScheduleClass, type ScheduleSlot } from '@/lib/schedule-store'
 import { generate, confirmDraft, cancelDraft, preparation } from '@/lib/schedule-preparation'
-import { planScheduleClear, scheduleClearRooms, type ScheduleClearOptions, type ScheduleClearScope } from './schedule-clear'
+import { planScheduleClear, scheduleClearPayload, scheduleClearRooms, type ScheduleClearOptions, type ScheduleClearScope } from './schedule-clear'
 import { LEARNER_DEVELOPMENT_KEY } from '@/lib/schedule-activity'
 import {activityLockCells} from './schedule-lock-state'
 
@@ -147,7 +147,7 @@ export async function clearScope(year:string,semester:number,scope:ScheduleClear
     const data=await preparation(year,semester)
     if(!options.expectedHash||data.hash!==options.expectedHash)throw Error('ข้อมูลเปลี่ยนแล้ว กรุณาเปิดหน้าต่างล้างตารางและตรวจสอบใหม่')
     const result=planScheduleClear(data,scheduleClearRooms(data,scope,roomId,selectedRooms),options)
-    const saved=await createServerClient().rpc('clear_schedule_placements',{p_school:session.schoolId,p_year:year,p_term:semester,p_hash:data.hash,p_rows:result.rows,p_config:result.plan,p_unlock:options.includeLocked===true})
+    const saved=await createServerClient().rpc('clear_schedule_placements',{p_school:session.schoolId,p_year:year,p_term:semester,p_hash:data.hash,p_rows:scheduleClearPayload(result.rows),p_config:result.plan,p_unlock:options.includeLocked===true})
     if(saved.error)throw Error(saved.error.code==='PGRST202'?'กรุณาติดตั้งฐานข้อมูล 097_schedule_clear_placements.sql ก่อนใช้งาน':saved.error.message)
     await logActivity({actor:session,schoolId:session.schoolId,action:'update',module:'schedules',targetType:'class_schedule',description:`ล้างคาบ${options.kind==='activities'?'กิจกรรม':'รายวิชา'} ${result.rooms} ห้อง · ${result.removed} คาบ · รวมคาบล็อก ${options.includeLocked===true?'ใช่':'ไม่'}`})
     return {rooms:result.rooms,removed:result.removed}

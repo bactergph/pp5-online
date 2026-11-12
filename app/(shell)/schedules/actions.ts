@@ -20,6 +20,7 @@ import {
   SCHEDULE_TEACHING_ROLES,
   SCHEDULE_VIEW_ROLES,
 } from '@/lib/schedules'
+import { formatStaffName } from '@/lib/roles'
 import { activityTimetableTeacherLabel, isActivityLessonId, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 
 type ScheduleSession = {
@@ -98,12 +99,16 @@ export async function fetchScheduleClassrooms(yearId: string) {
     .order('room')
 
   const classrooms = data || []
+  const teacherIds = [...new Set(classrooms.flatMap(room => [room.homeroom_teacher_id, room.homeroom_teacher2_id]).filter((id): id is string => !!id))]
+  const teachers = teacherIds.length ? await db.from('users').select('id, prefix, full_name').in('id', teacherIds) : { data: [] }
+  const names = new Map((teachers.data || []).map(teacher => [teacher.id, formatStaffName(teacher.prefix, teacher.full_name)]))
 
   return classrooms.map(c => ({
     id: c.id,
     level: c.level,
     room: c.room,
     label: `${c.level}/${c.room}`,
+    homeroomTeacherName: [c.homeroom_teacher_id, c.homeroom_teacher2_id].map(id => id ? names.get(id) || '' : '').filter(Boolean).join(' และ '),
   }))
 }
 

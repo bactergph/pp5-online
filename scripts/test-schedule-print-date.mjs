@@ -69,6 +69,12 @@ for (const page of [1, 2]) {
 drawn.length = 0
 await pdf.buildSchedulePdfBlob({ schoolName: 'โรงเรียนข้อมูลสมมติ', title: 'ตารางเรียนเดิม', periodTimes: [], gridData: {} })
 assert.equal(drawn.filter(row => row.value === 'วันที่ ......../......../........').length, 2, 'Legacy callers retain blank signer dates')
+const roles = pdf.scheduleDocumentSigners({
+  lead: { name: 'ครูประจำชั้นทดสอบ', role: 'ครูประจำชั้น' },
+  academicHeadName: 'หัวหน้า', viceDirectorName: ' รองทดสอบ ', directorName: 'ผอ', directorPosition: 'ผู้อำนวยการสถานศึกษา',
+}).map(signer => signer.role)
+assert.equal(JSON.stringify(roles), JSON.stringify(['ครูประจำชั้น', 'หัวหน้าวิชาการ', 'รองผู้อำนวยการสถานศึกษา', 'ผู้อำนวยการสถานศึกษา']))
+assert.equal(JSON.stringify(pdf.scheduleDocumentSigners({ lead: { name: 'ครูทดสอบ', role: 'ครูผู้สอน' }, viceDirectorName: '  ' }).map(signer => signer.role)), JSON.stringify(['ครูผู้สอน', 'หัวหน้าวิชาการ', 'ผู้อำนวยการสถานศึกษา']))
 console.log('PASS: full Thai date only on both signer rows of every PDF page; no header date; legacy exports unchanged')
 
 drawn.length = 0

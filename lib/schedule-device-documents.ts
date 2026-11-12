@@ -31,7 +31,8 @@ export function deviceDocumentPages(plan:FreeWizardPlan,kind:'class'|'teacher',i
         if(row.is_break){if(cells[key]?.pdf)gridData[key]=cells[key].pdf;continue}
         gridData[key]=cells[key]?.pdf||{line1:plan.blocks.some(b=>b.teacherId===id&&b.day===day&&teacherBlockOverlaps(teacherTimes,b.period,row.period))?'ไม่ว่าง':'—',line2:''}
       }
-      return {layout:teacherPeriodTimes(teacherTimes).length>10?'teacher-agenda' as const:'grid' as const,periodTimes:teacherPeriodTimes(teacherTimes),title:`ตารางสอน ${plan.teachers.find(t=>t.id===id)?.name||''} ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,gridData}
+      const teacherName=plan.teachers.find(t=>t.id===id)?.name||''
+      return {layout:teacherPeriodTimes(teacherTimes).length>10?'teacher-agenda' as const:'grid' as const,periodTimes:teacherPeriodTimes(teacherTimes),title:`ตารางสอน ${teacherName} ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,gridData,leadSigner:{name:teacherName,role:'ครูผู้สอน'}}
     }
     for(const day of plan.days)for(const {period} of teachingRows(levelPeriodTimes(plan.periods,plan.rooms.find(room=>room.id===id)?.label||''))){
       const subjects=plan.timetable.filter(cell=>cell.day===day&&cell.period===period&&cell.classroomId===id)
@@ -47,6 +48,6 @@ export function deviceDocumentPages(plan:FreeWizardPlan,kind:'class'|'teacher',i
       else gridData[`${day}-${period}`]={line1:'—',line2:''}
     }
     const name=plan.rooms.find(row=>row.id===id)?.label
-    return {periodTimes:levelPeriodTimes(plan.periods,name||''),title:`ตารางเรียน ${name||''} ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,gridData}
+    return {periodTimes:levelPeriodTimes(plan.periods,name||''),title:`ตารางเรียน ${name||''} ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,gridData,leadSigner:{name:'',role:'ครูประจำชั้น'}}
   })
 }

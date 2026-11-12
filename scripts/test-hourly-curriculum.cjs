@@ -2,6 +2,7 @@
 const fs = require('fs'), ts = require('typescript'), assert = require('node:assert/strict')
 function load(path, imports = {}) { const m = { exports: {} }; new Function('require', 'module', 'exports', ts.transpileModule(fs.readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(name => imports[name] || {}, m, m.exports); return m.exports }
 const hourly = load('lib/hourly-attendance.ts')
+const offer = load('lib/class-subject-offer.ts')
 const report = load('lib/subject-hourly-report.ts', { '@/lib/hourly-attendance': hourly })
 for (const [hours, hpw] of [[40, 1], [80, 2], [120, 3], [160, 4], [200, 5], [240, 6]]) {
   for (const weeks of [18, 20]) assert.equal(hourly.hoursPerWeek(hours, weeks), hpw)
@@ -47,7 +48,7 @@ const db = { from(table) {
 } }
 const actions = load('app/(shell)/attendance/actions.ts', {
   '@/lib/personal-data-scope':{isPersonalSubjectAccess:async()=>false,limitsToOwnSubjects:async()=>false},'@/lib/supabase': { createServerClient: () => db }, '@/lib/session': { getSession: async () => ({ role: 'admin', schoolId: 'school', userId: 'teacher' }) },
-  '@/lib/hourly-attendance': hourly, '@/lib/supabase-paginate': load('lib/supabase-paginate.ts'),
+  '@/lib/hourly-attendance': hourly, '@/lib/class-subject-offer': offer, '@/lib/supabase-paginate': load('lib/supabase-paginate.ts'),
   '@/lib/audit': { logActivity: async () => {}, resolveClassSubjectContext: async () => ({ schoolId: 'school' }) },
 })
 const base = { classroomId: 'room', classSubjectId: 'subject', academicYearId: 'year', term: 1 }
@@ -82,5 +83,18 @@ const base = { classroomId: 'room', classSubjectId: 'subject', academicYearId: '
   const second=await actions.fetchHourlyGrid({...base,term:2})
   assert.equal(second.records['student:2:1'],'ล')
   assert.equal(second.records['student:1:5'],undefined,'Do not mix term-1 records into term-2 summaries')
+  const weekProbe = [
+    { startDate: '2026-09-28', endDate: '2026-10-02' },
+    { startDate: '2026-10-05', endDate: '2026-10-09' },
+    { startDate: '2026-10-12', endDate: '2026-10-16' },
+    { startDate: '2026-10-19', endDate: '2026-10-23' },
+    { startDate: '2026-10-26', endDate: '2026-10-30' },
+    { startDate: '2026-11-02', endDate: '2026-11-06' },
+    { startDate: '2026-11-09', endDate: '2026-11-13' },
+    { startDate: '2026-11-16', endDate: '2026-11-20' },
+  ]
+  assert.equal(hourly.currentWeekTab(weekProbe, 5, '2026-11-10'), 1)
+  assert.equal(hourly.hourlyWeekNotStarted(weekProbe[7], '2026-11-10'), true)
+  assert.equal(hourly.hourlyWeekNotStarted(weekProbe[6], '2026-11-10'), false)
   console.log('Hourly curriculum tests passed: real 1–6 weekly slots, 20 term slots, report numbering, schedule warnings, legacy preservation and safe move failures.')
 })().catch(error => { console.error(error); process.exitCode = 1 })

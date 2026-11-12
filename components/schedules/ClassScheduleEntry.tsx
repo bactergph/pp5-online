@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import Link from './ScheduleLink'
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
+import { formatStaffName } from '@/lib/roles'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
 import { activityTimetableTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
@@ -27,7 +28,7 @@ import { FiZap, FiGrid, FiUsers, FiCalendar, FiDownload, FiMapPin, FiSettings } 
 import './schedule-workspace.css'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
-type Classroom = { id: string; level: string; room: number; label: string }
+type Classroom = { id: string; level: string; room: number; label: string; homeroomTeacherName?: string }
 type TeacherOption = { id: string; prefix?: string | null; full_name: string }
 type SubjectOption = {
   id: string
@@ -161,8 +162,8 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
         fetchScheduleExportContext(),
         fetchSchedulePdfGrids(selectedYear, semester, 'class', rooms.map(room => room.id)),
       ])
-      const pages = rooms.map(room => ({ periodTimes:levelPeriodTimes(times,room.level),title: classTitle(room), gridData: grids[room.id] }))
-      return buildSchedulePdfBlob({ days, pages, title: pages[0].title, fileName, gridData: pages[0].gridData, periodTimes: times, schoolName: scheduleSchoolName(ctx.school?.name), schoolLogoUrl: ctx.school?.logo_url, academicHeadName: ctx.school?.academic_head_name || '', directorName: directorDisplayName(ctx.school, ''), directorPosition: ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา' })
+      const pages = rooms.map(room => ({ periodTimes:levelPeriodTimes(times,room.level),title: classTitle(room), gridData: grids[room.id], leadSigner: { name: room.homeroomTeacherName || '', role: 'ครูประจำชั้น' } }))
+      return buildSchedulePdfBlob({ days, pages, title: pages[0].title, fileName, gridData: pages[0].gridData, periodTimes: times, schoolName: scheduleSchoolName(ctx.school?.name), schoolLogoUrl: ctx.school?.logo_url, academicHeadName: formatStaffName('', ctx.school?.academic_head_name || ''), viceDirectorName: formatStaffName('', ctx.school?.vice_director_name || ''), directorName: directorDisplayName(ctx.school, ''), directorPosition: ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา' })
     }})
   }
   const quotaOptions = subjects.map(s=>{

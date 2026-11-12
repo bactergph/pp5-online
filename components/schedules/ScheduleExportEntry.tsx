@@ -8,11 +8,12 @@ import { scheduleSemesterForYear, type PeriodTimeRow } from '@/lib/schedule-help
 import { enqueueFileExport } from '@/lib/pdf/pdf-export-queue'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
-import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
+import { formatStaffName } from '@/lib/roles'
+import { buildSchedulePdfBlob, scheduleDocumentSigners } from '@/lib/jspdf-schedules'
 import { formatThaiDate, getThaiMonthName } from '@/lib/thaiDate'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
-type Classroom = { id: string; level: string; room: number; label: string }
+type Classroom = { id: string; level: string; room: number; label: string; homeroomTeacherName?: string }
 type Teacher = { id: string; prefix: string; full_name: string }
 type ExportType = 'class' | 'teaching'
 
@@ -124,10 +125,12 @@ const STYLES = `
   .sched-print-cell .sub { font-size: 11px; font-weight: 600; color: #64748b; }
   .sched-print-cell .meta { font-size: 12px; font-weight: 600; color: #334155; }
   .sched-print-sign {
-    display: flex; justify-content: space-around; gap: 16px; text-align: center;
+    display: flex; justify-content: space-around; gap: 12px; text-align: center;
     margin: 8px 12px 16px; padding-top: 16px; border-top: 1px solid #dce6f2;
     font-size: 13px; color: #334155;
   }
+  .sched-print-sign > div { flex: 1; min-width: 0; }
+  .sched-print-sign p { margin: 0; line-height: 1.45; }
   .sched-export-page :focus-visible { outline: 3px solid #1373d9; outline-offset: 2px; }
   @media (max-width: 720px) {
     .sched-export-head, .sched-export-filters, .sched-export-picks-card { padding: 16px; }
@@ -149,6 +152,7 @@ export default function ScheduleExportPage() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [academicHeadName, setAcademicHeadName] = useState('')
+  const [viceDirectorName, setViceDirectorName] = useState('')
   const [directorName, setDirectorName] = useState('')
   const [directorPosition, setDirectorPosition] = useState('ผู้อำนวยการสถานศึกษา')
   const [schoolName, setSchoolName] = useState('')
@@ -204,7 +208,8 @@ export default function ScheduleExportPage() {
       ])
       setYears(initData.years as Year[])
       setTeachers(initData.teachers as Teacher[])
-      setAcademicHeadName(ctx.school?.academic_head_name || '')
+      setAcademicHeadName(formatStaffName('', ctx.school?.academic_head_name || ''))
+      setViceDirectorName(formatStaffName('', ctx.school?.vice_director_name || ''))
       setDirectorName(directorDisplayName(ctx.school, ''))
       setDirectorPosition(ctx.school?.acting_director ? 'รักษาการในตำแหน่งผู้อำนวยการสถานศึกษา' : ctx.school?.director_position || 'ผู้อำนวยการสถานศึกษา')
       setSchoolName(scheduleSchoolName(ctx.school?.name))
@@ -311,12 +316,12 @@ export default function ScheduleExportPage() {
           if (exportType === 'class') {
             const room = classrooms.find(c => c.id === id)
             const label = (room?.label || '').replace(/^ป\.\s*/, 'ชั้นประถมศึกษาปีที่ ').replace(/^ม\.\s*/, 'ชั้นมัธยมศึกษาปีที่ ').replace(/^อ\.\s*/, 'ชั้นอนุบาลปีที่ ')
-            return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id],periodTimes:exportType==='class'?levelPeriodTimes(periodTimes,classrooms.find(c=>c.id===id)?.level||''):teacherPeriodTimes(periodTimes) }
+            return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id], periodTimes: levelPeriodTimes(periodTimes, room?.level || ''), leadSigner: { name: room?.homeroomTeacherName || '', role: 'ครูประจำชั้น' } }
           }
           const teacher = teachers.find(t => t.id === id)
-          return { layout:teacherPeriodTimes(periodTimes).length>10?'teacher-agenda' as const:'grid' as const, title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? `${teacher.prefix.trim()}${teacher.full_name.trim()}` : ''}`, gridData: grids[id],periodTimes:teacherPeriodTimes(periodTimes) }
+          return { layout:teacherPeriodTimes(periodTimes).length>10?'teacher-agenda' as const:'grid' as const, title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? formatStaffName(teacher.prefix, teacher.full_name) : ''}`, gridData: grids[id], periodTimes: teacherPeriodTimes(periodTimes), leadSigner: { name: teacher ? formatStaffName(teacher.prefix, teacher.full_name) : '', role: 'ครูผู้สอน' } }
         })
-        return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, directorName, directorPosition, printDate, fileName })
+        return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, viceDirectorName, directorName, directorPosition, printDate, fileName })
       },
     })
   }
@@ -532,7 +537,7 @@ export default function ScheduleExportPage() {
           </table>
           </div>
           <div className="sched-print-sign">
-            {[{name:academicHeadName,role:'หัวหน้าวิชาการ'},{name:directorName,role:directorPosition}].map(s=><div key={s.role}>
+            {scheduleDocumentSigners({ lead: exportType === 'class' ? { name: selectedClass?.homeroomTeacherName || '', role: 'ครูประจำชั้น' } : { name: selectedTeacher ? formatStaffName(selectedTeacher.prefix, selectedTeacher.full_name) : '', role: 'ครูผู้สอน' }, academicHeadName, viceDirectorName, directorName, directorPosition }).map(s=><div key={s.role}>
               <p>ลงชื่อ ........................................................</p><p>({s.name || '........................................................'})</p><p>{s.role}</p><p>{printDate ? formatThaiDate(printDate) : 'วันที่ ........../........../..........'}</p>
             </div>)}
           </div>

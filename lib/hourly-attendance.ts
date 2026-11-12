@@ -224,6 +224,19 @@ export function summarizeHourlyStatuses(statuses: HourlyStatus[]): HourlySummary
   return { present, sick, leave, absent, total, percent }
 }
 
+/** สัปดาห์ที่ยังไม่เริ่มไม่นับเป็นมา — ใช้เฉพาะหน้าเช็คชื่อ ไม่เปลี่ยนรายงาน */
+export function hourlyWeekNotStarted(week: { startDate: string }, today: string) {
+  return week.startDate > today
+}
+
+export function currentWeekTab<T extends { startDate: string; endDate: string }>(weeks: T[], perTab: number, today: string) {
+  if (!weeks.length || perTab < 1) return 0
+  const open = weeks.findIndex(week => week.startDate <= today && week.endDate >= today)
+  const latestStarted = weeks.reduce((found, week, index) => week.startDate <= today ? index : found, -1)
+  const index = open >= 0 ? open : Math.max(0, latestStarted)
+  return Math.floor(index / perTab)
+}
+
 export function chunkWeeks<T>(items: T[], size: number) {
   const chunks: T[][] = []
   for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size))

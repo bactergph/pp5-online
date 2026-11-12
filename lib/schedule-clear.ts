@@ -5,6 +5,11 @@ export type ScheduleClearScope = 'room' | 'level' | 'school' | 'selected'
 type ClearData = Pick<Preparation, 'classrooms' | 'lessons' | 'slots' | 'plan'>
 const position = (room: string, day: number, period: number) => `${room}:${day}:${period}`
 
+/** Drop display-only fields so a clear payload matches stored timetable rows. */
+export function scheduleClearPayload<T extends { content_unit?: number | null }>(rows: T[]) {
+  return rows.map(({ content_unit: _unit, ...row }) => row)
+}
+
 export function scheduleClearRooms(data: ClearData, scope: ScheduleClearScope, roomId: string, selected?: string[]) {
   const room = data.classrooms.find(item => item.id === roomId)
   if (!room || !['room', 'level', 'school', 'selected'].includes(scope)) throw Error('เลือกห้องและขอบเขตการล้างตารางให้ถูกต้อง')

@@ -11,13 +11,16 @@ import {
 } from '@/app/scores/actions'
 import { fetchHourlyGrid, saveHourlyCell, fillHourlyPresentAll, fillHourlyPresentColumn, clearHourlyPresentColumn, clearHourlyAttendanceAll } from '@/app/attendance/actions'
 import { formatThaiDate } from '@/lib/thaiDate'
+import { dailyAttendanceToday } from '@/lib/daily-attendance'
 import { readContentUnits, subjectWithUnits } from '@/lib/class-subject-offer'
 import LegacyHourlyRecords, { type LegacyHourlyRecord } from './LegacyHourlyRecords'
 import {
   chunkWeeks,
+  currentWeekTab,
   globalSlotNumber,
   hourlyCellKey,
   hourlyCellText,
+  hourlyWeekNotStarted,
   HOURLY_STATUS_LABELS,
   nextHourlyStatusFromSaved,
   resolveHourlyStatus,
@@ -235,7 +238,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
 
   useEffect(() => {
     void Promise.resolve().then(() => {
-      setWeekTab(0)
+      setWeekTab(currentWeekTab(weeks, WEEKS_PER_TAB, dailyAttendanceToday()))
       setPendingAction(null)
       setConfirmPhase('idle')
       setConfirmCountdown(0)
@@ -268,8 +271,14 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
     return key in records ? records[key] : null
   }
 
-  function getDisplayStatus(studentId: string, weekNumber: number, slot: number): HourlyStatus {
-    return getSavedStatus(studentId, weekNumber, slot) ?? '/'
+  function weekNotStarted(week: TeachingWeek) {
+    return hourlyWeekNotStarted(week, dailyAttendanceToday())
+  }
+
+  function getDisplayStatus(studentId: string, week: TeachingWeek, slot: number): HourlyStatus | null {
+    const saved = getSavedStatus(studentId, week.weekNumber, slot)
+    if (saved == null && weekNotStarted(week)) return null
+    return saved ?? '/'
   }
 
   function markColumnFilling(columnKey: string, filling: boolean) {
@@ -287,7 +296,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
   }
 
   async function toggleColumnPresent(week: TeachingWeek, slot: number) {
-    if (!canEdit || !selectedYear || !selectedClass || !selectedCS || bulkFilling || clearingAll || !toolbarConfirmIdle) return
+    if (!canEdit || weekNotStarted(week) || !selectedYear || !selectedClass || !selectedCS || bulkFilling || clearingAll || !toolbarConfirmIdle) return
     const columnKey = `${week.weekNumber}:${slot}`
     if (fillingColumnKeys[columnKey]) return
     const cellKeys = students.map(student => hourlyCellKey(student.id, week.weekNumber, slot))
@@ -462,7 +471,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
   }
 
   async function toggleCell(studentId: string, week: TeachingWeek, slot: number) {
-    if (!canEdit || !selectedClass || !selectedCS) return
+    if (!canEdit || weekNotStarted(week) || !selectedClass || !selectedCS) return
     const key = hourlyCellKey(studentId, week.weekNumber, slot)
     const previous = getSavedStatus(studentId, week.weekNumber, slot)
     const next = nextHourlyStatusFromSaved(previous)
@@ -508,7 +517,9 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
     const statuses: HourlyStatus[] = []
     for (const week of scopeWeeks) {
       for (let slot = 1; slot <= hoursPerWeekCount; slot += 1) {
-        statuses.push(resolveHourlyStatus(getSavedStatus(studentId, week.weekNumber, slot)))
+        const saved = getSavedStatus(studentId, week.weekNumber, slot)
+        if (saved == null && weekNotStarted(week)) continue
+        statuses.push(resolveHourlyStatus(saved))
       }
     }
     return summarizeHourlyStatuses(statuses)
@@ -705,6 +716,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
                       const isLastSlot = slot === hoursPerWeekCount
                       const columnBusy = Boolean(fillingColumnKeys[columnKey])
                       const columnClearing = !columnHasSavedData(week.weekNumber, slot)
+                      const notStarted = weekNotStarted(week)
                       return (
                         <th
                           key={`${week.weekNumber}-${slot}`}
@@ -720,7 +732,8 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
                             <button
                               type="button"
                               className={`hourly-slot-all-btn ${columnClearing ? 'is-clear' : ''}`}
-                              disabled={columnBusy || bulkFilling || clearingAll || !toolbarConfirmIdle}
+                              title={notStarted ? 'ยังไม่ถึงสัปดาห์นี้' : undefined}
+                              disabled={notStarted || columnBusy || bulkFilling || clearingAll || !toolbarConfirmIdle}
                               onClick={() => void toggleColumnPresent(week, slot)}
                             >
                               {hourlyColumnPresentLabel(columnBusy, columnClearing)}
@@ -742,7 +755,8 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
                       {visibleWeeks.map(week => (
                         Array.from({ length: hoursPerWeekCount }, (_, i) => {
                           const slot = i + 1
-                          const status = getDisplayStatus(student.id, week.weekNumber, slot)
+                          const status = getDisplayStatus(student.id, week, slot)
+                          const notStarted = weekNotStarted(week)
                           const key = hourlyCellKey(student.id, week.weekNumber, slot)
                           const isFirstSlot = slot === 1
                           const isLastSlot = slot === hoursPerWeekCount
@@ -754,9 +768,10 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
                             ].filter(Boolean).join(' ')}>
                               <button
                                 type="button"
-                                aria-label={`${studentName(student)} ภาคเรียนที่ ${term} สัปดาห์ ${week.weekNumber} คาบ ${slot} ${HOURLY_STATUS_LABELS[status || '/']}`}
+                                aria-label={`${studentName(student)} ภาคเรียนที่ ${term} สัปดาห์ ${week.weekNumber} คาบ ${slot} ${notStarted && !status ? 'ยังไม่ถึงสัปดาห์นี้' : HOURLY_STATUS_LABELS[status || '/']}`}
                                 className={`hourly-cell ${status ? STATUS_CLASS[status] : 'hourly-status-empty'} ${savingCells[key] ? 'is-saving' : ''}`}
-                                disabled={!canEdit}
+                                title={notStarted ? 'ยังไม่ถึงสัปดาห์นี้' : undefined}
+                                disabled={!canEdit || notStarted}
                                 onClick={() => void toggleCell(student.id, week, slot)}
                               >
                                 {status ? hourlyCellText(status) : ''}

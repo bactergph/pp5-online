@@ -97,7 +97,7 @@ export async function fetchScoreInit(band?: AcademicBand, initialTerm: 1 | 2 | '
   const classrooms = (active ? await loadScoreClassrooms(db, session, active.id) : []).filter(room => !band || isSecondaryClassLevel(room.level) === (band === 'secondary'))
   const firstClassId = classrooms[0]?.id || ''
   const secondary = isSecondaryClassLevel(classrooms[0]?.level)
-  const calendarTerm = initialTerm === 'current' && secondary ? academicTermForDate(active, dailyAttendanceToday()) : null
+  const calendarTerm = initialTerm === 'current' ? academicTermForDate(active, dailyAttendanceToday()) : null
   let term: 1 | 2 = initialTerm === 2 ? 2 : calendarTerm || 1
   let classSubjects = firstClassId ? await loadScoreSubjects(db, session, firstClassId, term) : []
   // Legacy secondary schools may only have semester 2 offerings and no calendar yet.

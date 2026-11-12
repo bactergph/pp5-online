@@ -201,7 +201,7 @@ export async function fetchScheduleExportContext() {
   if (!session.schoolId) throw new Error('ไม่พบโรงเรียน')
   const db = createServerClient()
   const { data: school, error: schoolError } = await db.from('schools')
-    .select('name, logo_url, director_name, academic_head_name, acting_director, acting_director_position')
+    .select('name, logo_url, director_name, vice_director_name, academic_head_name, acting_director, acting_director_position')
     .eq('id', session.schoolId)
     .maybeSingle()
   if (schoolError) throw new Error('โหลดข้อมูลโรงเรียนไม่สำเร็จ')

@@ -21,9 +21,11 @@ const TEXT: [number, number, number] = [0, 0, 0]
 const MUTED: [number, number, number] = [0, 0, 0]
 
 export type SchedulePdfCell = { line1: string; line2: string; line3?: string; line4?: string }
-export type SchedulePdfPage = { layout?:'grid'|'teacher-agenda'; periodTimes?:PeriodTimeRow[]; title: string; gridData: Record<string, SchedulePdfCell> }
+export type ScheduleSigner = { name?: string; role: string }
+export type SchedulePdfPage = { layout?:'grid'|'teacher-agenda'; periodTimes?:PeriodTimeRow[]; title: string; gridData: Record<string, SchedulePdfCell>; leadSigner?: ScheduleSigner }
 export type SchedulePdfInput = {
   academicHeadName?: string
+  viceDirectorName?: string
   directorName?: string
   directorPosition?: string
   schoolName: string
@@ -88,6 +90,23 @@ function lineStyle(h: number, count: number, opts?: { line1Size?: number; line2S
   }
   if (count > 2) return [14, 12, 12, 11]
   return h >= 22 ? [16, 13] : [14, 11]
+}
+
+/** ครู → หัวหน้าวิชาการ → รองผู้อำนวยการเมื่อมีชื่อ → ผู้อำนวยการ */
+export function scheduleDocumentSigners(input: {
+  lead?: ScheduleSigner | null
+  academicHeadName?: string
+  viceDirectorName?: string
+  directorName?: string
+  directorPosition?: string
+}): ScheduleSigner[] {
+  const vice = input.viceDirectorName?.trim()
+  return [
+    ...(input.lead ? [{ name: input.lead.name, role: input.lead.role }] : []),
+    { name: input.academicHeadName, role: 'หัวหน้าวิชาการ' },
+    ...(vice ? [{ name: vice, role: 'รองผู้อำนวยการสถานศึกษา' }] : []),
+    { name: input.directorName, role: input.directorPosition || 'ผู้อำนวยการสถานศึกษา' },
+  ]
 }
 
 function drawSigners(
@@ -181,12 +200,9 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
 
   const logo = await loadImageDataUrl(input.schoolLogoUrl, 200, 0.8)
   const pages = input.pages?.length ? input.pages : [{ title: input.title, gridData: input.gridData }]
-  const signers = [
-    { name: input.academicHeadName, role: 'หัวหน้าวิชาการ' },
-    { name: input.directorName, role: input.directorPosition || 'ผู้อำนวยการสถานศึกษา' },
-  ]
   const signStep = 6.3
   for (const [index, sheet] of pages.entries()) {
+  const signers = scheduleDocumentSigners({ lead: sheet.leadSigner, academicHeadName: input.academicHeadName, viceDirectorName: input.viceDirectorName, directorName: input.directorName, directorPosition: input.directorPosition })
   const times=sheet.periodTimes||input.periodTimes
   const PERIODS=schedulePeriods(times)
   if (index) doc.addPage()
