@@ -83,7 +83,7 @@ try{
   console.log(roster ? 'PASS: 50 complete long student names, sticky identity columns after month-end scroll, 390/1440px layout, attendance save, sparse records and date cutoff' : 'PASS: production daily UI cutoff, saved future leave, old sparse write format, day rollover without writes, future month, actual PDF and mobile')
  }else{
  await page.setViewport({width:1440,height:1000});await go('merit');assert.equal(await page.$eval(first,el=>el.value),'5')
- await fill(first,'8');await click('[role=tab]','สรุปคะแนนความดี');await page.waitForSelector('.student-ledger-table');assert.equal(buckets.merit.s1[3],8);assert.match(await page.$eval('.student-ledger-metrics',el=>el.textContent),/13/,'Summary waits for blur save')
+ await fill(first,'8');const savingShown=page.waitForFunction(()=>document.body.innerText.includes('กำลังบันทึกคะแนน'));await click('[role=tab]','สรุปคะแนนความดี');await savingShown;await page.waitForSelector('.student-ledger-table');await page.waitForFunction(()=>document.body.innerText.includes('บันทึกคะแนนแล้ว'));assert.equal(buckets.merit.s1[3],8);assert.match(await page.$eval('.student-ledger-metrics',el=>el.textContent),/13/,'Summary waits for blur save')
  assert.equal(await page.$eval('.student-ledger-table tbody tr td:last-child',el=>el.textContent),'10')
  await page.select('.student-ledger-tools select','year');await page.waitForFunction(()=>document.querySelector('.student-ledger-metrics strong')?.textContent.includes('23'))
  await click('.student-ledger-table-tools button','ดาวน์โหลด PDF');await page.waitForFunction(()=>window.__pp5PdfExportStore?.jobs.some(job=>job.status==='ready'))

@@ -290,7 +290,12 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [ledgerView,setLedgerView]=useState<'daily'|'summary'>('daily')
   const activityRequestRef=useRef('')
   const pendingValueSaves=useRef(new Set<Promise<unknown>>())
+  const valueSaveInflight=useRef(0)
+  const valueSaveFailed=useRef(false)
+  const valueSaveTimer=useRef<number|null>(null)
   const [ledgerWaiting,setLedgerWaiting]=useState(false)
+  const [ledgerSavedFlash,setLedgerSavedFlash]=useState(false)
+  useEffect(()=>()=>{if(valueSaveTimer.current)window.clearTimeout(valueSaveTimer.current)},[])
   const [attendanceBulkFilling, setAttendanceBulkFilling] = useState(false)
   const [attendanceClearingAll, setAttendanceClearingAll] = useState(false)
   const [attendanceFillingDays, setAttendanceFillingDays] = useState<Record<number, true>>({})
@@ -1030,22 +1035,42 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     return 'ลบทั้งหมด'
   }
 
+  function noteLedgerSaved() {
+    if (valueSaveTimer.current) window.clearTimeout(valueSaveTimer.current)
+    setLedgerSavedFlash(true)
+    valueSaveTimer.current = window.setTimeout(() => {
+      setLedgerSavedFlash(false)
+      valueSaveTimer.current = null
+    }, 1800)
+  }
+
   async function autoSaveActivity(studentId: string, day: number, value: number) {
     if (!activityType) return false
     const requestKey=recordsRequestKey,previous=monthlyActivityValues[studentId]?.[day]??0
     const cellKey = `${studentId}-${day}`
     setMonthlyActivity(studentId, day, value)
     markSaving(cellKey, true)
+    valueSaveInflight.current += 1
+    if (valueSaveInflight.current === 1) valueSaveFailed.current = false
+    let saved = false
     try {
       const write=saveMonthlyActivity(classroomId, monthKey, term, activityType, [{ student_id: studentId, day, value }]);pendingValueSaves.current.add(write)
       let result
       try{result=await write}finally{pendingValueSaves.current.delete(write)}
       if (result.error) throw Error(result.error)
+      saved = true
       return true
     }catch(error){
+      valueSaveFailed.current = true
+      if (valueSaveTimer.current) window.clearTimeout(valueSaveTimer.current)
+      setLedgerSavedFlash(false)
       if(activityRequestRef.current===requestKey){if(isNumericMode)setMonthlyActivity(studentId,day,previous);notify('error',error instanceof Error?error.message:'บันทึกไม่สำเร็จ')}
       return false
-    }finally{markSaving(cellKey,false)}
+    }finally{
+      markSaving(cellKey,false)
+      valueSaveInflight.current -= 1
+      if (saved && valueSaveInflight.current === 0 && !valueSaveFailed.current) noteLedgerSaved()
+    }
   }
 
   function printAttendanceDocument(printWindow: Window) {
@@ -2075,6 +2100,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             {!canEdit && <span className="badge badge-gray">ดูอย่างเดียว</span>}
             {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากมาเรียนถึงวันนี้ · วันล่วงหน้ายังไม่บันทึก</span>}
             {tableLoading && <span className="badge badge-gray">กำลังโหลดตาราง...</span>}
+            {isNumericMode && !printMode && (Object.keys(savingCells).length > 0 || ledgerWaiting) && <span className="badge badge-gray" role="status" aria-live="polite"><span className="btn-spinner" aria-hidden="true" />{isMeritMode ? 'กำลังบันทึกคะแนน...' : 'กำลังบันทึก...'}</span>}
+            {isNumericMode && !printMode && Object.keys(savingCells).length === 0 && !ledgerWaiting && ledgerSavedFlash && <span className="badge badge-success" role="status" aria-live="polite">{isMeritMode ? 'บันทึกคะแนนแล้ว' : 'บันทึกแล้ว'}</span>}
           </div>
         </div>
       </div>
