@@ -237,7 +237,7 @@ export function createDeviceScheduleServices({read,write,onComputing,teacherLimi
     fetchScheduleDays:async(year,term=1)=>plan(year,term).days,
     fetchPeriodTimes:async(year,term)=>{const current=plan(year,term);return {times:year?withTeacherActivityClock(current.periods,current.teacherActivities):current.periods,isDefault:false}},
     savePeriodTimes:async periods=>{const error=validatePeriodProfiles(periods);if(error)throw Error(error);await mutate(selectedYear,selectedTerm,current=>{const next={...current,periods};for(const target of [next,{...plan(selectedYear,selectedTerm===1?2:1),periods}]){fixed(target);const issue=devicePreflight(target,target.rooms.filter(scheduleRoomEnabled).map(room=>room.id),false).find(issue=>issue.severity==='error'&&issue.code==='subject_day');if(issue)throw Error(issue.message)}return put(selectedYear,selectedTerm,next)});return {ok:true}},
-    fetchScheduleClassrooms:async year=>devicePreparation(plan(year)).classrooms.map(room=>({...room,label:`${room.level}/${room.name}`})),
+    fetchScheduleClassrooms:async year=>devicePreparation(plan(year)).classrooms.map(room=>({...room,label:`${room.level}/${room.name}`,homeroomTeacherName:''})),
     saveTimetableClassrooms:(year,term,levels)=>outcome(()=>mutate(year,term,async current=>{
       if(new Set(levels.map(level=>level.level)).size!==levels.length)throw Error('มีระดับชั้นซ้ำในข้อมูลที่กำลังบันทึก')
       const rooms=[...current.rooms]
