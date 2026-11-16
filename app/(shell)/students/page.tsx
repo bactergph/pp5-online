@@ -7,6 +7,7 @@ import LoadingButton from '@/components/LoadingButton'
 import ThaiDatePicker from '@/components/ThaiDatePicker'
 import AppAlertModal from '@/components/AppAlertModal'
 import DeleteAllStudentsDialog from '@/components/students/DeleteAllStudentsDialog'
+import NameColumnHandle, { useNameColumnWidth } from '@/components/table/NameColumnHandle'
 
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = { id: string; level: string; room: number }
@@ -25,6 +26,7 @@ const blank = {
 
 export default function StudentsPage() {
   const [canManage, setCanManage] = useState(false)
+  const { width: nameWidth, setWidth: setNameWidth } = useNameColumnWidth(220)
   const [canDeleteAll, setCanDeleteAll] = useState(false)
   const [deleteYear, setDeleteYear] = useState<Year | null>(null)
   const [years, setYears] = useState<Year[]>([])
@@ -235,12 +237,12 @@ export default function StudentsPage() {
               )}
 
               <div className="table-card data-card">
-                <table className="thai-table" style={{ width: '100%' }}>
+                <table className="thai-table" style={{ width: '100%', ['--name-col' as string]: `${nameWidth}px` }}>
                   <thead>
                     <tr>
                       <th style={{ width: 50 }}>เลขที่</th>
                       <th>รหัส</th>
-                      <th>ชื่อ - นามสกุล</th>
+                      <th className="name-col-sized">ชื่อ - นามสกุล<NameColumnHandle width={nameWidth} onResize={setNameWidth} /></th>
                       <th style={{ width: 60, textAlign: 'center' }}>เพศ</th>
                       <th>วันเกิด</th>
                       <th>อายุ</th>
@@ -257,7 +259,7 @@ export default function StudentsPage() {
                       <tr key={s.id}>
                         <td style={{ textAlign: 'center', fontWeight: 600 }}>{s.student_number}</td>
                         <td style={{ color: 'var(--text-3)' }}>{s.student_code || '-'}</td>
-                        <td>{s.prefix}{s.first_name} {s.last_name}</td>
+                        <td className="name-col-sized">{s.prefix}{s.first_name} {s.last_name}</td>
                         <td style={{ textAlign: 'center' }}>
                           <span style={{ fontSize: 12, fontWeight: 700, color: s.gender === 'M' ? '#17469f' : '#DB2777' }}>{s.gender === 'M' ? 'ช' : 'ญ'}</span>
                         </td>

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
 import Swal from 'sweetalert2'
 import './score-entry.css'
@@ -9,6 +9,7 @@ import {
 } from './actions'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 import LoadingButton from '@/components/LoadingButton'
+import NameColumnHandle, { useNameColumnWidth } from '@/components/table/NameColumnHandle'
 import AppAlertModal from '@/components/AppAlertModal'
 import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
@@ -60,6 +61,7 @@ export default function ScoreEntryPage({ educationBand }: { educationBand?: Acad
   const [selectedCS, setSelectedCS] = useState('')
   const [subjectListContext, setSubjectListContext] = useState('')
   const [term, setTerm] = useState<1 | 2>(1)
+  const { width: nameWidth, setWidth: setNameWidth } = useNameColumnWidth(190)
 
   const [students, setStudents] = useState<Student[]>([])
   const [config, setConfig] = useState<Config | null>(null)
@@ -588,11 +590,11 @@ async function exportScores() {
                 </div>
                 <p className="score-keyboard-hint" id="score-grid-help">คลิกช่องเพื่อกรอกคะแนน · กด Tab ไปช่องถัดไป · เลื่อนตารางเพื่อดูคอลัมน์เพิ่มเติม</p>
                 <div className="score-table-wrap" tabIndex={0} role="region" aria-label="ตารางคะแนนนักเรียน" aria-describedby="score-grid-help">
-                <table className="score-entry-table">
+                <table className="score-entry-table" style={{ '--name-col': `${nameWidth}px` } as CSSProperties}>
                   <thead>
                     <tr>
                       <th className="score-sticky-no">#</th>
-                      <th className="score-sticky-name">ชื่อ-สกุล</th>
+                      <th className="score-sticky-name name-col-sized">ชื่อ-สกุล<NameColumnHandle width={nameWidth} onResize={setNameWidth} /></th>
                       <th colSpan={uc} className="score-unit-head">คะแนนระหว่างเรียน</th>
                       <th className="score-unit-head">รวมระหว่างเรียน</th>
                       {showMidterm && <th className="score-mid-head">กลางภาค</th>}
@@ -604,7 +606,7 @@ async function exportScores() {
                     </tr>
                     <tr>
                       <th className="score-sticky-no">ที่</th>
-                      <th className="score-sticky-name">ชื่อ-สกุล</th>
+                      <th className="score-sticky-name name-col-sized">ชื่อ-สกุล<NameColumnHandle width={nameWidth} onResize={setNameWidth} /></th>
                       {Array.from({ length: uc }, (_, i) => (
                         <th key={i} style={{ textAlign: 'center', width: 58 }}>
                           {i + 1}<br /><span className="score-max-label" style={{ fontSize: 10 }}>({config.between_scores[i]})</span>
@@ -627,7 +629,7 @@ async function exportScores() {
                       return (
                         <tr key={st.id} style={inactive ? { opacity: 0.5 } : undefined}>
                           <td className="score-sticky-no">{st.student_number}</td>
-                          <td className="score-sticky-name" style={{ fontWeight: 700 }}>
+                          <td className="score-sticky-name name-col-sized" style={{ fontWeight: 700 }}>
                             {st.prefix}{st.first_name} {st.last_name}
                             {inactive && <span style={{ fontSize: 11, color: '#DC2626', marginLeft: 6 }}>({st.status})</span>}
                           </td>

@@ -1,14 +1,16 @@
 'use client'
-import {useEffect,useState} from 'react'
+import {useEffect,useState,type CSSProperties} from 'react'
 import {fetchStudentValueSummary} from '@/app/classroom-admin/actions'
 import type {LedgerSummary,StudentValueKind} from '@/lib/student-value-ledger'
 import {enqueueFileExport} from '@/lib/pdf/pdf-export-queue'
+import NameColumnHandle, { useNameColumnWidth } from '@/components/table/NameColumnHandle'
 import './student-value-summary.css'
 
 type Props={kind:StudentValueKind;classroomId:string;yearId:string;yearBe:number;monthKey:string;classLabel:string;schoolName:string}
 export default function StudentValueSummary(props:Props){
   const {kind,classroomId,yearId,yearBe,monthKey,classLabel,schoolName}=props
   const [scope,setScope]=useState<'month'|'year'>('month'),[response,setResponse]=useState<{key:string;summary:LedgerSummary|null;error:string}|null>(null),[exportError,setError]=useState(''),[revision,setRevision]=useState(0),[search,setSearch]=useState(''),[busy,setBusy]=useState(false)
+  const { width: nameWidth, setWidth: setNameWidth } = useNameColumnWidth(220)
   const title=kind==='saving'?'สรุปเงินออม':'สรุปคะแนนความดี',unit=kind==='saving'?'บาท':'คะแนน'
   const money=(value:number)=>value.toLocaleString('th-TH',{minimumFractionDigits:kind==='saving'?2:0,maximumFractionDigits:kind==='saving'?2:0})
   const monthText=new Intl.DateTimeFormat('th-TH',{month:'long',year:'numeric',timeZone:'Asia/Bangkok'}).format(new Date(monthKey+'-15T12:00:00+07:00'))
@@ -34,7 +36,7 @@ export default function StudentValueSummary(props:Props){
       {scope==='year'&&data.months.length>0&&<details className="student-ledger-months"><summary>ดูยอดแยกรายเดือน</summary><div>{data.months.map(row=><p key={row.month}><span>{new Intl.DateTimeFormat('th-TH',{month:'short',year:'numeric'}).format(new Date(row.month+'-15T12:00:00+07:00'))}</span><strong>{money(row.total)} {unit}</strong></p>)}</div></details>}
       <div className="student-ledger-table-tools"><label>ค้นหานักเรียน<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="เลขที่หรือชื่อ"/></label><div><button type="button" disabled={busy} onClick={()=>void excel()}>ส่งออก Excel</button><button type="button" disabled={busy} onClick={pdf}>ดาวน์โหลด PDF สรุป</button></div></div>
       <p className="student-ledger-count">แสดง {rows.length} จาก {data.rows.length} คน · เรียงยอดสะสมจากมากไปน้อย · อันดับเท่ากันเมื่อยอดเท่ากัน</p>
-      <div className="student-ledger-table"><table><thead><tr><th>อันดับ</th><th>เลขที่</th><th>ชื่อ-นามสกุล</th><th>วันที่บันทึก</th><th>รวม ({unit})</th></tr></thead><tbody>{rows.map(row=><tr key={row.studentId}><td>{row.rank??'-'}</td><td>{row.number??'-'}</td><td>{row.name}{row.former&&<small>รวมยอดจากรายการเดิม</small>}</td><td>{row.days} วัน</td><td>{money(row.total)}</td></tr>)}{!rows.length&&<tr><td colSpan={5}>{search.trim()?'ไม่พบรายการที่ค้นหา':'ยังไม่มีรายชื่อนักเรียนหรือรายการที่บันทึก'}</td></tr>}</tbody><tfoot><tr><th colSpan={4}>รวมทั้งห้อง{search.trim()?' (ทุกคน)':''}</th><td>{money(data.total)}</td></tr></tfoot></table></div>
+      <div className="student-ledger-table"><table style={{'--name-col':`${nameWidth}px`} as CSSProperties}><thead><tr><th>อันดับ</th><th>เลขที่</th><th className="name-col-sized">ชื่อ-นามสกุล<NameColumnHandle width={nameWidth} onResize={setNameWidth}/></th><th>วันที่บันทึก</th><th>รวม ({unit})</th></tr></thead><tbody>{rows.map(row=><tr key={row.studentId}><td>{row.rank??'-'}</td><td>{row.number??'-'}</td><td className="name-col-sized">{row.name}{row.former&&<small>รวมยอดจากรายการเดิม</small>}</td><td>{row.days} วัน</td><td>{money(row.total)}</td></tr>)}{!rows.length&&<tr><td colSpan={5}>{search.trim()?'ไม่พบรายการที่ค้นหา':'ยังไม่มีรายชื่อนักเรียนหรือรายการที่บันทึก'}</td></tr>}</tbody><tfoot><tr><th colSpan={4}>รวมทั้งห้อง{search.trim()?' (ทุกคน)':''}</th><td>{money(data.total)}</td></tr></tfoot></table></div>
     </>}
   </section>
 }

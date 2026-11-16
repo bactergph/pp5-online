@@ -83,6 +83,11 @@ try{
   console.log(roster ? 'PASS: 50 complete long student names, sticky identity columns after month-end scroll, 390/1440px layout, attendance save, sparse records and date cutoff' : 'PASS: production daily UI cutoff, saved future leave, old sparse write format, day rollover without writes, future month, actual PDF and mobile')
  }else{
  await page.setViewport({width:1440,height:1000});await go('merit');assert.equal(await page.$eval(first,el=>el.value),'5')
+ const nameBefore=await page.$eval('.classroom-admin-month-table th.name-col-sized',el=>el.getBoundingClientRect().width)
+ const grip=await page.$eval('.classroom-admin-month-table .name-col-resizer',el=>{const box=el.getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2}})
+ await page.mouse.move(grip.x,grip.y);await page.mouse.down();await page.mouse.move(grip.x+90,grip.y,{steps:12});await page.mouse.up()
+ const nameAfter=await page.$eval('.classroom-admin-month-table th.name-col-sized',el=>el.getBoundingClientRect().width)
+ assert.ok(nameAfter>=nameBefore+60,`Name column should grow when dragged (${nameBefore} -> ${nameAfter})`)
  await fill(first,'8');const savingShown=page.waitForFunction(()=>document.body.innerText.includes('กำลังบันทึกคะแนน'));await click('[role=tab]','สรุปคะแนนความดี');await savingShown;await page.waitForSelector('.student-ledger-table');await page.waitForFunction(()=>document.body.innerText.includes('บันทึกคะแนนแล้ว'));assert.equal(buckets.merit.s1[3],8);assert.match(await page.$eval('.student-ledger-metrics',el=>el.textContent),/13/,'Summary waits for blur save')
  assert.equal(await page.$eval('.student-ledger-table tbody tr td:last-child',el=>el.textContent),'10')
  await page.select('.student-ledger-tools select','year');await page.waitForFunction(()=>document.querySelector('.student-ledger-metrics strong')?.textContent.includes('23'))

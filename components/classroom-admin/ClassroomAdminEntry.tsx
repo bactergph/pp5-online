@@ -78,6 +78,7 @@ import {
 import { useAppAlert } from '@/lib/use-app-alert'
 import StudentValueCell from '@/components/classroom-admin/StudentValueCell'
 import StudentValueSummary from '@/components/classroom-admin/StudentValueSummary'
+import NameColumnHandle, { useNameColumnWidth } from '@/components/table/NameColumnHandle'
 import DocumentSignaturePanel from '@/components/sign/DocumentSignaturePanel'
 
 function attendanceDayAllLabel(busy: boolean, clearing: boolean) {
@@ -295,6 +296,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const valueSaveTimer=useRef<number|null>(null)
   const [ledgerWaiting,setLedgerWaiting]=useState(false)
   const [ledgerSavedFlash,setLedgerSavedFlash]=useState(false)
+  const { width: nameWidth, setWidth: setNameWidth } = useNameColumnWidth(mode === 'attendance' ? 260 : 148)
   useEffect(()=>()=>{if(valueSaveTimer.current)window.clearTimeout(valueSaveTimer.current)},[])
   const [attendanceBulkFilling, setAttendanceBulkFilling] = useState(false)
   const [attendanceClearingAll, setAttendanceClearingAll] = useState(false)
@@ -738,6 +740,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const isSavingMode = mode === 'activity' && activityType === 'saving'
   const isMeritMode = mode === 'activity' && activityType === 'merit'
   const isNumericMode = isSavingMode || isMeritMode
+  const nameColVars = { '--name-col': `${nameWidth}px` } as CSSProperties
   const hasActivitySummary = mode === 'activity' && Boolean(activityType && activityType !== 'saving')
   const savingDayColWidth = isNumericMode ? 56 : 32
   const savingStats = isSavingMode
@@ -2100,13 +2103,17 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             {!canEdit && <span className="badge badge-gray">ดูอย่างเดียว</span>}
             {isAttendanceDefaultMode && <span className="badge badge-warning">อ้างอิงจากมาเรียนถึงวันนี้ · วันล่วงหน้ายังไม่บันทึก</span>}
             {tableLoading && <span className="badge badge-gray">กำลังโหลดตาราง...</span>}
-            {isNumericMode && !printMode && (Object.keys(savingCells).length > 0 || ledgerWaiting) && <span className="badge badge-gray" role="status" aria-live="polite"><span className="btn-spinner" aria-hidden="true" />{isMeritMode ? 'กำลังบันทึกคะแนน...' : 'กำลังบันทึก...'}</span>}
-            {isNumericMode && !printMode && Object.keys(savingCells).length === 0 && !ledgerWaiting && ledgerSavedFlash && <span className="badge badge-success" role="status" aria-live="polite">{isMeritMode ? 'บันทึกคะแนนแล้ว' : 'บันทึกแล้ว'}</span>}
           </div>
         </div>
       </div>
 
       {isNumericMode&&!printMode&&<div className="student-ledger-tabs" role="tablist" aria-label={isMeritMode?'มุมมองคะแนนความดี':'มุมมองเงินออม'}>{(['daily','summary'] as const).map(view=><button key={view} type="button" role="tab" aria-selected={ledgerView===view} disabled={ledgerWaiting||isPending||!classroomId||!yearId} onClick={async()=>{setLedgerWaiting(true);await Promise.allSettled([...pendingValueSaves.current]);setLedgerView(view);setLedgerWaiting(false)}}>{view==='daily'?'บันทึกรายวัน':isMeritMode?'สรุปคะแนนความดี':'สรุปเงินออม'}</button>)}</div>}
+      {isNumericMode && !printMode && (Object.keys(savingCells).length > 0 || ledgerWaiting || ledgerSavedFlash) && (
+        <div className={`ledger-save-rail${Object.keys(savingCells).length > 0 || ledgerWaiting ? ' is-busy' : ' is-saved'}`} role="status" aria-live="polite">
+          <span className="ledger-save-rail__label">{Object.keys(savingCells).length > 0 || ledgerWaiting ? (isMeritMode ? 'กำลังบันทึกคะแนน' : 'กำลังบันทึก') : (isMeritMode ? 'บันทึกคะแนนแล้ว' : 'บันทึกแล้ว')}</span>
+          <span className="ledger-save-rail__track" aria-hidden="true"><span className="ledger-save-rail__light" /></span>
+        </div>
+      )}
       {isNumericMode&&ledgerView==='summary'&&!printMode ? <StudentValueSummary key={`${classroomId}:${yearId}:${activityType}`} kind={activityType as 'saving'|'merit'} classroomId={classroomId} yearId={yearId} yearBe={years.find(year=>year.id===yearId)?.year_be||0} monthKey={monthKey} classLabel={currentClassLabel(classrooms,classroomId)} schoolName={schoolName}/> : <>
       {isSavingMode && savingStats && !tableLoading && students.length > 0 && (
         <div className="control-card saving-summary-grid">
@@ -2166,10 +2173,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-3)' }}>ยังไม่มีนักเรียนในห้องนี้</div>
         ) : mode === 'weightHeight' ? (
           <div className="classroom-admin-month-table-wrap">
-          <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-weight-table">
+          <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-weight-table" style={nameColVars}>
             <colgroup>
               <col style={{ width: 40 }} />
-              <col style={{ width: 160 }} />
+              <col className="name-col-sized" style={{ width: nameWidth }} />
               <col style={{ width: 88 }} />
               <col style={{ width: 88 }} />
               <col style={{ width: 110 }} />
@@ -2177,7 +2184,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <thead>
               <tr>
                 <th style={{ textAlign: 'center' }}>#</th>
-                <th>นักเรียน</th>
+                <th className="name-col-sized">นักเรียน<NameColumnHandle width={nameWidth} onResize={setNameWidth} /></th>
                 <th>น้ำหนัก</th>
                 <th>ส่วนสูง</th>
                 <th>BMI</th>
@@ -2196,7 +2203,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 return (
                   <tr key={student.id}>
                     <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{student.student_number}</td>
-                    <td className="classroom-admin-student-cell">{studentName(student)}</td>
+                    <td className="classroom-admin-student-cell name-col-sized">{studentName(student)}</td>
                     <td>
                       <input
                         className="form-input classroom-admin-compact-input classroom-admin-saving-input"
@@ -2242,10 +2249,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           </div>
         ) : mode === 'healthInspection' ? (
           <div className="classroom-admin-month-table-wrap">
-          <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-health-table">
+          <table className="thai-table class-subjects-table classroom-admin-table classroom-admin-health-table" style={nameColVars}>
             <colgroup>
               <col style={{ width: 40 }} />
-              <col style={{ width: 140 }} />
+              <col className="name-col-sized" style={{ width: nameWidth }} />
               {INSPECTION_FIELDS.map(field => (
                 <col key={field.key} style={{ width: 72 }} />
               ))}
@@ -2253,7 +2260,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <thead>
               <tr>
                 <th style={{ textAlign: 'center' }}>#</th>
-                <th>นักเรียน</th>
+                <th className="name-col-sized">นักเรียน<NameColumnHandle width={nameWidth} onResize={setNameWidth} /></th>
                 {INSPECTION_FIELDS.map(field => <th key={field.key}>{field.label}</th>)}
               </tr>
             </thead>
@@ -2263,7 +2270,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 return (
                   <tr key={student.id}>
                     <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{student.student_number}</td>
-                    <td className="classroom-admin-student-cell">{studentName(student)}</td>
+                    <td className="classroom-admin-student-cell name-col-sized">{studentName(student)}</td>
                     {INSPECTION_FIELDS.map(field => {
                       const value = row[field.key] || 'ผ่าน'
                       const passed = value === 'ผ่าน'
@@ -2337,11 +2344,11 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           <div className="classroom-admin-month-table-wrap">
           <table
             className={`thai-table classroom-admin-month-table${isNumericMode ? ' classroom-admin-saving-table' : ''}${mode === 'attendance' ? ' classroom-admin-attendance-table' : ''}`}
-            style={mode === 'attendance' ? { '--attendance-day-count': days.length } as CSSProperties : undefined}
+            style={{ ...nameColVars, ...(mode === 'attendance' ? { '--attendance-day-count': days.length, '--roster-name-width': `${nameWidth}px` } : {}) } as CSSProperties}
           >
             <colgroup>
               <col style={{ width: 40 }} />
-              <col style={{ width: 148 }} />
+              <col className="name-col-sized" style={{ width: nameWidth }} />
               {days.map(day => <col key={day} style={{ width: savingDayColWidth }} />)}
               {hasActivitySummary && <col style={{ width: 64 }} />}
               {isSavingMode && (
@@ -2364,7 +2371,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
             <thead>
               <tr>
                 <th rowSpan={monthlyHeaderRowSpan} style={{ textAlign: 'center' }}>เลขที่</th>
-                <th rowSpan={monthlyHeaderRowSpan}>ชื่อ-นามสกุล</th>
+                <th rowSpan={monthlyHeaderRowSpan} className="name-col-sized">ชื่อ-นามสกุล<NameColumnHandle width={nameWidth} onResize={setNameWidth} /></th>
                 <th colSpan={days.length} className="classroom-admin-month-title">
                   เดือน{thaiMonthTitle(monthKey, years, yearId)}
                 </th>
@@ -2495,7 +2502,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 return (
                   <tr key={row.student.id}>
                     <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{row.student.student_number}</td>
-                    <td className={`classroom-admin-student-cell${mode === 'attendance' ? ' attendance-roster-name' : ''}`} title={studentName(row.student)}>
+                    <td className={`classroom-admin-student-cell name-col-sized${mode === 'attendance' ? ' attendance-roster-name' : ''}`} title={studentName(row.student)}>
                       {mode === 'attendance' ? <><span className="attendance-roster-given">{(row.student.prefix || '').trim()}{row.student.first_name}</span><span className="attendance-roster-family"> {row.student.last_name}</span></> : studentName(row.student)}
                     </td>
                     {renderMonthlyDayCells(bodyRowIndex, row.student)}
@@ -2526,16 +2533,16 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           </div>
           </>
         ) : (
-          <table className="thai-table class-subjects-table classroom-admin-table">
+          <table className="thai-table class-subjects-table classroom-admin-table" style={nameColVars}>
             <colgroup>
               <col style={{ width: 54 }} />
-              <col />
+              <col className="name-col-sized" style={{ width: nameWidth }} />
               <col style={{ width: 150 }} />
             </colgroup>
             <thead>
               <tr>
                 <th style={{ textAlign: 'center' }}>#</th>
-                <th>นักเรียน</th>
+                <th className="name-col-sized">นักเรียน<NameColumnHandle width={nameWidth} onResize={setNameWidth} /></th>
                 <th>{activityLabel || title}</th>
               </tr>
             </thead>
@@ -2543,7 +2550,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
               {students.map(student => (
                 <tr key={student.id}>
                   <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{student.student_number}</td>
-                  <td className="classroom-admin-student-cell">{studentName(student)}</td>
+                  <td className="classroom-admin-student-cell name-col-sized">{studentName(student)}</td>
                   <td>{renderInput(student)}</td>
                 </tr>
               ))}

@@ -7251,22 +7251,94 @@ body.staff-picker-menu-open .school-save-bar {
 }
 
 .ledger-value-cell.is-saving .classroom-admin-saving-input {
-  background: #eef4ff !important;
-  box-shadow: inset 0 0 0 2px rgba(35, 91, 200, 0.55);
+  background: #f3f7ff !important;
+  box-shadow: inset 0 0 0 1px #b9d0f5;
 }
 
-.ledger-value-spinner {
+.ledger-value-cell.is-saving::after {
+  content: "";
   position: absolute;
-  top: 50%;
+  left: 4px;
   right: 4px;
-  width: 12px;
-  height: 12px;
-  margin-top: -6px;
-  border: 2px solid #245ed4;
-  border-right-color: transparent;
+  bottom: 3px;
+  height: 3px;
   border-radius: 999px;
-  animation: btn-spin 0.72s linear infinite;
   pointer-events: none;
+  background: linear-gradient(90deg, rgba(219, 231, 251, 0) 0%, #dbe7fb 18%, #ffffff 46%, #245ed4 54%, #dbe7fb 78%, rgba(219, 231, 251, 0) 100%);
+  background-size: 220% 100%;
+  animation: ledger-cell-light 0.85s linear infinite;
+}
+
+.ledger-save-rail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #d5e4fb;
+  border-radius: 12px;
+  background: #f5f8ff;
+  color: #17469f;
+}
+
+.ledger-save-rail.is-saved {
+  border-color: #b7e4c7;
+  background: #f3fbf6;
+  color: #166534;
+}
+
+.ledger-save-rail__label {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.ledger-save-rail__track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d7e4f8;
+}
+
+.ledger-save-rail.is-saved .ledger-save-rail__track {
+  background: #c8ead6;
+}
+
+.ledger-save-rail__light {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 34%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, #ffffff 42%, #7eafff 58%, #245ed4 100%);
+  animation: ledger-light-run 1.05s ease-in-out infinite;
+}
+
+.ledger-save-rail.is-saved .ledger-save-rail__light {
+  width: 100%;
+  background: #3d9b63;
+  animation: none;
+}
+
+@keyframes ledger-light-run {
+  0% { transform: translateX(-130%); }
+  100% { transform: translateX(340%); }
+}
+
+@keyframes ledger-cell-light {
+  0% { background-position: 120% 0; }
+  100% { background-position: -80% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledger-save-rail__light,
+  .ledger-value-cell.is-saving::after {
+    animation: none;
+  }
 }
 
 .classroom-admin-attendance-meta > span:not(.badge) {
@@ -7541,7 +7613,8 @@ body.staff-picker-menu-open .school-save-bar {
 }
 
 .classroom-admin-month-table {
-  min-width: 1540px;
+  --name-col: 148px;
+  min-width: calc(1392px + var(--name-col));
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
@@ -7550,14 +7623,55 @@ body.staff-picker-menu-open .school-save-bar {
 }
 
 .classroom-admin-saving-table {
-  min-width: 1480px;
+  min-width: calc(1332px + var(--name-col));
+}
+
+.name-col-sized {
+  width: var(--name-col, 148px);
+  min-width: var(--name-col, 148px);
+  max-width: var(--name-col, 148px);
+}
+
+.classroom-admin-table th.name-col-sized,
+.student-ledger-table th.name-col-sized,
+.thai-table th.name-col-sized {
+  position: relative;
+  padding-right: 16px !important;
+}
+
+.name-col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  width: 12px;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-right: 3px solid rgba(35, 91, 200, 0.55);
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.name-col-resizer:hover,
+body.name-col-dragging .name-col-resizer {
+  border-right-color: #245ed4;
+  background: rgba(35, 91, 200, 0.14);
+}
+
+body.name-col-dragging,
+body.name-col-dragging * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+@media print {
+  .name-col-resizer { display: none !important; }
 }
 
 @media (max-width: 760px) {
-  .classroom-admin-saving-table {
-    min-width: 1080px;
-  }
-
   .classroom-admin-saving-table td:nth-child(n + 3),
   .classroom-admin-saving-table th:nth-child(n + 3) {
     min-width: 52px;
@@ -7805,16 +7919,20 @@ body.staff-picker-menu-open .school-save-bar {
 }
 
 @media (max-width: 760px) {
-  .classroom-admin-month-table {
-    min-width: 1080px;
-  }
-
+  .classroom-admin-month-table,
   .classroom-admin-saving-table {
-    min-width: 1080px;
+    min-width: max(1080px, calc(932px + var(--name-col, 148px)));
   }
 
   .classroom-admin-month-table thead tr:first-child th:nth-child(2),
-  .classroom-admin-month-table tbody td:nth-child(2),
+  .classroom-admin-month-table tbody td:nth-child(2) {
+    left: 36px;
+    width: var(--name-col, 148px);
+    min-width: var(--name-col, 148px);
+    max-width: var(--name-col, 148px);
+    padding-left: 6px !important;
+  }
+
   .classroom-admin-month-table thead tr:nth-child(2) th:nth-child(2),
   .classroom-admin-month-table thead tr:nth-child(3) th:nth-child(2) {
     left: 36px;

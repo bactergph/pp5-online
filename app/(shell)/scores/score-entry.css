@@ -29,7 +29,7 @@
 .score-entry-table thead { position: sticky; top: 0; z-index: 6; }
 .score-entry-table th { text-align: center; font-weight: 600; background: #eef3fa; }
 .score-entry-table .score-sticky-no { position: sticky; left: 0; width: 46px; min-width: 46px; text-align: center; z-index: 3; }
-.score-entry-table .score-sticky-name { position: sticky; left: 46px; min-width: 190px; max-width: 240px; text-align: left; z-index: 3; box-shadow: 4px 0 10px #18202f08; }
+.score-entry-table .score-sticky-name { position: sticky; left: 46px; width: var(--name-col, 190px); min-width: var(--name-col, 190px); max-width: var(--name-col, 190px); text-align: left; z-index: 3; box-shadow: 4px 0 10px #18202f08; overflow: hidden; text-overflow: ellipsis; }
 .score-entry-table thead :is(.score-sticky-no,.score-sticky-name) { z-index: 8; background: #eef3fa; }
 .score-entry-table tbody tr:hover td { background-color: #f8faff !important; }
 .score-entry-table tbody tr:focus-within td { background-color: #edf4ff !important; }
@@ -55,7 +55,7 @@
   .score-grid-top span { display: block; margin-top: 4px; }
   .score-keyboard-hint { padding: 10px 14px; }
   .score-entry-table .score-sticky-no { width: 36px; min-width: 36px; padding-inline: 4px; }
-  .score-entry-table .score-sticky-name { left: 36px; width: 116px; min-width: 116px; max-width: 116px; white-space: normal; overflow-wrap: anywhere; font-size: 13px; }
+  .score-entry-table .score-sticky-name { left: 36px; width: var(--name-col, 190px); min-width: var(--name-col, 190px); max-width: var(--name-col, 190px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
   .score-save-bar { flex-direction: column; align-items: stretch; padding: 14px; }
   .score-save-bar .btn { width: 100%; }
 }

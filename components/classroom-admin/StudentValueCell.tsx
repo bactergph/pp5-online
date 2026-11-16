@@ -15,6 +15,5 @@ export default function StudentValueCell({kind,value,disabled,className,label,on
       setBusy(true)
       try{if(await onSave(number)){setDraft(null);setError('')}else setError('ยังไม่บันทึก กรุณาออกจากช่องเพื่อลองอีกครั้ง')}finally{setBusy(false)}
     }}/>
-    {busy?<span className="ledger-value-spinner" aria-hidden="true"/>:null}
   </span>
 }

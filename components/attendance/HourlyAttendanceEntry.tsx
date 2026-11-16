@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import { isSchoolCodeSegment } from '@/lib/school-path'
 import { isSecondaryClassLevel } from '@/lib/class-level'
 import type { AcademicBand } from '@/lib/secondary-academic'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { flushSync } from 'react-dom'
 import {
   fetchScoreInit, fetchScoreClassrooms, fetchScoreSubjects,
@@ -12,6 +12,7 @@ import {
 import { fetchHourlyGrid, saveHourlyCell, fillHourlyPresentAll, fillHourlyPresentColumn, clearHourlyPresentColumn, clearHourlyAttendanceAll } from '@/app/attendance/actions'
 import { formatThaiDate } from '@/lib/thaiDate'
 import { dailyAttendanceToday } from '@/lib/daily-attendance'
+import NameColumnHandle, { useNameColumnWidth } from '@/components/table/NameColumnHandle'
 import { readContentUnits, subjectWithUnits } from '@/lib/class-subject-offer'
 import LegacyHourlyRecords, { type LegacyHourlyRecord } from './LegacyHourlyRecords'
 import {
@@ -107,6 +108,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
   const [clearingAll, setClearingAll] = useState(false)
   const [error, setError] = useState('')
   const [weekTab, setWeekTab] = useState(0)
+  const { width: nameWidth, setWidth: setNameWidth } = useNameColumnWidth(190)
   const skipYearFetch = useRef(true)
   const skipClassFetch = useRef(true)
   const gridContext = `${selectedYear}:${selectedClass}:${selectedCS}:${term}`
@@ -693,11 +695,11 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
             </div>
           )}
           <div className="hourly-table-wrap">
-            <table className="hourly-table">
+            <table className="hourly-table" style={{ '--name-col': `${nameWidth}px` } as CSSProperties}>
               <thead>
                 <tr className="hourly-week-row">
                   <th rowSpan={2} className="hourly-sticky-no hourly-head-fixed">ที่</th>
-                  <th rowSpan={2} className="hourly-sticky-name hourly-head-fixed">ชื่อ - สกุล</th>
+                  <th rowSpan={2} className="hourly-sticky-name hourly-head-fixed name-col-sized">ชื่อ - สกุล<NameColumnHandle width={nameWidth} onResize={setNameWidth} /></th>
                   {visibleWeeks.map(week => (
                     <th key={week.weekNumber} colSpan={hoursPerWeekCount} className="hourly-week-head hourly-week-divider-left hourly-week-divider-right">
                       <span className="hourly-week-head-num">สัปดาห์ {week.weekNumber}</span>
@@ -751,7 +753,7 @@ export default function HourlyAttendanceEntry({ educationBand }: { educationBand
                   return (
                     <tr key={student.id}>
                       <td className="hourly-sticky-no">{student.student_number || index + 1}</td>
-                      <td className="hourly-sticky-name text-left">{studentName(student)}</td>
+                      <td className="hourly-sticky-name name-col-sized text-left">{studentName(student)}</td>
                       {visibleWeeks.map(week => (
                         Array.from({ length: hoursPerWeekCount }, (_, i) => {
                           const slot = i + 1
@@ -951,7 +953,7 @@ const HOURLY_STYLES = `
     border-right-color: #1E293B !important;
   }
   .hourly-sticky-no { position: sticky; left: 0; z-index: 3; width: 46px; background: #fff !important; }
-  .hourly-sticky-name { position: sticky; left: 46px; z-index: 3; min-width: 190px; max-width: 230px; background: #fff !important; text-align: left !important; padding: 6px 10px !important; }
+  .hourly-sticky-name { position: sticky; left: 46px; z-index: 3; width: var(--name-col, 190px); min-width: var(--name-col, 190px); max-width: var(--name-col, 190px); background: #fff !important; text-align: left !important; padding: 6px 10px !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hourly-table thead .hourly-sticky-no,
   .hourly-table thead .hourly-sticky-name { z-index: 12; }
   .hourly-table thead .hourly-head-fixed { z-index: 13; }
