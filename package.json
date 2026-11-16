@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "create-demo": "node scripts/create-school-demo.mjs",
-    "build": "node scripts/build-sgs-extension.cjs && next build",
+    "build": "node scripts/build-sgs-extension.cjs && next build --webpack",
     "build:sgs-extension": "node scripts/build-sgs-extension.cjs",
     "test:sgs": "node scripts/build-sgs-extension.cjs && node scripts/test-sgs-transfer.cjs && node scripts/test-score-transfer.cjs && node scripts/test-sgs-extension-ui.mjs",
     "start": "next start",
