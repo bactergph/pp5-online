@@ -304,8 +304,11 @@ export async function fetchPeriodTimes(yearId?:string,semester=1) {
 }
 
 export async function savePeriodTimes(times: PeriodTimeRow[]) {
-  const mod = await import('./extended-actions')
-  return mod.savePeriodTimes(times)
+  const result = await scheduleResult(async () => {
+    const mod = await import('./extended-actions')
+    return mod.savePeriodTimes(times)
+  })
+  return { ok: !result.error, error: result.error }
 }
 
 export async function fetchTeacherAvailability(yearId: string, semester = 1) {

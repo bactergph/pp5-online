@@ -1,6 +1,6 @@
 import {profileTeacherConflicts} from '@/lib/schedule-profile-solver'
 import {hasPeriodProfiles,profileCellOverlap,rosterPeriodClock} from '@/lib/schedule-period-profiles'
-import {validatePeriodProfiles} from '@/lib/schedule-period-profiles'
+import {periodTimesForSave} from '@/lib/schedule-period-profiles'
 import * as substituteDocuments from '@/lib/substitute-documents'
 import 'server-only'
 import { loadSchedule, loadScheduleConstraints, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
@@ -72,10 +72,9 @@ export async function fetchPeriodTimes(yearId?:string,semester=1) {
 export async function savePeriodTimes(times: PeriodTimeRow[]) {
   const session = await requireScheduleSession()
   if (!canEdit(session) || !session.schoolId) throw new Error('ไม่มีสิทธิ์')
-  const invalid = validatePeriodProfiles(times)
-  if (invalid) throw new Error(invalid)
+  const rows = periodTimesForSave(times)
   const db = createServerClient()
-  const { error } = await db.rpc('save_school_period_times', { p_school_id: session.schoolId, p_rows: times })
+  const { error } = await db.rpc('save_school_period_times', { p_school_id: session.schoolId, p_rows: rows })
   if (error) throw new Error(error.message)
   await logActivity({
     actor: session,

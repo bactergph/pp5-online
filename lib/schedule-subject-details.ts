@@ -2,6 +2,7 @@ import type { Preparation } from './schedule-preparation'
 import { blocksFor, checkPlanning, type LessonRule } from './schedule-planning'
 import { withJointTeachingGroups } from './schedule-joint-teaching'
 import { subjectDayIssue } from './schedule-subject-days'
+import { levelPeriodTimes } from './schedule-period-profiles'
 
 export type SubjectDetailsInput = { code: string; name: string; shortName: string; group: string; type: string; count: number; teacherId?: string | null; periodMode?: 'single' | 'double' }
 export function normalizeSubjectDetails(input: SubjectDetailsInput): SubjectDetailsInput {
@@ -39,14 +40,16 @@ export function prepareSubjectDetails(data: Preparation, lessonId: string, input
   const selected = data.slots.filter(row => row.class_subject_id === lessonId)
   if (!teacherId && selected.length) throw Error('มีคาบในตารางแล้ว กรุณานำคาบออกก่อนยกเลิกครูผู้สอน')
   if (selected.length > details.count) throw Error(`วิชานี้มีในตาราง ${selected.length} คาบ ลดเหลือ ${details.count} ไม่ได้ กรุณานำคาบส่วนเกินออกก่อน`)
-  const lockedDayIssue=subjectDayIssue({...lesson,...rule},selected.filter(row=>row.locked).map(row=>({classroomId:row.classroom_id,lessonId,day:row.day_of_week,period:row.period})),data.plan.days,data.periods)
+  const classroom = data.classrooms.find(room => room.id === lesson.classroomId)!
+  const lessonTimes = levelPeriodTimes(data.periods, classroom.level)
+  const lockedDayIssue=subjectDayIssue({...lesson,...rule},selected.filter(row=>row.locked).map(row=>({classroomId:row.classroom_id,lessonId,day:row.day_of_week,period:row.period})),data.plan.days,lessonTimes)
   if(lockedDayIssue)throw Error(lockedDayIssue)
   if (selected.length === details.count && selected.every(row=>row.locked)) {
     const remaining = new Set(selected.map(row => `${row.day_of_week}:${row.period}`))
     function fits(pattern: number[]): boolean {
       if (!pattern.length) return remaining.size === 0
       const first = [...remaining].sort((a, b) => { const [ad, ap] = a.split(':').map(Number), [bd, bp] = b.split(':').map(Number); return ad - bd || ap - bp })[0]
-      for (const size of new Set(pattern)) for (const block of blocksFor(size, data.plan.days, data.periods).filter(block => `${block.day}:${block.periods[0]}` === first)) {
+      for (const size of new Set(pattern)) for (const block of blocksFor(size, data.plan.days, lessonTimes).filter(block => `${block.day}:${block.periods[0]}` === first)) {
         const cells = block.periods.map(period => `${block.day}:${period}`)
         if (!cells.every(cell => remaining.has(cell))) continue
         cells.forEach(cell => remaining.delete(cell))

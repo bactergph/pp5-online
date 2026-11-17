@@ -16,7 +16,7 @@ export default function PeriodTimesEntry(){
   const invalid=validatePeriodProfiles(rows);if(invalid){setAlert({type:'error',title:'ตรวจสอบเวลาเรียน',message:invalid});return}
   if(!window.confirm('บันทึกเวลาเรียนของโรงเรียน? ใช้ร่วมกันทุกปีและภาคเรียน ระบบจะตรวจตารางเดิมก่อนเปลี่ยนเวลา'))return
   setBusy(true)
-  try{await savePeriodTimes(rows);setDirty(false);setConfigured(true);setAlert({type:'success',title:'บันทึกเวลาเรียนแล้ว',message:'ตารางเรียนและตารางครูใช้เวลาชุดเดียวกัน'})}catch(cause){setAlert({type:'error',title:'บันทึกไม่สำเร็จ',message:cause instanceof Error?cause.message:'กรุณาลองใหม่'})}finally{setBusy(false)}
+  try{const result=await savePeriodTimes(rows);if(result.error)throw Error(result.error);setDirty(false);setConfigured(true);setAlert({type:'success',title:'บันทึกเวลาเรียนแล้ว',message:'ตารางเรียนและตารางครูใช้เวลาชุดเดียวกัน'})}catch(cause){setAlert({type:'error',title:'บันทึกไม่สำเร็จ',message:cause instanceof Error?cause.message:'กรุณาลองใหม่'})}finally{setBusy(false)}
  }
  return <section className="schedule-prep period-workspace"><h1>เวลาเรียนและช่วงพัก</h1><p>แยกเวลาอนุบาล ประถม และมัธยมได้ จำนวนคาบและช่วงพักไม่จำเป็นต้องเท่ากัน</p>{loading?<p role="status">กำลังโหลดเวลาเรียน…</p>:rows.length?<fieldset disabled={busy} style={{border:0,padding:0,minWidth:0}}><WizardPeriodEditor rows={rows} onChange={next=>{setRows(next);setDirty(true)}} configured={configured} dirty={dirty} onSave={()=>void save()}/></fieldset>:<p role="alert">ยังโหลดเวลาเรียนไม่ได้ กรุณาเปิดหน้านี้ใหม่</p>}{alert&&<AppAlertModal open {...alert} onClose={()=>setAlert(null)}/>}</section>
 }

@@ -51,7 +51,7 @@ export default function SchedulePreparation({yearId,semester,initialRooms,initia
  async function save(confirmTime=true){if(!data)throw Error('ยังโหลดข้อมูลไม่สำเร็จ');let hash=data.hash
  if(timeDirty||!data.timesConfigured){
  if(confirmTime&&!(await alert.fire({icon:'question',title:'บันทึกเวลาคาบของโรงเรียน?',text:'เวลานี้ใช้ร่วมกับตารางทุกปีและภาคเรียน ระบบจะตรวจคาบเดิมก่อนเปลี่ยนโครงสร้าง',showCancelButton:true})).isConfirmed)throw Error('ยังไม่ได้บันทึกวันและเวลา')
- await savePeriodTimes(data.periods);const latest=await fetchPreparation(yearId,semester);if(latest.error||!latest.data)throw Error(latest.error||'โหลดเวลาหลังบันทึกไม่สำเร็จ');hash=latest.data.hash;setData({...latest.data,plan:data.plan});setTimeDirty(false)
+ const clockResult=await savePeriodTimes(data.periods);if(clockResult.error)throw Error(clockResult.error);const latest=await fetchPreparation(yearId,semester);if(latest.error||!latest.data)throw Error(latest.error||'โหลดเวลาหลังบันทึกไม่สำเร็จ');hash=latest.data.hash;setData({...latest.data,plan:data.plan});setTimeDirty(false)
  }
  const r=await savePreparation(yearId,semester,hash,data.plan);if(r.error||!r.data)throw Error(r.error||'บันทึกไม่สำเร็จ');let saved=r.data;setData(saved)
  if(Object.keys(teacherAssignments).length){const assigned=await saveScheduleTeachingAssignments(yearId,semester,saved.hash,Object.entries(teacherAssignments).map(([lessonId,teacherId])=>({lessonId,teacherId})));if(assigned.error||!assigned.data)throw Error(assigned.error||'บันทึกครูผู้สอนไม่สำเร็จ');saved=assigned.data;setData(saved);setTeacherAssignments({})}

@@ -29,7 +29,7 @@ export default function ScheduleSubjectEditor({data,lessonId,year,term,onClose,o
     <header><div><h2 id="subject-edit-title">แก้ไขรายละเอียดรายวิชา</h2><p>{room?.level}/{room?.name||room?.room} · {lesson.code}</p></div><button type="button" disabled={busy} onClick={close}>ปิด</button></header>
     <form onSubmit={event=>{event.preventDefault();void save()}}>
       <div className="prep-team-dialog-body">
-        <div className="subject-edit-scope"><strong>{local?'แก้ไขข้อมูลของคุณในเครื่องนี้':'แก้ไขข้อมูลของโรงเรียนนี้'}</strong><p>เปลี่ยนรหัส ชื่อ และรายละเอียดได้ โดยไม่เปลี่ยนแม่แบบกลางหรือข้อมูลของโรงเรียนอื่น</p></div>
+        <div className="subject-edit-scope"><strong>{local?'แก้ไขข้อมูลของคุณในเครื่องนี้':'แก้ไขข้อมูลของโรงเรียนนี้'} · ภาคเรียนที่ {term}</strong><p>จำนวนคาบและรูปแบบคาบคู่/เดี่ยวเปลี่ยนเฉพาะห้องนี้ในเทอมที่เลือก</p><p>{local?'รหัส ชื่อวิชา และครูเปลี่ยนเฉพาะรายวิชานี้ในเทอมที่เลือก':'รหัสและชื่อวิชาใช้ร่วมกันในโรงเรียน ส่วนครูของรายวิชาแบบทั้งปีใช้ร่วมกันทั้งสองเทอม'}</p><p>ไม่เปลี่ยนแม่แบบกลางหรือข้อมูลของโรงเรียนอื่น</p></div>
         <fieldset disabled={busy} className="subject-edit-fields">
         <label>รหัสวิชา<input name="code" required maxLength={40} value={form.code} onChange={event=>change('code',event.target.value)}/></label>
         <label className="subject-edit-wide">ชื่อวิชา<input name="name" required maxLength={200} value={form.name} onChange={event=>change('name',event.target.value)}/></label>

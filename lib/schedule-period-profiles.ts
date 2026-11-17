@@ -14,6 +14,17 @@ export function levelPeriodTimes(times: PeriodTimeRow[], level: string) {
   return (band && periodProfiles(times)[band]) || times
 }
 export function hasPeriodProfiles(times: PeriodTimeRow[]) { return Object.keys(periodProfiles(times)).length > 0 }
+/** Database reads include profiles:null on ordinary rows. Only the first row
+ * of a write may carry profiles; teacher activities belong to the term plan. */
+export function periodTimesForSave(times: PeriodTimeRow[]): PeriodTimeRow[] {
+  const invalid = validatePeriodProfiles(times)
+  if (invalid) throw Error(invalid)
+  if (times.filter(row => row.profiles && Object.keys(row.profiles).length).length > 1) throw Error('กำหนดชุดเวลาได้ที่แถวแรกเท่านั้น')
+  const clean = (rows: PeriodTimeRow[]): PeriodTimeRow[] => rows.map(({ period, label, start_time, end_time, is_break }, index) => ({ period, label, start_time, end_time, is_break, sort_order: index + 1 }))
+  const result = clean(times), profiles = periodProfiles(times)
+  if (Object.keys(profiles).length) result[0].profiles = Object.fromEntries(Object.entries(profiles).map(([band, rows]) => [band, clean(rows!)]))
+  return result
+}
 export function validatePeriodProfiles(times: PeriodTimeRow[]): string | null {
   const invalid = validatePeriodTimes(times)
   if (invalid) return invalid
