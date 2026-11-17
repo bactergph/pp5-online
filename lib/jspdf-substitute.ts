@@ -4,14 +4,12 @@ import {jsPDF} from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import {applyThaiFonts,loadImageDataUrl} from '@/lib/jspdf-thai-font'
 import {periodTimeLabel,type PeriodTimeRow} from '@/lib/schedule-helpers'
-import type {SubstitutePdfWorkload} from '@/lib/substitute-roster'
 
 export type SubstitutePdfInput={
   schoolName:string;logoUrl?:string|null;date:string;year:number;term:string
   academicHead:string;director:string;times:PeriodTimeRow[]
   teachers:{id:string;prefix:string;full_name:string}[];teacherNames?:Record<string,string>
   entries:{absent_teacher_id:string;period:number;room_label:string|null;subject_label:string|null;substitute_teacher_id:string|null;leave_type:string;note:string|null}[]
-  workload:Record<string,SubstitutePdfWorkload>
 }
 
 /** A monochrome A4 form. Each absent teacher starts a new page, also allowing
@@ -35,19 +33,7 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
     if(index)doc.addPage()
     const clockLabel=(entry:SubstitutePdfInput['entries'][number])=>periodTimeLabel(levelPeriodTimes(input.times,entry.room_label||''),entry.period)
     const entries=input.entries.filter(entry=>entry.absent_teacher_id===teacherId).sort((a,b)=>(hasPeriodProfiles(input.times)?clockLabel(a).localeCompare(clockLabel(b)):a.period-b.period)||(a.room_label||'').localeCompare(b.room_label||'','th'))
-    const coverIds=[...new Set(entries.flatMap(row=>row.substitute_teacher_id?[row.substitute_teacher_id]:[]))]
-    const summary=coverIds.map(id=>{
-      const load=input.workload[id]
-      return [names.get(id)||'ไม่ระบุชื่อ',String(load.termAssignments),String(load.scheduled??'-'),String(load.substitutes),String(load.scheduled===null?'-':load.scheduled+load.substitutes)]
-    })
-    if(!summary.length)summary.push(['ยังไม่กำหนดครู','-','-','-','-'])
-    const numberWidths=[18,16,16,20]
-    doc.setFont('THSarabunNew','normal');doc.setFontSize(12)
-    const nameWidth=Math.min(72,Math.max(44,Math.max(...summary.map(row=>doc.getTextWidth(String(row[0]))))+4))
-    const summaryWidths=[nameWidth,...numberWidths]
-    const summaryWidth=summaryWidths.reduce((sum,value)=>sum+value,0)
-    const summaryLeft=width-margin-summaryWidth
-    const signatureWidth=summaryLeft-margin-8
+    const signatureWidth=content
     const detailWeights=[14,32,28,72,58,38,27]
     const detailSum=detailWeights.reduce((sum,value)=>sum+value,0)
     const widths=detailWeights.map(value=>value/detailSum*content)
@@ -69,11 +55,7 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
     const signerLines=Math.max(...[input.academicHead,input.director].map(name=>(doc.splitTextToSize(`(${name||'........................................................'})`,signerWidth) as string[]).length))
     const signerLineHeight=14*1.15*25.4/72
     const signerOffset=ownerLines.length*6.2+6,signatureHeight=signerOffset+6+signerLines*signerLineHeight+9
-    const summaryLine=12*1.15*25.4/72
-    doc.setFont('THSarabunNew','normal');doc.setFontSize(12)
-    const summaryBody=summary.reduce((total,row)=>total+Math.max(7.4,(doc.splitTextToSize(String(row[0]),nameWidth-3.2) as string[]).length*summaryLine+1.8),0)
-    const summaryHeight=6+11+summaryBody+1.5
-    const blockHeight=Math.max(signatureHeight,summaryHeight)
+    const blockHeight=signatureHeight
     const signatureGap=10,bottomLimit=height-15,bodyBottom=bottomLimit-blockHeight-signatureGap
     const drawHeader=()=>{
       const page=doc.getCurrentPageInfo().pageNumber
@@ -114,7 +96,7 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
     }
     let blockTop=contentY+signatureGap
     if(blockTop+blockHeight>bottomLimit+0.01){doc.addPage();drawHeader();blockTop=tableTop+6}
-    const signatureY=blockTop+blockHeight-signatureHeight,summaryTop=blockTop+blockHeight-summaryHeight
+    const signatureY=blockTop
     doc.setFont('THSarabunNew','normal');doc.setFontSize(15)
     let signLine='ลงชื่อ '
     while(signLine.length<46&&doc.getTextWidth(`${signLine}.`)<=signerWidth-1)signLine+='.'
@@ -129,21 +111,9 @@ export async function buildSubstitutePdf(input:SubstitutePdfInput){
     text(ownerLines,margin,signatureY,15)
     signature(margin+signatureWidth*0.27,signatureY+signerOffset,input.academicHead,'หัวหน้าวิชาการ',signerWidth)
     signature(margin+signatureWidth*0.73,signatureY+signerOffset,input.director,'ผู้อำนวยการสถานศึกษา',signerWidth)
-    const detailTable=(doc as jsPDF&{lastAutoTable?:{finalY:number}}).lastAutoTable
-    text('สรุปภาระงานวันนี้และยอดสอนแทนในเทอม',summaryLeft,summaryTop+3.4,12,true)
-    autoTable(doc,{
-      startY:summaryTop+5.2,margin:{left:summaryLeft,right:margin,top:tableTop,bottom:height-bottomLimit},tableWidth:summaryWidth,
-      head:[['ครูสอนแทน','เทอมนี้\n(ครั้ง)','ตาม\nตาราง','สอน\nแทน','รวมวันนี้\n(คาบ)']],body:summary,theme:'grid',rowPageBreak:'avoid',
-      styles:{font:'THSarabunNew',fontSize:12,textColor:0,fillColor:255,lineColor:80,lineWidth:0.18,cellPadding:{top:0.5,bottom:0.5,left:1.2,right:1.2},minCellHeight:7.2,valign:'middle',overflow:'linebreak'},
-      headStyles:{fontStyle:'bold',fillColor:242,textColor:0,halign:'center',fontSize:11},
-      columnStyles:Object.fromEntries(summaryWidths.map((cellWidth,i)=>[i,{cellWidth,...(i?{halign:'center' as const}:{})}])),
-      didParseCell:({cell,column,section})=>{if(column.index===4){cell.styles.fontStyle='bold';if(section==='body')cell.styles.fillColor=248}},
-    })
-    if(detailTable)(doc as jsPDF&{lastAutoTable?:{finalY:number}}).lastAutoTable=detailTable
   }
   for(let page=1;page<=doc.getNumberOfPages();page++){
     doc.setPage(page)
-    text('สอนแทน 1 ครั้ง = 1 รายการที่บันทึก    รวมวันนี้ = คาบตามตาราง + คาบสอนแทน',margin,height-10,11)
     text(`หน้า ${page} / ${doc.getNumberOfPages()}`,width-margin-15,height-8,11)
   }
   const teacherLabel=teacherIds.length===1?`-${names.get(teacherIds[0])||'ครูเจ้าของคาบ'}`:'-ทั้งหมด'

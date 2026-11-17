@@ -92,21 +92,23 @@ async function fetchSettingsForSchool(schoolId: string, kind: EvaluationKind, ed
 export async function fetchEvaluationInit(band?: AcademicBand) {
   const session = await requireSession()
   const db = createServerClient()
-  const { data } = await db.from('academic_years')
+  const { data, error } = await db.from('academic_years')
     .select('id, year_be, is_active')
     .eq('school_id', session.schoolId || '')
     .order('year_be', { ascending: false })
 
+  if (error) throw new Error('โหลดปีการศึกษาไม่สำเร็จ กรุณาลองใหม่')
   const yearList = data || []
   const active = yearList.find(y => y.is_active) || yearList[0]
   let classrooms: { id: string; level: string; room: number }[] = []
   if (active) {
-    const { data: cs } = await db.from('classrooms')
+    const { data: cs, error: classroomError } = await db.from('classrooms')
       .select('id, level, room')
       .eq('school_id', session.schoolId || '')
       .eq('academic_year_id', active.id)
       .order('level')
       .order('room')
+    if (classroomError) throw new Error('โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่')
     const personalRooms=await personalHomeroomIds(session,active.id)
     classrooms = (cs || []).filter(room=>personalRooms===null||personalRooms.includes(room.id))
   }
@@ -122,13 +124,14 @@ export async function fetchEvaluationInit(band?: AcademicBand) {
 export async function fetchEvaluationClassrooms(yearId: string, band?: AcademicBand) {
   const session = await requireSession()
   const db = createServerClient()
-  const { data } = await db.from('classrooms')
+  const { data, error } = await db.from('classrooms')
     .select('id, level, room')
     .eq('school_id', session.schoolId || '')
     .eq('academic_year_id', yearId)
     .order('level')
     .order('room')
 
+  if (error) throw new Error('โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่')
   const personalRooms=await personalHomeroomIds(session,yearId)
   return (data || []).filter(room=>(personalRooms===null||personalRooms.includes(room.id)) && (!band || isSecondaryClassLevel(room.level) === (band === 'secondary')))
 }
@@ -143,10 +146,12 @@ export async function fetchEvaluationData(kind: EvaluationKind, classroomId: str
 
   let criteriaBand: EducationBand | undefined
   if (isBandedEvaluationKind(kind)) {
-    const { data: classroom } = await db.from('classrooms')
-      .select('level')
+    const { data: classroom, error: classroomError } = await db.from('classrooms')
+      .select('level, academic_year_id')
       .eq('id', classroomId)
       .maybeSingle()
+    if (classroomError) throw new Error('โหลดเกณฑ์ช่วงชั้นไม่สำเร็จ กรุณาลองใหม่')
+    if (!classroom || classroom.academic_year_id !== academicYearId) throw new Error('ปีการศึกษาไม่ตรงกับห้องเรียน')
     criteriaBand = educationBandFromClassroomLevel(classroom?.level || '')
   }
 
@@ -160,11 +165,12 @@ export async function fetchEvaluationData(kind: EvaluationKind, classroomId: str
           : EVALUATION_DEFAULT_SETTINGS[kind]) as EvaluationSetting[],
       error: 'ยังไม่ได้เลือกโรงเรียน',
     }
-  const { data: students } = await db.from('students')
+  const { data: students, error: studentError } = await db.from('students')
     .select('id, student_number, student_code, prefix, first_name, last_name, status')
     .eq('classroom_id', classroomId)
     .order('student_number')
 
+  if (studentError) return { students: [], rows: [], settings: settingsResult.settings, error: 'โหลดรายชื่อนักเรียนไม่สำเร็จ กรุณาลองใหม่' }
   const studentIds = (students || []).map((student: { id: string }) => student.id)
   if (studentIds.length === 0) return { students: [], rows: [], settings: settingsResult.settings, error: settingsResult.error }
 

@@ -13,6 +13,7 @@ function load(file, overrides = {}) {
   }).outputText, { exports: api, Date, require: name => {
     if (name in overrides) return overrides[name]
     if (name.startsWith('.')) return load(path.resolve(path.dirname(file), name) + '.ts')
+    if (name.startsWith('@/')) return load(name.slice(2) + '.ts')
     throw Error('Unexpected import: ' + name)
   } })
   return api

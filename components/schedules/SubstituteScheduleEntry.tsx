@@ -5,7 +5,7 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import {FiPlus,FiSearch,FiCheckCircle,FiAlertTriangle,FiUsers,FiEdit2,FiTrash2,FiDownload,FiFileText,FiCalendar,FiRefreshCw,FiArrowLeft,FiX,FiInfo,FiLoader,FiSave} from 'react-icons/fi'
 import {useScheduleGuard,useScheduleOperations,useScheduleServices} from './ScheduleServices'
 import {currentScheduleSemester,periodTimeLabel,type PeriodTimeRow} from '@/lib/schedule-helpers'
-import {indexSubstituteAvailability,substitutePdfWorkload,teachingPeriodCount,validateSubstituteRoster,SUBSTITUTE_LEAVE_TYPES,type SubstituteRosterEntry as Entry,type SubstituteBusy} from '@/lib/substitute-roster'
+import {indexSubstituteAvailability,teachingPeriodCount,validateSubstituteRoster,SUBSTITUTE_LEAVE_TYPES,type SubstituteRosterEntry as Entry,type SubstituteBusy} from '@/lib/substitute-roster'
 import {directorDisplayName} from '@/lib/school-director'
 import {buildSubstitutePdf} from '@/lib/jspdf-substitute'
 import AppAlertModal from '@/components/AppAlertModal'
@@ -20,7 +20,7 @@ const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'n
 const rowKey=(row:Entry)=>[row.absent_teacher_id,row.period,row.classroom_id].join(':')
 
 export default function SubstituteScheduleEntry(){
-  const {fetchScheduleInit,fetchPeriodTimes,fetchSubstituteDay,fetchSubstituteStats,loadSubstituteRosterSlots,saveSubstituteRoster,deleteSubstituteRosterEntries,fetchSubstitutePdfContext}=useScheduleOperations()
+  const {fetchScheduleInit,fetchPeriodTimes,fetchSubstituteDay,loadSubstituteRosterSlots,saveSubstituteRoster,deleteSubstituteRosterEntries,fetchSubstitutePdfContext}=useScheduleOperations()
   const {local}=useScheduleServices()
   const [years,setYears]=useState<Year[]>([]),[teachers,setTeachers]=useState<Teacher[]>([]),[periods,setPeriods]=useState<PeriodTimeRow[]>([])
   const [year,setYear]=useState(''),[term,setTerm]=useState(String(currentScheduleSemester())),[date,setDate]=useState(today)
@@ -130,16 +130,15 @@ export default function SubstituteScheduleEntry(){
     if((!record&&(blocked||dirty||!original.length))||!year||operation.current)return
     operation.current=true;setDownload(null);setWorking('กำลังสร้าง PDF จากข้อมูลที่บันทึกแล้ว…')
     try{
-      const [context,day,otherDays]=await Promise.all([
-        fetchSubstitutePdfContext(),fetchSubstituteDay(pdfDate,year,Number(term),true),fetchSubstituteStats(year,Number(term),pdfDate),
+      const [context,day]=await Promise.all([
+        fetchSubstitutePdfContext(),fetchSubstituteDay(pdfDate,year,Number(term),true),
       ])
       const rows=record?day.entries.filter(row=>row.absent_teacher_id===record.absentId):day.entries
-      const workload=substitutePdfWorkload(day.entries,day.period_times===null?null:day.busy,otherDays)
       const result=await buildSubstitutePdf({
         schoolName:context.school?.name||'โรงเรียน',logoUrl:context.school?.logo_url,date:pdfDate,
         year:years.find(row=>row.id===year)?.year_be||0,term,academicHead:context.academicHead,
         director:directorDisplayName(context.school,''),times:day.period_times??[],teachers,
-        teacherNames:substituteDocumentNames(rows,{...names,...historyNames,...day.teacher_names}),entries:rows,workload,
+        teacherNames:substituteDocumentNames(rows,{...names,...historyNames,...day.teacher_names}),entries:rows,
       })
       const url=URL.createObjectURL(result.blob),link=document.createElement('a')
       setDownload({url,fileName:result.fileName})

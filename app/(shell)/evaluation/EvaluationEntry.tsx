@@ -277,7 +277,7 @@ export default function EvaluationEntry({ kind, educationBand }: { kind: Evaluat
       setYearId(data.activeYearId || '')
       setClassroomId(list[0]?.id || '')
       setLoading(false)
-    })
+    }).catch(() => { setLoading(false); notify('error', 'โหลดปีการศึกษาหรือห้องเรียนไม่สำเร็จ กรุณาโหลดหน้าใหม่') })
   }, [educationBand])
 
   useEffect(() => {
@@ -290,7 +290,7 @@ export default function EvaluationEntry({ kind, educationBand }: { kind: Evaluat
       const list = data as Classroom[]
       setClassrooms(list)
       setClassroomId(list[0]?.id || '')
-    })
+    }).catch(() => { setClassrooms([]); setClassroomId(''); notify('error', 'โหลดห้องเรียนไม่สำเร็จ กรุณาลองใหม่') })
   }, [yearId, educationBand])
 
   useEffect(() => {
