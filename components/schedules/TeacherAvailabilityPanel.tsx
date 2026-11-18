@@ -5,7 +5,8 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 import {useCallback, useEffect, useRef, useState} from 'react'
 import {type PeriodTimeRow} from '@/lib/schedule-helpers'
 import ScheduleGridTable from './ScheduleGridTable'
-import {hasTeacherTimeline,teacherPeriodTimes,levelPeriodTimes} from '@/lib/schedule-period-profiles'
+import {hasTeacherTimeline,levelPeriodTimes} from '@/lib/schedule-period-profiles'
+import {teacherDisplayTimes} from '@/lib/schedule-teacher-display'
 import {teacherCellBlocks,teacherCellEvents,teacherCellOptions,teacherCellClock,type TeacherCellEvent} from '@/lib/schedule-teacher-cell-options'
 import {teacherActivitiesInClock} from '@/lib/schedule-teacher-activities'
 
@@ -13,10 +14,11 @@ type Availability = Awaited<ReturnType<import('./ScheduleServices').ScheduleOper
 export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded,onChanged}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean;onChanged?:()=>Promise<void>}) {
   const { fetchScheduleDays, fetchTeacherAvailability, setTeacherAvailabilityBlock, editTeacherScheduleCell, toggleScheduleCellLock, clearTeacherSchedule } = useScheduleOperations()
 
-  const gridTimes=teacherPeriodTimes(periodTimes)
   const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
   const [data,setData] = useState<Availability|null>(null)
   const [teacher,setTeacher] = useState('')
+  const teacherRooms=[...(data?.lessons||[]),...(data?.busy||[])].filter(row=>row.teacherId===teacher).map(row=>data?.classroomLevels?.[row.classroomId]||'').filter(Boolean)
+  const gridTimes=teacherDisplayTimes(periodTimes,teacher,teacherRooms)
   const [error,setError] = useState('')
   const [notice,setNotice] = useState('')
   const [editing,setEditing] = useState<{day:number;period:number}|null>(null)

@@ -4,6 +4,8 @@ import { applyThaiFonts, loadImageDataUrl } from '@/lib/jspdf-thai-font'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
 import { periodTimeLabel, schedulePeriods, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { formatThaiDate } from '@/lib/thaiDate'
+import {teacherTimelineBounds,teacherTimelineDay,timelineClockLabel} from './schedule-teacher-timeline'
+import {clockMinute} from './schedule-period-profiles'
 
 const PAGE_W = 297
 const PAGE_H = 210
@@ -20,9 +22,9 @@ const BREAK_TEXT: [number, number, number] = [0, 0, 0]
 const TEXT: [number, number, number] = [0, 0, 0]
 const MUTED: [number, number, number] = [0, 0, 0]
 
-export type SchedulePdfCell = { line1: string; line2: string; line3?: string; line4?: string }
+export type SchedulePdfCell = { line1: string; line2: string; line3?: string; line4?: string; classroomLevels?: string[] }
 export type ScheduleSigner = { name?: string; role: string }
-export type SchedulePdfPage = { layout?:'grid'|'teacher-agenda'; periodTimes?:PeriodTimeRow[]; title: string; gridData: Record<string, SchedulePdfCell>; leadSigner?: ScheduleSigner }
+export type SchedulePdfPage = { layout?:'grid'|'teacher-agenda'|'teacher-timeline'; periodTimes?:PeriodTimeRow[]; title: string; gridData: Record<string, SchedulePdfCell>; leadSigner?: ScheduleSigner }
 export type SchedulePdfInput = {
   academicHeadName?: string
   viceDirectorName?: string
@@ -236,6 +238,54 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   doc.line(MARGIN_X, y, PAGE_W - MARGIN_X, y)
   y += 3
 
+  if ('layout' in sheet && sheet.layout==='teacher-timeline' && times.length) {
+    const days=SCHEDULE_DAYS.filter(day=>!input.days||input.days.includes(day.value))
+    const {start,end,duration}=teacherTimelineBounds(times)
+    const dayW=24,chartX=MARGIN_X+dayW,chartW=PAGE_W-MARGIN_X*2-dayW
+    const xAt=(minute:number)=>chartX+(minute-start)/duration*chartW
+    const notes=new Map<string,{number:number;lines:string[]}>()
+    doc.setFont('THSarabunNew','normal');doc.setFontSize(11)
+    for(const day of days)for(const event of teacherTimelineDay(times,sheet.gridData,day.value).events){
+      if(xAt(event.end)-xAt(event.start)>=18)continue
+      const number=notes.size+1,activity=event.cell.line2==='(กิจกรรมครู)'
+      const text=`[${number}] ${day.label} ${event.time.start_time}–${event.time.end_time} · ${[event.cell.line1,event.cell.line2,activity?'':event.cell.line3,event.cell.line4].filter(Boolean).join(' · ')}`
+      notes.set(`${day.value}-${event.time.period}`,{number,lines:wrapLine(doc,text,PAGE_W-MARGIN_X*2)})
+    }
+    const noteHeight=[...notes.values()].reduce((sum,note)=>sum+note.lines.length*4.5,0)
+    const headerH=12,rowH=Math.max(16,Math.min(26,(PAGE_H-MARGIN_BOTTOM-signStep*3-8-y-headerH-noteHeight)/Math.max(days.length,1)))
+    drawCell(doc,MARGIN_X,y,dayW,headerH,'วัน','',{line1Size:14})
+    doc.rect(chartX,y,chartW,headerH)
+    doc.setFont('THSarabunNew','normal');doc.setFontSize(10)
+    const ticks=[start,...Array.from({length:Math.max(0,Math.ceil(end/60)-Math.floor(start/60)-1)},(_,i)=>(Math.floor(start/60)+i+1)*60).filter(t=>t>start&&t<end),end]
+    for(const minute of ticks){doc.text(timelineClockLabel(minute),xAt(minute),y+7,{align:minute===start?'left':minute===end?'right':'center'})}
+    y+=headerH
+    for(const day of days){
+      drawCell(doc,MARGIN_X,y,dayW,rowH,day.label,'',{line1Size:14})
+      doc.setDrawColor(...BORDER);doc.rect(chartX,y,chartW,rowH)
+      doc.setDrawColor(220,220,220);doc.setLineWidth(0.15)
+      for(const minute of ticks.slice(1,-1))doc.line(xAt(minute),y,xAt(minute),y+rowH)
+      for(const time of times.filter(t=>t.is_break)){
+        const x=xAt(clockMinute(time.start_time)),w=xAt(clockMinute(time.end_time))-x
+        drawCell(doc,x,y,w,rowH,time.label,'',{fill:BREAK_BG,line1Size:10})
+      }
+      const {events,lanes}=teacherTimelineDay(times,sheet.gridData,day.value)
+      for(const {time,cell,start:from,end:to,lane} of events){
+        const x=xAt(from),w=xAt(to)-x,h=rowH/lanes
+        const activity=cell.line2==='(กิจกรรมครู)'
+        const note=notes.get(`${day.value}-${time.period}`)
+        if(note){drawCell(doc,x,y+lane*h,w,h,String(note.number),'',{fill:activity?[238,244,249]:HEADER_BG,line1Size:11});continue}
+        drawCell(doc,x,y+lane*h,w,h,cell.line1,cell.line2,{fill:activity?[238,244,249]:HEADER_BG,line1Size:lanes>1?10:13,line2Size:lanes>1?9:11,line3:[activity?'':cell.line3,cell.line4].filter(Boolean).join(' · '),line4:`${time.start_time}–${time.end_time}`})
+      }
+      y+=rowH
+    }
+    for(const note of notes.values())for(const line of note.lines){
+      if(y+4.5>PAGE_H-MARGIN_BOTTOM-signStep*3-8){doc.addPage();y=12}
+      y+=4.5;doc.setFont('THSarabunNew','normal');doc.setFontSize(11);doc.setTextColor(...TEXT);doc.text(line,MARGIN_X,y)
+    }
+    drawSigners(doc,Math.min(y+8,PAGE_H-MARGIN_BOTTOM-signStep*3),PAGE_W,MARGIN_X,signers,input.printDate)
+    continue
+  }
+
   if ('layout' in sheet && sheet.layout==='teacher-agenda') {
     const events=SCHEDULE_DAYS.filter(day=>!input.days||input.days.includes(day.value)).flatMap(day=>times.filter(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return time.is_break?cell?.line2==='(กิจกรรมครู)':!!cell&&!!cell.line1&&cell.line1!=='—'}).flatMap(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return cell?[{day,time,cell}]:[]}))
     const widths=[24,36,91,45,81],head=()=>{let x=MARGIN_X;for(const [i,label] of ['วัน','เวลา','รายวิชา / กิจกรรม','ชั้น / ห้อง','รายละเอียด'].entries()){drawCell(doc,x,y,widths[i],10,label,'',{fill:HEADER_BG,line1Size:14});x+=widths[i]}y+=10}
@@ -264,7 +314,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   x += dayW
   for(const row of times){
     const width=row.is_break?breakW:periodW
-    drawCell(doc,x,y,width,headerH,row.is_break?row.label:(row.label.startsWith('ช่วง')?row.label:`คาบ ${row.period}`),row.is_break?`${row.start_time}–${row.end_time}`:periodTimeLabel(times,row.period),{fill:row.is_break?BREAK_BG:HEADER_BG,line1Size:row.is_break?11:14,line2Size:10,line2Color:TEXT})
+    drawCell(doc,x,y,width,headerH,row.label||`คาบ ${row.period}`,row.is_break?`${row.start_time}–${row.end_time}`:periodTimeLabel(times,row.period),{fill:row.is_break?BREAK_BG:HEADER_BG,line1Size:row.is_break?11:14,line2Size:10,line2Color:TEXT})
     x+=width
   }
   y += headerH

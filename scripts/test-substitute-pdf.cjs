@@ -9,7 +9,7 @@ class RecordedPdf extends originalJsPDF {
 function load(file){
   if(modules.has(file))return modules.get(file)
   const exports={};modules.set(file,exports)
-  const source=ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText
+  const source=ts.transpileModule(fs.readFileSync(path.join(root,file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText
   vm.runInNewContext(source,{exports,console,Buffer,Blob,Intl,Date,Map,Set,Uint8Array,fetch:async url=>{
     if(String(url).startsWith('data:'))return fetch(url)
     assert.ok(String(url).startsWith('/fonts/')||String(url).startsWith('/brand/'),'No network in PDF tests')

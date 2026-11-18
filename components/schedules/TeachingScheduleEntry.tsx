@@ -1,5 +1,7 @@
 'use client'
-import {teacherPeriodTimes,hasTeacherTimeline} from '@/lib/schedule-period-profiles'
+import {hasTeacherTimeline} from '@/lib/schedule-period-profiles'
+import {teacherGridTimes,teacherPdfLayout} from '@/lib/schedule-teacher-display'
+import TeacherTimeline from './TeacherTimeline'
 import {teacherActivitiesInClock,teacherActivityMinutes} from '@/lib/schedule-teacher-activities'
 import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
@@ -11,7 +13,7 @@ import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 type Teacher = { id: string; prefix: string; full_name: string }
-type Cell = { label: string; subject_line: string; room_line: string }
+type Cell = { label: string; subject_line: string; room_line: string; classroomLevels?: string[]; pdf?: import('@/lib/jspdf-schedules').SchedulePdfCell }
 
 const STYLES = `
   .schedule-page { display: grid; gap: 14px; }
@@ -71,6 +73,7 @@ export default function TeachingScheduleEntry() {
   }, [teachers, selectedTeacher])
 
   const selectedYearObj = years.find(y => y.id === selectedYear)
+  const displayTimes=teacherGridTimes(periodTimes,selectedTeacher,cells)
 
   const init = useCallback(async () => {
     try {
@@ -194,8 +197,8 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-empty">ไม่พบครูในโรงเรียน</div>
         ) : (
           <div className="schedule-grid-card">
-            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<div className="schedule-profile-teacher-grid"><ScheduleGridTable days={scheduleDays} dutyBreaks
-              periodTimes={teacherPeriodTimes(periodTimes)}
+            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<div className="schedule-profile-teacher-grid">{teacherPdfLayout(displayTimes)==='teacher-timeline'?<TeacherTimeline times={displayTimes} cells={Object.fromEntries(Object.entries(cells).map(([key,cell])=>[key,cell.pdf||{line1:cell.room_line,line2:cell.subject_line}]))} days={scheduleDays}/>:<ScheduleGridTable days={scheduleDays} dutyBreaks
+              periodTimes={displayTimes}
               renderBreak={(day, period) => {
                 const cell = cells[`${day}-${period}`]
                 return cell?.room_line === 'กิจกรรมครู' ? <div className="cell-view"><strong>{cell.subject_line}</strong><small>กิจกรรมครู</small></div> : null
@@ -205,8 +208,8 @@ export default function TeachingScheduleEntry() {
                 const cell = cells[key]
                 return <div className="cell-view">{renderCell(cell)}</div>
               }}
-            /></div>}
-            {!canEdit&&hasTeacherTimeline(periodTimes)&&<div className="teacher-time-agenda" aria-label="ตารางครูตามเวลาจริง">{scheduleDays.map(day=>{const labels=['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];const events=teacherPeriodTimes(periodTimes).filter(time=>cells[`${day}-${time.period}`]?.label);return <section key={day}><h3>วัน{labels[day]}</h3>{events.length?events.map(time=><article key={time.period}><time>{time.start_time}<br/>–{time.end_time}</time><div><strong>{cells[`${day}-${time.period}`].subject_line}</strong><small>{cells[`${day}-${time.period}`].room_line}</small></div></article>):<p>ไม่มีคาบสอนหรือกิจกรรมครูที่กำหนด</p>}</section>})}</div>}
+            />}</div>}
+            {!canEdit&&hasTeacherTimeline(periodTimes)&&<div className="teacher-time-agenda" aria-label="ตารางครูตามเวลาจริง">{scheduleDays.map(day=>{const labels=['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];const events=displayTimes.filter(time=>cells[`${day}-${time.period}`]?.label);return <section key={day}><h3>วัน{labels[day]}</h3>{events.length?events.map(time=><article key={time.period}><time>{time.start_time}<br/>–{time.end_time}</time><div><strong>{cells[`${day}-${time.period}`].subject_line}</strong><small>{cells[`${day}-${time.period}`].room_line}</small></div></article>):<p>ไม่มีคาบสอนหรือกิจกรรมครูที่กำหนด</p>}</section>})}</div>}
           </div>
         )}
       </div>

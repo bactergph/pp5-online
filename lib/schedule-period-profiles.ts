@@ -72,7 +72,7 @@ export function teacherPeriodTimes(times:PeriodTimeRow[]):PeriodTimeRow[]{
  }
  for(const activity of teacherActivitiesInClock(times)){
   const key=`${activity.start_time}-${activity.end_time}`
-  const covered=[...clocks.values()].some(row=>row.start_time<=activity.start_time&&activity.end_time<=row.end_time)
+  const covered=[...clocks.values()].some(row=>(row.is_break||row.start_time===activity.start_time&&row.end_time===activity.end_time)&&row.start_time<=activity.start_time&&activity.end_time<=row.end_time)
   if(!covered)clocks.set(key,{period:0,label:activity.name,start_time:activity.start_time,end_time:activity.end_time,is_break:false,sort_order:0})
  }
  return [...clocks.values()].sort((a,b)=>a.start_time.localeCompare(b.start_time)||a.end_time.localeCompare(b.end_time)||Number(a.is_break)-Number(b.is_break)).map((row,i)=>({period:i+1,label:row.is_break?(row.label||'พัก'):`ช่วง ${i+1}`,start_time:row.start_time,end_time:row.end_time,is_break:!!row.is_break,sort_order:i+1}))

@@ -1,6 +1,8 @@
 'use client'
 import {teacherActivitiesInClock} from '@/lib/schedule-teacher-activities'
-import {levelPeriodTimes,teacherPeriodTimes} from '@/lib/schedule-period-profiles'
+import {levelPeriodTimes} from '@/lib/schedule-period-profiles'
+import {teacherGridTimes,teacherPdfLayout} from '@/lib/schedule-teacher-display'
+import TeacherTimeline from './TeacherTimeline'
 import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -165,7 +167,7 @@ export default function ScheduleExportPage() {
   const [classIds, setClassIds] = useState<string[]>([])
   const [teacherIds, setTeacherIds] = useState<string[]>([])
   const [pickQuery, setPickQuery] = useState('')
-  const [gridData, setGridData] = useState<Record<string, { line1: string; line2: string; line3?: string; line4?: string }>>({})
+  const [gridData, setGridData] = useState<Record<string, import('@/lib/jspdf-schedules').SchedulePdfCell>>({})
   const [semester, setSemester] = useState(() => String(scheduleSemesterForYear(null)))
   const [printDate, setPrintDate] = useState('')
   const printYear = Number(printDate.slice(0, 4))
@@ -319,14 +321,15 @@ export default function ScheduleExportPage() {
             return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id], periodTimes: levelPeriodTimes(periodTimes, room?.level || ''), leadSigner: { name: room?.homeroomTeacherName || '', role: 'ครูประจำชั้น' } }
           }
           const teacher = teachers.find(t => t.id === id)
-          return { layout:teacherPeriodTimes(periodTimes).length>10?'teacher-agenda' as const:'grid' as const, title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? formatStaffName(teacher.prefix, teacher.full_name) : ''}`, gridData: grids[id], periodTimes: teacherPeriodTimes(periodTimes), leadSigner: { name: teacher ? formatStaffName(teacher.prefix, teacher.full_name) : '', role: 'ครูผู้สอน' } }
+          const teacherTimes=teacherGridTimes(periodTimes,id,grids[id]||{})
+          return { layout:teacherPdfLayout(teacherTimes), title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? formatStaffName(teacher.prefix, teacher.full_name) : ''}`, gridData: grids[id], periodTimes: teacherTimes, leadSigner: { name: teacher ? formatStaffName(teacher.prefix, teacher.full_name) : '', role: 'ครูผู้สอน' } }
         })
         return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, viceDirectorName, directorName, directorPosition, printDate, fileName })
       },
     })
   }
 
-  const displayTimes=exportType==='class'?levelPeriodTimes(periodTimes,selectedClass?.level||''):teacherPeriodTimes(periodTimes)
+  const displayTimes=exportType==='class'?levelPeriodTimes(periodTimes,selectedClass?.level||''):teacherGridTimes(periodTimes,teacherId,gridData)
   const classGroups = useMemo(() => {
     const map = new Map<string, Classroom[]>()
     for (const room of classrooms) {
@@ -514,7 +517,7 @@ export default function ScheduleExportPage() {
           </header>
 
           <div className="sched-print-scroll">
-          <table className="sched-print-table">
+          {exportType==='teaching'&&teacherPdfLayout(displayTimes)==='teacher-timeline'?<TeacherTimeline times={displayTimes} cells={gridData} days={scheduleDays}/>:<table className="sched-print-table">
             <thead>
               <tr>
                 <th>วัน</th>
@@ -534,7 +537,7 @@ export default function ScheduleExportPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table>}
           </div>
           <div className="sched-print-sign">
             {scheduleDocumentSigners({ lead: exportType === 'class' ? { name: selectedClass?.homeroomTeacherName || '', role: 'ครูประจำชั้น' } : { name: selectedTeacher ? formatStaffName(selectedTeacher.prefix, selectedTeacher.full_name) : '', role: 'ครูผู้สอน' }, academicHeadName, viceDirectorName, directorName, directorPosition }).map(s=><div key={s.role}>

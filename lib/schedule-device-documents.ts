@@ -1,5 +1,6 @@
 import {scheduleRoomEnabled} from './schedule-room-state'
 import {levelPeriodTimes,teacherPeriodTimes,teacherBlockOverlaps} from './schedule-period-profiles'
+import {teacherGridTimes,teacherPdfLayout} from './schedule-teacher-display'
 import {withTeacherActivityClock} from './schedule-teacher-activities'
 import {scheduleTeachingView} from './schedule-teaching-view'
 import type {SchedulePdfCell, SchedulePdfPage} from './jspdf-schedules'
@@ -32,7 +33,8 @@ export function deviceDocumentPages(plan:FreeWizardPlan,kind:'class'|'teacher',i
         gridData[key]=cells[key]?.pdf||{line1:plan.blocks.some(b=>b.teacherId===id&&b.day===day&&teacherBlockOverlaps(teacherTimes,b.period,row.period))?'ไม่ว่าง':'—',line2:''}
       }
       const teacherName=plan.teachers.find(t=>t.id===id)?.name||''
-      return {layout:teacherPeriodTimes(teacherTimes).length>10?'teacher-agenda' as const:'grid' as const,periodTimes:teacherPeriodTimes(teacherTimes),title:`ตารางสอน ${teacherName} ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,gridData,leadSigner:{name:teacherName,role:'ครูผู้สอน'}}
+      const displayTimes=teacherGridTimes(teacherTimes,id,gridData)
+      return {layout:teacherPdfLayout(displayTimes),periodTimes:displayTimes,title:`ตารางสอน ${teacherName} ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,gridData,leadSigner:{name:teacherName,role:'ครูผู้สอน'}}
     }
     for(const day of plan.days)for(const {period} of teachingRows(levelPeriodTimes(plan.periods,plan.rooms.find(room=>room.id===id)?.label||''))){
       const subjects=plan.timetable.filter(cell=>cell.day===day&&cell.period===period&&cell.classroomId===id)
