@@ -16,6 +16,7 @@ import {
   fillActivityDoneColumn,
   fillDailyPresentAll,
   fillDailyPresentColumn,
+  fetchHomeroomActivityNotes,
   fetchMonthlyActivity,
   fetchMonthlyAttendance,
   fetchWeightHeight,
@@ -76,6 +77,8 @@ import {
   printPageRowCount,
 } from '@/lib/print-student-pages'
 import { useAppAlert } from '@/lib/use-app-alert'
+import { HomeroomDayDialog } from '@/components/classroom-admin/HomeroomActivityBar'
+import { homeroomDayAttendance } from '@/lib/homeroom-activity'
 import StudentValueCell from '@/components/classroom-admin/StudentValueCell'
 import StudentValueSummary from '@/components/classroom-admin/StudentValueSummary'
 import NameColumnHandle, { useNameColumnWidth } from '@/components/table/NameColumnHandle'
@@ -280,6 +283,8 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const [students, setStudents] = useState<Student[]>([])
   const [recordsLoadedKey, setRecordsLoadedKey] = useState('')
   const [attendanceValues, setAttendanceValues] = useState<Record<string, AttendanceStatus>>({})
+  const [homeroomNotes, setHomeroomNotes] = useState<Record<string, string[]>>({})
+  const [homeroomNoteDate, setHomeroomNoteDate] = useState<string | null>(null)
   const [activityValues, setActivityValues] = useState<Record<string, number>>({})
   const [monthlyAttendanceValues, setMonthlyAttendanceValues] = useState<Record<string, Record<number, AttendanceStatus>>>({})
   const [monthlyActivityValues, setMonthlyActivityValues] = useState<Record<string, Record<number, number>>>({})
@@ -312,7 +317,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
 
   const hasMonthlyBulkTools = mode === 'attendance'
     || (mode === 'activity' && Boolean(activityType && ATTENDANCE_SYNCED_ACTIVITY_TYPES.includes(activityType)))
-  const monthlyHeaderRowSpan = hasMonthlyBulkTools ? 4 : 3
+  const monthlyHeaderRowSpan = hasMonthlyBulkTools ? 5 : 3
   // ไม่ใส่ date ใน request key — date ใช้เฉพาะวันตรวจวัดตอนบันทึก ไม่ใช่โหลดตาราง
   const recordsRequestKey = [classroomId, yearId, mode, activityType || '', month, monthKey, term].join('|')
   activityRequestRef.current=recordsRequestKey
@@ -472,6 +477,14 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           setHolidays(result.holidays)
           setWeekendSchoolDays(result.weekendSchoolDays || [])
           setMonthlyAttendanceValues(Object.fromEntries(result.students.map(s => [s.id, (result.records as Record<string,Record<number,AttendanceStatus>>)[s.id] || {}])))
+          const notes = await fetchHomeroomActivityNotes(classroomId, monthKey)
+          if (activityRequestRef.current !== requestKey) return
+          if (notes.error) {
+            setHomeroomNotes({})
+            notify('error', notes.error)
+          } else {
+            setHomeroomNotes(Object.fromEntries(notes.notes.map(row => [row.activity_date, row.topics])))
+          }
         } else if (mode === 'activity' && activityType) {
           const result = await fetchMonthlyActivity(classroomId, yearId, monthKey, activityType)
           if(activityRequestRef.current!==requestKey)return
@@ -506,7 +519,7 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
           })))
         }
       } catch(error) {
-        if(activityRequestRef.current===requestKey){setStudents([]);setMonthlyActivityValues({});setMonthlyAttendanceValues({});notify('error',error instanceof Error?error.message:'โหลดข้อมูลไม่สำเร็จ')}
+        if(activityRequestRef.current===requestKey){setStudents([]);setMonthlyActivityValues({});setMonthlyAttendanceValues({});setHomeroomNotes({});notify('error',error instanceof Error?error.message:'โหลดข้อมูลไม่สำเร็จ')}
       } finally {
         if(activityRequestRef.current===requestKey)setRecordsLoadedKey(requestKey)
       }
@@ -607,6 +620,13 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
   const isAttendanceDefaultMode = usesAttendanceDefault(mode, activityType)
   const selectedMonth = selectedMonthNumber(monthKey)
   const attendanceTerm = selectedMonth >= 5 && selectedMonth <= 10 ? 1 : 2
+  const homeroomReportDays = useMemo(() => {
+    if (mode !== 'attendance') return []
+    return days.filter(day => !isClosedWeekend(day)).map(day => ({
+      date: dayDate(monthKey, day),
+      counts: homeroomDayAttendance(students.map(student => monthlyAttendanceValues[student.id]?.[day]), dayDate(monthKey, day), attendanceAsOf),
+    }))
+  }, [mode, days, monthKey, students, monthlyAttendanceValues, attendanceAsOf, holidays, weekendSchoolDays])
   const boardTerm = mode === 'attendance' ? attendanceTerm : term
   const boardMonth = isMonthlyMode ? selectedMonth : month
   const boardMonthTabs = mode === 'weightHeight'
@@ -1910,6 +1930,24 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
     <ClassroomAdminPrintLayoutsProvider layouts={printLayouts}>
     <div data-ledger-view={isNumericMode?ledgerView:undefined} className={`page-stack classroom-admin-page${printMode ? ' classroom-admin-page--print' : ''}${mode === 'attendance' ? ' classroom-admin-page--attendance' : ''}`}>
       <AlertModal />
+      {mode === 'attendance' && (
+        <HomeroomDayDialog
+          date={homeroomNoteDate}
+          day={homeroomReportDays.find(day => day.date === homeroomNoteDate)}
+          classroomId={classroomId}
+          level={classrooms.find(room => room.id === classroomId)?.level || ''}
+          room={classrooms.find(room => room.id === classroomId)?.room || 0}
+          canEdit={canEdit}
+          savedTopics={homeroomNoteDate ? homeroomNotes[homeroomNoteDate] || [] : []}
+          onClose={() => setHomeroomNoteDate(null)}
+          onSaved={(date, topics) => setHomeroomNotes(current => {
+            const next = { ...current }
+            if (topics.length) next[date] = topics
+            else delete next[date]
+            return next
+          })}
+        />
+      )}
       <style>{CLASSROOM_ADMIN_PRINT_STYLES}</style>
       {!printMode && (
       <ClassroomAdminPrintLayoutTuner
@@ -2414,10 +2452,10 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                 })}
                 {mode === 'attendance' && (
                   <>
-                    <th rowSpan={3} className="classroom-admin-summary-head">มา</th>
-                    <th rowSpan={3} className="classroom-admin-summary-head">ป่วย</th>
-                    <th rowSpan={3} className="classroom-admin-summary-head">ลา</th>
-                    <th rowSpan={3} className="classroom-admin-summary-head">ขาด</th>
+                    <th rowSpan={4} className="classroom-admin-summary-head">มา</th>
+                    <th rowSpan={4} className="classroom-admin-summary-head">ป่วย</th>
+                    <th rowSpan={4} className="classroom-admin-summary-head">ลา</th>
+                    <th rowSpan={4} className="classroom-admin-summary-head">ขาด</th>
                   </>
                 )}
                 {isSavingMode && (
@@ -2451,6 +2489,42 @@ export default function ClassroomAdminEntry({ mode, title, description, activity
                   )
                 })}
               </tr>
+              {mode === 'attendance' && (
+                <tr className="homeroom-note-row">
+                  {days.map(day => {
+                    const dateKey = dayDate(monthKey, day)
+                    const holiday = holidayMap[dateKey]
+                    const closedWeekend = isClosedWeekend(day)
+                    const openWeekend = isOpenWeekend(day)
+                    const schoolDay = isSchoolDay(day)
+                    const savedTopics = homeroomNotes[dateKey] || []
+                    return (
+                      <th
+                        key={`note-${day}`}
+                        className={[
+                          'homeroom-note-head',
+                          closedWeekend ? 'is-weekend' : '',
+                          openWeekend ? 'is-open-weekend' : '',
+                          holiday ? 'is-holiday' : '',
+                        ].filter(Boolean).join(' ')}
+                      >
+                        {schoolDay && (canEdit || savedTopics.length > 0) ? (
+                          <button
+                            type="button"
+                            className={`homeroom-note-btn${savedTopics.length ? ' is-saved' : ''}`}
+                            disabled={!classroomId || tableLoading}
+                            title={savedTopics.join(' · ') || 'บันทึกเรื่องที่อบรมวันนี้'}
+                            onClick={() => setHomeroomNoteDate(dateKey)}
+                          >
+                            <span>{savedTopics.length ? 'แก้' : 'บันทึก'}</span>
+                            <span>เรื่อง</span>
+                          </button>
+                        ) : null}
+                      </th>
+                    )
+                  })}
+                </tr>
+              )}
               {hasMonthlyBulkTools && (
                 <tr>
                   {days.map(day => {

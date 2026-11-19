@@ -322,7 +322,7 @@ export default function ScheduleExportPage() {
             return { title: `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${label}`, gridData: grids[id], periodTimes: levelPeriodTimes(periodTimes, room?.level || ''), leadSigner: { name: room?.homeroomTeacherName || '', role: 'ครูประจำชั้น' } }
           }
           const teacher = teachers.find(t => t.id === id)
-          const teacherTimes=teacherGridTimes(periodTimes,id,grids[id]||{})
+          const teacherTimes=teacherGridTimes(periodTimes,id,grids[id]||{},teacher?.homeroomLevel)
           return { layout:teacherPdfLayout(teacherTimes), title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? formatStaffName(teacher.prefix, teacher.full_name) : ''} · ${teacherWeeklyHoursLabel(periodTimes,grids[id]||{})}`, gridData: grids[id], periodTimes: teacherTimes, leadSigner: { name: teacher ? formatStaffName(teacher.prefix, teacher.full_name) : '', role: 'ครูผู้สอน' } }
         })
         return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, viceDirectorName, directorName, directorPosition, printDate, fileName })
@@ -330,7 +330,7 @@ export default function ScheduleExportPage() {
     })
   }
 
-  const displayTimes=exportType==='class'?levelPeriodTimes(periodTimes,selectedClass?.level||''):teacherGridTimes(periodTimes,teacherId,gridData)
+  const displayTimes=exportType==='class'?levelPeriodTimes(periodTimes,selectedClass?.level||''):teacherGridTimes(periodTimes,teacherId,gridData,teachers.find(teacher=>teacher.id===teacherId)?.homeroomLevel)
   const classGroups = useMemo(() => {
     const map = new Map<string, Classroom[]>()
     for (const room of classrooms) {

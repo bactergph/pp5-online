@@ -106,7 +106,15 @@ const TEACHER_REPORTS: NavItem = {
     { href: '/reports/pp5', label: 'ปพ.5 รายวิชา', icon: ic(I.doc) },
   ],
 }
-const HOMEROOM_ATTENDANCE: NavItem = { href: '/attendance/homeroom', label: 'เช็กชื่อโฮมรูม', icon: ic(I.calendar) }
+const HOMEROOM_MENU: NavItem = {
+  href: '/attendance/homeroom',
+  label: 'โฮมรูม',
+  icon: ic(I.calendar),
+  children: [
+    { href: '/attendance/homeroom', label: 'เช็กชื่อโฮมรูม', icon: ic(I.calendar) },
+    { href: '/attendance/homeroom/report', label: 'รายงานโฮมรูม', icon: ic(I.doc) },
+  ],
+}
 const CLASSROOM_ATTENDANCE: NavItem = { href: '/classroom-admin/daily-attendance', label: 'บันทึกเวลาเรียน', icon: ic(I.calendar) }
 const CLASSROOM_BRUSHING: NavItem = { href: '/classroom-admin/brushing', label: 'บันทึกการแปรงฟัน', icon: ic(I.tooth) }
 const CLASSROOM_MILK: NavItem = { href: '/classroom-admin/milk', label: 'บันทึกการดื่มนม', icon: ic(I.bottle) }
@@ -522,8 +530,8 @@ export default function Sidebar({
 
 
   const sections = buildNav(navRole, isHomeroom).map(section => {
-    const showHomeroom = (educationType === 'secondary' || hasSecondaryClasses) && ['admin', 'academic_head', 'deputy_principal', 'principal', 'teacher'].includes(navRole)
-    const sourceItems = showHomeroom && section.items.some(item => item.href === '/dashboard') ? [...section.items, HOMEROOM_ATTENDANCE] : section.items
+    const showHomeroom = ['admin', 'academic_head', 'deputy_principal', 'principal', 'teacher'].includes(navRole)
+    const sourceItems = showHomeroom && section.items.some(item => item.href === '/dashboard') ? [...section.items, HOMEROOM_MENU] : section.items
     const byEducation = filterSchoolMenu(sourceItems, educationType)
     const secondaryPaths: Record<string, string> = { '/scores': '/scores/secondary', '/attendance/hourly': '/attendance/secondary', '/reports/pp5': '/reports/secondary/pp5', '/reports/pp6': '/reports/secondary/pp6', '/evaluation/activities': '/evaluation/secondary/activities', '/evaluation/character': '/evaluation/secondary/character', '/evaluation/reading': '/evaluation/secondary/reading', '/evaluation/competency': '/evaluation/secondary/competency' }
     const collect = (nodes: Child[]): Child[] => nodes.flatMap(node => node.children ? collect(node.children) : node.href && secondaryPaths[node.href] ? [{ ...node, href: secondaryPaths[node.href] }] : [])

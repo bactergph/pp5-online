@@ -1,5 +1,5 @@
 import type { PeriodTimeRow } from './schedule-helpers'
-import { levelPeriodTimes, teacherPeriodTimes, clockMinute } from './schedule-period-profiles'
+import { levelPeriodTimes, periodBand, teacherPeriodTimes, clockMinute } from './schedule-period-profiles'
 import { teacherActivitiesInClock } from './schedule-teacher-activities'
 import type { SchedulePdfCell } from './jspdf-schedules'
 
@@ -21,11 +21,12 @@ export type TeacherDisplayCell = { classroomLevels?: string[]; line1?: string; l
 
 /** Keep the shared display IDs: editing must still resolve to the original
  * classroom clock. Only the visible columns change, never stored periods. */
-export function teacherDisplayTimes(times: PeriodTimeRow[], teacherId: string, levels: string[], occupiedPeriods: number[] = []): PeriodTimeRow[] {
+export function teacherDisplayTimes(times: PeriodTimeRow[], teacherId: string, levels: string[], occupiedPeriods: number[] = [], homeroomLevel?: string | null): PeriodTimeRow[] {
   const axis = teacherPeriodTimes(times)
   const selected = new Map<string, PeriodTimeRow>()
   const key = (row: PeriodTimeRow) => `${row.start_time}-${row.end_time}`
-  const clocks = levels.length ? [...new Set(levels)].map(level => levelPeriodTimes(times, level)) : [times]
+  const home = homeroomLevel && periodBand(homeroomLevel) ? homeroomLevel : ''
+  const clocks = home ? [levelPeriodTimes(times, home)] : levels.length ? [...new Set(levels)].map(level => levelPeriodTimes(times, level)) : [times]
   for (const rows of clocks) for (const row of rows) {
     if (row.is_break && selected.get(key(row))?.is_break === false) continue
     selected.set(key(row), row)
@@ -46,8 +47,8 @@ export function teacherDisplayTimes(times: PeriodTimeRow[], teacherId: string, l
   })
 }
 
-export function teacherGridTimes(times: PeriodTimeRow[], teacherId: string, cells: Record<string, TeacherDisplayCell>) {
-  return teacherDisplayTimes(times, teacherId, Object.values(cells).flatMap(cell => cell.classroomLevels || []), Object.entries(cells).filter(([,cell]) => !!(cell.label || cell.line1) && cell.line1 !== '—').map(([key]) => Number(key.split('-')[1])))
+export function teacherGridTimes(times: PeriodTimeRow[], teacherId: string, cells: Record<string, TeacherDisplayCell>, homeroomLevel?: string | null) {
+  return teacherDisplayTimes(times, teacherId, Object.values(cells).flatMap(cell => cell.classroomLevels || []), Object.entries(cells).filter(([,cell]) => !!(cell.label || cell.line1) && cell.line1 !== '—').map(([key]) => Number(key.split('-')[1])), homeroomLevel)
 }
 
 /** Overlapping clocks need proportional placement, not consecutive columns. */

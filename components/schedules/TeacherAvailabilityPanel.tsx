@@ -19,7 +19,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
   const [data,setData] = useState<Availability|null>(null)
   const [teacher,setTeacher] = useState('')
   const teacherRooms=[...(data?.lessons||[]),...(data?.busy||[])].filter(row=>row.teacherId===teacher).map(row=>data?.classroomLevels?.[row.classroomId]||'').filter(Boolean)
-  const gridTimes=teacherDisplayTimes(periodTimes,teacher,teacherRooms)
+  const gridTimes=teacherDisplayTimes(periodTimes,teacher,teacherRooms,[],data?.teachers.find(item=>item.id===teacher)?.homeroomLevel)
   const [error,setError] = useState('')
   const [notice,setNotice] = useState('')
   const [editing,setEditing] = useState<{day:number;period:number}|null>(null)

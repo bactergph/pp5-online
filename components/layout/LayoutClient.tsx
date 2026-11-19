@@ -22,6 +22,7 @@ const TITLE_BY_PREFIX: { prefix: string; title: string }[] = [
   { prefix: '/classrooms', title: 'ชั้นเรียน' },
   { prefix: '/students', title: 'นักเรียน' },
   { prefix: '/scores', title: 'บันทึกคะแนน' },
+  { prefix: '/attendance/homeroom/report', title: 'รายงานโฮมรูม' },
   { prefix: '/attendance/homeroom', title: 'เช็กชื่อโฮมรูม' },
   { prefix: '/attendance', title: 'เช็คเวลาเรียนรายวิชา' },
   { prefix: '/evaluation', title: 'การประเมิน' },

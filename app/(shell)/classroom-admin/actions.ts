@@ -1264,3 +1264,75 @@ export async function fetchStudentValueSummary(classroomId:string,academicYearId
     return {error:null,summary:summarizeStudentValues(students,records,kind),range}
   }catch(error){return {error:error instanceof Error?error.message:'โหลดสรุปไม่สำเร็จ',summary:null}}
 }
+
+function homeroomNoteDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const parsed = new Date(`${value}T12:00:00+07:00`)
+  if (Number.isNaN(parsed.getTime())) return null
+  const formatted = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(parsed)
+  return formatted === value ? value : null
+}
+
+export async function fetchHomeroomActivityNotes(classroomId: string, monthKey: string) {
+  const session = await requireClassroomAdminSession()
+  const access = await getClassroomForAccess(classroomId, session)
+  if (access.error || !access.classroom) return { error: access.error || 'ไม่พบห้องเรียน', notes: [] as { activity_date: string; topics: string[] }[] }
+  if (!/^\d{4}-\d{2}$/.test(monthKey)) return { error: 'เดือนไม่ถูกต้อง', notes: [] }
+  const db = createServerClient()
+  const range = monthRange(monthKey)
+  const { data, error } = await db.from('homeroom_activity_notes')
+    .select('activity_date, topics')
+    .eq('school_id', access.classroom.school_id)
+    .eq('classroom_id', classroomId)
+    .gte('activity_date', range.start)
+    .lte('activity_date', range.end)
+    .order('activity_date')
+  if (error) return { error: 'โหลดเรื่องโฮมรูมไม่สำเร็จ', notes: [] }
+  return { error: null, notes: (data || []).map(row => ({ activity_date: row.activity_date, topics: Array.isArray(row.topics) ? row.topics.filter((topic: unknown): topic is string => typeof topic === 'string') : [] })) }
+}
+
+export async function saveHomeroomActivityNotes(classroomId: string, rows: { date: string; topics: string[] }[]) {
+  const session = await requireClassroomAdminSession()
+  if (!canEdit(session)) return { error: 'ไม่มีสิทธิ์บันทึก' }
+  const access = await getClassroomForAccess(classroomId, session)
+  if (access.error || !access.classroom) return { error: access.error || 'ไม่พบห้องเรียน' }
+  if (!Array.isArray(rows) || rows.length > 31) return { error: 'รายการวันที่ไม่ถูกต้อง' }
+  const notes = rows.map(row => {
+    const date = homeroomNoteDate(row?.date)
+    const topics = Array.isArray(row?.topics) ? row.topics.filter((topic): topic is string => typeof topic === 'string').map(topic => topic.replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 2) : []
+    return { date, topics }
+  })
+  if (notes.some(row => !row.date || row.topics.some(topic => topic.length > 200))) return { error: 'กรอกเรื่องไม่เกิน 200 ตัวอักษร และระบุวันที่ให้ถูกต้อง' }
+  const month = notes[0]?.date?.slice(0, 7)
+  if (notes.some(row => row.date?.slice(0, 7) !== month)) return { error: 'บันทึกได้ทีละหนึ่งเดือน' }
+  const db = createServerClient()
+  const cleared = notes.filter(row => !row.topics.length).map(row => row.date).filter((date): date is string => Boolean(date))
+  const filled = notes.filter(row => row.date && row.topics.length)
+  if (cleared.length) {
+    const { error } = await db.from('homeroom_activity_notes').delete().eq('school_id', access.classroom.school_id).eq('classroom_id', classroomId).in('activity_date', cleared)
+    if (error) return { error: 'ลบเรื่องที่เว้นว่างไม่สำเร็จ' }
+  }
+  if (filled.length) {
+    const { error } = await db.from('homeroom_activity_notes').upsert(filled.map(row => ({
+      school_id: access.classroom.school_id,
+      classroom_id: classroomId,
+      activity_date: row.date,
+      topics: row.topics,
+      updated_by: session.userId,
+      updated_at: new Date().toISOString(),
+    })), { onConflict: 'classroom_id,activity_date' })
+    if (error) return { error: 'บันทึกเรื่องโฮมรูมไม่สำเร็จ' }
+  }
+  await logActivity({
+    actor: session,
+    schoolId: access.classroom.school_id,
+    action: 'upsert',
+    module: 'classroom_admin',
+    targetType: 'homeroom_activity_notes',
+    targetId: classroomId,
+    targetLabel: `${access.classroom.level}/${access.classroom.room}`,
+    description: `บันทึกเรื่องโฮมรูม ${filled.length} วัน · ${access.classroom.level}/${access.classroom.room} เดือน ${month}`,
+    metadata: { classroomId, month: month || '', saved: filled.length, cleared: cleared.length },
+  })
+  return { error: null }
+}

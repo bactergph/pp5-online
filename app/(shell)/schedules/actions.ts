@@ -243,7 +243,15 @@ export async function saveClassScheduleCell(classroomId: string, yearId: string,
 export async function moveClassScheduleCell(roomId:string,yearId:string,fromDay:number,fromPeriod:number,toDay:number,toPeriod:number,expectedLesson:string,semester=1) {
   return scheduleResult(()=>scheduleOps.moveCell(roomId,yearId,fromDay,fromPeriod,toDay,toPeriod,expectedLesson,semester))
 }
-function teachingCells(data: ScheduleData, teacherId: string) {return scheduleTeachingView(data,teacherId)}
+async function homeroomLevels(schoolId: string) {
+  const { readHomeroomSeats } = await import('@/lib/teacher-homeroom')
+  const { earliestHomeroom } = await import('@/lib/teacher-order')
+  return earliestHomeroom(await readHomeroomSeats(createServerClient(), schoolId))
+}
+
+function teachingCells(data: ScheduleData, teacherId: string, homeroomLevel?: string | null) {
+  return scheduleTeachingView(data, teacherId, homeroomLevel)
+}
 
 function classPdfGrid(data: ScheduleData, classroomId: string) {
   const view = classRoomView(data, classroomId)
@@ -284,7 +292,8 @@ export async function fetchTeachingScheduleGrid(teacherId: string, yearId: strin
   const session = await requireScheduleSession()
   if (session.role === 'teacher' && teacherId !== session.userId) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
   const data = await loadSchedule(session.schoolId, yearId, semester)
-  return teachingCells(data, teacherId)
+  const levels = await homeroomLevels(session.schoolId)
+  return teachingCells(data, teacherId, levels.get(teacherId)?.level)
 }
 
 /** โหลดตารางทั้งภาคครั้งเดียว แล้วตัดเป็นหน้า PDF ตามห้องหรือครูที่เลือก */
@@ -293,12 +302,13 @@ export async function fetchSchedulePdfGrids(yearId: string, semester: number, ki
   if (!ids.length || ids.length > 200) throw new Error('เลือกห้องหรือครูได้ครั้งละ 1–200 รายการ')
   if (kind === 'teaching' && session.role === 'teacher' && ids.some(id => id !== session.userId)) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
   const data = await loadSchedule(session.schoolId, yearId, semester)
+  const levels = kind === 'teaching' ? await homeroomLevels(session.schoolId) : new Map()
   const result: Record<string, Record<string, { line1: string; line2: string; line3?: string; line4?: string }>> = {}
   for (const id of ids) {
     if (kind === 'class') {
       requireScheduleClass(data, id)
       result[id] = classPdfGrid(data, id)
-    } else result[id] = teachingPdfGrid(teachingCells(data, id))
+    } else result[id] = teachingPdfGrid(teachingCells(data, id, levels.get(id)?.level))
   }
   return result
 }

@@ -1,5 +1,5 @@
 'use client'
-import {hasTeacherTimeline} from '@/lib/schedule-period-profiles'
+import {hasTeacherTimeline,periodBand} from '@/lib/schedule-period-profiles'
 import {teacherGridTimes,teacherPdfLayout,teacherWeeklyHoursLabel} from '@/lib/schedule-teacher-display'
 import TeacherTimeline from './TeacherTimeline'
 import {teacherActivitiesInClock,teacherActivityMinutes} from '@/lib/schedule-teacher-activities'
@@ -74,7 +74,9 @@ export default function TeachingScheduleEntry() {
   }, [teachers, selectedTeacher])
 
   const selectedYearObj = years.find(y => y.id === selectedYear)
-  const displayTimes=teacherGridTimes(periodTimes,selectedTeacher,cells)
+  const homeroomLevel = teachers.find(teacher => teacher.id === selectedTeacher)?.homeroomLevel
+  const homeroomBand = homeroomLevel ? periodBand(homeroomLevel) : null
+  const displayTimes=teacherGridTimes(periodTimes,selectedTeacher,cells,homeroomLevel)
   const weeklyHours=teacherWeeklyHoursLabel(periodTimes,Object.fromEntries(Object.entries(cells).map(([key,cell])=>[key,cell.pdf||{line1:cell.room_line||cell.label,line2:cell.room_line==='กิจกรรมครู'?'(กิจกรรมครู)':cell.subject_line}])))
 
   const init = useCallback(async () => {
@@ -154,7 +156,7 @@ export default function TeachingScheduleEntry() {
         </div>
 
         <div className="schedule-info">
-          ตารางสอนใช้เวลาจริงของแต่ละช่วงชั้น รวมกิจกรรมครูที่รับผิดชอบ
+          {homeroomBand === 'kindergarten' ? 'ตารางสอนใช้เวลาอนุบาล ตามห้องที่ตั้งเป็นครูประจำชั้น' : homeroomBand === 'primary' ? 'ตารางสอนใช้เวลาประถม ตามห้องที่ตั้งเป็นครูประจำชั้น' : homeroomBand === 'secondary' ? 'ตารางสอนใช้เวลามัธยม ตามห้องที่ตั้งเป็นครูประจำชั้น' : 'ตารางสอนใช้เวลาจริงของแต่ละช่วงชั้น'} รวมกิจกรรมครูที่รับผิดชอบ
           {teacherActivityMinutes(teacherActivitiesInClock(periodTimes),selectedTeacher)>0&&<span> · กิจกรรมครู {teacherActivityMinutes(teacherActivitiesInClock(periodTimes),selectedTeacher)} นาที/สัปดาห์ (แยกจากคาบสอน)</span>}
           {canEdit && (
             <>
