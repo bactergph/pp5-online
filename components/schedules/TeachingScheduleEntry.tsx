@@ -1,4 +1,5 @@
 'use client'
+import {periodColSpans,scheduleCellIdentity,spanPeriods} from '@/lib/schedule-cell-span'
 import {hasTeacherTimeline,periodBand} from '@/lib/schedule-period-profiles'
 import {teacherGridTimes,teacherPdfLayout,teacherWeeklyHoursLabel} from '@/lib/schedule-teacher-display'
 import TeacherTimeline from './TeacherTimeline'
@@ -201,6 +202,10 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-grid-card">
             {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''} onChanged={loadGrid}/>:<div className="schedule-profile-teacher-grid">{teacherPdfLayout(displayTimes)==='teacher-timeline'?<TeacherTimeline times={displayTimes} cells={Object.fromEntries(Object.entries(cells).map(([key,cell])=>[key,cell.pdf||{line1:cell.room_line,line2:cell.subject_line}]))} days={scheduleDays}/>:<ScheduleGridTable days={scheduleDays} dutyBreaks
               periodTimes={displayTimes}
+              cellKey={(day, period) => {
+                const cell = cells[`${day}-${period}`]
+                return cell?.label ? scheduleCellIdentity([cell.room_line, cell.subject_line]) : ''
+              }}
               renderBreak={(day, period) => {
                 const cell = cells[`${day}-${period}`]
                 return cell?.room_line === 'กิจกรรมครู' ? <div className="cell-view"><strong>{cell.subject_line}</strong><small>กิจกรรมครู</small></div> : null
@@ -211,7 +216,7 @@ export default function TeachingScheduleEntry() {
                 return <div className="cell-view">{renderCell(cell)}</div>
               }}
             />}</div>}
-            {!canEdit&&hasTeacherTimeline(periodTimes)&&<div className="teacher-time-agenda" aria-label="ตารางครูตามเวลาจริง">{scheduleDays.map(day=>{const labels=['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];const events=displayTimes.filter(time=>cells[`${day}-${time.period}`]?.label);return <section key={day}><h3>วัน{labels[day]}</h3>{events.length?events.map(time=><article key={time.period}><time>{time.start_time}<br/>–{time.end_time}</time><div><strong>{cells[`${day}-${time.period}`].subject_line}</strong><small>{cells[`${day}-${time.period}`].room_line}</small></div></article>):<p>ไม่มีคาบสอนหรือกิจกรรมครูที่กำหนด</p>}</section>})}</div>}
+            {!canEdit&&hasTeacherTimeline(periodTimes)&&<div className="teacher-time-agenda" aria-label="ตารางครูตามเวลาจริง">{scheduleDays.map(day=>{const labels=['','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];const slots=displayTimes.map(time=>({period:time.period,break:time.is_break}));const spans=periodColSpans(slots,period=>{const cell=cells[`${day}-${period}`];return cell?.label?scheduleCellIdentity([cell.room_line,cell.subject_line]):''});const events=displayTimes.filter(time=>cells[`${day}-${time.period}`]?.label&&(time.is_break||(spans.get(time.period)??1)>0));return <section key={day}><h3>วัน{labels[day]}</h3>{events.length?events.map(time=>{const run=time.is_break?[time]:spanPeriods(slots,spans,time.period).map(period=>displayTimes.find(item=>item.period===period)||time);const end=run[run.length-1]||time;return <article key={time.period}><time>{time.start_time}<br/>–{end.end_time}</time><div><strong>{cells[`${day}-${time.period}`].subject_line}</strong><small>{cells[`${day}-${time.period}`].room_line}</small></div></article>}):<p>ไม่มีคาบสอนหรือกิจกรรมครูที่กำหนด</p>}</section>})}</div>}
           </div>
         )}
       </div>

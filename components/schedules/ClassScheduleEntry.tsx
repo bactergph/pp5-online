@@ -14,7 +14,8 @@ import { buildSchedulePdfBlob } from '@/lib/jspdf-schedules'
 import { formatStaffName } from '@/lib/roles'
 import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
-import { activityTimetableTeacherLabel, isActivityLessonId, periodTimeLabel, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
+import { periodColSpans, spanPeriods } from '@/lib/schedule-cell-span'
+import { activityTimetableTeacherLabel, isActivityLessonId, scheduleSemesterForYear, teacherTimetableName, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import ScheduleLessonPicker from './ScheduleLessonPicker'
 import ScheduleLessonPalette from './ScheduleLessonPalette'
 import { SCHEDULE_DAYS } from '@/lib/schedules'
@@ -84,7 +85,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
   const [preparationStep,setPreparationStep]=useState(initialStep)
   const [workspace,setWorkspace]=useState<'class'|'teacher'|'activity'|'places'|'prepare'>(initialWorkspace)
   const isManage = mode === 'manage'
-  const [picker, setPicker] = useState<{day:number;period:number} | null>(null)
+  const [picker, setPicker] = useState<{day:number;period:number;periods:number[]} | null>(null)
   const [scheduleDays,setScheduleDays]=useState<number[]>([1,2,3,4,5])
   const [loading, setLoading] = useState(true)
   const [years, setYears] = useState<Year[]>([])
@@ -392,6 +393,25 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
     return queueCellEdit(day, period, () => saveToggleLock(day, period))
   }
 
+  const spanSlots = periodTimes.map(row => ({ period: row.period, break: row.is_break }))
+  function subjectRun(day: number, period: number) {
+    return spanPeriods(spanSlots, periodColSpans(spanSlots, item => cells[`${day}-${item}`]?.class_subject_id || ''), period)
+  }
+  function spanFits(day: number, periods: number[], value: string) {
+    if (!value) return true
+    const item = quotas?.items.find(row => row.class_subject_id === value)
+    if (!item) return true
+    const already = periods.filter(itemPeriod => cells[`${day}-${itemPeriod}`]?.class_subject_id === value).length
+    return item.used + periods.length - already <= item.target
+  }
+  async function toggleRunLock(day: number, periods: number[]) {
+    const unlock = periods.some(period => cells[`${day}-${period}`]?.locked)
+    for (const period of periods) {
+      if (!!cells[`${day}-${period}`]?.locked !== unlock) continue
+      await handleToggleLock(day, period)
+    }
+  }
+
   async function saveToggleLock(day: number, period: number) {
     const key = `${day}-${period}`
     try {
@@ -577,47 +597,53 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
             <div className="schedule-mobile-board">{periodTimes.map((slot, index) => {
               const day = scheduleDays.includes(mobileDay) ? mobileDay : scheduleDays[0]
               if (slot.is_break) return <p key={`break-${index}`} className="schedule-mobile-break">{slot.label}</p>
-              return <article key={slot.period}><header>คาบ {slot.period}<small>{periodTimeLabel(periodTimes, slot.period)}</small></header>{(() => {
-                const key = `${day}-${slot.period}`
-                const cell = cells[key]
-                return <div className={isActivityLessonId(cell?.class_subject_id) ? 'sched-cell is-activity' : 'sched-cell'}>{subjectBlock(cell?.class_subject_id, cell?.note)}{isManage && canEdit && <div className="mt-2 flex flex-wrap gap-2"><button type="button" className="sched-mini" onClick={() => setPicker({ day, period: slot.period })}>แก้คาบ</button>{cell?.class_subject_id && !cell.locked && <button type="button" className="sched-mini is-danger" onClick={() => { void handleCellChange(day, slot.period, '') }}>เอาออก</button>}<button type="button" className="sched-mini" onClick={() => handleToggleLock(day, slot.period)}>{cell?.locked ? 'ปลดล็อก' : 'ล็อก'}</button></div>}</div>
-              })()}</article>
+              const periods = subjectRun(day, slot.period)
+              if (!periods.length) return null
+              const last = periodTimes.find(row => row.period === periods[periods.length - 1]) || slot
+              const cell = cells[`${day}-${slot.period}`]
+              const anyLocked = periods.some(period => cells[`${day}-${period}`]?.locked)
+              const allLocked = periods.every(period => cells[`${day}-${period}`]?.locked)
+              return <article key={slot.period}><header>คาบ {periods.length > 1 ? `${periods[0]}–${periods[periods.length - 1]}` : slot.period}<small>{slot.start_time}–{last.end_time}</small></header><div className={isActivityLessonId(cell?.class_subject_id) ? 'sched-cell is-activity' : 'sched-cell'}>{subjectBlock(cell?.class_subject_id, cell?.note)}{isManage && canEdit && <div className="mt-2 flex flex-wrap gap-2"><button type="button" className="sched-mini" disabled={anyLocked} onClick={() => setPicker({ day, period: slot.period, periods })}>แก้คาบ</button>{cell?.class_subject_id && !anyLocked && <button type="button" className="sched-mini is-danger" onClick={() => { for (const period of periods) void handleCellChange(day, period, '') }}>เอาออก</button>}<button type="button" className="sched-mini" onClick={() => void toggleRunLock(day, periods)}>{allLocked ? 'ปลดล็อก' : 'ล็อก'}</button></div>}</div></article>
             })}</div>
             <div className="schedule-desktop-board overflow-x-auto">
             <ScheduleGridTable days={scheduleDays} compactBreak
               periodTimes={periodTimes}
+              cellKey={(day, period) => cells[`${day}-${period}`]?.class_subject_id || ''}
               renderCell={(day, period) => {
+                const periods = subjectRun(day, period)
                 const key = `${day}-${period}`
                 const cell = cells[key]
-                const conflictRooms = conflicts[key]
-                const pending = pendingCells.has(key)
+                const conflictRooms = [...new Set(periods.flatMap(item => conflicts[`${day}-${item}`] || []))]
+                const pending = periods.some(item => pendingCells.has(`${day}-${item}`))
+                const range = periods.length > 1 ? `${periods[0]}–${periods[periods.length - 1]}` : String(period)
                 if (isManage && canEdit) {
-                  const locked = cell?.locked ?? false
+                  const allLocked = periods.every(item => cells[`${day}-${item}`]?.locked)
+                  const anyLocked = periods.some(item => cells[`${day}-${item}`]?.locked)
                   return (
-                    <div onDragOver={e=>{if(dragLesson&&!locked&&!pending&&!cellBlocked){e.preventDefault();setDropKey(key)}}} onDragLeave={()=>setDropKey(current=>current===key?null:current)} onDrop={e=>{e.preventDefault();placePaletteLesson(day,period)}} className={`sched-slot${dropKey===key?' is-drop':''}${conflictRooms?.length?' is-conflict':''}`}>
+                    <div onDragOver={e=>{if(dragLesson&&!anyLocked&&!pending&&!cellBlocked){e.preventDefault();setDropKey(key)}}} onDragLeave={()=>setDropKey(current=>current===key?null:current)} onDrop={e=>{e.preventDefault();placePaletteLesson(day,period)}} className={`sched-slot${dropKey===key?' is-drop':''}${conflictRooms.length?' is-conflict':''}`}>
                       <div className="grid gap-1">
-                        <button type="button" className={`sched-cell${isActivityLessonId(cell?.class_subject_id)?' is-activity':''}${locked?' is-locked':''}`}
-                          title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={cellBlocked || pending || locked} aria-busy={pending}
-                          draggable={!!cell?.class_subject_id&&!locked&&!pending&&!cellBlocked} onDragStart={e=>{if(!cell?.class_subject_id)return;e.dataTransfer.setData('application/x-jarnsek-lesson',cell.class_subject_id);e.dataTransfer.effectAllowed='move';setPaletteSelection(null);setDragLesson({id:cell.class_subject_id,from:{day,period},context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}} onClick={()=>paletteSelection?placePaletteLesson(day,period):setPicker({day,period})}
-                          aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${period}`}>
+                        <button type="button" className={`sched-cell${isActivityLessonId(cell?.class_subject_id)?' is-activity':''}${allLocked?' is-locked':''}`}
+                          title={cell?.class_subject_id ? subjectMap[cell.class_subject_id]?.label : 'เพิ่มรายวิชาหรือกิจกรรม'} disabled={cellBlocked || pending || anyLocked} aria-busy={pending}
+                          draggable={periods.length===1&&!!cell?.class_subject_id&&!anyLocked&&!pending&&!cellBlocked} onDragStart={e=>{if(!cell?.class_subject_id)return;e.dataTransfer.setData('application/x-jarnsek-lesson',cell.class_subject_id);e.dataTransfer.effectAllowed='move';setPaletteSelection(null);setDragLesson({id:cell.class_subject_id,from:{day,period},context:`${selectedYear}:${semester}:${selectedClass}`})}} onDragEnd={()=>{setDragLesson(null);setDropKey(null)}} onClick={()=>paletteSelection?placePaletteLesson(day,period):setPicker({day,period,periods})}
+                          aria-label={`แก้ไขวัน${SCHEDULE_DAYS.find(d=>d.value===day)?.label} คาบ ${range}`}>
                           {cell?.class_subject_id ? subjectBlock(cell.class_subject_id) : <span className="text-sm text-stone-400">{cell?.note || '+ เพิ่มวิชา'}</span>}
                         </button>
                         <button
                           type="button"
-                          className={`sched-lock${locked?' is-locked':''}`}
-                          title={locked ? 'ปลดล็อก' : 'ล็อกคาบนี้'}
-                          aria-label={locked ? 'ปลดล็อกคาบ' : 'ล็อกคาบ'}
-                          aria-pressed={locked}
-                          onClick={() => handleToggleLock(day, period)}
+                          className={`sched-lock${anyLocked?' is-locked':''}`}
+                          title={anyLocked ? 'ปลดล็อก' : 'ล็อกคาบนี้'}
+                          aria-label={anyLocked ? 'ปลดล็อกคาบ' : 'ล็อกคาบ'}
+                          aria-pressed={allLocked}
+                          onClick={() => void toggleRunLock(day, periods)}
                           disabled={cellBlocked || pending}
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d={locked?'M8 10V6a4 4 0 018 0v4':'M8 10V6a4 4 0 018 0'}/></svg>
-                          <span className="sched-lock-label">{locked?'ปลดล็อก':'ล็อก'}</span>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d={anyLocked?'M8 10V6a4 4 0 018 0v4':'M8 10V6a4 4 0 018 0'}/></svg>
+                          <span className="sched-lock-label">{anyLocked?'ปลดล็อก':'ล็อก'}</span>
                         </button>
                         {pending && <span role="status" className="flex items-center gap-1.5 text-xs text-blue-800"><span className="size-3 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" aria-hidden="true" />กำลังบันทึก…</span>}
                       </div>
                       {cell?.note && !cell.class_subject_id && <div className="mt-2 truncate px-1 text-xs text-stone-500">{cell.note}</div>}
-                      {conflictRooms?.length ? (
+                      {conflictRooms.length ? (
                         <div className="mt-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-700">
                           ซ้ำ: {conflictRooms.join(', ')}
                         </div>
@@ -629,7 +655,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
               }}
             />
             </div>
-            <div className="schedule-board-foot"><span>{isManage && canEdit ? 'คลิกช่องเพื่อใส่หรือเอาวิชาออก · ล็อกมุมขวาบนจะเก็บช่องไว้ตอนจัดใหม่' : 'ตารางเรียนรายสัปดาห์'}</span><div className="schedule-legend"><span><i className="schedule-legend-dot activity" />กิจกรรม</span><span><i className="schedule-legend-dot locked" />คาบที่ล็อก</span><Link href="/schedules/conflicts">ตรวจคาบชน</Link></div></div>
+            <div className="schedule-board-foot"><span>{isManage && canEdit ? 'คลิกช่องเพื่อใส่หรือเอาวิชาออก · คาบคู่รวมเป็นช่องเดียว · ล็อกมุมขวาบนจะเก็บช่องไว้ตอนจัดใหม่' : 'ตารางเรียนรายสัปดาห์ · คาบคู่รวมเป็นช่องเดียว'}</span><div className="schedule-legend"><span><i className="schedule-legend-dot activity" />กิจกรรม</span><span><i className="schedule-legend-dot locked" />คาบที่ล็อก</span><Link href="/schedules/conflicts">ตรวจคาบชน</Link></div></div>
           </section></div>
         )}
 
@@ -637,7 +663,7 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
 
       </div>
 
-      {picker && <ScheduleLessonPicker title={`วัน${SCHEDULE_DAYS.find(d=>d.value===picker.day)?.label} · คาบ ${picker.period}`} options={workspace==='activity'?quotaOptions.filter(s=>isActivityLessonId(s.id)):quotaOptions} selected={cells[`${picker.day}-${picker.period}`]?.class_subject_id || null} onClose={()=>setPicker(null)} onChoose={id=>{const {day,period}=picker;setPicker(null);void handleCellChange(day,period,id)}} />}
+      {picker && <ScheduleLessonPicker title={`วัน${SCHEDULE_DAYS.find(d=>d.value===picker.day)?.label} · คาบ ${picker.periods.length>1?`${picker.periods[0]}–${picker.periods[picker.periods.length-1]}`:picker.period}`} options={workspace==='activity'?quotaOptions.filter(s=>isActivityLessonId(s.id)):quotaOptions} selected={cells[`${picker.day}-${picker.period}`]?.class_subject_id || null} onClose={()=>setPicker(null)} onChoose={id=>{const {day,periods}=picker;setPicker(null);if(id&&!spanFits(day,periods,id)){setAlert({type:'error',title:'ลงวิชาไม่ได้',message:'รายวิชานี้ลงครบจำนวนคาบต่อสัปดาห์แล้ว กรุณานำคาบเดิมออกก่อน'});return}for(const period of periods)void handleCellChange(day,period,id)}} />}
       {pdfOpen && (
         <div className="fixed inset-0 z-[9000] grid place-items-center bg-stone-950/40 p-5 backdrop-blur-sm" onClick={() => setPdfOpen(false)}>
           <div className="grid max-h-[80vh] w-full max-w-lg gap-4 overflow-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>

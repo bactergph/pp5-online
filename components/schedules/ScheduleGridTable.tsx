@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { periodColSpans } from '@/lib/schedule-cell-span'
 import { periodTimeLabel, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import { SCHEDULE_DAYS, type ScheduleColumn } from '@/lib/schedules'
 import { DEFAULT_PERIOD_TIMES } from '@/lib/schedule-helpers'
@@ -30,6 +31,7 @@ const GRID_STYLES = `
     color: #182b49; font-size: 13px; font-weight: 700; padding: 8px 10px;
   }
   .schedule-grid-table td.cell { min-width: 108px; padding: 6px; height: auto; min-height: 8rem; vertical-align: top; }
+  .schedule-grid-table td.cell.is-span { min-width: 0; }
   .schedule-grid-table td.break-col {
     background: #f3f6fb; color: #52647c; font-size: 12px; font-weight: 600;
     writing-mode: vertical-rl; text-orientation: mixed; padding: 10px 4px;
@@ -43,6 +45,8 @@ const GRID_STYLES = `
 type Props = {
   renderCell: (day: number, period: number) => ReactNode
   renderBreak?: (day: number, period: number) => ReactNode | null
+  /** Same non-empty key on consecutive periods merges those cells. A break ends the run. */
+  cellKey?: (day: number, period: number) => string
   periodTimes?: PeriodTimeRow[]
   days?: number[]
   compactBreak?: boolean
@@ -50,8 +54,9 @@ type Props = {
   dutyBreaks?: boolean
 }
 
-export default function ScheduleGridTable({ renderCell, renderBreak, periodTimes, compactBreak = false, dutyBreaks = false, days = [1,2,3,4,5] }: Props) {
+export default function ScheduleGridTable({ renderCell, renderBreak, cellKey, periodTimes, compactBreak = false, dutyBreaks = false, days = [1,2,3,4,5] }: Props) {
   const columns: ScheduleColumn[] = (periodTimes?.length ? periodTimes : DEFAULT_PERIOD_TIMES).map(t => t.is_break ? { kind: 'break', period: t.period, header: t.label || 'พัก' } : { kind: 'period', period: t.period, header: t.label || `คาบ ${t.period}` })
+  const spanSlots = columns.map(col => ({ period: col.period ?? 0, break: col.kind === 'break' }))
   return (
     <>
       <style>{GRID_STYLES}</style>
@@ -82,7 +87,9 @@ export default function ScheduleGridTable({ renderCell, renderBreak, periodTimes
           </tr>
         </thead>
         <tbody>
-          {SCHEDULE_DAYS.filter(d=>days.includes(d.value)).map(day => (
+          {SCHEDULE_DAYS.filter(d=>days.includes(d.value)).map(day => {
+            const spans = cellKey ? periodColSpans(spanSlots, period => cellKey(day.value, period)) : null
+            return (
             <tr key={day.value}>
               <td className="day-col">{day.label}</td>
               {columns.map((col,index) => {
@@ -95,14 +102,17 @@ export default function ScheduleGridTable({ renderCell, renderBreak, periodTimes
                     </td>
                   )
                 }
+                const span = spans?.get(col.period) ?? 1
+                if (span === 0) return null
                 return (
-                  <td key={`${day.value}-${col.period}`} className="cell">
+                  <td key={`${day.value}-${col.period}`} className={span > 1 ? 'cell is-span' : 'cell'} colSpan={span > 1 ? span : undefined}>
                     {renderCell(day.value, col.period)}
                   </td>
                 )
               })}
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
     </>

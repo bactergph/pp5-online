@@ -6,6 +6,7 @@ import { periodTimeLabel, schedulePeriods, type PeriodTimeRow } from '@/lib/sche
 import { formatThaiDate } from '@/lib/thaiDate'
 import {teacherTimelineBounds,teacherTimelineDay,timelineClockLabel} from './schedule-teacher-timeline'
 import {clockMinute} from './schedule-period-profiles'
+import {pdfCellIdentity,periodColSpans,stripPeriodLabel} from './schedule-cell-span'
 
 const PAGE_W = 297
 const PAGE_H = 210
@@ -195,6 +196,21 @@ function drawCell(
   doc.setTextColor(...TEXT)
 }
 
+function mergeAgendaEvents<T extends { day: { value: number }; time: PeriodTimeRow; cell: SchedulePdfCell }>(rows: T[]) {
+  const merged: T[] = []
+  for (const row of rows) {
+    const prev = merged[merged.length - 1]
+    const key = pdfCellIdentity(row.cell)
+    if (prev && prev.day.value === row.day.value && !prev.time.is_break && !row.time.is_break && key && pdfCellIdentity(prev.cell) === key && prev.time.end_time === row.time.start_time) {
+      prev.time = { ...prev.time, end_time: row.time.end_time }
+      prev.cell = { ...prev.cell, line4: stripPeriodLabel(prev.cell.line4) }
+      continue
+    }
+    merged.push({ ...row, time: { ...row.time } })
+  }
+  return merged
+}
+
 /** สร้าง PDF ตารางเรียน/ตารางสอน ด้วย jsPDF บนเครื่องผู้ใช้ — คืน Blob ใส่คิวได้ */
 export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true })
@@ -287,7 +303,7 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
   }
 
   if ('layout' in sheet && sheet.layout==='teacher-agenda') {
-    const events=SCHEDULE_DAYS.filter(day=>!input.days||input.days.includes(day.value)).flatMap(day=>times.filter(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return time.is_break?cell?.line2==='(กิจกรรมครู)':!!cell&&!!cell.line1&&cell.line1!=='—'}).flatMap(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return cell?[{day,time,cell}]:[]}))
+    const events=mergeAgendaEvents(SCHEDULE_DAYS.filter(day=>!input.days||input.days.includes(day.value)).flatMap(day=>times.filter(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return time.is_break?cell?.line2==='(กิจกรรมครู)':!!cell&&!!cell.line1&&cell.line1!=='—'}).flatMap(time=>{const cell=sheet.gridData[`${day.value}-${time.period}`];return cell?[{day,time,cell}]:[]})))
     const widths=[24,36,91,45,81],head=()=>{let x=MARGIN_X;for(const [i,label] of ['วัน','เวลา','รายวิชา / กิจกรรม','ชั้น / ห้อง','รายละเอียด'].entries()){drawCell(doc,x,y,widths[i],10,label,'',{fill:HEADER_BG,line1Size:14});x+=widths[i]}y+=10}
     head()
     for(const event of events){
@@ -323,9 +339,19 @@ export async function buildSchedulePdfBlob(input: SchedulePdfInput) {
     x = MARGIN_X
     drawCell(doc, x, y, dayW, rowH, day.label, '', { fill: DAY_BG })
     x += dayW
+    const spans=periodColSpans(times.map(row=>({period:row.period,break:row.is_break})),period=>pdfCellIdentity(sheet.gridData[`${day.value}-${period}`]))
     for(const row of times){
-      const width=row.is_break?breakW:periodW,cell=sheet.gridData[`${day.value}-${row.period}`],duty=row.is_break&&cell?.line2==='(กิจกรรมครู)'&&cell.line1&&cell.line1!=='—'
-      drawCell(doc,x,y,width,rowH,duty?cell.line1:row.is_break?row.label:cell?.line1||'—',duty?'':row.is_break?'':cell?.line2||'',row.is_break?{fill:BREAK_BG,line1Size:duty?12:11}:{line3:cell?.line3,line4:cell?.line4})
+      if(!row.is_break){
+        const span=spans.get(row.period)??1
+        if(span===0)continue
+        const cell=sheet.gridData[`${day.value}-${row.period}`]
+        const width=periodW*span
+        drawCell(doc,x,y,width,rowH,cell?.line1||'—',cell?.line2||'',{line3:cell?.line3,line4:span>1?stripPeriodLabel(cell?.line4)||undefined:cell?.line4})
+        x+=width
+        continue
+      }
+      const width=breakW,cell=sheet.gridData[`${day.value}-${row.period}`],duty=cell?.line2==='(กิจกรรมครู)'&&!!cell.line1&&cell.line1!=='—'
+      drawCell(doc,x,y,width,rowH,duty?cell.line1:row.label,duty?'':'',{fill:BREAK_BG,line1Size:duty?12:11})
       x+=width
     }
     y += rowH

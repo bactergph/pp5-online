@@ -76,7 +76,7 @@ export default function FreeScheduleWizard({plan,step,onStep,onPlan,busy,review,
 }
 
 export function FreePlanBoard({plan,roomId,draft,selected,onSelect}:{plan:FreeWizardPlan;roomId:string;draft:DeviceDraft|null;selected?:string;onSelect?:(day:number,period:number)=>void}) {
-  return <div className="board" tabIndex={0} role="region" aria-label="ตารางเรียน เลื่อนเพื่อดูทุกคาบ"><ScheduleGridTable periodTimes={plan.periods} days={plan.days} renderCell={(day,period)=>{
+  return <div className="board" tabIndex={0} role="region" aria-label="ตารางเรียน เลื่อนเพื่อดูทุกคาบ"><ScheduleGridTable periodTimes={plan.periods} days={plan.days} cellKey={onSelect?undefined:(day,period)=>{const cell=cellText(plan,roomId,day,period,draft);return cell&&cell.name!=='ไม่ลงคาบ'?`${cell.kind}\n${cell.name}\n${cell.detail}`:''}} renderCell={(day,period)=>{
     const cell=cellText(plan,roomId,day,period,draft)
     const content=cell?<><b>{cell.name}</b><small>{cell.detail}</small>{cell.locked&&<small>ล็อก</small>}</>:'ว่าง'
     return onSelect?<button type="button" className={'cell-btn'+(cell?.kind==='activity'?' is-activity':'')} aria-pressed={selected===day+':'+period} onClick={()=>onSelect(day,period)}>{content}</button>:content

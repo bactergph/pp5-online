@@ -12,6 +12,7 @@ import { scheduleSchoolName } from '@/lib/schedule-school-name'
 import { directorDisplayName } from '@/lib/school-director'
 import { formatStaffName } from '@/lib/roles'
 import { buildSchedulePdfBlob, scheduleDocumentSigners } from '@/lib/jspdf-schedules'
+import { pdfCellIdentity, periodColSpans, stripPeriodLabel } from '@/lib/schedule-cell-span'
 import { formatThaiDate, getThaiMonthName } from '@/lib/thaiDate'
 import TeacherOptions from '@/components/teachers/TeacherOptions'
 
@@ -371,17 +372,18 @@ export default function ScheduleExportPage() {
     applyClassIds(allOn ? classIds.filter(id => !ids.includes(id)) : [...new Set([...classIds, ...ids])])
   }
 
-  function renderPrintCell(day: number, period: number) {
+  function renderPrintCell(day: number, period: number, span = 1) {
     const cell = gridData[`${day}-${period}`]
     const activity = cell?.line2 === '(กิจกรรม)' || cell?.line1 === 'กิจกรรม'
     const empty = !cell?.line1 || cell.line1 === '—'
+    const place = span > 1 ? stripPeriodLabel(cell?.line4) : cell?.line4
     return (
-      <td key={period} className={activity ? 'is-activity' : empty ? 'is-empty' : undefined}>
+      <td key={period} colSpan={span > 1 ? span : undefined} className={activity ? 'is-activity' : empty ? 'is-empty' : undefined}>
         <div className="sched-print-cell">
           {cell?.line1 || '—'}
           {cell?.line2 ? <div className="sub">{cell.line2}</div> : null}
           {cell?.line3 ? <div className="meta">{cell.line3}</div> : null}
-          {cell?.line4 ? <div className="meta">{cell.line4}</div> : null}
+          {place ? <div className="meta">{place}</div> : null}
         </div>
       </td>
     )
@@ -524,17 +526,24 @@ export default function ScheduleExportPage() {
               </tr>
             </thead>
             <tbody>
-              {SCHEDULE_DAYS.filter(d=>scheduleDays.includes(d.value)).map(day => (
+              {SCHEDULE_DAYS.filter(d=>scheduleDays.includes(d.value)).map(day => {
+                const spans = periodColSpans(displayTimes.map(row => ({ period: row.period, break: row.is_break })), period => pdfCellIdentity(gridData[`${day.value}-${period}`]))
+                return (
                 <tr key={day.value}>
                   <td className="day-col">{day.label}</td>
                   {displayTimes.map((row,index)=>{
-                    if(!row.is_break)return renderPrintCell(day.value,row.period)
+                    if(!row.is_break){
+                      const span = spans.get(row.period) ?? 1
+                      if (span === 0) return null
+                      return renderPrintCell(day.value, row.period, span)
+                    }
                     const duty=gridData[`${day.value}-${row.period}`]
                     const named=duty?.line2==='(กิจกรรมครู)'&&duty.line1&&duty.line1!=='—'
                     return <td key={`break-${index}`} className="break-col">{named?duty.line1:row.label}</td>
                   })}
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>}
           </div>
