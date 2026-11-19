@@ -122,7 +122,7 @@ function subjectRow(lesson: { id: string; teacherId: string | null; code?: strin
     offering_id: lesson.offeringId || lesson.id.split('#')[0], subject_title: lesson.subjectTitle || lesson.fullName || lesson.name, main_teacher_id: lesson.mainTeacherId ?? lesson.teacherId, content_units: lesson.contentUnits || [] }
 }
 
-function visibleTimetableLessons(data: ScheduleData, classroomId: string, lessons: ScheduleData['lessons'], grid: Record<string, GridCell>) {
+function visibleTimetableLessons<T extends { id: string; classroomId: string; subjectId: string; selectable?: boolean; activity?: boolean }>(data: ScheduleData, classroomId: string, lessons: T[], grid: Record<string, GridCell>) {
   const used = new Set(Object.values(grid).map(cell => cell.class_subject_id).filter(Boolean))
   return lessons.filter(lesson => lesson.selectable !== false || used.has(lesson.id) || lesson.classroomId === classroomId && lesson.activity && roomHasUnlockedActivity(data.activityGroups, classroomId, lesson.subjectId))
 }
