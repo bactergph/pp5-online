@@ -147,8 +147,14 @@ export async function loadSchedule(schoolId: string | null, yearId: string, seme
     if (parentRule && Number.isInteger(parentRule.count) && parentRule.count > 0) lesson.count = parentRule.count
   }
   lessons = lessons.flatMap(lesson => splitOfferingLesson(lesson, lesson.contentUnits || [], names))
+  // Catalogue triggers create zero-count activity rows for every classroom.
+  // Once an activity is assigned through this term's groups, those placeholder
+  // rows must not become selectable lessons in rooms outside the assignment.
+  // Keep the rows themselves so existing timetable references remain readable.
+  const assignedActivitySettings = new Set((plan?.activityGroups || []).map(group => group.settingId))
   for (const lesson of lessons) {
     lesson.classroomLevel=levels.get(lesson.classroomId)||''
+    if (lesson.activity && assignedActivitySettings.has(lesson.subjectId)) lesson.selectable=false
     const group=lesson.activity?plan?.activityGroups?.find(g=>g.settingId===lesson.subjectId&&g.roomIds.includes(lesson.classroomId)):undefined
     if(group){lesson.teacherIds=activityTeachers(group,lesson.classroomId);lesson.teacherId=null;lesson.teacherName=lesson.teacherIds.map(id=>names.get(id)||'').join(', ');lesson.activityGroupId=group.mode==='joint'?group.id:undefined;lesson.count=group.weeklyPeriods;lesson.selectable=false}
     const ownRule=plan?.rules?.[lesson.id]

@@ -24,6 +24,26 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/schedule-store.ts','u
  await assert.rejects(exportsObject.loadSchedule('school','year',3),/ภาคเรียน/)
  tables.users.push({id:'second',prefix:'ครู',full_name:'อีกคน'});teamConfig={activityGroups:[{id:'team',settingId:'guide',mode:'joint',roomIds:['room0'],teacherIds:['teacher','second'],roomTeachers:{},weeklyPeriods:2,cells:[]}]};const teamSchedule=await exportsObject.loadSchedule('school','year',2);assert.equal(teamSchedule.lessons[0].teacherIds.join(','),'teacher,second');assert.equal(teamSchedule.lessons[0].teacherName,'ครู ทดสอบ, ครู อีกคน');assert.equal(teamSchedule.lessons[0].count,2);assert.equal(teamSchedule.lessons[0].activityGroupId,'team');assert.equal(teamSchedule.lessons[0].selectable,false);
  console.log('PASS: term activity team loads all teachers and names for timetable/PDF, weekly count and shared group identity');
+ // The database catalogue trigger creates these rows in *all* rooms, including
+ // lower primary, but the school assigned communication only to upper primary.
+ const scopedRows=Array.from({length:6},(_,i)=>({id:`communication${i+1}`,classroom_id:`room${i}`,evaluation_setting_id:'communication',teacher_id:null,weekly_periods:0,evaluation_settings:{label:'สื่อสารอ่านเขียน',is_active:true}}))
+ tables.class_schedule_activities.push(...scopedRows)
+ const upper={id:'upper',settingId:'communication',mode:'separate',roomIds:['room3','room4','room5'],teacherIds:[],roomTeachers:{room3:['teacher'],room4:['teacher'],room5:['second']},weeklyPeriods:1,cells:[]}
+ rulesByTerm={1:{activityGroups:[{...upper,id:'lower',roomIds:['room0'],roomTeachers:{room0:['teacher']}}]},2:{activityGroups:[upper]}}
+ const beforeRows=JSON.stringify(tables.class_schedule_activities)
+ const scoped=await exportsObject.loadSchedule('school','year',2)
+ for(let i=0;i<3;i++){const lesson=scoped.lessons.find(l=>l.id===`activity:communication${i+1}`);assert.equal(lesson.selectable,false,'Out-of-scope placeholders cannot appear in the palette or be newly placed');assert.equal(lesson.count,0)}
+ for(let i=3;i<6;i++){const lesson=scoped.lessons.find(l=>l.id===`activity:communication${i+1}`);assert.equal(lesson.count,1);assert.ok(lesson.teacherIds.length,'Assigned upper-primary activities keep teacher and weekly count')}
+ const termOne=await exportsObject.loadSchedule('school','year',1)
+ assert.equal(termOne.lessons.find(l=>l.id==='activity:communication1').count,1,'Use assignments from the selected term only')
+ assert.equal(termOne.lessons.find(l=>l.id==='activity:communication4').count,0)
+ tables.class_schedule_slots.push({classroom_id:'room0',academic_year_id:'year',day_of_week:1,period:1,activity_id:'communication1',class_subject_id:null,semester:2,locked:false})
+ const historical=await exportsObject.loadSchedule('school','year',2)
+ assert.ok(historical.slots.some(s=>s.activity_id==='communication1'),'Previously saved cells are never deleted or hidden from schedule data')
+ assert.ok(historical.lessons.some(l=>l.id==='activity:communication1'),'Keep the label for existing cells and PDFs')
+ assert.equal(JSON.stringify(tables.class_schedule_activities),beforeRows,'Read filtering must not modify school assignments')
+ tables.class_schedule_slots.pop();tables.class_schedule_activities.splice(1);rulesByTerm=undefined
+ console.log('PASS: upper-primary-only activity placeholders hidden from lower-primary selection, term isolation, assigned teachers/counts and historical cells preserved without database writes');
  tables.classrooms[0].level='ป.2';tables.classrooms[1].level='ม.1'
  const offering=(id,room,semester)=>({id,classroom_id:room,subject_id:'math',teacher_id:'teacher',semester,subjects:{code:'ค1',name:'คณิตศาสตร์',hours_per_year:40,credits:1}})
  tables.class_subjects.push(offering('primary','room0',0),offering('legacy','room1',0),offering('secondary1','room1',1),offering('secondary2','room1',2))

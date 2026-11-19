@@ -201,7 +201,8 @@ export async function copyRoom(from: string, to: string, year: string, semester 
   if (from === to) throw new Error('กรุณาเลือกห้องต้นทางต่างจากห้องปลายทาง')
   const ctx = await context(year, semester)
   requireScheduleClass(ctx.data, from); requireScheduleClass(ctx.data, to)
-  const targets = ctx.data.lessons.filter(l => l.classroomId === to)
+  const groups = ctx.data.activityGroups || []
+  const targets = ctx.data.lessons.filter(l => l.classroomId === to && (!l.activity || !groups.some(group => group.settingId === l.subjectId) || groups.some(group => group.settingId === l.subjectId && group.roomIds.includes(to))))
   const locked = ctx.data.slots.filter(s => s.classroom_id === to && s.locked)
   const rows = ctx.data.slots.filter(s => s.classroom_id !== to || s.locked)
   let copied = 0
