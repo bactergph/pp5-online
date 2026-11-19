@@ -13,10 +13,11 @@ import { directorDisplayName } from '@/lib/school-director'
 import { formatStaffName } from '@/lib/roles'
 import { buildSchedulePdfBlob, scheduleDocumentSigners } from '@/lib/jspdf-schedules'
 import { formatThaiDate, getThaiMonthName } from '@/lib/thaiDate'
+import TeacherOptions from '@/components/teachers/TeacherOptions'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
 type Classroom = { id: string; level: string; room: number; label: string; homeroomTeacherName?: string }
-type Teacher = { id: string; prefix: string; full_name: string }
+type Teacher = { id: string; prefix: string; full_name: string; homeroomLevel?: string | null }
 type ExportType = 'class' | 'teaching'
 
 const STYLES = `
@@ -494,9 +495,7 @@ export default function ScheduleExportPage() {
             <div className="sched-export-field">
               <label htmlFor="schedule-preview-teacher">ดูตัวอย่างครู</label>
               <select id="schedule-preview-teacher" value={teacherId} onChange={e => setTeacherId(e.target.value)}>
-                {teachers.filter(t => teacherIds.includes(t.id)).map(t => (
-                  <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>
-                ))}
+                <TeacherOptions teachers={teachers.filter(t => teacherIds.includes(t.id))} label={teacher => `${teacher.prefix || ''} ${teacher.full_name || ''}`.trim()} />
               </select>
             </div>
           )}</div>

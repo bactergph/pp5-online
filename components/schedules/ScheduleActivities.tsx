@@ -2,6 +2,7 @@
 import { useScheduleOperations } from './ScheduleServices'
 import { useEffect, useState } from 'react'
 import { LEARNER_DEVELOPMENT_KEY, LEARNER_DEVELOPMENT_NAME } from '@/lib/schedule-activity'
+import TeacherOptions from '@/components/teachers/TeacherOptions'
 
 export default function ScheduleActivities({ yearId, classroomId, onSaved, disabled, onBusy }: {
   yearId: string; classroomId: string; onSaved: () => Promise<void>; disabled: boolean; onBusy: (busy: boolean) => void
@@ -50,7 +51,7 @@ export default function ScheduleActivities({ yearId, classroomId, onSaved, disab
       </select></label>}
       <label>ครูผู้สอน<select className="form-input" value={teacher} onChange={e => setTeacher(e.target.value)}>
         <option value="">— เลือกครูผู้สอน —</option>
-        {data?.teachers.map(t => <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>)}
+        {data?.teachers && <TeacherOptions teachers={data.teachers} label={teacher => `${teacher.prefix || ''} ${teacher.full_name || ''}`.trim()} />}
       </select></label>
       <label>คาบ/สัปดาห์<input className="form-input" type="number" min={0} max={30} value={count} onChange={e => setCount(Number(e.target.value))} /></label>
       <button className="btn btn-primary" type="button" disabled={!teacher} onClick={save}>{busy ? 'กำลังบันทึก...' : configured || setting !== LEARNER_DEVELOPMENT_KEY ? 'บันทึกการตั้งค่า' : 'เพิ่มวิชาในตารางเรียน'}</button>

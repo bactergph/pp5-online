@@ -173,7 +173,8 @@ export async function fetchScheduleWorkload(yearId: string, semester = 1) {
     .order('full_name')
 
   if (error) throw new Error('โหลดรายชื่อครูสำหรับสรุปภาระสอนไม่สำเร็จ กรุณาลองใหม่')
-  return summarizeScheduleWorkload(data, teachers || [])
+  const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
+  return summarizeScheduleWorkload(data, await withHomeroomOrder(db, session.schoolId, teachers || []))
 }
 
 export async function fetchScheduleCurriculumCheck(classroomId: string, yearId: string, semester = 1) {

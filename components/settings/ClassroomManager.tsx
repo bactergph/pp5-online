@@ -5,6 +5,7 @@ import LoadingButton from '@/components/LoadingButton'
 import PersonalHomeroomPanel from '@/components/classroom-admin/PersonalHomeroomPanel'
 import { useRouter } from 'next/navigation'
 import AppAlertModal from '@/components/AppAlertModal'
+import TeacherOptions from '@/components/teachers/TeacherOptions'
 import { SCHOOL_LEVEL_GROUPS, schoolLevels, type SchoolEducationType } from '@/lib/school-education-type'
 import {
   fetchClassroomInit,
@@ -16,7 +17,7 @@ import {
   saveSchoolEducationType,
 } from '@/app/classrooms/actions'
 
-type Teacher = { id: string; prefix: string; full_name: string; is_homeroom: boolean }
+type Teacher = { id: string; prefix: string; full_name: string; is_homeroom: boolean; homeroomLevel?: string | null }
 type Year = { id: string; year_be: number; is_active: boolean }
 type Classroom = {
   id: string; level: string; room: number
@@ -422,14 +423,14 @@ export default function ClassroomManager({ embedded = false, mode = 'levels' }: 
                           <label className="form-label">ครูประจำชั้น</label>
                           <select name="homeroom_teacher_id" value={editing.homeroom_teacher_id} onChange={event => setEditing(current => ({ ...current, homeroom_teacher_id: event.target.value }))} disabled={saving || teachersLoading || !!teachersError} className="form-input">
                             <option value="">— ไม่ระบุ —</option>
-                            {teachers.map(t => <option key={t.id} value={t.id}>{t.prefix}{t.full_name}</option>)}
+                            <TeacherOptions teachers={teachers} />
                           </select>
                         </div>
                         <div>
                           <label className="form-label">ครูประจำชั้น (คนที่ 2)</label>
                           <select name="homeroom_teacher2_id" value={editing.homeroom_teacher2_id} onChange={event => setEditing(current => ({ ...current, homeroom_teacher2_id: event.target.value }))} disabled={saving || teachersLoading || !!teachersError} className="form-input">
                             <option value="">— ไม่ระบุ —</option>
-                            {teachers.map(t => <option key={t.id} value={t.id}>{t.prefix}{t.full_name}</option>)}
+                            <TeacherOptions teachers={teachers} />
                           </select>
                         </div>
                       </div>

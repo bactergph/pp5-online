@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase'
 import { getSession } from '@/lib/session'
 import { logActivity, resolveClassroomSchoolId, resolveStudentSchoolId } from '@/lib/audit'
 import { invalidateClassroomStudents, invalidateClassroomStudentsMany } from '@/lib/students-cache'
+import { compareClassLevel } from '@/lib/teacher-order'
 
 async function requireSession() {
   const s = await getSession()
@@ -32,7 +33,7 @@ export async function fetchStudentInit() {
     const { data: cs } = await db.from('classrooms').select('id, level, room')
       .eq('school_id', session.schoolId || '').eq('academic_year_id', active.id)
       .order('level').order('room')
-    classrooms = cs || []
+    classrooms = [...(cs || [])].sort((left, right) => compareClassLevel(left.level, right.level) || left.room - right.room)
     const firstClassId = classrooms[0]?.id
     if (firstClassId) {
       const { data: studs } = await db.from('students').select('*')
@@ -56,7 +57,7 @@ export async function fetchClassroomsForYear(yearId: string) {
   const { data } = await db.from('classrooms').select('id, level, room')
     .eq('school_id', session.schoolId || '').eq('academic_year_id', yearId)
     .order('level').order('room')
-  return data || []
+  return [...(data || [])].sort((left, right) => compareClassLevel(left.level, right.level) || left.room - right.room)
 }
 
 export async function fetchStudents(classroomId: string) {

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import type { ContentUnit } from '@/lib/class-subject-offer'
+import TeacherOptions from '@/components/teachers/TeacherOptions'
 
 export type ScheduleUnitRow = { name: string; periods: string; useMain: boolean; teacherId: string }
 export type ScheduleUnitSource = {
@@ -13,7 +14,7 @@ export type ScheduleUnitSource = {
   rows: [ScheduleUnitRow, ScheduleUnitRow]
   names: string[]
 }
-type Teacher = { id: string; prefix?: string | null; full_name: string }
+type Teacher = { id: string; prefix?: string | null; full_name: string; homeroomLevel?: string | null }
 
 export function buildScheduleUnitSource(input: {
   offeringId: string
@@ -96,7 +97,7 @@ export default function ScheduleUnitDialog({ source, teachers, onClose, onSave }
         <label className="grid gap-1 text-sm font-semibold">ครูประจำวิชา
           <select className="h-11 rounded-xl border border-stone-300 px-3 font-normal" value={teacherId} disabled={busy} onChange={event => setTeacherId(event.target.value)}>
             <option value="">เลือกครู</option>
-            {teachers.map(teacher => <option key={teacher.id} value={teacher.id}>{teacherLabel(teacher)}</option>)}
+            <TeacherOptions teachers={teachers} label={teacherLabel} />
           </select>
         </label>
         <div className="class-subject-unit-switch" role="group" aria-label="วิชาย่อย">
@@ -111,7 +112,7 @@ export default function ScheduleUnitDialog({ source, teachers, onClose, onSave }
             <label><input type="checkbox" checked={row.useMain} disabled={busy} onChange={event => update(index as 0 | 1, { useMain: event.target.checked })} /> ใช้ครูประจำวิชา</label>
             {!row.useMain && <select className="form-input" disabled={busy} aria-label={`ผู้สอนวิชาย่อย ${index + 1}`} value={row.teacherId} onChange={event => update(index as 0 | 1, { teacherId: event.target.value })}>
               <option value="">เลือกผู้สอน</option>
-              {teachers.map(teacher => <option key={teacher.id} value={teacher.id}>{teacherLabel(teacher)}</option>)}
+              <TeacherOptions teachers={teachers} label={teacherLabel} />
             </select>}
           </div>)}
         </div>}

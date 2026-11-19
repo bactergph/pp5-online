@@ -32,7 +32,8 @@ export async function preparation(year:string,term:number){
  const storedPlan=(config.data?.config||emptyPlan()) as SchedulePlan
  const allClassrooms=data.allClassrooms||data.classrooms
  const allLessonRooms=data.allLessonRooms||data.lessons
- const roster=teachers.data||[]
+ const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
+ const roster=await withHomeroomOrder(db,session.schoolId,teachers.data||[])
  const allowed=new Set(roster.map(teacher=>teacher.id))
  const plan=effectiveSchedulePlan(storedPlan,allClassrooms,allLessonRooms)
  if(plan.teacherIds?.some(id=>!allowed.has(id))){const teacherIds=plan.teacherIds.filter(id=>allowed.has(id));if(teacherIds.length)plan.teacherIds=teacherIds;else delete plan.teacherIds}

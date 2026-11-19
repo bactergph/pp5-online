@@ -5,6 +5,7 @@ import { DEFAULT_PERIOD_TIMES, periodTimeLabel, type PeriodTimeRow } from '@/lib
 import { availableSubstitutes } from '@/lib/substitute-availability'
 import { bangkokToday } from '@/lib/free-schedule-ad-window'
 import type { LocalCell } from '@/lib/schedule-device-free'
+import TeacherOptions from '@/components/teachers/TeacherOptions'
 
 export type { LocalCell }
 export type FreeSubstituteEntry = {
@@ -25,7 +26,7 @@ export type FreeSubstituteEntry = {
   conflictConfirmedAt?:string|null
 }
 
-type Teacher = { id: string; name: string }
+type Teacher = { id: string; name: string; homeroomLevel?: string | null }
 type Room = { id: string; label: string }
 type Subject = { id: string; roomId: string; name: string; teacherId: string }
 
@@ -175,7 +176,7 @@ export default function FreeSubstituteDesk({
         <div className="schedule-field">
           <label>ครูที่ลา</label>
           <select value={absentId} onChange={event => setAbsentId(event.target.value)}>
-            {teachers.map(teacher => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}
+            <TeacherOptions teachers={teachers} />
           </select>
         </div>
       </div>

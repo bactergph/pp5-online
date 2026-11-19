@@ -9,6 +9,7 @@ import {hasTeacherTimeline,levelPeriodTimes} from '@/lib/schedule-period-profile
 import {teacherDisplayTimes} from '@/lib/schedule-teacher-display'
 import {teacherCellBlocks,teacherCellEvents,teacherCellOptions,teacherCellClock,type TeacherCellEvent} from '@/lib/schedule-teacher-cell-options'
 import {teacherActivitiesInClock} from '@/lib/schedule-teacher-activities'
+import TeacherOptions from '@/components/teachers/TeacherOptions'
 
 type Availability = Awaited<ReturnType<import('./ScheduleServices').ScheduleOperations['fetchTeacherAvailability']>>
 export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,disabled,refreshToken,fixedTeacher,expanded,onChanged}: {yearId:string;semester:number;periodTimes:PeriodTimeRow[];disabled:boolean;refreshToken:string;fixedTeacher?:string;expanded?:boolean;onChanged?:()=>Promise<void>}) {
@@ -157,7 +158,7 @@ export default function TeacherAvailabilityPanel({yearId,semester,periodTimes,di
       {!data?<p>กำลังโหลด...</p>:<>
         {!data.supported&&<p role="alert">ยังไม่เปิดใช้การล็อกคาบครู กรุณารันฐานข้อมูล 058_schedule_eight_periods_teacher_blocks.sql</p>}
         <div className="flex flex-wrap items-end gap-3">
-        {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled||clearing} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}>{data.teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}
+        {!fixedTeacher&&<label className="availability-teacher">ครูผู้สอน<select value={teacher} disabled={disabled||clearing} onChange={e=>{setTeacher(e.target.value);setNotice('');setEditing(null)}}><TeacherOptions teachers={data.teachers} /></select></label>}
         <button type="button" className="my-4 min-h-11 rounded-md border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50" disabled={disabled||clearing||pending.length>0||!teacher} onClick={()=>void clearSelectedTeacher()}>{clearing?'กำลังล้าง...':'ล้างตารางสอนครูที่เลือก'}</button>
         <details key={teacher} className="relative my-4 w-full shrink-0 rounded-lg border border-stone-200 bg-stone-50 p-3 sm:ml-auto sm:w-64">
           <summary className="cursor-pointer list-none" aria-label="ดูความคืบหน้าคาบครู">

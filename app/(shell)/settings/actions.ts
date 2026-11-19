@@ -463,6 +463,8 @@ export async function fetchSchoolUsers() {
     const {data:account} = await db.auth.admin.getUserById(user.id)
     return {...user,role_pending:account.user?.app_metadata?.staff_role_pending ?? (user.role === 'teacher')}
   }))
+  const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
+  const orderedStaff = await withHomeroomOrder(db, session.schoolId || '', staffRows, true)
   let code: string | null = null
   if (session.schoolId) {
     const { data: sc } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()
@@ -471,7 +473,7 @@ export async function fetchSchoolUsers() {
   return {
     schoolId: session.schoolId,
     code,
-    users: staffRows,
+    users: orderedStaff,
     canManage: hasRole(session, ADMIN_ROLES),
     viewerRole: session.role,
   }
@@ -486,7 +488,8 @@ export async function fetchSchoolStaff() {
     .eq('school_id', session.schoolId)
     .or('is_active.eq.true,email.like.pending-%')
     .order('full_name')
-  return data || []
+  const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
+  return withHomeroomOrder(db, session.schoolId, data || [])
 }
 
 export async function saveSchoolLeaders(payload: {
@@ -1134,8 +1137,9 @@ export async function fetchPermissionsData() {
     ])
     : [{ data: [] }, { data: [] }]
 
+  const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
   return {
-    teachers: teachersRes.data || [],
+    teachers: await withHomeroomOrder(db, schoolId || '', teachersRes.data || []),
     classrooms: classroomsRes.data || [],
     subjects: subjectsRes.data || [],
     classSubjects: classSubjectsRes.data || [],
@@ -2487,10 +2491,11 @@ export async function fetchClassSubjectInit() {
     db.from('users').select('id, prefix, full_name').in('role', ['teacher', 'academic_head', 'deputy_principal']).eq('school_id', sid).or('is_active.eq.true,email.like.pending-%').order('full_name'),
     db.from('subjects').select('id, code, name, short_name, subject_group, type, hours_per_year, credits, max_score').eq('school_id', sid).order('code'),
   ])
+  const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
   return {
     role: session.role,
     canManage: hasRole(session, ACADEMIC_MANAGE_ROLES),
-    years: years.data || [], teachers: teachers.data || [], subjects: subjects.data || [],
+    years: years.data || [], teachers: await withHomeroomOrder(db, sid, teachers.data || []), subjects: subjects.data || [],
   }
 }
 

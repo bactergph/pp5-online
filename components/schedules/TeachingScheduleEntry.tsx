@@ -8,11 +8,12 @@ import { useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import Link from './ScheduleLink'
 import { scheduleSemesterForYear, type PeriodTimeRow } from '@/lib/schedule-helpers'
 import AppAlertModal from '@/components/AppAlertModal'
+import TeacherOptions from '@/components/teachers/TeacherOptions'
 import ScheduleGridTable from '@/components/schedules/ScheduleGridTable'
 import TeacherAvailabilityPanel from './TeacherAvailabilityPanel'
 
 type Year = { id: string; year_be: number; is_active: boolean; term1_start_date?: string | null; term1_end_date?: string | null; term2_start_date?: string | null; term2_end_date?: string | null }
-type Teacher = { id: string; prefix: string; full_name: string }
+type Teacher = { id: string; prefix: string; full_name: string; homeroomLevel?: string | null }
 type Cell = { label: string; subject_line: string; room_line: string; classroomLevels?: string[]; pdf?: import('@/lib/jspdf-schedules').SchedulePdfCell }
 
 const STYLES = `
@@ -187,9 +188,7 @@ export default function TeachingScheduleEntry() {
               onChange={e => setSelectedTeacher(e.target.value)}
               disabled={role === 'teacher'}
             >
-              {teachers.map(t => (
-                <option key={t.id} value={t.id}>{t.prefix} {t.full_name}</option>
-              ))}
+              <TeacherOptions teachers={teachers} label={teacher => `${teacher.prefix || ''} ${teacher.full_name || ''}`.trim()} />
             </select>
           </div>
         </div>

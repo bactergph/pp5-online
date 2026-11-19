@@ -23,7 +23,7 @@ export function devicePreparation(plan: FreeWizardPlan): Preparation {
       const [level, ...rest] = room.label.split('/')
       return { id: room.id, level, schedule_enabled:true, room: plan.rooms.filter(item=>item.label.split('/')[0]===level).findIndex(item=>item.id===room.id)+1, name: rest.join('/') || '1' }
     }),
-    teachers: plan.teachers.map(teacher => ({id:teacher.id,prefix:teacher.prefix || '',full_name:teacher.fullName || teacher.name,position:teacher.position || ''})),
+    teachers: plan.teachers.map(teacher => ({id:teacher.id,prefix:teacher.prefix || '',full_name:teacher.fullName || teacher.name,position:teacher.position || '',homeroomLevel:null})),
     activities: deviceActivityCatalog(plan),
     lessons: snapshot.lessons.map(lesson => ({...lesson, name:lesson.name || '', code:lesson.code || '', subjectId:lesson.subjectId || lesson.id, activity:!!lesson.activity, teacherName:lesson.teacherName || '', roomName:lesson.roomName, pattern:lesson.pattern || Array(lesson.count).fill(1), roomId:lesson.roomId || null, morning:!!lesson.morning, spread:lesson.spread ?? true, source:'กำหนดคาบต่อสัปดาห์บนเครื่องนี้'})),
   }

@@ -213,10 +213,10 @@ export default function StudentsPage() {
                         ปิด
                       </button>
                     </div>
-                    <form onSubmit={handleSave}>
+                    <form key={`${editing.id || 'new'}-${selectedClass}`} onSubmit={handleSave} autoComplete="off">
                       <div className="form-grid">
                         <div><label className="form-label">เลขที่ *</label><input name="student_number" type="number" min={1} defaultValue={editing.student_number} className="form-input" required /></div>
-                        <div><label className="form-label">เลขประจำตัวนักเรียน</label><input name="student_code" defaultValue={editing.student_code} className="form-input" /></div>
+                        <div><label className="form-label">เลขประจำตัวนักเรียน</label><input name="student_code" defaultValue={editing.student_code} className="form-input" autoComplete="off" /></div>
                         <div><label className="form-label">เลขบัตรประชาชน</label><input name="national_id" defaultValue={editing.national_id} className="form-input" maxLength={13} /></div>
                         <div><label className="form-label">คำนำหน้า *</label><select name="prefix" defaultValue={editing.prefix} className="form-input">{PREFIXES.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                         <div><label className="form-label">ชื่อ *</label><input name="first_name" defaultValue={editing.first_name} className="form-input" required /></div>

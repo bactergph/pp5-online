@@ -74,13 +74,15 @@ export async function fetchScheduleInit() {
     .order('full_name')
 
   if (teachersError) throw new Error('โหลดรายชื่อครูไม่สำเร็จ: ' + teachersError.message)
+  const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
+  const orderedTeachers = await withHomeroomOrder(db, session.schoolId || '', teachers || [])
   return {
     canEdit: canEditSchedule(session),
     defaultSemester: scheduleSemesterForYear(years?.find(y => y.id === activeYearId)),
     years: years || [],
-    teachers: teachers || [],
+    teachers: orderedTeachers,
     homeroomClassroomIds,
-    defaultTeacherId: session.role === 'teacher' ? session.userId : teachers?.[0]?.id ?? null,
+    defaultTeacherId: session.role === 'teacher' ? session.userId : orderedTeachers[0]?.id ?? null,
     role: session.role,
   }
 }

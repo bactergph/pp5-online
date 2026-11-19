@@ -246,6 +246,7 @@ export default function EvaluationEntry({ kind, educationBand }: { kind: Evaluat
   const [loadingRows, setLoadingRows] = useState(false)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [defaultsReady, setDefaultsReady] = useState(false)
   const [loadedContext, setLoadedContext] = useState('')
   const entryContext = `${kind}:${yearId}:${classroomId}:${term}`
   const { notify, clearAlert, AlertModal } = useAppAlert()
@@ -311,12 +312,19 @@ export default function EvaluationEntry({ kind, educationBand }: { kind: Evaluat
       const savedMap = Object.fromEntries(saved.map(row => [row.student_id as string, row]))
       const nextRows: Record<string, Record<string, string>> = {}
 
+      let appliedDefaults = false
       for (const student of nextStudents) {
         const existing = savedMap[student.id] || {}
         nextRows[student.id] = {}
         for (const column of nextColumns) {
           const value = existing[column.key]
-          nextRows[student.id][column.key] = value == null ? '' : String(value)
+          const blank = value == null || value === ''
+          if (blank && (kind === 'character' || kind === 'reading') && column.type === 'score') {
+            nextRows[student.id][column.key] = String(column.maxScore)
+            appliedDefaults = true
+          } else {
+            nextRows[student.id][column.key] = blank ? '' : String(value)
+          }
         }
       }
 
@@ -324,6 +332,7 @@ export default function EvaluationEntry({ kind, educationBand }: { kind: Evaluat
       setSettings(nextSettings)
       setStudents(nextStudents)
       setRows(nextRows)
+      setDefaultsReady(data.error ? false : appliedDefaults)
       setDirty(false)
       setLoadingRows(false)
       if (data.error) notify('error', data.error)
@@ -399,6 +408,7 @@ export default function EvaluationEntry({ kind, educationBand }: { kind: Evaluat
       return
     }
     setDirty(false)
+    setDefaultsReady(false)
     notify('success', `บันทึกการประเมิน ${result.count} คนเรียบร้อย`)
   }
 
@@ -685,7 +695,7 @@ export default function EvaluationEntry({ kind, educationBand }: { kind: Evaluat
           {canEdit && (
             <div className="eval-save">
               <span style={{ color: dirty ? '#d97706' : '#64748b', fontWeight: 800 }}>{dirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : 'บันทึกล่าสุดแล้ว'}</span>
-              <LoadingButton loading={saving} onClick={handleSave} disabled={!dirty || loadingRows || loadedContext !== entryContext || !canEdit}>
+              <LoadingButton loading={saving} onClick={handleSave} disabled={(!dirty && !defaultsReady) || loadingRows || loadedContext !== entryContext || !canEdit}>
                 บันทึกการประเมิน
               </LoadingButton>
             </div>

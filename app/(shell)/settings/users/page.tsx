@@ -1,11 +1,12 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { Fragment, useMemo, useState, useEffect } from 'react'
 import LoadingButton from '@/components/LoadingButton'
 import SignatureUploadBox from '@/components/SignatureUploadBox'
 import StaffTableEditor from '@/components/StaffTableEditor'
 import { fetchSchoolUsers, updateUser, toggleUserActive, resetTeacherPassword, deleteSchoolUser } from '../actions'
 import { useAppAlert } from '@/lib/use-app-alert'
 import { ROLE_LABELS } from '@/lib/roles'
+import { classBand, homeroomGroupLabel } from '@/lib/teacher-order'
 
 type User = {
   id: string
@@ -19,6 +20,7 @@ type User = {
   is_active: boolean
   signature_url?: string | null
   role_pending?: boolean
+  homeroomLevel?: string | null
 }
 
 const ROLES = [
@@ -53,6 +55,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false)
   const { notify, clearAlert, AlertModal } = useAppAlert()
   const [search, setSearch] = useState('')
+  const [band, setBand] = useState('all')
   const [isHomeroom, setIsHomeroom] = useState(false)
   const [schoolId, setSchoolId] = useState<string | null>(null)
   const [schoolCode, setSchoolCode] = useState<string | null>(null)
@@ -197,10 +200,28 @@ export default function UsersPage() {
     loadUsers()
   }
 
-  const filtered = users.filter(u =>
-    u.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-    u.username?.toLowerCase().includes(search.toLowerCase())
-  )
+  function staffGroup(user: User) {
+    if (user.role === 'principal' || user.role === 'deputy_principal') return 'ผู้บริหาร'
+    if (user.homeroomLevel) return homeroomGroupLabel(user.homeroomLevel)
+    return 'ครูผู้สอน'
+  }
+
+  const bands = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const user of users) {
+      const item = classBand(user.homeroomLevel)
+      if (item && !seen.has(item.id)) seen.set(item.id, item.label)
+    }
+    return [...seen.entries()].map(([id, label]) => ({ id, label }))
+  }, [users])
+
+  const filtered = users.filter(user => {
+    const needle = search.toLowerCase()
+    const matchesSearch = !needle || user.full_name?.toLowerCase().includes(needle) || user.username?.toLowerCase().includes(needle)
+    if (!matchesSearch) return false
+    if (band === 'all' || user.role === 'principal' || user.role === 'deputy_principal') return true
+    return classBand(user.homeroomLevel)?.id === band
+  })
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px' }}>
@@ -396,14 +417,23 @@ export default function UsersPage() {
 
       {tableMode && canManage ? <StaffTableEditor users={users} onSaved={()=>loadUsers(false)} onClose={()=>setTableMode(false)} /> : <>
       <div className="filter-bar control-card" style={{ justifyContent: 'space-between' }}>
-        <input
-          type="text"
-          placeholder="ค้นหาชื่อหรือชื่อผู้ใช้..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="form-input"
-          style={{ maxWidth: '320px' }}
-        />
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="ค้นหาชื่อหรือชื่อผู้ใช้..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="form-input"
+            style={{ maxWidth: '320px' }}
+          />
+          <label className="field-inline" style={{ gap: 8 }}>
+            <span className="form-label" style={{ margin: 0 }}>ชั้นที่</span>
+            <select className="form-input" style={{ width: 'auto' }} value={band} onChange={event => setBand(event.target.value)} aria-label="ชั้นที่">
+              <option value="all">ทั้งหมด</option>
+              {bands.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+          </label>
+        </div>
         {canManage && <div className="flex flex-wrap gap-2"><button onClick={()=>setTableMode(true)} className="btn btn-secondary">เพิ่ม / แก้ไขแบบตาราง</button><button onClick={openAdd} className="btn btn-primary" style={{ flexShrink: 0 }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }}><path d="M12 5v14M5 12h14"/></svg>
           เพิ่มบุคลากร
@@ -429,13 +459,17 @@ export default function UsersPage() {
             ) : filtered.map((user, i) => {
               const badge = ROLE_BADGE[user.role] || { bg: '#F3F4F6', color: '#6B7280' }
               const canManageAccount = viewerRole==='district' || ['teacher','academic_head','deputy_principal','principal'].includes(user.role)
+              const group = staffGroup(user)
+              const showGroup = i === 0 || staffGroup(filtered[i - 1]) !== group
               return (
-                <tr key={user.id}>
+                <Fragment key={user.id}>
+                {showGroup && <tr><td colSpan={canManage ? 7 : 6} style={{ background: '#f3f7ff', color: '#17469f', fontWeight: 800 }}>{group}</td></tr>}
+                <tr>
                   <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{i + 1}</td>
                   <td>
                     <div style={{ fontWeight: 600, color: 'var(--text)' }}>{user.prefix} {user.full_name}</div>
                     {user.is_homeroom && (
-                      <span style={{ fontSize: '11px', color: '#DB2777', fontWeight: 600 }}>● ครูประจำชั้น</span>
+                      <span style={{ fontSize: '11px', color: '#DB2777', fontWeight: 600 }}>● ครูประจำชั้น{user.homeroomLevel ? ` ${user.homeroomLevel}` : ''}</span>
                     )}
                   </td>
                   <td style={{ fontSize: '13px', color: 'var(--text-2)' }}>{user.username || <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
@@ -475,6 +509,7 @@ export default function UsersPage() {
                     </div>
                   </td>}
                 </tr>
+                </Fragment>
               )
             })}
           </tbody>

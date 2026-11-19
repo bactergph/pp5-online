@@ -69,7 +69,8 @@ async function loadClassroomTeachers(db: ReturnType<typeof createServerClient>, 
     .or('is_active.eq.true,email.like.pending-%')
     .order('full_name')
   if (error) throw new Error('โหลดรายชื่อครูไม่สำเร็จ กรุณาลองใหม่')
-  return data || []
+  const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
+  return withHomeroomOrder(db, schoolId, data || [])
 }
 
 export async function fetchClassroomTeachers() {
