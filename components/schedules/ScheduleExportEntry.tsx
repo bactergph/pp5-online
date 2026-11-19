@@ -1,7 +1,7 @@
 'use client'
 import {teacherActivitiesInClock} from '@/lib/schedule-teacher-activities'
 import {levelPeriodTimes} from '@/lib/schedule-period-profiles'
-import {teacherGridTimes,teacherPdfLayout} from '@/lib/schedule-teacher-display'
+import {teacherGridTimes,teacherPdfLayout,teacherWeeklyHoursLabel} from '@/lib/schedule-teacher-display'
 import TeacherTimeline from './TeacherTimeline'
 import { useScheduleOperations } from './ScheduleServices'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -185,7 +185,7 @@ export default function ScheduleExportPage() {
   const yearLabel = years.find(y => y.id === yearId)?.year_be || ''
   const title = exportType === 'class'
     ? `ตารางเรียน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${classLabel}`
-    : `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${selectedTeacher ? `${selectedTeacher.prefix.trim()}${selectedTeacher.full_name.trim()}` : ''}`
+    : `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${selectedTeacher ? `${selectedTeacher.prefix.trim()}${selectedTeacher.full_name.trim()}` : ''} · ${teacherWeeklyHoursLabel(periodTimes,gridData)}`
   const [error, setError] = useState('')
   const [previewReady, setPreviewReady] = useState(false)
   const gridRequest = useRef(0)
@@ -322,7 +322,7 @@ export default function ScheduleExportPage() {
           }
           const teacher = teachers.find(t => t.id === id)
           const teacherTimes=teacherGridTimes(periodTimes,id,grids[id]||{})
-          return { layout:teacherPdfLayout(teacherTimes), title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? formatStaffName(teacher.prefix, teacher.full_name) : ''}`, gridData: grids[id], periodTimes: teacherTimes, leadSigner: { name: teacher ? formatStaffName(teacher.prefix, teacher.full_name) : '', role: 'ครูผู้สอน' } }
+          return { layout:teacherPdfLayout(teacherTimes), title: `ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${yearLabel} ${teacher ? formatStaffName(teacher.prefix, teacher.full_name) : ''} · ${teacherWeeklyHoursLabel(periodTimes,grids[id]||{})}`, gridData: grids[id], periodTimes: teacherTimes, leadSigner: { name: teacher ? formatStaffName(teacher.prefix, teacher.full_name) : '', role: 'ครูผู้สอน' } }
         })
         return buildSchedulePdfBlob({ days: scheduleDays, pages, title: pages[0]?.title || title, gridData: pages[0]?.gridData || {}, periodTimes, schoolName, schoolLogoUrl, academicHeadName, viceDirectorName, directorName, directorPosition, printDate, fileName })
       },

@@ -1,6 +1,6 @@
 import {scheduleRoomEnabled} from './schedule-room-state'
 import {levelPeriodTimes,teacherPeriodTimes,teacherBlockOverlaps} from './schedule-period-profiles'
-import {teacherGridTimes,teacherPdfLayout} from './schedule-teacher-display'
+import {teacherGridTimes,teacherPdfLayout,teacherWeeklyHoursLabel} from './schedule-teacher-display'
 import {withTeacherActivityClock} from './schedule-teacher-activities'
 import {scheduleTeachingView} from './schedule-teaching-view'
 import type {SchedulePdfCell, SchedulePdfPage} from './jspdf-schedules'
@@ -34,7 +34,7 @@ export function deviceDocumentPages(plan:FreeWizardPlan,kind:'class'|'teacher',i
       }
       const teacherName=plan.teachers.find(t=>t.id===id)?.name||''
       const displayTimes=teacherGridTimes(teacherTimes,id,gridData)
-      return {layout:teacherPdfLayout(displayTimes),periodTimes:displayTimes,title:`ตารางสอน ${teacherName} ภาคเรียนที่ ${semester} ปีการศึกษา ${year}`,gridData,leadSigner:{name:teacherName,role:'ครูผู้สอน'}}
+      return {layout:teacherPdfLayout(displayTimes),periodTimes:displayTimes,title:`ตารางสอน ภาคเรียนที่ ${semester} ปีการศึกษา ${year} ${teacherName} · ${teacherWeeklyHoursLabel(teacherTimes,gridData)}`,gridData,leadSigner:{name:teacherName,role:'ครูผู้สอน'}}
     }
     for(const day of plan.days)for(const {period} of teachingRows(levelPeriodTimes(plan.periods,plan.rooms.find(room=>room.id===id)?.label||''))){
       const subjects=plan.timetable.filter(cell=>cell.day===day&&cell.period===period&&cell.classroomId===id)

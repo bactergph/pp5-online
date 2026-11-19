@@ -1,6 +1,6 @@
 'use client'
 import {hasTeacherTimeline} from '@/lib/schedule-period-profiles'
-import {teacherGridTimes,teacherPdfLayout} from '@/lib/schedule-teacher-display'
+import {teacherGridTimes,teacherPdfLayout,teacherWeeklyHoursLabel} from '@/lib/schedule-teacher-display'
 import TeacherTimeline from './TeacherTimeline'
 import {teacherActivitiesInClock,teacherActivityMinutes} from '@/lib/schedule-teacher-activities'
 import { useScheduleOperations } from './ScheduleServices'
@@ -74,6 +74,7 @@ export default function TeachingScheduleEntry() {
 
   const selectedYearObj = years.find(y => y.id === selectedYear)
   const displayTimes=teacherGridTimes(periodTimes,selectedTeacher,cells)
+  const weeklyHours=teacherWeeklyHoursLabel(periodTimes,Object.fromEntries(Object.entries(cells).map(([key,cell])=>[key,cell.pdf||{line1:cell.room_line||cell.label,line2:cell.room_line==='กิจกรรมครู'?'(กิจกรรมครู)':cell.subject_line}])))
 
   const init = useCallback(async () => {
     try {
@@ -145,7 +146,7 @@ export default function TeachingScheduleEntry() {
             <h1>ตารางสอน</h1>
             <p>
               {teacherLabel && selectedYearObj
-                ? `${teacherLabel} · ภาคเรียนที่ ${semester} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
+                ? `${teacherLabel} · ${weeklyHours} · ภาคเรียนที่ ${semester} · ปีการศึกษา พ.ศ. ${selectedYearObj.year_be}`
                 : 'ดูตารางสอนรายครู'}
             </p>
           </div>
@@ -197,7 +198,7 @@ export default function TeachingScheduleEntry() {
           <div className="schedule-empty">ไม่พบครูในโรงเรียน</div>
         ) : (
           <div className="schedule-grid-card">
-            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''}/>:<div className="schedule-profile-teacher-grid">{teacherPdfLayout(displayTimes)==='teacher-timeline'?<TeacherTimeline times={displayTimes} cells={Object.fromEntries(Object.entries(cells).map(([key,cell])=>[key,cell.pdf||{line1:cell.room_line,line2:cell.subject_line}]))} days={scheduleDays}/>:<ScheduleGridTable days={scheduleDays} dutyBreaks
+            {canEdit?<TeacherAvailabilityPanel key={`${selectedYear}:${semester}:${selectedTeacher}`} yearId={selectedYear} semester={semester} fixedTeacher={selectedTeacher} periodTimes={periodTimes} disabled={false} refreshToken={''} onChanged={loadGrid}/>:<div className="schedule-profile-teacher-grid">{teacherPdfLayout(displayTimes)==='teacher-timeline'?<TeacherTimeline times={displayTimes} cells={Object.fromEntries(Object.entries(cells).map(([key,cell])=>[key,cell.pdf||{line1:cell.room_line,line2:cell.subject_line}]))} days={scheduleDays}/>:<ScheduleGridTable days={scheduleDays} dutyBreaks
               periodTimes={displayTimes}
               renderBreak={(day, period) => {
                 const cell = cells[`${day}-${period}`]

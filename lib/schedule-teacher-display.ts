@@ -1,6 +1,21 @@
 import type { PeriodTimeRow } from './schedule-helpers'
 import { levelPeriodTimes, teacherPeriodTimes, clockMinute } from './schedule-period-profiles'
 import { teacherActivitiesInClock } from './schedule-teacher-activities'
+import type { SchedulePdfCell } from './jspdf-schedules'
+
+/** Academic teaching hours (placed periods), matching scheduled_hours in the
+ * workload report. Count a joint class once; staff duties/PLC stay separate. */
+export function teacherWeeklyHoursLabel(times: PeriodTimeRow[], cells: Record<string, SchedulePdfCell>): string {
+  const axis = teacherPeriodTimes(times)
+  const taught = new Set<string>()
+  for (const [key, cell] of Object.entries(cells)) {
+    if (!cell.line1?.trim() || ['—','ไม่ว่าง'].includes(cell.line1.trim()) || cell.line2 === '(กิจกรรมครู)') continue
+    const [day, period] = key.split('-').map(Number)
+    const time = axis.find(row => !row.is_break && row.period === period)
+    if (day >= 1 && day <= 5 && time) taught.add(`${day}:${time.start_time}-${time.end_time}`)
+  }
+  return `จำนวน ${taught.size} ชั่วโมง/สัปดาห์`
+}
 
 export type TeacherDisplayCell = { classroomLevels?: string[]; line1?: string; label?: string }
 
