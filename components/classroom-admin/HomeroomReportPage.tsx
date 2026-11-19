@@ -47,6 +47,16 @@ function currentMonthKey() {
   return dailyAttendanceToday().slice(0, 7)
 }
 
+function termForMonth(month: number) {
+  return TERMS.find(item => item.months.includes(month)) || (month >= 5 && month <= 10 ? TERMS[0] : TERMS[1])
+}
+
+function initialMonths() {
+  const month = Number(currentMonthKey().slice(5))
+  const term = termForMonth(month)
+  return [term.months.includes(month) ? month : term.startMonth]
+}
+
 function teachingDates(monthKey: string, dayCount: number, openWeekends: { date: string }[]) {
   const open = new Set(openWeekends.map(item => item.date))
   const [year, month] = monthKey.split('-').map(Number)
@@ -67,7 +77,8 @@ export default function HomeroomReportPage() {
   const [rooms, setRooms] = useState<Room[]>([])
   const [yearId, setYearId] = useState('')
   const [classroomId, setClassroomId] = useState('')
-  const [monthKey, setMonthKey] = useState(currentMonthKey)
+  const [anchorKey] = useState(currentMonthKey)
+  const [selectedMonths, setSelectedMonths] = useState<number[]>(initialMonths)
   const [rows, setRows] = useState<ReportRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -99,9 +110,13 @@ export default function HomeroomReportPage() {
     [rooms, yearId],
   )
   const classroom = yearRooms.find(room => room.id === classroomId) || null
-  const month = Number(monthKey.split('-')[1])
-  const term = month >= 5 && month <= 10 ? 1 : 2
-  const termMonths = TERMS.find(item => item.value === term)?.months || TERMS[0].months
+  const activeTerm = TERMS.find(item => selectedMonths.every(month => item.months.includes(month))) || termForMonth(selectedMonths[0] || 11)
+  const term = activeTerm.value
+  const termMonths = activeTerm.months
+  const monthKeys = useMemo(
+    () => termMonths.filter(month => selectedMonths.includes(month)).map(month => setAcademicMonth(anchorKey, month)),
+    [termMonths, selectedMonths, anchorKey],
+  )
 
   useEffect(() => {
     if (!yearId || yearRooms.some(room => room.id === classroomId)) return
@@ -113,43 +128,44 @@ export default function HomeroomReportPage() {
       setRows([])
       return
     }
+    if (!monthKeys.length) {
+      setRows([])
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError('')
-    Promise.all([
-      fetchMonthlyAttendance(classroomId, yearId, monthKey),
-      fetchHomeroomActivityNotes(classroomId, monthKey),
-    ]).then(([attendance, notes]) => {
-      if (cancelled) return
-      if (attendance.error || notes.error) {
-        setRows([])
-        setError(attendance.error || notes.error || 'โหลดรายงานไม่สำเร็จ')
-        setLoading(false)
-        return
-      }
+    Promise.all(monthKeys.map(async monthKey => {
+      const [attendance, notes] = await Promise.all([
+        fetchMonthlyAttendance(classroomId, yearId, monthKey),
+        fetchHomeroomActivityNotes(classroomId, monthKey),
+      ])
+      if (attendance.error || notes.error) throw new Error(attendance.error || notes.error || 'โหลดรายงานไม่สำเร็จ')
       const noteMap = Object.fromEntries((notes.notes || []).map(note => [note.activity_date, note.topics || []]))
       const asOf = dailyAttendanceToday()
       const openWeekends = 'weekendSchoolDays' in attendance && Array.isArray(attendance.weekendSchoolDays) ? attendance.weekendSchoolDays : []
       const records = attendance.records as Record<string, Record<number, string | null | undefined>>
-      const dates = teachingDates(monthKey, attendance.days, openWeekends)
-      setRows(dates.map(date => {
+      return teachingDates(monthKey, attendance.days, openWeekends).map(date => {
         const day = Number(date.slice(8, 10))
         return {
           date,
           topics: noteMap[date] || [],
           counts: homeroomDayAttendance((attendance.students || []).map(student => records[student.id]?.[day]), date, asOf),
         }
-      }))
+      })
+    })).then(groups => {
+      if (cancelled) return
+      setRows(groups.flat().sort((a, b) => a.date.localeCompare(b.date)))
       setLoading(false)
-    }).catch(() => {
+    }).catch(cause => {
       if (!cancelled) {
         setRows([])
-        setError('โหลดรายงานไม่สำเร็จ')
+        setError(cause instanceof Error ? cause.message : 'โหลดรายงานไม่สำเร็จ')
         setLoading(false)
       }
     })
     return () => { cancelled = true }
-  }, [classroomId, yearId, monthKey])
+  }, [classroomId, yearId, monthKeys])
 
   const weeks = groupHomeroomWeeks(rows.map(row => row.date))
   const recorded = rows.filter(row => row.topics.length).length
@@ -196,23 +212,42 @@ export default function HomeroomReportPage() {
       <div className="homeroom-report-filters">
         <div className="homeroom-report-terms" aria-label="ภาคเรียน">
           {TERMS.map(item => (
-            <button key={item.value} type="button" className={term === item.value ? 'is-active' : ''} onClick={() => setMonthKey(setAcademicMonth(monthKey, item.startMonth))}>
+            <button key={item.value} type="button" className={term === item.value ? 'is-active' : ''} onClick={() => setSelectedMonths([item.startMonth])}>
               {item.label}
             </button>
           ))}
         </div>
         <div className="homeroom-report-months" aria-label="เดือน">
-          {termMonths.map(value => (
-            <button key={value} type="button" className={month === value ? 'is-active' : ''} onClick={() => setMonthKey(setAcademicMonth(monthKey, value))}>
-              {MONTHS.find(item => item.value === value)?.label}
-            </button>
-          ))}
+          {termMonths.map(value => {
+            const selected = selectedMonths.includes(value)
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={selected}
+                className={selected ? 'is-active' : ''}
+                onClick={() => setSelectedMonths(current => {
+                  if (!current.includes(value)) return [...current, value]
+                  return current.length === 1 ? current : current.filter(month => month !== value)
+                })}
+              >
+                {MONTHS.find(item => item.value === value)?.label}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            className={`homeroom-report-all${selectedMonths.length === termMonths.length ? ' is-active' : ''}`}
+            onClick={() => setSelectedMonths(termMonths)}
+          >
+            เลือกทั้งหมด (ทั้งเทอม)
+          </button>
         </div>
       </div>
       {error && <p className="homeroom-report-error" role="alert">{error}</p>}
       <div className="homeroom-report-actions">
         <p>
-          {classroom ? `${homeroomClassTitle(classroom.level, classroom.room)} · บันทึกเรื่องแล้ว ${recorded}/${rows.length} วัน` : 'เลือกห้องเรียนเพื่อดูรายงาน'}
+          {classroom ? `${homeroomClassTitle(classroom.level, classroom.room)} · ${monthKeys.length} เดือน · บันทึกเรื่องแล้ว ${recorded}/${rows.length} วัน` : 'เลือกห้องเรียนเพื่อดูรายงาน'}
           {loading ? ' · กำลังโหลด' : ''}
         </p>
         <button type="button" className="btn classroom-admin-print-green" disabled={!classroom || loading || rows.length === 0} onClick={createReport}>

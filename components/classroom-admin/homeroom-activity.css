@@ -285,6 +285,12 @@
   font-weight: 800;
 }
 
+.homeroom-report-all {
+  border-style: dashed;
+  color: #92400e;
+  font-weight: 800;
+}
+
 .homeroom-report-actions {
   display: flex;
   align-items: center;
