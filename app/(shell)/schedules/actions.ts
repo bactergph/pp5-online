@@ -292,7 +292,7 @@ export async function fetchTeachingScheduleGrid(teacherId: string, yearId: strin
   const session = await requireScheduleSession()
   if (session.role === 'teacher' && teacherId !== session.userId) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
   const data = await loadSchedule(session.schoolId, yearId, semester)
-  const levels = await homeroomLevels(session.schoolId)
+  const levels = await homeroomLevels(session.schoolId || '')
   return teachingCells(data, teacherId, levels.get(teacherId)?.level)
 }
 
@@ -302,7 +302,7 @@ export async function fetchSchedulePdfGrids(yearId: string, semester: number, ki
   if (!ids.length || ids.length > 200) throw new Error('เลือกห้องหรือครูได้ครั้งละ 1–200 รายการ')
   if (kind === 'teaching' && session.role === 'teacher' && ids.some(id => id !== session.userId)) throw new Error('ไม่มีสิทธิ์ดูตารางสอนของครูท่านอื่น')
   const data = await loadSchedule(session.schoolId, yearId, semester)
-  const levels = kind === 'teaching' ? await homeroomLevels(session.schoolId) : new Map()
+  const levels = kind === 'teaching' ? await homeroomLevels(session.schoolId || '') : new Map()
   const result: Record<string, Record<string, { line1: string; line2: string; line3?: string; line4?: string }>> = {}
   for (const id of ids) {
     if (kind === 'class') {
