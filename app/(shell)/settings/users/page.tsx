@@ -21,6 +21,7 @@ type User = {
   signature_url?: string | null
   role_pending?: boolean
   homeroomLevel?: string | null
+  homeroomRooms?: string[]
 }
 
 const ROLES = [
@@ -468,8 +469,8 @@ export default function UsersPage() {
                   <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>{i + 1}</td>
                   <td>
                     <div style={{ fontWeight: 600, color: 'var(--text)' }}>{user.prefix} {user.full_name}</div>
-                    {user.is_homeroom && (
-                      <span style={{ fontSize: '11px', color: '#DB2777', fontWeight: 600 }}>● ครูประจำชั้น{user.homeroomLevel ? ` ${user.homeroomLevel}` : ''}</span>
+                    {(user.homeroomRooms?.length || user.is_homeroom) && (
+                      <span style={{ fontSize: '11px', color: '#DB2777', fontWeight: 600 }}>● {user.homeroomRooms?.length ? `ครูประจำชั้น ${user.homeroomRooms.join(', ')}` : 'ครูประจำชั้น · ยังไม่ระบุชั้น'}</span>
                     )}
                   </td>
                   <td style={{ fontSize: '13px', color: 'var(--text-2)' }}>{user.username || <span style={{ color: 'var(--text-3)' }}>—</span>}</td>

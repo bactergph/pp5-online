@@ -83,6 +83,19 @@ export function orderTeachers<T extends OrderedTeacher>(teachers: T[], seats: Ho
   }))
 }
 
+export function homeroomClassLabels(seats: HomeroomSeat[]) {
+  const labels = new Map<string, string[]>()
+  const sorted = [...seats].sort((left, right) => compareClassLevel(left.level, right.level) || left.room - right.room)
+  for (const seat of sorted) {
+    if (!seat.teacherId) continue
+    const label = `${canonicalClassLevel(seat.level) || seat.level}/${seat.room}`
+    const current = labels.get(seat.teacherId) || []
+    if (!current.includes(label)) current.push(label)
+    labels.set(seat.teacherId, current)
+  }
+  return labels
+}
+
 export function homeroomSeatsFromClassrooms(rooms: { level: string; room: number; homeroom_teacher_id?: string | null; homeroom_teacher2_id?: string | null }[]): HomeroomSeat[] {
   return rooms.flatMap(room => [room.homeroom_teacher_id, room.homeroom_teacher2_id].filter((id): id is string => Boolean(id)).map(teacherId => ({
     teacherId, level: room.level, room: room.room,

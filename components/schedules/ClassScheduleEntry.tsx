@@ -39,6 +39,7 @@ type SubjectOption = {
   teacher_name: string
   label: string
   activity?: boolean
+  weekly_periods?: number
   offering_id?: string
   subject_title?: string
   main_teacher_id?: string | null
@@ -168,14 +169,15 @@ export default function ClassScheduleEntry({ mode, initialWorkspace='class', ini
   }
   const quotaOptions = subjects.map(s=>{
     const quota=quotas?.items.find(q=>q.class_subject_id===s.id)
-    const target=isActivityLessonId(s.id)?Math.max(1,Object.values(cells).filter(c=>c.class_subject_id===s.id).length):quota?.target
+    const placed=Object.values(cells).filter(c=>c.class_subject_id===s.id).length
+    const target=isActivityLessonId(s.id)?(s.weekly_periods||Math.max(1,placed)):quota?.target
     const used=Object.values(cells).filter(c=>c.class_subject_id===s.id).length
     const selected=picker&&cells[`${picker.day}-${picker.period}`]?.class_subject_id===s.id
     return {...s,disabled:target!==undefined&&used>=target&&!selected,quotaLabel:target===undefined?'':`ลงแล้ว ${used} / ${target} คาบต่อสัปดาห์${used>target?' · เกินจำนวน':used===target?' · ครบแล้ว':` · เหลือ ${target-used}`}`}
   })
   const remainingLessons = subjects.map(s=>{
-    const target=isActivityLessonId(s.id)?Math.max(1,Object.values(cells).filter(c=>c.class_subject_id===s.id).length):quotas?.items.find(q=>q.class_subject_id===s.id)?.target
     const used=Object.values(cells).filter(c=>c.class_subject_id===s.id).length
+    const target=isActivityLessonId(s.id)?(s.weekly_periods||Math.max(1,used)):quotas?.items.find(q=>q.class_subject_id===s.id)?.target
     return {...s,target,used,remaining:target===undefined?undefined:Math.max(0,target-used)}
   }).filter(s=>(showCompleted||s.remaining!==0)&&[s.subject_name,s.subject_code,s.teacher_name,s.room_name].join(' ').toLowerCase().includes(paletteFilter.toLowerCase()))
   const selectedYearObj = years.find(y => y.id === selectedYear)

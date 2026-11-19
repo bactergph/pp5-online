@@ -2,7 +2,7 @@
 import {levelPeriodTimes,profileCellOverlap} from '@/lib/schedule-period-profiles'
 import {teachingEventAt} from '@/lib/schedule-joint-teaching'
 
-import { activityTeachers, applyActivityDisplay, lessonTeachers, roomActivityDisplay } from '@/lib/schedule-activity-teams'
+import { activityTeachers, applyActivityDisplay, lessonTeachers, roomActivityDisplay, roomHasUnlockedActivity } from '@/lib/schedule-activity-teams'
 import { loadSchedule, lessonKey, requireScheduleClass } from '@/lib/schedule-store'
 import { preparation, savePlan } from '@/lib/schedule-preparation'
 import { setClassSubjectTeacher } from '@/app/(shell)/settings/actions'
@@ -117,9 +117,14 @@ export async function fetchScheduleClassrooms(yearId: string) {
 type ScheduleData = Awaited<ReturnType<typeof loadSchedule>>
 type GridCell = { class_subject_id: string | null; note: string | null; locked: boolean; expected_lesson_id: string | null }
 
-function subjectRow(lesson: { id: string; teacherId: string | null; code?: string; name: string; teacherName: string; roomName?: string; activity?: boolean; fullName?: string; offeringId?: string; mainTeacherId?: string | null; subjectTitle?: string; contentUnits?: ContentUnit[] }) {
-  return { id: lesson.id, teacher_id: lesson.teacherId, subject_code: lesson.code || '', subject_name: lesson.name, teacher_name: lesson.teacherName, room_name: lesson.roomName || '', label: `${lesson.code || ''} ${lesson.name}`.trim(), activity: !!lesson.activity,
+function subjectRow(lesson: { id: string; teacherId: string | null; code?: string; name: string; teacherName: string; roomName?: string; activity?: boolean; count?: number; fullName?: string; offeringId?: string; mainTeacherId?: string | null; subjectTitle?: string; contentUnits?: ContentUnit[] }) {
+  return { id: lesson.id, teacher_id: lesson.teacherId, subject_code: lesson.code || '', subject_name: lesson.name, teacher_name: lesson.teacherName, room_name: lesson.roomName || '', label: `${lesson.code || ''} ${lesson.name}`.trim(), activity: !!lesson.activity, weekly_periods: lesson.activity ? Math.max(1, lesson.count || 1) : undefined,
     offering_id: lesson.offeringId || lesson.id.split('#')[0], subject_title: lesson.subjectTitle || lesson.fullName || lesson.name, main_teacher_id: lesson.mainTeacherId ?? lesson.teacherId, content_units: lesson.contentUnits || [] }
+}
+
+function visibleTimetableLessons(data: ScheduleData, classroomId: string, lessons: ScheduleData['lessons'], grid: Record<string, GridCell>) {
+  const used = new Set(Object.values(grid).map(cell => cell.class_subject_id).filter(Boolean))
+  return lessons.filter(lesson => lesson.selectable !== false || used.has(lesson.id) || lesson.classroomId === classroomId && lesson.activity && roomHasUnlockedActivity(data.activityGroups, classroomId, lesson.subjectId))
 }
 
 function classRoomView(data: ScheduleData, classroomId: string) {
@@ -150,8 +155,7 @@ export async function fetchClassScheduleSubjects(classroomId: string, semester =
   if (error || !room) throw new Error('ไม่พบห้องเรียน')
   const data = await loadSchedule(session.schoolId, room.academic_year_id, semester)
   const view = classRoomView(data, classroomId)
-  const used = new Set(Object.values(view.grid).map(cell => cell.class_subject_id).filter(Boolean))
-  return view.lessons.filter(lesson => lesson.selectable !== false || used.has(lesson.id)).map(subjectRow)
+  return visibleTimetableLessons(data, classroomId, view.lessons, view.grid).map(subjectRow)
 }
 
 export async function fetchClassScheduleGrid(classroomId: string, yearId: string, semester = 1) {
@@ -188,9 +192,8 @@ export async function fetchClassScheduleBundle(classroomId: string, yearId: stri
     const used = data.slots.filter(slot => lessonKey(slot) === lesson.id).length
     return { class_subject_id: lesson.id, code: lesson.code || '', name: lesson.name, target: lesson.count || 0, used, remaining: (lesson.count || 0) - used }
   })
-  const used = new Set(Object.values(view.grid).map(cell => cell.class_subject_id).filter(Boolean))
   return { grid: view.grid, warnings,
-    subjects: view.lessons.filter(lesson => lesson.selectable !== false || used.has(lesson.id)).map(subjectRow),
+    subjects: visibleTimetableLessons(data, classroomId, view.lessons, view.grid).map(subjectRow),
     quotas: { items, filled: items.reduce((sum, lesson) => sum + lesson.used, 0), totalTarget: items.reduce((sum, lesson) => sum + lesson.target, 0) },
   }
 }

@@ -12,6 +12,7 @@ import { generate, confirmDraft, cancelDraft, preparation } from '@/lib/schedule
 import { planScheduleClear, scheduleClearPayload, scheduleClearRooms, type ScheduleClearOptions, type ScheduleClearScope } from './schedule-clear'
 import { LEARNER_DEVELOPMENT_KEY } from '@/lib/schedule-activity'
 import {activityLockCells} from './schedule-lock-state'
+import {roomHasUnlockedActivity} from './schedule-activity-teams'
 
 async function context(yearId: string, semester = 1) {
   const session = await getSession()
@@ -27,7 +28,7 @@ async function commit(ctx: Awaited<ReturnType<typeof context>>, year: string, ro
   for (const lesson of ctx.data.lessons) {
     const used = rows.filter(s=>s.classroom_id===lesson.classroomId&&lessonKey(s)===lesson.id).length
     const before = ctx.data.slots.filter(s=>s.classroom_id===lesson.classroomId&&lessonKey(s)===lesson.id).length
-    const target = lesson.activity ? Math.max(1,before) : lesson.count
+    const target = lesson.activity ? Math.max(lesson.count || 1, before) : lesson.count
     if (used>target && used>before) throw new Error(`${lesson.label} ลงครบ ${target} คาบต่อสัปดาห์แล้ว กรุณานำคาบเดิมออกก่อนเพิ่ม`)
   }
   await persistSchedule(ctx.session.schoolId, year, ctx.data.slots, rows, unlock, ctx.semester)
@@ -62,7 +63,8 @@ export async function saveCell(roomId: string, year: string, day: number, period
   const current = ctx.data.slots.find(s => s.classroom_id === roomId && s.day_of_week === day && s.period === period)
   if(expectedLesson!==undefined && (current?lessonKey(current):null)!==expectedLesson)throw new Error('คาบนี้เปลี่ยนแล้ว กรุณาโหลดตารางล่าสุดก่อนแก้ไข')
   if (current?.locked) throw new Error('กรุณาปลดล็อกคาบก่อนแก้ไข')
-  if (lesson && !ctx.data.lessons.some(l => l.id === lesson && l.classroomId === roomId && l.selectable !== false)) throw new Error('ไม่พบรายวิชาหรือกิจกรรมในห้องนี้')
+  const offering = lesson ? ctx.data.lessons.find(l => l.id === lesson && l.classroomId === roomId) : undefined
+  if (lesson && !(offering && (offering.selectable !== false || offering.activity && roomHasUnlockedActivity(ctx.data.activityGroups, roomId, offering.subjectId)))) throw new Error('ไม่พบรายวิชาหรือกิจกรรมในห้องนี้')
   const rows = ctx.data.slots.filter(s => s !== current)
   if (lesson || note?.trim()) { const columns=lessonColumns(lesson); rows.push({ classroom_id: roomId, academic_year_id: year, day_of_week: day, period, ...columns, note: lesson ? columns.note ?? null : note?.trim() || null, locked: false }) }
   await commit(ctx, year, rows, `แก้ไขตารางเรียน วัน ${day} คาบ ${period}`)

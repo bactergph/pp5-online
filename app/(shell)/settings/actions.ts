@@ -463,8 +463,14 @@ export async function fetchSchoolUsers() {
     const {data:account} = await db.auth.admin.getUserById(user.id)
     return {...user,role_pending:account.user?.app_metadata?.staff_role_pending ?? (user.role === 'teacher')}
   }))
-  const { withHomeroomOrder } = await import('@/lib/teacher-homeroom')
-  const orderedStaff = await withHomeroomOrder(db, session.schoolId || '', staffRows, true)
+  const { readHomeroomSeats } = await import('@/lib/teacher-homeroom')
+  const { homeroomClassLabels, orderTeachers } = await import('@/lib/teacher-order')
+  const homeroomSeats = await readHomeroomSeats(db, session.schoolId || '')
+  const homeroomRooms = homeroomClassLabels(homeroomSeats)
+  const orderedStaff = orderTeachers(staffRows, homeroomSeats, true).map(user => ({
+    ...user,
+    homeroomRooms: homeroomRooms.get(user.id) || [],
+  }))
   let code: string | null = null
   if (session.schoolId) {
     const { data: sc } = await db.from('schools').select('code').eq('id', session.schoolId).maybeSingle()

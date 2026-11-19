@@ -36,7 +36,7 @@ const api=moduleFrom('lib/schedule-operations.ts',name=>({
   'server-only':{},'@/lib/session':{getSession:async()=>({schoolId:'s',role,userId:'u'})},
   '@/lib/supabase':{createServerClient:()=>{throw Error('Unexpected DB call')}},
   '@/lib/audit':{logActivity:async()=>{}},'@/lib/schedules':{SCHEDULE_EDIT_ROLES:['admin']},
-  './schedule-period-profiles':pure('lib/schedule-period-profiles.ts'),'./schedule-teacher-activities':pure('lib/schedule-teacher-activities.ts'),'./schedule-joint-teaching':pure('lib/schedule-joint-teaching.ts'),'@/lib/schedule-store':store,'@/lib/schedule-solver':solver,'@/lib/schedule-preparation':preparation,
+  './schedule-period-profiles':pure('lib/schedule-period-profiles.ts'),'./schedule-teacher-activities':pure('lib/schedule-teacher-activities.ts'),'./schedule-joint-teaching':pure('lib/schedule-joint-teaching.ts'),'./schedule-lock-state':pure('lib/schedule-lock-state.ts'),'./schedule-activity-teams':pure('lib/schedule-activity-teams.ts'),'./schedule-clear':pure('lib/schedule-clear.ts'),'@/lib/schedule-store':store,'@/lib/schedule-solver':solver,'@/lib/schedule-preparation':preparation,
   '@/lib/schedule-activity':{LEARNER_DEVELOPMENT_KEY:'learner-development'},
 }[name]))
 function reset(){writes=0;data={classrooms:[{id:'a',level:'ป.1',room:1},{id:'b',level:'ป.2',room:1},{id:'empty',level:'อ.2',room:1}],lessons:[{id:'l1',classroomId:'a',teacherId:'t',count:2,label:'a · math',subjectId:'math',name:'math',activity:false},{id:'l2',classroomId:'b',teacherId:'t',count:2,label:'b · math',subjectId:'math',name:'math',activity:false}],slots:[]}}
@@ -110,6 +110,11 @@ const slot=(room,id,period,locked=false)=>({classroom_id:room,academic_year_id:'
   reset();data.lessons.push({id:'activity:a',classroomId:'a',teacherId:null,count:0,label:'scout',activity:true})
   await api.saveCell('a','y',1,1,'activity:a',null)
   await assert.rejects(api.saveCell('a','y',1,2,'activity:a',null),/ครบ 1 คาบ/)
+  reset();data.lessons.push({id:'activity:reading',classroomId:'a',teacherId:null,teacherIds:['t'],count:1,label:'สื่อสารอ่านเขียน',subjectId:'communication',name:'สื่อสารอ่านเขียน',activity:true,selectable:false},{id:'activity:reading-b',classroomId:'b',teacherId:null,count:0,label:'สื่อสารอ่านเขียน',subjectId:'communication',name:'สื่อสารอ่านเขียน',activity:true,selectable:false})
+  data.activityGroups=[{id:'g',settingId:'communication',roomIds:['a'],teacherIds:[],roomTeachers:{a:['t']},mode:'separate',weeklyPeriods:1,cells:[]}]
+  await api.saveCell('a','y',1,2,'activity:reading',null)
+  assert.equal(data.slots.some(row=>row.classroom_id==='a'&&row.activity_id==='reading'&&row.period===2),true)
+  await assert.rejects(api.saveCell('b','y',1,2,'activity:reading-b',null),/ไม่พบ/)
   console.log('PASS: manual and teacher edits cannot exceed weekly quota; unchanged and repair edits allowed; activities capped at one period')
   reset();data.classrooms.push({id:'a2',level:'ป.1',room:2});data.slots=[slot('a','l1',1),slot('a','l1',2,true),slot('a2','l1',1),slot('b','l2',1)]
   const clearLevel=await api.clearScope('y',2,'level','a')

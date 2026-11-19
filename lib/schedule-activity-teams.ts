@@ -2,6 +2,10 @@ import {levelPeriodTimes} from './schedule-period-profiles'
 import type { PeriodTimeRow } from './schedule-helpers'
 export type ActivityTeam = { id:string; settingId:string; mode:'joint'|'separate'; roomIds:string[]; teacherIds:string[]; roomTeachers:Record<string,string[]>; weeklyPeriods:number; cells:{day:number;period:number}[] }
 export function activityTeachers(group:ActivityTeam,room:string){return group.mode==='joint'?group.teacherIds:group.roomTeachers[room]||[]}
+/** An assigned activity with no shared period can be placed on each room's own timetable. */
+export function roomHasUnlockedActivity(groups:ActivityTeam[]|undefined,roomId:string,settingId:string){
+  return (groups||[]).some(group=>group.settingId===settingId&&group.roomIds?.includes(roomId)&&!(group.cells||[]).length)
+}
 /** A teacher-only edit changes responsibility, not the saved timetable or locks. */
 export function activityTeamKeepsSchedule(old:ActivityTeam|undefined,next:ActivityTeam) {
  if(!old||old.settingId!==next.settingId||old.mode!==next.mode&&(old.roomIds.length!==1||next.roomIds.length!==1)||old.weeklyPeriods!==next.weeklyPeriods)return false
